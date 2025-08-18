@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="googlebot" content="noindex, nofollow, noarchive" />
+    <title>Dashboard de Vendas</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Removido integrity: jsDelivr não garante SRI estável; isso bloqueava o script e causava 'Chart is not defined' -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0" defer></script>
+  </head>
+  <body>
+    <div class="bg-animations">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <header class="app-header">
+      <h1 class="brand"><span>Vale</span>pan Insights</h1>
+      <div class="header-right">
+        <button id="period-btn" class="badge badge-interactive" title="Filtrar período" hidden>
+          <span class="dot-indicator"></span>
+          <span id="period-badge"></span>
+          <span class="caret">▾</span>
+        </button>
+        <div id="period-panel" class="period-panel" hidden>
+          <div class="period-presets">
+            <button id="preset-this-month" class="chip">Este mês</button>
+            <button id="preset-last-month" class="chip">Mês passado</button>
+          </div>
+          <div class="period-row">
+            <label>Início</label>
+            <input type="date" id="period-start" />
+          </div>
+          <div class="period-row">
+            <label>Fim</label>
+            <input type="date" id="period-end" />
+          </div>
+          <div class="period-actions">
+            <button id="period-apply" class="btn">Aplicar</button>
+            <button id="period-reset" class="btn btn-ghost">Padrão</button>
+          </div>
+        </div>
+
+        <!-- Filtro de Cliente -->
+        <button id="client-btn" class="badge badge-interactive" title="Filtrar cliente" hidden>
+          <span class="dot-indicator"></span>
+          <span id="client-badge">Clientes: Todos</span>
+          <span class="caret">▾</span>
+        </button>
+        <div id="client-panel" class="period-panel" hidden>
+          <div class="period-row">
+            <label>Buscar</label>
+            <input type="text" id="client-search" placeholder="Digite para filtrar" />
+          </div>
+          <div class="table-scroll" style="max-height:240px; border:1px solid var(--panel-border); border-radius:10px;">
+            <ul id="client-list" style="list-style:none; margin:0; padding:6px 8px; display:grid; gap:6px;"></ul>
+          </div>
+          <div class="period-actions">
+            <button id="client-apply" class="btn">Aplicar</button>
+            <button id="client-clear" class="btn btn-ghost">Limpar</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section id="landing" class="landing">
+      <div class="landing-inner">
+        <h2 class="hero-title">Visão de vendas em outro nível</h2>
+        <p class="hero-sub">Conecte-se com Google para liberar um dashboard moderno, rápido e encantador.</p>
+        <div id="gsi-btn-landing" class="hero-login"></div>
+        <div id="ios-demo-notice" style="margin-top:12px; display:none;">
+          <p style="font-size:0.9em; color:#9fb0c7; margin-bottom:8px;">
+            📱 Dispositivo iOS detectado - Modo demonstração ativado
+          </p>
+          <button id="btn-ios-demo" class="btn">Ver Dashboard (Demo)</button>
+        </div>
+      </div>
+    </section>
+
+    
+
+    <main id="app" class="container" hidden>
+      <section class="kpis" id="kpis" hidden>
+        <div class="kpi">
+          <div class="kpi-label">Faturamento do período</div>
+          <div class="kpi-value" id="kpi-fat-valor">—</div>
+          <div class="kpi-sub" id="kpi-fat-var">—</div>
+          <div class="kpi-foot"><span id="kpi-fat-proj-label">Projeção</span>: <strong id="kpi-fat-proj">—</strong></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Pedidos</div>
+          <div class="kpi-value" id="kpi-ped-valor">—</div>
+          <div class="kpi-sub" id="kpi-ped-var">—</div>
+          <div class="kpi-foot"><span id="kpi-ped-proj-label">Projeção</span>: <strong id="kpi-ped-proj">—</strong></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Ticket médio</div>
+          <div class="kpi-value" id="kpi-ticket-valor">—</div>
+          <div class="kpi-sub" id="kpi-ticket-var">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Clientes únicos</div>
+          <div class="kpi-value" id="kpi-clientes-valor">—</div>
+          <div class="kpi-sub" id="kpi-clientes-var">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label" id="kpi-ytd-title">Faturamento</div>
+          <div class="kpi-value" id="kpi-ytd-valor">—</div>
+          <div class="kpi-sub" id="kpi-ytd-var">—</div>
+          <div class="kpi-foot"><span id="kpi-ytd-proj-label">Projeção</span>: <strong id="kpi-ytd-proj">—</strong></div>
+        </div>
+      </section>
+
+      <section class="charts" id="charts" hidden>
+        <div class="card">
+          <h3>Faturamento por semanas (últimas 8)</h3>
+          <canvas id="chart-semanas" height="120"></canvas>
+        </div>
+        <div class="card">
+          <h3 id="title-top-clientes">Top clientes</h3>
+          <div class="topcli">
+            <div class="chart-donut"><canvas id="chart-clientes"></canvas></div>
+            <ul id="topcli-legend" class="topcli-legend"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="charts" id="insights" hidden>
+        <div class="card span-2">
+          <h3 id="title-variacao">Variação por cliente (vs período anterior)</h3>
+          <div class="rank-grid">
+            <div>
+              <div class="kpi-label">Quem mais cresceu</div>
+              <ul id="rank-up" class="rank"></ul>
+            </div>
+            <div>
+              <div class="kpi-label">Quem mais caiu</div>
+              <ul id="rank-down" class="rank"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Engajamento (últimas 2 semanas)</h3>
+          <div class="eng-visual">
+            <canvas id="chart-eng" height="160"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modal para listar clientes -->
+      <div id="modal" class="modal hidden">
+        <div class="modal-card">
+          <div class="modal-head">
+            <h4 id="modal-title">Lista</h4>
+            <button id="modal-close" class="btn btn-ghost">Fechar</button>
+          </div>
+          <div class="table-scroll" style="max-height:380px">
+            <table class="modal-table">
+              <thead><tr><th>Cliente</th><th>Última compra</th><th>Histórico</th></tr></thead>
+              <tbody id="modal-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <section class="table-wrap" id="table-wrap" hidden>
+        <div class="card">
+          <div class="table-head">
+            <h3>Últimas vendas</h3>
+            <div class="search-wrap">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 5 1.5-1.5-5-5Zm-6 0C8.01 14 6 11.99 6 9.5S8.01 5 10.5 5 15 7.01 15 9.5 12.99 14 10.5 14Z"/></svg>
+              <input id="sales-search" type="text" placeholder="Buscar cliente..." />
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table id="sales-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <div class="loading-text">Processando dados…</div>
+    </div>
+
+    <!-- Config local do projeto: edite CLIENT_ID e ALLOWLIST -->
+    <script src="./config.js"></script>
+    <!-- App principal -->
+    <script src="./scripts/app.js?v=20250810-2"></script>
+  </body>
+  </html>
+
+
