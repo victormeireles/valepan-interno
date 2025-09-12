@@ -87,7 +87,9 @@ export async function appendRow(
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${tabName}!A:Z`, // Range amplo para capturar todas as colunas
-      valueInputOption: 'RAW',
+      // USER_ENTERED faz o Google Sheets interpretar datas e números
+      // evitando que datas sejam gravadas como texto com aspa inicial
+      valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
         values: [values]
