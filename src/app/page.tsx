@@ -3,11 +3,11 @@ import { STAGES_CONFIG } from "@/config/stages";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
+    <div className="bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Sistema de Produção - Valepan
+            Sistema de Produção
           </h1>
           <p className="text-lg text-gray-600">
             Registro de produção por etapas - Mobile First
@@ -23,8 +23,8 @@ export default function Home() {
             >
               <div className="text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="material-icons text-blue-600 text-2xl">
-                    {getStageIcon(stageKey)}
+                  <span className="text-blue-600 text-2xl font-bold">
+                    {getStageNumber(stageKey)}
                   </span>
                 </div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
@@ -48,14 +48,14 @@ export default function Home() {
   );
 }
 
-function getStageIcon(stageKey: string): string {
-  const icons: Record<string, string> = {
-    'pre-mistura': 'mix',
-    'massa': 'dough_kneading',
-    'fermentacao': 'hourglass_empty',
-    'resfriamento': 'ac_unit',
-    'forno': 'local_fire_department',
+function getStageNumber(stageKey: string): string {
+  const numbers: Record<string, string> = {
+    'pre-mistura': '1',
+    'massa': '2',
+    'fermentacao': '3',
+    'resfriamento': '4',
+    'forno': '5',
   };
   
-  return icons[stageKey] || 'assignment';
+  return numbers[stageKey] || '?';
 }
