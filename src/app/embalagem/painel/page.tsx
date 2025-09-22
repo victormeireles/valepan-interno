@@ -81,7 +81,6 @@ export default function PainelEmbalagemPage() {
           ) : (
             rows.map((it, idx) => {
               const status = getStatusColor(it.aProduzir, it.produzido);
-              const colorClass = status === 'green' ? 'bg-green-500' : status === 'yellow' ? 'bg-yellow-500' : 'bg-red-500';
               return (
                 <div key={idx} className="contents">
                   <div className="col-span-3 px-3 py-4 bg-gray-800/40 rounded-md">{it.cliente}</div>

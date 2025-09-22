@@ -67,11 +67,15 @@ export default function PedidoEmbalagemPage() {
     setItens(prev => prev.map((it, idx) => (idx === index ? { ...it, ...patch } : it)));
   };
 
-  const getUnidadePadrao = (produto: string): string => {
+  const getUnidadePadrao = (produto: string): Item['unidade'] => {
     const produtoComUnidade = produtosComUnidades.find(p => p.produto === produto);
     const unidade = produtoComUnidade?.unidade || '';
-    // Converter para minúsculo para corresponder aos valores internos
-    return unidade.toLowerCase();
+    // Converter para minúsculo e validar se é um valor válido
+    const unidadeLower = unidade.toLowerCase();
+    if (['cx', 'pct', 'un', 'kg'].includes(unidadeLower)) {
+      return unidadeLower as Item['unidade'];
+    }
+    return '';
   };
 
   const handleProdutoChange = (index: number, produto: string) => {

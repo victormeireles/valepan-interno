@@ -87,7 +87,7 @@ export default function AutocompleteInput({
     }
   };
 
-  const handleBlur = (e: React.FocusEvent) => {
+  const handleBlur = () => {
     // Delay para permitir que o clique na opção seja processado
     setTimeout(() => {
       setIsOpen(false);
