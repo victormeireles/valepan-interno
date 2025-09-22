@@ -1,0 +1,126 @@
+# **PRD – Sistema de Controle de Embalagem – Valepan**
+
+## 1. Objetivo
+
+Substituir o controle de pedidos e confirmações via WhatsApp por um sistema simples e centralizado, que permita:
+
+* Registrar pedidos de embalagem por cliente/produto.
+* Dar visibilidade em tempo real ao time de embalagem.
+* Registrar o que foi efetivamente embalado.
+* Permitir conferência entre **pedido x embalado**.
+
+---
+
+## 2. Usuários
+
+* **Comercial/planejamento** → lança pedidos de embalagem.
+* **Equipe de embalagem** → consulta pedidos e registra produção.
+* **Gestão** → acompanha status e histórico.
+
+---
+
+## 3. Telas
+
+### **Tela 1 – Pedido para Embalagem**
+
+**Usuário:** Comercial/Planejamento
+**Objetivo:** Inserir pedidos de produção para embalagem.
+
+**Campos principais:**
+
+* Data do pedido (default: hoje, editável)
+* Data de fabricação (default: hoje, editável)
+* Cliente (lista suspensa). Origem:
+	planilha https://docs.google.com/spreadsheets/d/1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw/edit?gid=1881124154#gid=1881124154
+	aba De Para Razao Social
+	coluna G, a partir da linha 2
+* Observacao do cliente 
+
+**Tabela de itens do pedido (multi-linhas):**
+
+* Produto (lista suspensa)
+* Congelado (sim/não)
+* Quantidade (numerico)
+* Unidade (lista com opcoes: cx / pct / un / kg)
+
+**Funcionalidades:**
+
+* Botão “Adicionar produto” → adiciona linha à tabela.
+* Botão “Salvar pedido” → gera registro.
+
+---
+
+### **Tela 2 – Pedidos do Dia**
+
+**Usuário:** Equipe de embalagem
+**Objetivo:** Visualizar pedidos a embalar, organizados por cliente e produto.
+
+**Layout:**
+
+* Filtro de data (default: hoje)
+* Lista de clientes → com pedido de embalagem por produto.
+* Para cada produto:
+
+  * Nome + congelado/não
+  * Data de fabricação
+  * Data de vencimento (se congelado hoje + 3 meses, senao hoje + 15 dias)
+  * Quantidade pedida (cx/pct/unid/kg)
+  * Quantidade já embalada (auto do sistema)
+  * Status: pendente / parcial / concluído (farol verde/amarelo/vermelho)
+
+**Elementos visuais:**
+
+* Barra de progresso (pedido vs embalado).
+* Cliente em **verde** quando 100% concluído.
+* Destaque em **vermelho** se houver atraso ou falta grande.
+
+---
+
+### **Tela 3 – Registro da Embalagem**
+
+**Usuário:** Equipe de embalagem
+**Objetivo:** Registrar lotes embalados e atualizar status.
+
+**Campos principais:**
+
+* Cliente (lista suspensa, incluir “Estoque”)
+* Produto
+* Data de produção (default: hoje, editável)
+* Data de fabricação (default: hoje, editável)
+* Data de vencimento (default: +15 dias, editável)
+* Caixas
+* Pacotes
+* Unidades
+* Kg
+
+**Funcionalidades:**
+
+* Botão “Confirmar” → grava lote embalado e soma no acumulado.
+* Validação: alerta se quantidade ultrapassa o pedido.
+* Atualização em tempo real da Tela 2.
+
+---
+
+## 4. Regras de Negócio
+
+1. Cada pedido é único por **data + cliente + produto**.
+2. Um produto pode aparecer mais de uma vez se for lançado em lotes (somatório feito automaticamente).
+3. Datas padrão devem ser sugeridas, mas sempre editáveis.
+4. Todo registro deve gerar histórico para relatórios (não sobrescrever valores).
+
+---
+
+## 5. Relatórios (futuro próximo)
+
+* Pedido vs Embalado por cliente/produto/data.
+* Produção para estoque (volumes embalados sem cliente atrelado).
+* Histórico de pedidos diários.
+
+---
+
+## 6. Critérios de Sucesso
+
+* O time de embalagem não depender mais do WhatsApp para saber o que embalar.
+* Progresso visível em tempo real na TV.
+* Histórico confiável para auditoria e relatórios.
+

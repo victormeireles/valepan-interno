@@ -5,13 +5,14 @@ interface DateInputProps {
   onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
+  label?: string;
 }
 
-export default function DateInput({ value, onChange, required = false, disabled = false }: DateInputProps) {
+export default function DateInput({ value, onChange, required = false, disabled = false, label = "Data" }: DateInputProps) {
   return (
     <div className="w-full">
       <label className="block text-base font-semibold text-gray-800 mb-3">
-        Data {required && <span className="text-red-500">*</span>}
+        {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
         type="date"

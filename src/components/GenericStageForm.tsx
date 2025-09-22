@@ -6,7 +6,7 @@ import { validateStageData } from '@/domain/validation';
 import LoadingOverlay from './LoadingOverlay';
 import DateInput from './FormControls/DateInput';
 import TurnoRadio from './FormControls/TurnoRadio';
-import SelectRemote from './FormControls/SelectRemote';
+import SelectRemoteAutocomplete from './FormControls/SelectRemoteAutocomplete';
 import NumberHalfStepInput from './FormControls/NumberHalfStepInput';
 import NumberInput from './FormControls/NumberInput';
 
@@ -118,13 +118,14 @@ export default function GenericStageForm({ stage, stageName, stageDescription, f
       
       case 'select':
         return (
-          <SelectRemote
+          <SelectRemoteAutocomplete
             key={fieldName}
             value={String(value)}
             onChange={(val) => handleFieldChange(fieldName, val)}
             stage={stage}
             required={fieldConfig.required}
-            placeholder={`Selecione ${fieldConfig.label.toLowerCase()}...`}
+            placeholder={`Digite para buscar ${fieldConfig.label.toLowerCase()}...`}
+            label={fieldConfig.label}
           />
         );
       

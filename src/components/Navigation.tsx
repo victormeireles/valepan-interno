@@ -129,6 +129,28 @@ export default function Navigation() {
                   </Link>
                 ))}
               </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
+              {/* Embalagem */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  Embalagem
+                </h3>
+                <Link
+                  href="/embalagem/pedido"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/embalagem/pedido')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">shopping_cart</span>
+                  Pedido para Embalagem
+                </Link>
+              </div>
             </div>
           </nav>
 
