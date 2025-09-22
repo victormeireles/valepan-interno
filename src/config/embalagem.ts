@@ -18,6 +18,11 @@ export const PEDIDOS_EMBALAGEM_CONFIG = {
   }
 } as const;
 
+export const EMBALAGEM_PRODUCAO_DESTINO = {
+  spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
+  tabName: '6 - Embalagem',
+} as const;
+
 export type PedidoItem = {
   produto: string;
   congelado: 'Sim' | 'Não';

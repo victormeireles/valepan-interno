@@ -12,6 +12,8 @@ export async function GET(
   context: { params: Promise<{ stage: string }> }
 ) {
   const { stage } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const field = searchParams.get('field'); // campo específico para buscar opções
   
   try {
     // Validar etapa
@@ -30,8 +32,25 @@ export async function GET(
       );
     }
 
+    // Determinar qual coluna usar baseado no campo solicitado
+    let column = config.source.column;
+    let spreadsheetId = config.source.spreadsheetId;
+    let tabName = config.source.tabName;
+    let headerRow = config.source.headerRow;
+
+    // Se um campo específico foi solicitado, usar sua configuração
+    if (field && config.fields[field]?.sourceColumn) {
+      column = config.fields[field].sourceColumn!;
+      // Para embalagem-producao, cliente vem de fonte diferente
+      if (stage === 'embalagem-producao' && field === 'cliente') {
+        spreadsheetId = '1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw';
+        tabName = 'De Para Razao Social';
+        headerRow = 1;
+      }
+    }
+
     // Verificar cache
-    const cacheKey = `${stage}-${config.source.spreadsheetId}-${config.source.tabName}-${config.source.column}`;
+    const cacheKey = `${stage}-${field || 'default'}-${spreadsheetId}-${tabName}-${column}`;
     const cached = optionsCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
       return NextResponse.json({ options: cached.data });
@@ -39,10 +58,10 @@ export async function GET(
 
     // Buscar opções da planilha
     const options = await getColumnOptions(
-      config.source.spreadsheetId,
-      config.source.tabName,
-      config.source.column,
-      config.source.headerRow
+      spreadsheetId,
+      tabName,
+      column,
+      headerRow
     );
 
     // Atualizar cache

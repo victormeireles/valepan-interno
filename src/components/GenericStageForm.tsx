@@ -126,6 +126,7 @@ export default function GenericStageForm({ stage, stageName, stageDescription, f
             required={fieldConfig.required}
             placeholder={`Digite para buscar ${fieldConfig.label.toLowerCase()}...`}
             label={fieldConfig.label}
+            field={fieldName}
           />
         );
       

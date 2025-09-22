@@ -10,6 +10,7 @@ type PainelItem = {
   observacao: string;
   aProduzir: number;
   produzido: number;
+  dataFabricacao?: string;
 };
 
 function formatUnidade(u: PainelItem['unidade']): string {
@@ -25,6 +26,13 @@ function getStatusColor(aProduzir: number, produzido: number): 'red' | 'yellow' 
   if (!produzido || produzido === 0) return 'red';
   if (produzido > 0 && produzido < aProduzir) return 'yellow';
   return 'green';
+}
+
+function formatDateManual(dateString: string): string {
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}`;
 }
 
 export default function PainelEmbalagemPage() {
@@ -58,12 +66,29 @@ export default function PainelEmbalagemPage() {
     return () => clearInterval(interval);
   }, [selectedDate]);
 
-  // Layout sem rolagem: limitar a no máximo 10-12 linhas; o resto pode ser agrupado/compactado
-  const rows = useMemo(() => items.slice(0, 12), [items]);
+  // Agrupar itens por cliente, observação e data de fabricação
+  const groupedItems = useMemo(() => {
+    const groups: { [key: string]: PainelItem[] } = {};
+    
+    items.forEach(item => {
+      const observacao = item.observacao || 'Sem observação';
+      const dataFab = item.dataFabricacao || selectedDate;
+      const groupKey = `${item.cliente}|||${observacao}|||${dataFab}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(item);
+    });
+    
+    return groups;
+  }, [items, selectedDate]);
+
+  // Cor única elegante para todos os grupos
+  const groupColor = 'bg-gray-800/40 border-gray-600/50';
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="mx-auto">
         <header className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-extrabold tracking-tight">Painel de Produção - Embalagem</h1>
           <div className="flex items-center gap-4">
@@ -89,48 +114,93 @@ export default function PainelEmbalagemPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-12 gap-3 text-sm">
-          <div className="col-span-3 px-3 py-2 bg-gray-800/70 rounded-md font-bold">Cliente</div>
-          <div className="col-span-3 px-3 py-2 bg-gray-800/70 rounded-md font-bold">Produto</div>
-          <div className="col-span-2 px-3 py-2 bg-gray-800/70 rounded-md font-bold">Obs.</div>
-          <div className="col-span-1 px-3 py-2 bg-gray-800/70 rounded-md font-bold text-center">A produzir</div>
-          <div className="col-span-1 px-3 py-2 bg-gray-800/70 rounded-md font-bold text-center">Produzido</div>
-          <div className="col-span-2 px-3 py-2 bg-gray-800/70 rounded-md font-bold text-center">Status</div>
-
-          {loading ? (
-            <div className="col-span-12 text-center py-16 text-gray-400">Carregando...</div>
-          ) : (
-            rows.map((it, idx) => {
-              const status = getStatusColor(it.aProduzir, it.produzido);
+        {loading ? (
+          <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupedItems).map(([groupKey, groupItems], groupIndex) => {
+              const [cliente, observacao, dataFab] = groupKey.split('|||');
+              const dataProducaoISO = selectedDate;
+              const dataDiferente = dataFab && dataFab !== dataProducaoISO;
+              
               return (
-                <div key={idx} className="contents">
-                  <div className="col-span-3 px-3 py-4 bg-gray-800/40 rounded-md">{it.cliente}</div>
-                  <div className="col-span-3 px-3 py-4 bg-gray-800/40 rounded-md">
-                    <div className="font-semibold">{it.produto}</div>
-                    <div className="text-gray-400 text-xs mt-1">{it.congelado === 'Sim' ? 'Congelado' : 'Fresco'}</div>
+                <div key={groupKey} className={`rounded-xl border-2 p-4 ${groupColor} shadow-lg h-fit`}>
+                  {/* Header do Grupo */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-4 flex-1">
+                        <h3 className="text-xl font-bold text-white">{cliente}</h3>
+                        
+                        {observacao !== 'Sem observação' && (
+                          <div className="text-sm text-gray-300">
+                            <span className="font-medium">Obs:</span> {observacao}
+                          </div>
+                        )}
+                        
+                        {dataDiferente && (
+                          <div className="text-sm text-yellow-300">
+                            <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="text-sm text-gray-300">
+                        {groupItems.length} iten{groupItems.length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
                   </div>
-                  <div className="col-span-2 px-3 py-4 bg-gray-800/40 rounded-md">
-                    <div className="text-gray-300 truncate" title={it.observacao}>{it.observacao || '-'}</div>
-                  </div>
-                  <div className="col-span-1 px-3 py-4 bg-gray-800/40 rounded-md text-center font-extrabold text-xl flex items-center justify-center gap-2">
-                    <span>{it.aProduzir}</span>
-                    <span className="text-sm font-bold px-2 py-0.5 rounded bg-gray-700/70">{formatUnidade(it.unidade)}</span>
-                  </div>
-                  <div className="col-span-1 px-3 py-4 bg-gray-800/40 rounded-md text-center font-extrabold text-xl flex items-center justify-center gap-2">
-                    <span>{it.produzido}</span>
-                    <span className="text-sm font-bold px-2 py-0.5 rounded bg-gray-700/70">{formatUnidade(it.unidade)}</span>
-                  </div>
-                  <div className="col-span-2 px-3 py-4 bg-gray-800/40 rounded-md flex items-center justify-center">
-                    <span className={`inline-block w-6 h-6 rounded-full ${status === 'red' ? 'bg-red-500' : status === 'yellow' ? 'bg-yellow-500' : 'bg-green-500'}`}></span>
+                  
+                  {/* Lista de Produtos */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                    {groupItems.map((item, itemIndex) => {
+                      const showCongelado = item.congelado === 'Sim';
+                      const progressoItem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
+                      
+                      return (
+                        <div key={itemIndex} className={`p-2.5 rounded-lg ${
+                          item.produzido === 0 ? 'bg-red-900/20 border border-red-500/30' : 'bg-gray-800/40'
+                        }`}>
+                          {/* Header com Nome e Quantidades */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-1 flex-1">
+                              <span className="font-semibold text-white text-sm">
+                                {item.produto}
+                                {showCongelado && (
+                                  <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="text-right ml-2 flex-shrink-0">
+                              <div className="text-base font-bold text-white">
+                                {item.produzido} / {item.aProduzir} {formatUnidade(item.unidade)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Barra de Progresso do Item */}
+                          <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                item.produzido === 0 ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/50' : 
+                                item.produzido < item.aProduzir ? 'bg-yellow-500' : 
+                                'bg-green-500'
+                              }`}
+                              style={{ width: `${progressoItem}%` }}
+                            ></div>
+                          </div>
+                          
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
 
-        <footer className="mt-6 text-center text-gray-400 text-xs">
-          Mostrando até 12 itens de {new Date(selectedDate).toLocaleDateString('pt-BR')}
+        <footer className="mt-6 text-center text-gray-400 text-sm">
+          {Object.keys(groupedItems).length} grupos • {items.length} itens • {new Date(selectedDate).toLocaleDateString('pt-BR')}
         </footer>
       </div>
     </div>

@@ -135,6 +135,32 @@ export const STAGES_CONFIG: Record<string, StageConfig> = {
       unidades: { type: 'number', required: true, label: 'Unidades' }
     }
   }
+  ,
+  'embalagem-producao': {
+    name: 'Embalagem (Produção)',
+    description: 'Registro de produção na etapa de embalagem',
+    source: {
+      spreadsheetId: '1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw',
+      tabName: 'De Para Razao Social',
+      column: 'G',
+      headerRow: 1
+    },
+    destination: {
+      spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
+      tabName: '6 - Embalagem',
+      columns: ['Data', 'Turno', 'Cliente', 'Produto', 'Caixas', 'Pacotes', 'Unidades', 'Kg']
+    },
+    fields: {
+      data: { type: 'date', required: true, label: 'Data' },
+      turno: { type: 'turno', required: true, label: 'Turno' },
+      cliente: { type: 'select', required: true, label: 'Cliente', sourceColumn: 'G' },
+      produto: { type: 'select', required: true, label: 'Produto', sourceColumn: 'A' },
+      caixas: { type: 'number', required: false, label: 'Caixas' },
+      pacotes: { type: 'number', required: false, label: 'Pacotes' },
+      unidades: { type: 'number', required: false, label: 'Unidades' },
+      kg: { type: 'number', required: false, label: 'Kg' },
+    }
+  }
 };
 
 export function getStageConfig(stage: string): StageConfig | null {

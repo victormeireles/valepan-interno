@@ -69,6 +69,16 @@ export const fornoSchema = baseStageSchema.extend({
   unidades: integerSchema,
 });
 
+// Schema para Embalagem (produção)
+export const embalagemProducaoSchema = baseStageSchema.extend({
+  cliente: nonEmptyStringSchema,
+  produto: nonEmptyStringSchema,
+  caixas: integerSchema,
+  pacotes: integerSchema,
+  unidades: integerSchema,
+  kg: integerSchema,
+});
+
 // Mapeamento de schemas por etapa
 export const stageSchemas = {
   'pre-mistura': preMisturaSchema,
@@ -76,6 +86,7 @@ export const stageSchemas = {
   'fermentacao': fermentacaoSchema,
   'resfriamento': resfriamentoSchema,
   'forno': fornoSchema,
+  'embalagem-producao': embalagemProducaoSchema,
 } as const;
 
 // Função para obter schema por etapa

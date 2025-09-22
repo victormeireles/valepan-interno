@@ -35,6 +35,7 @@ type PainelItem = {
   observacao: string;
   aProduzir: number;
   produzido: number;
+  dataFabricacao: string;
 };
 
 export async function GET(request: Request) {
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
     const items: PainelItem[] = [];
 
     for (const r of todaysRows) {
+      const dataFabricacao = normalizeToISODate(r[1]);
       const cliente = (r[2] || '').toString().trim();
       const observacao = (r[3] || '').toString().trim();
       const produto = (r[4] || '').toString().trim();
@@ -74,12 +76,13 @@ export async function GET(request: Request) {
 
       if (!cliente || !produto || !unidade || aProduzir <= 0) continue;
 
-      // Agrupar por cliente/produto/unidade/congelado
+      // Agrupar por cliente/produto/unidade/congelado/observacao
       const sameIdx = items.findIndex(it => 
         it.cliente === cliente && 
         it.produto === produto && 
         it.unidade === unidade &&
-        it.congelado === congelado
+        it.congelado === congelado &&
+        it.observacao === observacao
       );
 
       if (sameIdx >= 0) {
@@ -93,6 +96,7 @@ export async function GET(request: Request) {
           observacao,
           aProduzir,
           produzido: 0, // Por enquanto 0; futura integração com planilha de produção de embalagem
+          dataFabricacao,
         });
       }
     }

@@ -11,6 +11,7 @@ interface SelectRemoteAutocompleteProps {
   disabled?: boolean;
   placeholder?: string;
   label?: string;
+  field?: string; // campo específico para buscar opções
 }
 
 export default function SelectRemoteAutocomplete({ 
@@ -20,7 +21,8 @@ export default function SelectRemoteAutocomplete({
   required = false, 
   disabled = false,
   placeholder = 'Digite para buscar...',
-  label
+  label,
+  field
 }: SelectRemoteAutocompleteProps) {
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +34,8 @@ export default function SelectRemoteAutocomplete({
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`/api/options/${stage}`);
+        const url = field ? `/api/options/${stage}?field=${field}` : `/api/options/${stage}`;
+        const response = await fetch(url);
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -50,7 +53,7 @@ export default function SelectRemoteAutocomplete({
     };
 
     fetchOptions();
-  }, [stage]);
+  }, [stage, field]);
 
   if (loading) {
     return (
