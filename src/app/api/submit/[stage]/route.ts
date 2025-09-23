@@ -118,7 +118,7 @@ function prepareValuesForSheet(config: { destination: { columns: string[] } }, d
     values.push(data.carrinhos);
     values.push(data.assadeiras);
     values.push(data.unidades);
-  } else if ('produto' in data) {
+  } else if ('produto' in data && 'carrinhos' in data) {
     values.push(data.produto);
     values.push(data.carrinhos);
     values.push(data.assadeiras);

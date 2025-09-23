@@ -22,11 +22,6 @@ function formatUnidade(u: PainelItem['unidade']): string {
   }
 }
 
-function getStatusColor(aProduzir: number, produzido: number): 'red' | 'yellow' | 'green' {
-  if (!produzido || produzido === 0) return 'red';
-  if (produzido > 0 && produzido < aProduzir) return 'yellow';
-  return 'green';
-}
 
 function formatDateManual(dateString: string): string {
   const date = new Date(dateString);
@@ -118,7 +113,7 @@ export default function PainelEmbalagemPage() {
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
           <div className="space-y-4">
-            {Object.entries(groupedItems).map(([groupKey, groupItems], groupIndex) => {
+            {Object.entries(groupedItems).map(([groupKey, groupItems]) => {
               const [cliente, observacao, dataFab] = groupKey.split('|||');
               const dataProducaoISO = selectedDate;
               const dataDiferente = dataFab && dataFab !== dataProducaoISO;
