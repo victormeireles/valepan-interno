@@ -214,10 +214,12 @@ export default function PedidoEmbalagemPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <NumberInput label="Quantidade" value={item.quantidade} onChange={(v) => updateItem(idx, { quantidade: v })} />
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <NumberInput label="Quantidade" value={item.quantidade} onChange={(v) => updateItem(idx, { quantidade: v })} />
+                    </div>
                     <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-2">Unidade <span className="text-red-500">*</span></label>
+                      <label className="block text-base font-semibold text-gray-800 mb-3">Unidade <span className="text-red-500">*</span></label>
                       <select
                         value={item.unidade}
                         onChange={(e) => updateItem(idx, { unidade: e.target.value as Item['unidade'] })}
