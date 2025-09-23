@@ -42,7 +42,7 @@ export default function NumberInput({
           type="button"
           onClick={handleDecrement}
           disabled={disabled || value <= min}
-          className="px-2 sm:px-3 md:px-4 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[50px] flex-shrink-0"
+          className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
         >
           −
         </button>
@@ -56,14 +56,14 @@ export default function NumberInput({
           min={min}
           step={step}
           max={max}
-          className="flex-1 min-w-0 px-1 sm:px-2 py-4 text-sm sm:text-base md:text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 shadow-sm"
+          className="flex-1 min-w-[80px] sm:min-w-[100px] md:min-w-[120px] px-2 sm:px-3 py-4 text-sm sm:text-base md:text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 shadow-sm"
         />
         
         <button
           type="button"
           onClick={handleIncrement}
           disabled={disabled || value >= max}
-          className="px-2 sm:px-3 md:px-4 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[50px] flex-shrink-0"
+          className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
         >
           +
         </button>

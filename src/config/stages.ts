@@ -140,10 +140,10 @@ export const STAGES_CONFIG: Record<string, StageConfig> = {
     name: 'Embalagem (Produção)',
     description: 'Registro de produção na etapa de embalagem',
     source: {
-      spreadsheetId: '1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw',
-      tabName: 'De Para Razao Social',
-      column: 'G',
-      headerRow: 1
+      spreadsheetId: '1WsdJ4ocAhLis_7eDkPDHgYMraNqmRe0I2XQJK-mrHcI',
+      tabName: 'Produtos',
+      column: 'A',
+      headerRow: 2 // Dados começam na linha 3, igual ao forno
     },
     destination: {
       spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',

@@ -97,6 +97,7 @@ function getStageNumber(stageKey: string): string {
     'fermentacao': '3',
     'resfriamento': '4',
     'forno': '5',
+    'embalagem-producao': '6',
   };
   
   return numbers[stageKey] || '?';

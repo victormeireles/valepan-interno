@@ -15,9 +15,15 @@ export async function GET(request: Request) {
 
     if (type === 'produtos') {
       const { spreadsheetId, tabName, productColumn, unitColumn, headerRow } = PEDIDOS_EMBALAGEM_CONFIG.origemProdutos;
+      
+      // Buscar lista de produtos usando a mesma lógica das outras telas
+      const options = await getColumnOptions(spreadsheetId, tabName, productColumn, headerRow);
+      
+      // Buscar produtos com unidades para funcionalidade adicional
       const productsWithUnits = await getProductsWithUnits(spreadsheetId, tabName, productColumn, unitColumn, headerRow);
+      
       return NextResponse.json({ 
-        options: productsWithUnits.map(p => p.produto),
+        options,
         productsWithUnits 
       });
     }

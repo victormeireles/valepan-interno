@@ -150,30 +150,18 @@ export default function Navigation() {
                   <span className="material-icons text-xl mr-3">shopping_cart</span>
                   Pedido para Embalagem
                 </Link>
-                <Link
-                  href="/embalagem/painel"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/embalagem/painel')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">dashboard</span>
-                  Painel de Produção
-                </Link>
-                <Link
-                  href="/embalagem/producao"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/embalagem/producao')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">inventory_2</span>
-                  Produção - Embalagem
-                </Link>
+                 <Link
+                   href="/embalagem/painel"
+                   onClick={closeMenu}
+                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                     isActive('/embalagem/painel')
+                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                   }`}
+                 >
+                   <span className="material-icons text-xl mr-3">dashboard</span>
+                   Painel de Produção
+                 </Link>
               </div>
             </div>
           </nav>
@@ -202,6 +190,7 @@ function getStageNumber(stageKey: string): string {
     'fermentacao': '3',
     'resfriamento': '4',
     'forno': '5',
+    'embalagem-producao': '6',
   };
   
   return numbers[stageKey] || '?';
