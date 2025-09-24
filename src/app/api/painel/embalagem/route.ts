@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { PEDIDOS_EMBALAGEM_CONFIG, EMBALAGEM_PRODUCAO_DESTINO } from '@/config/embalagem';
 
 function getTodayISO(): string {
   const d = new Date();
@@ -43,20 +43,22 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISO();
 
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    // Buscar dados de pedidos (o que precisa ser produzido)
+    const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:K`);
+    const pedidosDataRows = pedidosRows.slice(1);
+    const pedidosTodayRows = pedidosDataRows.filter(r => normalizeToISODate(r[0]) === date);
 
-    // Leitura ampla das colunas necessárias (A:K conforme gravação da rota de submit)
-    const rows = await readSheetValues(spreadsheetId, `${tabName}!A:K`);
-
-    // Ignorar header
-    const dataRows = rows.slice(1);
-
-    // Filtrar por data de produção (coluna A)
-    const todaysRows = dataRows.filter(r => normalizeToISODate(r[0]) === date);
+    // Buscar dados de produção (o que foi produzido)
+    const { spreadsheetId: producaoSpreadsheetId, tabName: producaoTabName } = EMBALAGEM_PRODUCAO_DESTINO;
+    const producaoRows = await readSheetValues(producaoSpreadsheetId, `${producaoTabName}!A:H`);
+    const producaoDataRows = producaoRows.slice(1);
+    const producaoTodayRows = producaoDataRows.filter(r => normalizeToISODate(r[0]) === date);
 
     const items: PainelItem[] = [];
 
-    for (const r of todaysRows) {
+    // Processar pedidos (aProduzir)
+    for (const r of pedidosTodayRows) {
       const dataFabricacao = normalizeToISODate(r[1]);
       const cliente = (r[2] || '').toString().trim();
       const observacao = (r[3] || '').toString().trim();
@@ -95,8 +97,50 @@ export async function GET(request: Request) {
           congelado,
           observacao,
           aProduzir,
-          produzido: 0, // Por enquanto 0; futura integração com planilha de produção de embalagem
+          produzido: 0, // Inicializar com 0
           dataFabricacao,
+        });
+      }
+    }
+
+    // Processar produção (produzido)
+    for (const r of producaoTodayRows) {
+      const cliente = (r[2] || '').toString().trim();
+      const produto = (r[3] || '').toString().trim();
+      const caixas = Number(r[4] || 0);
+      const pacotes = Number(r[5] || 0);
+      const unidades = Number(r[6] || 0);
+      const kg = Number(r[7] || 0);
+
+      let unidade: PainelItem['unidade'] | '' = '';
+      let produzido = 0;
+      if (caixas > 0) { unidade = 'cx'; produzido = caixas; }
+      else if (pacotes > 0) { unidade = 'pct'; produzido = pacotes; }
+      else if (unidades > 0) { unidade = 'un'; produzido = unidades; }
+      else if (kg > 0) { unidade = 'kg'; produzido = kg; }
+
+      if (!cliente || !produto || !unidade || produzido <= 0) continue;
+
+      // Encontrar item correspondente nos pedidos
+      const itemIdx = items.findIndex(it => 
+        it.cliente === cliente && 
+        it.produto === produto && 
+        it.unidade === unidade
+      );
+
+      if (itemIdx >= 0) {
+        items[itemIdx].produzido += produzido;
+      } else {
+        // Se não há pedido correspondente, criar item só com produção
+        items.push({
+          cliente,
+          produto,
+          unidade,
+          congelado: 'Não', // Default para produção sem pedido
+          observacao: '',
+          aProduzir: 0,
+          produzido,
+          dataFabricacao: date,
         });
       }
     }

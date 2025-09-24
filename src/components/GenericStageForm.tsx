@@ -25,10 +25,28 @@ interface GenericStageFormProps {
 }
 
 export default function GenericStageForm({ stage, stageName, stageDescription, fields }: GenericStageFormProps) {
-  const [formData, setFormData] = useState<Record<string, string | number>>({
-    data: getTodayString(),
-    turno: 1,
-  });
+  // Inicializar todos os campos do formulário
+  const getInitialFormData = () => {
+    const initialData: Record<string, string | number> = {
+      data: getTodayString(),
+      turno: 1,
+    };
+    
+    // Inicializar todos os campos definidos na configuração
+    Object.keys(fields).forEach(key => {
+      if (key !== 'data' && key !== 'turno') {
+        if (fields[key].type === 'select') {
+          initialData[key] = '';
+        } else if (fields[key].type === 'number' || fields[key].type === 'numberHalf') {
+          initialData[key] = 0;
+        }
+      }
+    });
+    
+    return initialData;
+  };
+
+  const [formData, setFormData] = useState<Record<string, string | number>>(getInitialFormData());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
