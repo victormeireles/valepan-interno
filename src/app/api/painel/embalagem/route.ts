@@ -44,6 +44,10 @@ type PainelItem = {
   pacotes?: number;
   unidades?: number;
   kg?: number;
+  // Dados de foto
+  photoUrl?: string;
+  photoId?: string;
+  photoUploadedAt?: string;
 };
 
 export async function GET(request: Request) {
@@ -51,9 +55,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISO();
 
-    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P)
+    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e foto Q, R, S, T)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:P`);
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:T`);
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
@@ -82,6 +86,11 @@ export async function GET(request: Request) {
       const producaoPacotes = Number(r[13] || 0); // N
       const producaoUnidades = Number(r[14] || 0); // O
       const producaoKg = Number(r[15] || 0);      // P
+      
+      // Dados de foto (colunas Q, R, S, T)
+      const photoUrl = (r[17] || '').toString().trim();        // R
+      const photoId = (r[18] || '').toString().trim();         // S
+      const photoUploadedAt = (r[19] || '').toString().trim(); // T
 
       let unidade: PainelItem['unidade'] | '' = '';
       let aProduzir = 0;
@@ -117,6 +126,10 @@ export async function GET(request: Request) {
         pacotes: pacotes,
         unidades: unidades,
         kg: kg,
+        // Dados de foto
+        photoUrl: photoUrl || undefined,
+        photoId: photoId || undefined,
+        photoUploadedAt: photoUploadedAt || undefined,
       });
       
       // Debug log para verificar rowId

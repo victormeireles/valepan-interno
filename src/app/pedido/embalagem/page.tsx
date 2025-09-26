@@ -21,6 +21,10 @@ type PainelItem = {
   pacotes?: number;
   unidades?: number;
   kg?: number;
+  // Dados de foto
+  photoUrl?: string;
+  photoId?: string;
+  photoUploadedAt?: string;
 };
 
 type CreatePedidoData = {
@@ -457,6 +461,22 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                       )}
                                     </span>
+                                    {item.photoUrl && (
+                                      <a
+                                        href={item.photoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          window.open(item.photoUrl, '_blank');
+                                        }}
+                                        className="text-white hover:text-gray-300 ml-2 transition-colors cursor-pointer"
+                                        title="Ver foto"
+                                      >
+                                        <span className="material-icons text-lg">photo_camera</span>
+                                      </a>
+                                    )}
                                   </div>
                                   <div className="text-right ml-2 flex-shrink-0">
                                     <div className="text-base font-bold text-white">

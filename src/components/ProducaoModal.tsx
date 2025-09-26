@@ -2,13 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import NumberInput from './FormControls/NumberInput';
+import PhotoUploader from './PhotoUploader';
+import PhotoManager from './PhotoManager';
+import { ProducaoData } from '@/domain/types';
 
-interface ProducaoData {
-  caixas: number;
-  pacotes: number;
-  unidades: number;
-  kg: number;
-}
 
 interface ProducaoModalProps {
   isOpen: boolean;
@@ -18,6 +15,7 @@ interface ProducaoModalProps {
   loading?: boolean;
   produto?: string;
   cliente?: string;
+  rowId?: number;
   pedidoQuantidades?: {
     caixas: number;
     pacotes: number;
@@ -34,6 +32,7 @@ export default function ProducaoModal({
   loading = false,
   produto = '',
   cliente = '',
+  rowId,
   pedidoQuantidades
 }: ProducaoModalProps) {
   const [formData, setFormData] = useState<ProducaoData>({
@@ -44,6 +43,8 @@ export default function ProducaoModal({
   });
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -55,14 +56,105 @@ export default function ProducaoModal({
     e.preventDefault();
     try {
       setMessage(null);
-      await onSave(formData);
+      
+      // Se há uma nova foto para upload
+      if (photoFile && rowId) {
+        setPhotoLoading(true);
+        
+        // Se já existe uma foto, deletar a antiga primeiro
+        if (formData.photoId) {
+          try {
+            const deleteRes = await fetch(`/api/photo/${rowId}`, {
+              method: 'DELETE',
+            });
+            
+            if (!deleteRes.ok) {
+              console.warn('Erro ao deletar foto antiga, continuando com upload...');
+            }
+          } catch (deleteError) {
+            console.warn('Erro ao deletar foto antiga:', deleteError);
+          }
+        }
+        
+        const formDataPhoto = new FormData();
+        formDataPhoto.append('photo', photoFile);
+        formDataPhoto.append('rowId', rowId.toString());
+        
+        const uploadRes = await fetch('/api/upload/photo', {
+          method: 'POST',
+          body: formDataPhoto,
+        });
+        
+        if (!uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          throw new Error(uploadData.error || 'Erro ao fazer upload da foto');
+        }
+        
+        const uploadData = await uploadRes.json();
+        
+        // Atualizar formData com dados da foto
+        const updatedFormData = {
+          ...formData,
+          photoUrl: uploadData.photoUrl,
+          photoId: uploadData.photoId,
+          photoUploadedAt: new Date().toISOString(),
+        };
+        
+        setPhotoLoading(false);
+        await onSave(updatedFormData);
+      } else {
+        await onSave(formData);
+      }
+      
       // Fechar modal imediatamente após salvar com sucesso
       onClose();
     } catch (error) {
+      setPhotoLoading(false);
       setMessage({ 
         type: 'error', 
         text: error instanceof Error ? error.message : 'Erro ao salvar produção' 
       });
+    }
+  };
+
+  const handlePhotoSelect = (file: File) => {
+    setPhotoFile(file);
+  };
+
+  const handlePhotoRemove = () => {
+    setPhotoFile(null);
+  };
+
+  const handlePhotoManagerRemove = async () => {
+    if (!rowId) return;
+    
+    try {
+      setPhotoLoading(true);
+      const res = await fetch(`/api/photo/${rowId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao remover foto');
+      }
+      
+      // Atualizar formData para remover dados da foto
+      setFormData(prev => ({
+        ...prev,
+        photoUrl: undefined,
+        photoId: undefined,
+        photoUploadedAt: undefined,
+      }));
+      
+      setMessage({ type: 'success', text: 'Foto removida com sucesso!' });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Erro ao remover foto' 
+      });
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -74,6 +166,7 @@ export default function ProducaoModal({
       kg: 0,
     });
     setMessage(null);
+    setPhotoFile(null);
     onClose();
   };
 
@@ -171,6 +264,34 @@ export default function ProducaoModal({
                 onChange={(value) => setFormData(prev => ({ ...prev, kg: value }))}
                 min={0}
                 step={1}
+              />
+            </div>
+
+            {/* Seção de Foto */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Foto da Produção</h3>
+              
+              {/* Mostrar botão "Ver Foto" se houver foto */}
+              {formData.photoUrl && (
+                <div className="mb-4">
+                  <PhotoManager
+                    photoUrl={formData.photoUrl}
+                    photoId={formData.photoId}
+                    onPhotoRemove={handlePhotoManagerRemove}
+                    loading={photoLoading}
+                    disabled={loading}
+                    showRemoveButton={true}
+                  />
+                </div>
+              )}
+              
+              {/* Input de upload sempre disponível */}
+              <PhotoUploader
+                onPhotoSelect={handlePhotoSelect}
+                onPhotoRemove={handlePhotoRemove}
+                loading={photoLoading}
+                disabled={loading}
+                currentPhotoUrl={formData.photoUrl}
               />
             </div>
 

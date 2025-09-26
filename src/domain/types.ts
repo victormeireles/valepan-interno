@@ -72,3 +72,26 @@ export interface ApiError {
   email?: string;
   sheetUrl?: string;
 }
+
+// Tipos para fotos de produção
+export interface PhotoData {
+  photoUrl?: string;
+  photoId?: string;
+  photoUploadedAt?: string;
+}
+
+// Dados de produção com foto
+export interface ProducaoData extends PhotoData {
+  caixas: number;
+  pacotes: number;
+  unidades: number;
+  kg: number;
+}
+
+// Resposta da API de upload de foto
+export interface PhotoUploadResponse {
+  success: boolean;
+  photoUrl: string;
+  photoId: string;
+  message: string;
+}

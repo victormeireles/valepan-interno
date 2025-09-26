@@ -18,8 +18,8 @@ export async function GET(
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    // Buscar colunas G, H, I, J (pedido) e M, N, O, P, Q (produção)
-    const range = `${tabName}!G${rowNumber}:Q${rowNumber}`;
+    // Buscar colunas G, H, I, J (pedido), M, N, O, P, Q (produção) e R, S, T (foto)
+    const range = `${tabName}!G${rowNumber}:T${rowNumber}`;
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -39,6 +39,10 @@ export async function GET(
       unidades: Number(values[8] || 0),        // O
       kg: Number(values[9] || 0),              // P
       producaoUpdatedAt: values[10] || '',     // Q
+      // Dados de foto (colunas R, S, T)
+      photoUrl: values[11] || '',              // R
+      photoId: values[12] || '',               // S
+      photoUploadedAt: values[13] || '',       // T
     };
 
     return NextResponse.json({ data, rowId: rowNumber });
@@ -61,24 +65,27 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { caixas, pacotes, unidades, kg } = body;
+    const { caixas, pacotes, unidades, kg, photoUrl, photoId, photoUploadedAt } = body;
 
     // Validar dados
     if (caixas < 0 || pacotes < 0 || unidades < 0 || kg < 0) {
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
     }
 
-    // Atualizar apenas as colunas de produção
+    // Atualizar colunas de produção e foto
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    const range = `${tabName}!M${rowNumber}:Q${rowNumber}`;
+    const range = `${tabName}!M${rowNumber}:T${rowNumber}`;
     const values = [
-      caixas || 0,
-      pacotes || 0,
-      unidades || 0,
-      kg || 0,
-      new Date().toISOString(), // producao_updated_at
+      caixas || 0,                    // M - caixas
+      pacotes || 0,                   // N - pacotes
+      unidades || 0,                  // O - unidades
+      kg || 0,                        // P - kg
+      new Date().toISOString(),       // Q - producao_updated_at
+      photoUrl || '',                 // R - photo_url
+      photoId || '',                  // S - photo_id
+      photoUploadedAt || '',          // T - photo_uploaded_at
     ];
 
     await sheets.spreadsheets.values.update({

@@ -25,6 +25,10 @@ type PainelItem = {
   pedidoPacotes?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
+  // Dados de foto
+  photoUrl?: string;
+  photoId?: string;
+  photoUploadedAt?: string;
 };
 
 function formatUnidade(u: PainelItem['unidade']): string {
@@ -137,6 +141,10 @@ export default function ProducaoEmbalagemPage() {
         pedidoPacotes: data.data.pedidoPacotes || 0,
         pedidoUnidades: data.data.pedidoUnidades || 0,
         pedidoKg: data.data.pedidoKg || 0,
+        // Dados de foto
+        photoUrl: data.data.photoUrl,
+        photoId: data.data.photoId,
+        photoUploadedAt: data.data.photoUploadedAt,
       });
       setProducaoModalOpen(true);
     } catch (err) {
@@ -304,6 +312,22 @@ export default function ProducaoEmbalagemPage() {
                                         <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                       )}
                                     </span>
+                                    {item.photoUrl && (
+                                      <a
+                                        href={item.photoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          window.open(item.photoUrl, '_blank');
+                                        }}
+                                        className="text-white hover:text-gray-300 ml-2 transition-colors cursor-pointer"
+                                        title="Ver foto"
+                                      >
+                                        <span className="material-icons text-lg">photo_camera</span>
+                                      </a>
+                                    )}
                                   </div>
                                   <div className="text-right ml-2 flex-shrink-0">
                                     <div className="text-base font-bold text-white">
@@ -351,9 +375,13 @@ export default function ProducaoEmbalagemPage() {
           pacotes: editingItem.pacotes || 0,
           unidades: editingItem.unidades || 0,
           kg: editingItem.kg || 0,
+          photoUrl: editingItem.photoUrl,
+          photoId: editingItem.photoId,
+          photoUploadedAt: editingItem.photoUploadedAt,
         } : undefined}
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}
+        rowId={editingItem?.rowId}
         pedidoQuantidades={editingItem ? {
           caixas: editingItem.pedidoCaixas || 0,
           pacotes: editingItem.pedidoPacotes || 0,
