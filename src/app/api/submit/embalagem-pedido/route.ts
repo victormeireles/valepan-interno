@@ -22,6 +22,8 @@ export async function POST(request: Request) {
 
     // Persistir cada item como linha separada (regra 4: manter histórico)
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    const now = new Date().toISOString();
+    
     for (const item of payload.itens) {
       const values = [
         payload.dataPedido,
@@ -34,7 +36,8 @@ export async function POST(request: Request) {
         item.pacotes || 0,
         item.unidades || 0,
         item.kg || 0,
-        new Date().toISOString(),
+        now, // created_at
+        now, // updated_at (mesmo valor na criação)
       ];
       await appendRow(spreadsheetId, tabName, values);
     }

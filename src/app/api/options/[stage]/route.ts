@@ -34,19 +34,13 @@ export async function GET(
 
     // Determinar qual coluna usar baseado no campo solicitado
     let column = config.source.column;
-    let spreadsheetId = config.source.spreadsheetId;
-    let tabName = config.source.tabName;
-    let headerRow = config.source.headerRow;
+    const spreadsheetId = config.source.spreadsheetId;
+    const tabName = config.source.tabName;
+    const headerRow = config.source.headerRow;
 
     // Se um campo específico foi solicitado, usar sua configuração
     if (field && config.fields[field]?.sourceColumn) {
       column = config.fields[field].sourceColumn!;
-      // Para embalagem-producao, cliente vem de fonte diferente
-      if (stage === 'embalagem-producao' && field === 'cliente') {
-        spreadsheetId = '1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw';
-        tabName = 'De Para Razao Social';
-        headerRow = 1;
-      }
     }
 
     // Verificar cache

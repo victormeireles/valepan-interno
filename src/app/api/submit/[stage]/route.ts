@@ -123,14 +123,6 @@ function prepareValuesForSheet(config: { destination: { columns: string[] } }, d
     values.push(data.carrinhos);
     values.push(data.assadeiras);
     values.push(data.unidades);
-  } else if ('cliente' in data && 'caixas' in data) {
-    // Embalagem produção
-    values.push(data.cliente);
-    values.push(data.produto);
-    values.push(data.caixas);
-    values.push(data.pacotes);
-    values.push(data.unidades);
-    values.push(data.kg);
   }
 
   return values;

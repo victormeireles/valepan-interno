@@ -15,27 +15,31 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => (
-            <Link
-              key={stageKey}
-              href={`/${stageKey}`}
-              className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 p-6"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-blue-600 text-2xl font-bold">
-                    {getStageNumber(stageKey)}
-                  </span>
+          {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => {
+            const href = stageKey === 'producao-embalagem' ? '/producao/embalagem' : `/${stageKey}`;
+            
+            return (
+              <Link
+                key={stageKey}
+                href={href}
+                className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 p-6"
+              >
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-blue-600 text-2xl font-bold">
+                      {getStageNumber(stageKey)}
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    {config.name}
+                  </h2>
+                  <p className="text-gray-600 text-sm">
+                    {config.description}
+                  </p>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  {config.name}
-                </h2>
-                <p className="text-gray-600 text-sm">
-                  {config.description}
-                </p>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Seção de Embalagem */}
@@ -43,9 +47,9 @@ export default function Home() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
             Embalagem
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-1 gap-6 max-w-md mx-auto">
             <Link
-              href="/embalagem/pedido"
+              href="/pedido/embalagem"
               className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 p-6"
             >
               <div className="text-center">
@@ -53,27 +57,10 @@ export default function Home() {
                   <span className="material-icons text-green-600 text-2xl">shopping_cart</span>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Pedido para Embalagem
+                  Pedido de Embalagem
                 </h3>
                 <p className="text-gray-600 text-sm">
-                  Cadastro de pedidos por cliente e produto
-                </p>
-              </div>
-            </Link>
-
-            <Link
-              href="/embalagem/painel"
-              className="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 p-6"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="material-icons text-purple-600 text-2xl">dashboard</span>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Painel de Produção
-                </h3>
-                <p className="text-gray-600 text-sm">
-                  Visualização da produção do dia para a equipe
+                  Cadastro e gestão de pedidos por cliente e produto
                 </p>
               </div>
             </Link>
@@ -97,7 +84,7 @@ function getStageNumber(stageKey: string): string {
     'fermentacao': '3',
     'resfriamento': '4',
     'forno': '5',
-    'embalagem-producao': '6',
+    'producao-embalagem': '6',
   };
   
   return numbers[stageKey] || '?';

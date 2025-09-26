@@ -168,3 +168,61 @@ export async function getProductsWithUnits(
   
   return uniqueProducts;
 }
+
+// Função para deletar uma linha específica
+export async function deleteSheetRow(
+  spreadsheetId: string,
+  tabName: string,
+  rowNumber: number
+): Promise<void> {
+  const sheets = await getGoogleSheetsClient();
+  
+  try {
+    // Primeiro, obter o ID da aba
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === tabName);
+    
+    if (!sheet?.properties?.sheetId) {
+      throw new Error(`Aba "${tabName}" não encontrada`);
+    }
+
+    // Deletar a linha usando batchUpdate
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowNumber - 1, // Google Sheets usa índice baseado em 0
+              endIndex: rowNumber
+            }
+          }
+        }]
+      }
+    });
+  } catch (error) {
+    const getMessage = (e: unknown): string => (e instanceof Error ? (e.message ?? '') : '');
+    const msg = getMessage(error).toLowerCase();
+
+    // Falta de permissão à planilha
+    const isPermissionError =
+      msg.includes('permission') ||
+      msg.includes('insufficient permissions') ||
+      msg.includes('permission_denied') ||
+      msg.includes('caller does not have permission') ||
+      msg.includes('request had insufficient authentication scopes');
+
+    if (isPermissionError) {
+      const authEmail = process.env.GOOGLE_SA_CLIENT_EMAIL || '';
+      throw new AccessDeniedError(
+        'Acesso à planilha necessário',
+        authEmail,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+      );
+    }
+
+    throw error;
+  }
+}

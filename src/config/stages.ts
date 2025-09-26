@@ -134,32 +134,22 @@ export const STAGES_CONFIG: Record<string, StageConfig> = {
       assadeiras: { type: 'number', required: true, label: 'Assadeiras' },
       unidades: { type: 'number', required: true, label: 'Unidades' }
     }
-  }
-  ,
-  'embalagem-producao': {
-    name: 'Embalagem (Produção)',
+  },
+  'producao-embalagem': {
+    name: 'Produção de Embalagem',
     description: 'Registro de produção na etapa de embalagem',
     source: {
-      spreadsheetId: '1WsdJ4ocAhLis_7eDkPDHgYMraNqmRe0I2XQJK-mrHcI',
-      tabName: 'Produtos',
-      column: 'A',
-      headerRow: 2 // Dados começam na linha 3, igual ao forno
+      spreadsheetId: '',
+      tabName: '',
+      column: '',
+      headerRow: 1
     },
     destination: {
-      spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
-      tabName: '6 - Embalagem',
-      columns: ['Data', 'Turno', 'Cliente', 'Produto', 'Caixas', 'Pacotes', 'Unidades', 'Kg']
+      spreadsheetId: '',
+      tabName: '',
+      columns: []
     },
-    fields: {
-      data: { type: 'date', required: true, label: 'Data' },
-      turno: { type: 'turno', required: true, label: 'Turno' },
-      cliente: { type: 'select', required: true, label: 'Cliente', sourceColumn: 'G' },
-      produto: { type: 'select', required: true, label: 'Produto', sourceColumn: 'A' },
-      caixas: { type: 'number', required: false, label: 'Caixas' },
-      pacotes: { type: 'number', required: false, label: 'Pacotes' },
-      unidades: { type: 'number', required: false, label: 'Unidades' },
-      kg: { type: 'number', required: false, label: 'Kg' },
-    }
+    fields: {}
   }
 };
 

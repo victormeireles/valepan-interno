@@ -15,7 +15,7 @@ export default function Switch({
   onChange, 
   required = false, 
   disabled = false,
-  label = "Opção",
+  label = "Congelado",
   trueLabel = "Sim",
   falseLabel = "Não"
 }: SwitchProps) {

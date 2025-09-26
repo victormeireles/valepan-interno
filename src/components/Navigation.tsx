@@ -111,23 +111,27 @@ export default function Navigation() {
                 <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                   Etapas de Produção
                 </h3>
-                {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => (
-                  <Link
-                    key={stageKey}
-                    href={`/${stageKey}`}
-                    onClick={closeMenu}
-                    className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                      isActive(`/${stageKey}`) 
-                        ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700' 
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className="w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-sm font-bold mr-3">
-                      {getStageNumber(stageKey)}
-                    </span>
-                    {config.name}
-                  </Link>
-                ))}
+                {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => {
+                  const href = stageKey === 'producao-embalagem' ? '/producao/embalagem' : `/${stageKey}`;
+                  
+                  return (
+                    <Link
+                      key={stageKey}
+                      href={href}
+                      onClick={closeMenu}
+                      className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                        isActive(href) 
+                          ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700' 
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-sm font-bold mr-3">
+                        {getStageNumber(stageKey)}
+                      </span>
+                      {config.name}
+                    </Link>
+                  );
+                })}
               </div>
 
               {/* Separador */}
@@ -139,29 +143,17 @@ export default function Navigation() {
                   Embalagem
                 </h3>
                 <Link
-                  href="/embalagem/pedido"
+                  href="/pedido/embalagem"
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/embalagem/pedido')
+                    isActive('/pedido/embalagem')
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
                   <span className="material-icons text-xl mr-3">shopping_cart</span>
-                  Pedido para Embalagem
+                  Pedido de Embalagem
                 </Link>
-                 <Link
-                   href="/embalagem/painel"
-                   onClick={closeMenu}
-                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                     isActive('/embalagem/painel')
-                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                   }`}
-                 >
-                   <span className="material-icons text-xl mr-3">dashboard</span>
-                   Painel de Produção
-                 </Link>
               </div>
             </div>
           </nav>
@@ -190,7 +182,7 @@ function getStageNumber(stageKey: string): string {
     'fermentacao': '3',
     'resfriamento': '4',
     'forno': '5',
-    'embalagem-producao': '6',
+    'producao-embalagem': '6',
   };
   
   return numbers[stageKey] || '?';

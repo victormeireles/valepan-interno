@@ -40,15 +40,6 @@ export interface FornoData extends BaseStageData {
   unidades: number; // sempre inteiro
 }
 
-// Etapa 6: Embalagem (produção)
-export interface EmbalagemProducaoData extends BaseStageData {
-  cliente: string;
-  produto: string;
-  caixas: number;
-  pacotes: number;
-  unidades: number;
-  kg: number;
-}
 
 // Union type para todas as etapas
 export type StageData = 
@@ -56,11 +47,10 @@ export type StageData =
   | MassaData 
   | FermentacaoData 
   | ResfriamentoData 
-  | FornoData
-  | EmbalagemProducaoData;
+  | FornoData;
 
 // Tipos para as etapas
-export type StageType = 'pre-mistura' | 'massa' | 'fermentacao' | 'resfriamento' | 'forno' | 'embalagem-producao';
+export type StageType = 'pre-mistura' | 'massa' | 'fermentacao' | 'resfriamento' | 'forno' | 'producao-embalagem';
 
 // Resposta da API de opções
 export interface OptionsResponse {
