@@ -289,7 +289,7 @@ export default function ProducaoEmbalagemPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-wrap gap-6">
             {Object.entries(groupedItems).map(([groupKey, groupItems]) => {
               // Extrair informações do grupo da chave
               const [cliente, dataFab, obs] = groupKey.split('|');
@@ -297,27 +297,29 @@ export default function ProducaoEmbalagemPage() {
               const observacao = obs || '';
               
               return (
-                <div key={groupKey} className="space-y-2">
+                <div key={groupKey} className="bg-gray-800/20 border border-gray-600/30 rounded-lg p-4 space-y-3 w-full lg:inline-block lg:w-auto">
                   {/* Header do Cliente com Data de Etiqueta e Observação */}
-                  <div className="flex items-center gap-4">
-                    <h3 className="text-2xl font-bold text-white">{cliente}</h3>
-                    {dataDiferente && (
-                      <div className="text-sm text-yellow-300">
-                        <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white">{cliente}</h3>
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      {dataDiferente && (
+                        <div className="text-yellow-300">
+                          <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                        </div>
+                      )}
+                      {observacao && (
+                        <div className="text-gray-300">
+                          Obs: {observacao}
+                        </div>
+                      )}
+                      <div className="text-gray-300">
+                        {groupItems.length} produto{groupItems.length !== 1 ? 's' : ''}
                       </div>
-                    )}
-                    {observacao && (
-                      <div className="text-sm text-gray-300">
-                        Obs: {observacao}
-                      </div>
-                    )}
-                    <div className="text-sm text-gray-300">
-                      {groupItems.length} produto{groupItems.length !== 1 ? 's' : ''}
                     </div>
                   </div>
                         
                   {/* Cards de Produtos Individuais */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {groupItems.map((item, itemIndex) => {
                             const progressoItem = item.aProduzir > 0 ? Math.min((item.produzido / item.aProduzir) * 100, 100) : 0;
                             const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
@@ -326,7 +328,7 @@ export default function ProducaoEmbalagemPage() {
                             return (
                               <div 
                                 key={`${item.produto}-${itemIndex}`} 
-                                className={`p-2.5 rounded-lg cursor-pointer hover:shadow-lg transition-all duration-200 relative ${
+                                className={`p-2.5 rounded-lg cursor-pointer hover:shadow-lg transition-all duration-200 relative w-full sm:w-64 lg:min-w-[350px] flex-shrink-0 ${
                                   item.produzido === 0 ? 'bg-red-900/20 border border-red-500/30' : 'bg-gray-800/40'
                                 } ${isItemLoading ? 'opacity-75 pointer-events-none' : ''}`}
                                 onClick={() => handleEditProducao(item)}
@@ -341,117 +343,256 @@ export default function ProducaoEmbalagemPage() {
                                   </div>
                                 )}
                                 
-                                {/* Header com Nome e Quantidades */}
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex items-center gap-1 flex-1">
-                                    <span className="font-semibold text-white text-sm">
-                                      {item.produto}
-                                      {item.congelado === 'Sim' && (
-                                        <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
-                                      )}
-                                    </span>
-                                    {(item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
-                                      <div className="relative ml-2">
-                                        <button
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            
-                                            // Fechar todos os outros dropdowns
-                                            document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
-                                              dropdown.classList.add('hidden');
-                                            });
-                                            
-                                            // Abrir/fechar o dropdown atual
-                                            const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
-                                            dropdown.classList.toggle('hidden');
-                                          }}
-                                          className="text-white hover:text-gray-300 transition-colors cursor-pointer"
-                                          title="Ver fotos"
-                                        >
-                                          <span className="material-icons text-lg">photo_camera</span>
-                                        </button>
-                                        
-                                        {/* Dropdown de fotos */}
-                                        <div className="photo-dropdown absolute left-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden min-w-[200px]">
-                                          {item.pacoteFotoUrl && (
-                                            <a
-                                              href={item.pacoteFotoUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                window.open(item.pacoteFotoUrl, '_blank');
-                                                // Fechar dropdown
-                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                {/* Layout em duas colunas */}
+                                <div className="flex gap-3">
+                                  {/* Coluna esquerda - Produto e Fotos */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1 mb-2">
+                                      <span className="font-semibold text-white text-sm truncate">
+                                        {item.produto}
+                                        {item.congelado === 'Sim' && (
+                                          <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
+                                        )}
+                                      </span>
+                                      {(item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
+                                        <div className="relative ml-2">
+                                          <button
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              
+                                              // Fechar todos os outros dropdowns
+                                              document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
                                                 dropdown.classList.add('hidden');
-                                              }}
-                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                                            >
-                                              <span className="text-sm">📦</span>
-                                              <span className="text-sm">Foto do Pacote</span>
-                                            </a>
-                                          )}
-                                          {item.etiquetaFotoUrl && (
-                                            <a
-                                              href={item.etiquetaFotoUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                window.open(item.etiquetaFotoUrl, '_blank');
-                                                // Fechar dropdown
-                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
-                                                dropdown.classList.add('hidden');
-                                              }}
-                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                                            >
-                                              <span className="text-sm">🏷️</span>
-                                              <span className="text-sm">Foto da Etiqueta</span>
-                                            </a>
-                                          )}
-                                          {item.palletFotoUrl && (
-                                            <a
-                                              href={item.palletFotoUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                window.open(item.palletFotoUrl, '_blank');
-                                                // Fechar dropdown
-                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
-                                                dropdown.classList.add('hidden');
-                                              }}
-                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                                            >
-                                              <span className="text-sm">🚛</span>
-                                              <span className="text-sm">Foto do Pallet</span>
-                                            </a>
-                                          )}
+                                              });
+                                              
+                                              // Abrir/fechar o dropdown atual
+                                              const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                                              dropdown.classList.toggle('hidden');
+                                            }}
+                                            className="text-white hover:text-gray-300 transition-colors cursor-pointer"
+                                            title="Ver fotos"
+                                          >
+                                            <span className="material-icons text-lg">photo_camera</span>
+                                          </button>
+                                          
+                                          {/* Dropdown de fotos */}
+                                          <div className="photo-dropdown absolute left-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden min-w-[200px]">
+                                            {item.pacoteFotoUrl && (
+                                              <a
+                                                href={item.pacoteFotoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  window.open(item.pacoteFotoUrl, '_blank');
+                                                  // Fechar dropdown
+                                                  const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                  dropdown.classList.add('hidden');
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                              >
+                                                <span className="text-sm">📦</span>
+                                                <span className="text-sm">Foto do Pacote</span>
+                                              </a>
+                                            )}
+                                            {item.etiquetaFotoUrl && (
+                                              <a
+                                                href={item.etiquetaFotoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  window.open(item.etiquetaFotoUrl, '_blank');
+                                                  // Fechar dropdown
+                                                  const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                  dropdown.classList.add('hidden');
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                              >
+                                                <span className="text-sm">🏷️</span>
+                                                <span className="text-sm">Foto da Etiqueta</span>
+                                              </a>
+                                            )}
+                                            {item.palletFotoUrl && (
+                                              <a
+                                                href={item.palletFotoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  window.open(item.palletFotoUrl, '_blank');
+                                                  // Fechar dropdown
+                                                  const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                  dropdown.classList.add('hidden');
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                              >
+                                                <span className="text-sm">🚛</span>
+                                                <span className="text-sm">Foto do Pallet</span>
+                                              </a>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="text-right ml-2 flex-shrink-0">
-                                    <div className="text-base font-bold text-white">
-                                      {item.produzido} / {item.aProduzir} {formatUnidade(item.unidade)}
+                                      )}
+                                    </div>
+                                    
+                                    {/* Barra de Progresso do Item - reduzida */}
+                                    <div className="w-full bg-gray-700 rounded-full h-2">
+                                      <div 
+                                        className={`h-2 rounded-full transition-all duration-300 ${
+                                          item.produzido === 0 ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/50' : 
+                                          item.produzido < item.aProduzir ? 'bg-yellow-500' : 
+                                          'bg-green-500'
+                                        }`}
+                                        style={{ width: `${progressoItem}%` }}
+                                      ></div>
                                     </div>
                                   </div>
-                                </div>
-                                
-                                {/* Barra de Progresso do Item */}
-                                <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
-                                  <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                      item.produzido === 0 ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/50' : 
-                                      item.produzido < item.aProduzir ? 'bg-yellow-500' : 
-                                      'bg-green-500'
-                                    }`}
-                                    style={{ width: `${progressoItem}%` }}
-                                  ></div>
+                                  
+                                  {/* Coluna direita - Números */}
+                                  <div className="flex-shrink-0 w-24">
+                                    <div className="text-right">
+                                      {/* Linha 1: Produção atual */}
+                                      <div className="text-base font-bold text-white mb-1">
+                                        {(() => {
+                                          const productionParts = [];
+                                          
+                                          // Caixas produzidas
+                                          if (item.caixas !== undefined && item.caixas !== null && item.caixas > 0) {
+                                            productionParts.push(
+                                              <>
+                                                <span className="font-bold">{item.caixas}</span>
+                                                <span className="text-xs text-gray-400 ml-1">cx</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Pacotes produzidos
+                                          if (item.pacotes !== undefined && item.pacotes !== null && item.pacotes > 0) {
+                                            productionParts.push(
+                                              <>
+                                                <span className="font-bold">{item.pacotes}</span>
+                                                <span className="text-xs text-gray-400 ml-1">pct</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Unidades produzidas
+                                          if (item.unidades !== undefined && item.unidades !== null && item.unidades > 0) {
+                                            productionParts.push(
+                                              <>
+                                                <span className="font-bold">{item.unidades}</span>
+                                                <span className="text-xs text-gray-400 ml-1">un</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Kg produzidos
+                                          if (item.kg !== undefined && item.kg !== null && item.kg > 0) {
+                                            productionParts.push(
+                                              <>
+                                                <span className="font-bold">{item.kg}</span>
+                                                <span className="text-xs text-gray-400 ml-1">kg</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Se não há dados de produção detalhados, usar o valor consolidado
+                                          if (productionParts.length === 0) {
+                                            return (
+                                              <>
+                                                <span className="font-bold">{item.produzido}</span>
+                                                <span className="text-xs text-gray-400 ml-1">{formatUnidade(item.unidade).toLowerCase()}</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Juntar todas as partes com "+"
+                                          return productionParts.map((part, index) => (
+                                            <span key={index}>
+                                              {index > 0 && <span className="text-xs text-gray-400 mx-1">+</span>}
+                                              {part}
+                                            </span>
+                                          ));
+                                        })()}
+                                      </div>
+                                      
+                                      {/* Linha 2: Pedido original */}
+                                      <div className="text-xs text-gray-400">
+                                        {(() => {
+                                          const pedidoParts = [];
+                                          
+                                          // Caixas do pedido
+                                          if (item.pedidoCaixas && item.pedidoCaixas > 0) {
+                                            pedidoParts.push(
+                                              <>
+                                                <span className="text-base font-bold text-white">{item.pedidoCaixas}</span>
+                                                <span className="text-xs text-gray-400 ml-1">cx</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Pacotes do pedido
+                                          if (item.pedidoPacotes && item.pedidoPacotes > 0) {
+                                            pedidoParts.push(
+                                              <>
+                                                <span className="text-base font-bold text-white">{item.pedidoPacotes}</span>
+                                                <span className="text-xs text-gray-400 ml-1">pct</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Unidades do pedido
+                                          if (item.pedidoUnidades && item.pedidoUnidades > 0) {
+                                            pedidoParts.push(
+                                              <>
+                                                <span className="text-base font-bold text-white">{item.pedidoUnidades}</span>
+                                                <span className="text-xs text-gray-400 ml-1">un</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Kg do pedido
+                                          if (item.pedidoKg && item.pedidoKg > 0) {
+                                            pedidoParts.push(
+                                              <>
+                                                <span className="text-base font-bold text-white">{item.pedidoKg}</span>
+                                                <span className="text-xs text-gray-400 ml-1">kg</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Se não há dados de pedido detalhados, usar o valor consolidado
+                                          if (pedidoParts.length === 0) {
+                                            return (
+                                              <>
+                                                de <span className="text-base font-bold text-white">{item.aProduzir}</span>
+                                                <span className="ml-1">{formatUnidade(item.unidade).toLowerCase()}</span>
+                                              </>
+                                            );
+                                          }
+                                          
+                                          // Juntar todas as partes com "+"
+                                          const pedidoContent = pedidoParts.map((part, index) => (
+                                            <span key={index}>
+                                              {index > 0 && <span className="mx-1">+</span>}
+                                              {part}
+                                            </span>
+                                          ));
+                                          
+                                          return (
+                                            <>
+                                              de {pedidoContent}
+                                            </>
+                                          );
+                                        })()}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             );

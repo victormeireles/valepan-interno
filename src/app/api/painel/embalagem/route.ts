@@ -44,6 +44,11 @@ type PainelItem = {
   pacotes?: number;
   unidades?: number;
   kg?: number;
+  // Dados do pedido original para exibição
+  pedidoCaixas?: number;
+  pedidoPacotes?: number;
+  pedidoUnidades?: number;
+  pedidoKg?: number;
   // Dados de fotos (novos campos)
   pacoteFotoUrl?: string;
   pacoteFotoId?: string;
@@ -133,11 +138,16 @@ export async function GET(request: Request) {
         dataFabricacao,
         rowId: rowNumber,
         sourceType: 'pedido',
-        // Adicionar valores individuais para edição
-        caixas: caixas,
-        pacotes: pacotes,
-        unidades: unidades,
-        kg: kg,
+        // Valores de PRODUÇÃO (o que foi realmente produzido)
+        caixas: producaoCaixas,
+        pacotes: producaoPacotes,
+        unidades: producaoUnidades,
+        kg: producaoKg,
+        // Valores do PEDIDO (o que foi pedido originalmente)
+        pedidoCaixas: caixas,
+        pedidoPacotes: pacotes,
+        pedidoUnidades: unidades,
+        pedidoKg: kg,
         // Dados de fotos
         pacoteFotoUrl: pacoteFotoUrl || undefined,
         pacoteFotoId: pacoteFotoId || undefined,

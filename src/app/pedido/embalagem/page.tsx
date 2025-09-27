@@ -400,7 +400,7 @@ export default function PedidoEmbalagemPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-wrap gap-6">
             {Object.entries(groupedItems).map(([groupKey, groupItems]) => {
               // Extrair informações do grupo da chave
               const [cliente, dataFab, obs] = groupKey.split('|');
@@ -408,27 +408,29 @@ export default function PedidoEmbalagemPage() {
               const observacao = obs || '';
               
               return (
-                <div key={groupKey} className="space-y-2">
+                <div key={groupKey} className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-4 space-y-3 w-full lg:inline-block lg:w-auto">
                   {/* Header do Cliente com Data de Etiqueta e Observação */}
-                  <div className="flex items-center gap-4">
-                    <h3 className="text-2xl font-bold text-white">{cliente}</h3>
-                    {dataDiferente && (
-                      <div className="text-sm text-yellow-300">
-                        <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white">{cliente}</h3>
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      {dataDiferente && (
+                        <div className="text-yellow-300">
+                          <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                        </div>
+                      )}
+                      {observacao && (
+                        <div className="text-gray-300">
+                          Obs: {observacao}
+                        </div>
+                      )}
+                      <div className="text-gray-300">
+                        {groupItems.length} produto{groupItems.length !== 1 ? 's' : ''}
                       </div>
-                    )}
-                    {observacao && (
-                      <div className="text-sm text-gray-300">
-                        Obs: {observacao}
-                      </div>
-                    )}
-                    <div className="text-sm text-gray-300">
-                      {groupItems.length} produto{groupItems.length !== 1 ? 's' : ''}
                     </div>
                   </div>
                         
                   {/* Cards de Produtos Individuais */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {groupItems.map((item, itemIndex) => {
                             const progressoItem = item.aProduzir > 0 ? Math.min((item.produzido / item.aProduzir) * 100, 100) : 0;
                             const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
@@ -437,7 +439,7 @@ export default function PedidoEmbalagemPage() {
                             return (
                               <div 
                                 key={`${item.produto}-${itemIndex}`} 
-                                className={`p-2.5 rounded-lg cursor-pointer hover:shadow-lg transition-all duration-200 relative ${
+                                className={`p-2.5 rounded-lg cursor-pointer hover:shadow-lg transition-all duration-200 relative w-full sm:w-64 lg:min-w-[350px] flex-shrink-0 ${
                                   item.produzido === 0 ? 'bg-red-900/20 border border-red-500/30' : 'bg-slate-800/40'
                                 } ${isItemLoading ? 'opacity-75 pointer-events-none' : ''}`}
                                 onClick={() => handleEditItem(item)}
