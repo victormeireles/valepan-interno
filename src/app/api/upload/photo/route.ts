@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const photo = formData.get('photo') as File;
     const rowId = formData.get('rowId') as string;
+    const photoType = formData.get('photoType') as string;
 
     if (!photo) {
       return NextResponse.json({ error: 'Nenhuma foto foi enviada' }, { status: 400 });
@@ -15,6 +16,10 @@ export async function POST(request: NextRequest) {
 
     if (!rowId) {
       return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
+    }
+
+    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
     }
 
     const rowNumber = parseInt(rowId);
@@ -41,18 +46,36 @@ export async function POST(request: NextRequest) {
       buffer,
       photo.name,
       photo.type,
-      rowNumber
+      rowNumber,
+      photoType as 'pacote' | 'etiqueta' | 'pallet'
     );
 
-    // Salvar dados da foto na planilha (colunas R, S, T)
+    // Salvar dados da foto na planilha
     const sheets = await getGoogleSheetsClient();
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     
-    const range = `${tabName}!R${rowNumber}:T${rowNumber}`;
+    // Determinar as colunas baseado no tipo de foto
+    let startColumn: string;
+    switch (photoType) {
+      case 'pacote':
+        startColumn = 'R'; // R, S, T
+        break;
+      case 'etiqueta':
+        startColumn = 'U'; // U, V, W
+        break;
+      case 'pallet':
+        startColumn = 'X'; // X, Y, Z
+        break;
+      default:
+        throw new Error('Tipo de foto inválido');
+    }
+    
+    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
+    const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
     const values = [
-      uploadResult.photoUrl,           // R - URL da foto
-      uploadResult.photoId,            // S - ID do arquivo no Drive
-      new Date().toISOString(),        // T - Timestamp do upload
+      uploadResult.photoUrl,           // URL da foto
+      uploadResult.photoId,            // ID do arquivo no Drive
+      new Date().toISOString(),        // Timestamp do upload
     ];
 
     await sheets.spreadsheets.values.update({
@@ -68,6 +91,7 @@ export async function POST(request: NextRequest) {
       success: true,
       photoUrl: uploadResult.photoUrl,
       photoId: uploadResult.photoId,
+      photoType: photoType,
       message: 'Foto enviada com sucesso'
     });
 

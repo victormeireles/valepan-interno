@@ -9,17 +9,42 @@ export async function GET(
 ) {
   try {
     const { rowId } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | null;
+    
     const rowNumber = parseInt(rowId);
     
     if (isNaN(rowNumber) || rowNumber < 2) {
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    // Buscar dados da foto na planilha (colunas R, S, T)
+    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
+    }
+
+    // Buscar dados da foto na planilha
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    const range = `${tabName}!R${rowNumber}:T${rowNumber}`;
+    // Determinar as colunas baseado no tipo de foto
+    let startColumn: string;
+    switch (photoType) {
+      case 'pacote':
+        startColumn = 'R'; // R, S, T
+        break;
+      case 'etiqueta':
+        startColumn = 'U'; // U, V, W
+        break;
+      case 'pallet':
+        startColumn = 'X'; // X, Y, Z
+        break;
+      default:
+        throw new Error('Tipo de foto inválido');
+    }
+    
+    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
+    const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
+    
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -31,7 +56,7 @@ export async function GET(
       return NextResponse.json({ 
         success: true, 
         photo: null,
-        message: 'Nenhuma foto encontrada' 
+        message: `Nenhuma foto ${photoType} encontrada` 
       });
     }
 
@@ -39,6 +64,7 @@ export async function GET(
       photoUrl: values[0] || '',
       photoId: values[1] || '',
       photoUploadedAt: values[2] || '',
+      photoType: photoType,
     };
 
     // Verificar se a foto ainda existe no Drive
@@ -58,7 +84,7 @@ export async function GET(
         return NextResponse.json({ 
           success: true, 
           photo: null,
-          message: 'Foto não encontrada no Drive' 
+          message: `Foto ${photoType} não encontrada no Drive` 
         });
       }
     }
@@ -66,7 +92,7 @@ export async function GET(
     return NextResponse.json({ 
       success: true, 
       photo: photoData,
-      message: 'Foto encontrada' 
+      message: `Foto ${photoType} encontrada` 
     });
 
   } catch (error) {
@@ -82,17 +108,42 @@ export async function DELETE(
 ) {
   try {
     const { rowId } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | null;
+    
     const rowNumber = parseInt(rowId);
     
     if (isNaN(rowNumber) || rowNumber < 2) {
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
+    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
+    }
+
     // Buscar dados da foto na planilha
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    const range = `${tabName}!R${rowNumber}:T${rowNumber}`;
+    // Determinar as colunas baseado no tipo de foto
+    let startColumn: string;
+    switch (photoType) {
+      case 'pacote':
+        startColumn = 'R'; // R, S, T
+        break;
+      case 'etiqueta':
+        startColumn = 'U'; // U, V, W
+        break;
+      case 'pallet':
+        startColumn = 'X'; // X, Y, Z
+        break;
+      default:
+        throw new Error('Tipo de foto inválido');
+    }
+    
+    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
+    const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
+    
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -103,7 +154,7 @@ export async function DELETE(
     if (values.length === 0 || !values[0]) {
       return NextResponse.json({ 
         success: true, 
-        message: 'Nenhuma foto encontrada para deletar' 
+        message: `Nenhuma foto ${photoType} encontrada para deletar` 
       });
     }
 
@@ -131,7 +182,7 @@ export async function DELETE(
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Foto deletada com sucesso' 
+      message: `Foto ${photoType} deletada com sucesso` 
     });
 
   } catch (error) {

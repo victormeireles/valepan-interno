@@ -11,6 +11,7 @@ interface ProducaoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: ProducaoData) => Promise<void>;
+  onSaveSuccess?: () => Promise<void>;
   initialData?: ProducaoData;
   loading?: boolean;
   produto?: string;
@@ -28,6 +29,7 @@ export default function ProducaoModal({
   isOpen,
   onClose,
   onSave,
+  onSaveSuccess,
   initialData,
   loading = false,
   produto = '',
@@ -43,8 +45,17 @@ export default function ProducaoModal({
   });
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoFiles, setPhotoFiles] = useState<{
+    pacote: File | null;
+    etiqueta: File | null;
+    pallet: File | null;
+  }>({
+    pacote: null,
+    etiqueta: null,
+    pallet: null,
+  });
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -54,56 +65,79 @@ export default function ProducaoModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevenir múltiplos cliques
+    if (isSubmitting) return;
+    
     try {
+      setIsSubmitting(true);
       setMessage(null);
       
-      // Se há uma nova foto para upload
-      if (photoFile && rowId) {
+      let updatedFormData = { ...formData };
+      
+      // Verificar se há fotos para upload
+      const hasPhotos = Object.values(photoFiles).some(file => file !== null);
+      
+      // Upload de fotos se houver
+      if (rowId && hasPhotos) {
         setPhotoLoading(true);
         
-        // Se já existe uma foto, deletar a antiga primeiro
-        if (formData.photoId) {
-          try {
-            const deleteRes = await fetch(`/api/photo/${rowId}`, {
-              method: 'DELETE',
-            });
+        // Fazer upload de todas as fotos primeiro
+        const uploadPromises = [];
+        const photoTypes = [];
+        
+        for (const [photoType, photoFile] of Object.entries(photoFiles)) {
+          if (photoFile) {
+            const formDataPhoto = new FormData();
+            formDataPhoto.append('photo', photoFile);
+            formDataPhoto.append('rowId', rowId.toString());
+            formDataPhoto.append('photoType', photoType);
             
-            if (!deleteRes.ok) {
-              console.warn('Erro ao deletar foto antiga, continuando com upload...');
-            }
-          } catch (deleteError) {
-            console.warn('Erro ao deletar foto antiga:', deleteError);
+            uploadPromises.push(
+              fetch('/api/upload/photo', {
+                method: 'POST',
+                body: formDataPhoto,
+              })
+            );
+            photoTypes.push(photoType);
           }
         }
         
-        const formDataPhoto = new FormData();
-        formDataPhoto.append('photo', photoFile);
-        formDataPhoto.append('rowId', rowId.toString());
+        // Aguardar todos os uploads
+        const uploadResults = await Promise.all(uploadPromises);
         
-        const uploadRes = await fetch('/api/upload/photo', {
-          method: 'POST',
-          body: formDataPhoto,
-        });
-        
-        if (!uploadRes.ok) {
+        // Verificar se todos os uploads foram bem-sucedidos
+        for (let i = 0; i < uploadResults.length; i++) {
+          const uploadRes = uploadResults[i];
+          const photoType = photoTypes[i];
+          
+          if (!uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
+          }
+          
           const uploadData = await uploadRes.json();
-          throw new Error(uploadData.error || 'Erro ao fazer upload da foto');
+          
+          // Atualizar formData com dados da foto baseado no tipo
+          const photoFieldPrefix = photoType === 'pacote' ? 'pacote' : 
+                                 photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+          
+          updatedFormData = {
+            ...updatedFormData,
+            [`${photoFieldPrefix}FotoUrl`]: uploadData.photoUrl,
+            [`${photoFieldPrefix}FotoId`]: uploadData.photoId,
+            [`${photoFieldPrefix}FotoUploadedAt`]: new Date().toISOString(),
+          };
         }
         
-        const uploadData = await uploadRes.json();
-        
-        // Atualizar formData com dados da foto
-        const updatedFormData = {
-          ...formData,
-          photoUrl: uploadData.photoUrl,
-          photoId: uploadData.photoId,
-          photoUploadedAt: new Date().toISOString(),
-        };
-        
         setPhotoLoading(false);
-        await onSave(updatedFormData);
-      } else {
-        await onSave(formData);
+      }
+      
+      await onSave(updatedFormData);
+      
+      // Recarregar dados do painel se callback fornecido
+      if (onSaveSuccess) {
+        await onSaveSuccess();
       }
       
       // Fechar modal imediatamente após salvar com sucesso
@@ -114,44 +148,55 @@ export default function ProducaoModal({
         type: 'error', 
         text: error instanceof Error ? error.message : 'Erro ao salvar produção' 
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handlePhotoSelect = (file: File) => {
-    setPhotoFile(file);
+  const handlePhotoSelect = (file: File, photoType: 'pacote' | 'etiqueta' | 'pallet') => {
+    setPhotoFiles(prev => ({
+      ...prev,
+      [photoType]: file
+    }));
   };
 
-  const handlePhotoRemove = () => {
-    setPhotoFile(null);
+  const handlePhotoRemove = (photoType: 'pacote' | 'etiqueta' | 'pallet') => {
+    setPhotoFiles(prev => ({
+      ...prev,
+      [photoType]: null
+    }));
   };
 
-  const handlePhotoManagerRemove = async () => {
+  const handlePhotoManagerRemove = async (photoType: 'pacote' | 'etiqueta' | 'pallet') => {
     if (!rowId) return;
     
     try {
       setPhotoLoading(true);
-      const res = await fetch(`/api/photo/${rowId}`, {
+      const res = await fetch(`/api/photo/${rowId}?type=${photoType}`, {
         method: 'DELETE',
       });
       
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Erro ao remover foto');
+        throw new Error(data.error || `Erro ao remover foto ${photoType}`);
       }
       
       // Atualizar formData para remover dados da foto
+      const photoFieldPrefix = photoType === 'pacote' ? 'pacote' : 
+                             photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+      
       setFormData(prev => ({
         ...prev,
-        photoUrl: undefined,
-        photoId: undefined,
-        photoUploadedAt: undefined,
+        [`${photoFieldPrefix}FotoUrl`]: undefined,
+        [`${photoFieldPrefix}FotoId`]: undefined,
+        [`${photoFieldPrefix}FotoUploadedAt`]: undefined,
       }));
       
-      setMessage({ type: 'success', text: 'Foto removida com sucesso!' });
+      setMessage({ type: 'success', text: `Foto ${photoType} removida com sucesso!` });
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error instanceof Error ? error.message : 'Erro ao remover foto' 
+        text: error instanceof Error ? error.message : `Erro ao remover foto ${photoType}` 
       });
     } finally {
       setPhotoLoading(false);
@@ -166,7 +211,11 @@ export default function ProducaoModal({
       kg: 0,
     });
     setMessage(null);
-    setPhotoFile(null);
+    setPhotoFiles({
+      pacote: null,
+      etiqueta: null,
+      pallet: null,
+    });
     onClose();
   };
 
@@ -267,32 +316,95 @@ export default function ProducaoModal({
               />
             </div>
 
-            {/* Seção de Foto */}
+            {/* Seção de Fotos */}
             <div className="border-t pt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Foto da Produção</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Fotos da Produção</h3>
               
-              {/* Mostrar botão "Ver Foto" se houver foto */}
-              {formData.photoUrl && (
-                <div className="mb-4">
-                  <PhotoManager
-                    photoUrl={formData.photoUrl}
-                    photoId={formData.photoId}
-                    onPhotoRemove={handlePhotoManagerRemove}
+              <div className="space-y-6">
+                {/* Foto do Pacote */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-700 mb-3">📦 Foto do Pacote</h4>
+                  
+                  {/* Mostrar botão "Ver Foto" se houver foto */}
+                  {formData.pacoteFotoUrl && (
+                    <div className="mb-4">
+                      <PhotoManager
+                        photoUrl={formData.pacoteFotoUrl}
+                        photoId={formData.pacoteFotoId}
+                        onPhotoRemove={() => handlePhotoManagerRemove('pacote')}
+                        loading={photoLoading}
+                        disabled={loading}
+                        showRemoveButton={true}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Input de upload sempre disponível */}
+                  <PhotoUploader
+                    onPhotoSelect={(file) => handlePhotoSelect(file, 'pacote')}
+                    onPhotoRemove={() => handlePhotoRemove('pacote')}
                     loading={photoLoading}
                     disabled={loading}
-                    showRemoveButton={true}
+                    currentPhotoUrl={formData.pacoteFotoUrl}
                   />
                 </div>
-              )}
-              
-              {/* Input de upload sempre disponível */}
-              <PhotoUploader
-                onPhotoSelect={handlePhotoSelect}
-                onPhotoRemove={handlePhotoRemove}
-                loading={photoLoading}
-                disabled={loading}
-                currentPhotoUrl={formData.photoUrl}
-              />
+
+                {/* Foto da Etiqueta */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-700 mb-3">🏷️ Foto da Etiqueta</h4>
+                  
+                  {/* Mostrar botão "Ver Foto" se houver foto */}
+                  {formData.etiquetaFotoUrl && (
+                    <div className="mb-4">
+                      <PhotoManager
+                        photoUrl={formData.etiquetaFotoUrl}
+                        photoId={formData.etiquetaFotoId}
+                        onPhotoRemove={() => handlePhotoManagerRemove('etiqueta')}
+                        loading={photoLoading}
+                        disabled={loading}
+                        showRemoveButton={true}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Input de upload sempre disponível */}
+                  <PhotoUploader
+                    onPhotoSelect={(file) => handlePhotoSelect(file, 'etiqueta')}
+                    onPhotoRemove={() => handlePhotoRemove('etiqueta')}
+                    loading={photoLoading}
+                    disabled={loading}
+                    currentPhotoUrl={formData.etiquetaFotoUrl}
+                  />
+                </div>
+
+                {/* Foto do Pallet */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-700 mb-3">🚛 Foto do Pallet</h4>
+                  
+                  {/* Mostrar botão "Ver Foto" se houver foto */}
+                  {formData.palletFotoUrl && (
+                    <div className="mb-4">
+                      <PhotoManager
+                        photoUrl={formData.palletFotoUrl}
+                        photoId={formData.palletFotoId}
+                        onPhotoRemove={() => handlePhotoManagerRemove('pallet')}
+                        loading={photoLoading}
+                        disabled={loading}
+                        showRemoveButton={true}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Input de upload sempre disponível */}
+                  <PhotoUploader
+                    onPhotoSelect={(file) => handlePhotoSelect(file, 'pallet')}
+                    onPhotoRemove={() => handlePhotoRemove('pallet')}
+                    loading={photoLoading}
+                    disabled={loading}
+                    currentPhotoUrl={formData.palletFotoUrl}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end space-x-4 pt-6">
@@ -300,16 +412,26 @@ export default function ProducaoModal({
                 type="button"
                 onClick={handleClose}
                 className="px-6 py-3 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium"
-                disabled={loading}
+                disabled={loading || isSubmitting}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
-                disabled={loading}
+                className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                disabled={loading || isSubmitting}
               >
-                {loading ? 'Salvando...' : 'Salvar Produção'}
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {photoLoading ? 'Enviando fotos...' : 'Salvando...'}
+                  </>
+                ) : (
+                  'Salvar Produção'
+                )}
               </button>
             </div>
           </form>

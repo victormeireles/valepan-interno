@@ -75,12 +75,18 @@ export interface ApiError {
 
 // Tipos para fotos de produção
 export interface PhotoData {
-  photoUrl?: string;
-  photoId?: string;
-  photoUploadedAt?: string;
+  pacoteFotoUrl?: string;
+  pacoteFotoId?: string;
+  pacoteFotoUploadedAt?: string;
+  etiquetaFotoUrl?: string;
+  etiquetaFotoId?: string;
+  etiquetaFotoUploadedAt?: string;
+  palletFotoUrl?: string;
+  palletFotoId?: string;
+  palletFotoUploadedAt?: string;
 }
 
-// Dados de produção com foto
+// Dados de produção com fotos
 export interface ProducaoData extends PhotoData {
   caixas: number;
   pacotes: number;
@@ -88,10 +94,14 @@ export interface ProducaoData extends PhotoData {
   kg: number;
 }
 
+// Tipo de foto para upload
+export type PhotoType = 'pacote' | 'etiqueta' | 'pallet';
+
 // Resposta da API de upload de foto
 export interface PhotoUploadResponse {
   success: boolean;
   photoUrl: string;
   photoId: string;
+  photoType: PhotoType;
   message: string;
 }

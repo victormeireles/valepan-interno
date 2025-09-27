@@ -44,10 +44,16 @@ type PainelItem = {
   pacotes?: number;
   unidades?: number;
   kg?: number;
-  // Dados de foto
-  photoUrl?: string;
-  photoId?: string;
-  photoUploadedAt?: string;
+  // Dados de fotos (novos campos)
+  pacoteFotoUrl?: string;
+  pacoteFotoId?: string;
+  pacoteFotoUploadedAt?: string;
+  etiquetaFotoUrl?: string;
+  etiquetaFotoId?: string;
+  etiquetaFotoUploadedAt?: string;
+  palletFotoUrl?: string;
+  palletFotoId?: string;
+  palletFotoUploadedAt?: string;
 };
 
 export async function GET(request: Request) {
@@ -55,9 +61,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISO();
 
-    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e foto Q, R, S, T)
+    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R, S, T, U, V, W, X, Y, Z)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:T`);
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:Z`);
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
@@ -87,10 +93,16 @@ export async function GET(request: Request) {
       const producaoUnidades = Number(r[14] || 0); // O
       const producaoKg = Number(r[15] || 0);      // P
       
-      // Dados de foto (colunas Q, R, S, T)
-      const photoUrl = (r[17] || '').toString().trim();        // R
-      const photoId = (r[18] || '').toString().trim();         // S
-      const photoUploadedAt = (r[19] || '').toString().trim(); // T
+      // Dados de fotos (colunas R, S, T, U, V, W, X, Y, Z)
+      const pacoteFotoUrl = (r[17] || '').toString().trim();        // R
+      const pacoteFotoId = (r[18] || '').toString().trim();         // S
+      const pacoteFotoUploadedAt = (r[19] || '').toString().trim(); // T
+      const etiquetaFotoUrl = (r[20] || '').toString().trim();      // U
+      const etiquetaFotoId = (r[21] || '').toString().trim();       // V
+      const etiquetaFotoUploadedAt = (r[22] || '').toString().trim(); // W
+      const palletFotoUrl = (r[23] || '').toString().trim();        // X
+      const palletFotoId = (r[24] || '').toString().trim();         // Y
+      const palletFotoUploadedAt = (r[25] || '').toString().trim(); // Z
 
       let unidade: PainelItem['unidade'] | '' = '';
       let aProduzir = 0;
@@ -126,10 +138,16 @@ export async function GET(request: Request) {
         pacotes: pacotes,
         unidades: unidades,
         kg: kg,
-        // Dados de foto
-        photoUrl: photoUrl || undefined,
-        photoId: photoId || undefined,
-        photoUploadedAt: photoUploadedAt || undefined,
+        // Dados de fotos
+        pacoteFotoUrl: pacoteFotoUrl || undefined,
+        pacoteFotoId: pacoteFotoId || undefined,
+        pacoteFotoUploadedAt: pacoteFotoUploadedAt || undefined,
+        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+        etiquetaFotoId: etiquetaFotoId || undefined,
+        etiquetaFotoUploadedAt: etiquetaFotoUploadedAt || undefined,
+        palletFotoUrl: palletFotoUrl || undefined,
+        palletFotoId: palletFotoId || undefined,
+        palletFotoUploadedAt: palletFotoUploadedAt || undefined,
       });
       
       // Debug log para verificar rowId

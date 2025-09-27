@@ -25,10 +25,16 @@ type PainelItem = {
   pedidoPacotes?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
-  // Dados de foto
-  photoUrl?: string;
-  photoId?: string;
-  photoUploadedAt?: string;
+  // Dados de fotos (novos campos)
+  pacoteFotoUrl?: string;
+  pacoteFotoId?: string;
+  pacoteFotoUploadedAt?: string;
+  etiquetaFotoUrl?: string;
+  etiquetaFotoId?: string;
+  etiquetaFotoUploadedAt?: string;
+  palletFotoUrl?: string;
+  palletFotoId?: string;
+  palletFotoUploadedAt?: string;
 };
 
 function formatUnidade(u: PainelItem['unidade']): string {
@@ -115,6 +121,23 @@ export default function ProducaoEmbalagemPage() {
     }
   }, [selectedDate, producaoModalOpen]);
 
+  // Fechar dropdowns ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.photo-dropdown') && !target.closest('button[title="Ver fotos"]')) {
+        document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
+          dropdown.classList.add('hidden');
+        });
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, []);
+
 
   // Função para abrir modal de edição de produção
   const handleEditProducao = async (item: PainelItem) => {
@@ -141,10 +164,16 @@ export default function ProducaoEmbalagemPage() {
         pedidoPacotes: data.data.pedidoPacotes || 0,
         pedidoUnidades: data.data.pedidoUnidades || 0,
         pedidoKg: data.data.pedidoKg || 0,
-        // Dados de foto
-        photoUrl: data.data.photoUrl,
-        photoId: data.data.photoId,
-        photoUploadedAt: data.data.photoUploadedAt,
+        // Dados de fotos (novos campos)
+        pacoteFotoUrl: data.data.pacoteFotoUrl,
+        pacoteFotoId: data.data.pacoteFotoId,
+        pacoteFotoUploadedAt: data.data.pacoteFotoUploadedAt,
+        etiquetaFotoUrl: data.data.etiquetaFotoUrl,
+        etiquetaFotoId: data.data.etiquetaFotoId,
+        etiquetaFotoUploadedAt: data.data.etiquetaFotoUploadedAt,
+        palletFotoUrl: data.data.palletFotoUrl,
+        palletFotoId: data.data.palletFotoId,
+        palletFotoUploadedAt: data.data.palletFotoUploadedAt,
       });
       setProducaoModalOpen(true);
     } catch (err) {
@@ -152,6 +181,19 @@ export default function ProducaoEmbalagemPage() {
     } finally {
       setProducaoLoading(false);
       setLoadingCardId(null);
+    }
+  };
+
+  // Função para recarregar dados do painel
+  const refreshPainelData = async () => {
+    try {
+      const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+      const painelData = await painelRes.json();
+      if (painelRes.ok) {
+        setItems((painelData.items || []) as PainelItem[]);
+      }
+    } catch (err) {
+      console.error('Erro ao recarregar dados do painel:', err);
     }
   };
 
@@ -178,11 +220,7 @@ export default function ProducaoEmbalagemPage() {
       setMessage('Produção atualizada com sucesso!');
       
       // Recarregar dados do painel
-      const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
-      const painelData = await painelRes.json();
-      if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
-      }
+      await refreshPainelData();
       
       // Limpar mensagem após 3 segundos
       setTimeout(() => setMessage(null), 3000);
@@ -312,21 +350,89 @@ export default function ProducaoEmbalagemPage() {
                                         <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                       )}
                                     </span>
-                                    {item.photoUrl && (
-                                      <a
-                                        href={item.photoUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          window.open(item.photoUrl, '_blank');
-                                        }}
-                                        className="text-white hover:text-gray-300 ml-2 transition-colors cursor-pointer"
-                                        title="Ver foto"
-                                      >
-                                        <span className="material-icons text-lg">photo_camera</span>
-                                      </a>
+                                    {(item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
+                                      <div className="relative ml-2">
+                                        <button
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            
+                                            // Fechar todos os outros dropdowns
+                                            document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
+                                              dropdown.classList.add('hidden');
+                                            });
+                                            
+                                            // Abrir/fechar o dropdown atual
+                                            const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                                            dropdown.classList.toggle('hidden');
+                                          }}
+                                          className="text-white hover:text-gray-300 transition-colors cursor-pointer"
+                                          title="Ver fotos"
+                                        >
+                                          <span className="material-icons text-lg">photo_camera</span>
+                                        </button>
+                                        
+                                        {/* Dropdown de fotos */}
+                                        <div className="photo-dropdown absolute left-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden min-w-[200px]">
+                                          {item.pacoteFotoUrl && (
+                                            <a
+                                              href={item.pacoteFotoUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                window.open(item.pacoteFotoUrl, '_blank');
+                                                // Fechar dropdown
+                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                dropdown.classList.add('hidden');
+                                              }}
+                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                            >
+                                              <span className="text-sm">📦</span>
+                                              <span className="text-sm">Foto do Pacote</span>
+                                            </a>
+                                          )}
+                                          {item.etiquetaFotoUrl && (
+                                            <a
+                                              href={item.etiquetaFotoUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                window.open(item.etiquetaFotoUrl, '_blank');
+                                                // Fechar dropdown
+                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                dropdown.classList.add('hidden');
+                                              }}
+                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                            >
+                                              <span className="text-sm">🏷️</span>
+                                              <span className="text-sm">Foto da Etiqueta</span>
+                                            </a>
+                                          )}
+                                          {item.palletFotoUrl && (
+                                            <a
+                                              href={item.palletFotoUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                window.open(item.palletFotoUrl, '_blank');
+                                                // Fechar dropdown
+                                                const dropdown = e.currentTarget.closest('.photo-dropdown') as HTMLElement;
+                                                dropdown.classList.add('hidden');
+                                              }}
+                                              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                                            >
+                                              <span className="text-sm">🚛</span>
+                                              <span className="text-sm">Foto do Pallet</span>
+                                            </a>
+                                          )}
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                   <div className="text-right ml-2 flex-shrink-0">
@@ -370,14 +476,21 @@ export default function ProducaoEmbalagemPage() {
           setEditingItem(null);
         }}
         onSave={handleSaveProducao}
+        onSaveSuccess={refreshPainelData}
         initialData={editingItem ? {
           caixas: editingItem.caixas || 0,
           pacotes: editingItem.pacotes || 0,
           unidades: editingItem.unidades || 0,
           kg: editingItem.kg || 0,
-          photoUrl: editingItem.photoUrl,
-          photoId: editingItem.photoId,
-          photoUploadedAt: editingItem.photoUploadedAt,
+          pacoteFotoUrl: editingItem.pacoteFotoUrl,
+          pacoteFotoId: editingItem.pacoteFotoId,
+          pacoteFotoUploadedAt: editingItem.pacoteFotoUploadedAt,
+          etiquetaFotoUrl: editingItem.etiquetaFotoUrl,
+          etiquetaFotoId: editingItem.etiquetaFotoId,
+          etiquetaFotoUploadedAt: editingItem.etiquetaFotoUploadedAt,
+          palletFotoUrl: editingItem.palletFotoUrl,
+          palletFotoId: editingItem.palletFotoId,
+          palletFotoUploadedAt: editingItem.palletFotoUploadedAt,
         } : undefined}
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}

@@ -18,8 +18,8 @@ export async function GET(
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    // Buscar colunas G, H, I, J (pedido), M, N, O, P, Q (produção) e R, S, T (foto)
-    const range = `${tabName}!G${rowNumber}:T${rowNumber}`;
+    // Buscar colunas G, H, I, J (pedido), M, N, O, P, Q (produção) e R, S, T, U, V, W, X, Y, Z (fotos)
+    const range = `${tabName}!G${rowNumber}:Z${rowNumber}`;
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -39,10 +39,16 @@ export async function GET(
       unidades: Number(values[8] || 0),        // O
       kg: Number(values[9] || 0),              // P
       producaoUpdatedAt: values[10] || '',     // Q
-      // Dados de foto (colunas R, S, T)
-      photoUrl: values[11] || '',              // R
-      photoId: values[12] || '',               // S
-      photoUploadedAt: values[13] || '',       // T
+      // Dados de fotos (colunas R, S, T, U, V, W, X, Y, Z)
+      pacoteFotoUrl: values[11] || '',         // R
+      pacoteFotoId: values[12] || '',          // S
+      pacoteFotoUploadedAt: values[13] || '',  // T
+      etiquetaFotoUrl: values[14] || '',       // U
+      etiquetaFotoId: values[15] || '',        // V
+      etiquetaFotoUploadedAt: values[16] || '', // W
+      palletFotoUrl: values[17] || '',         // X
+      palletFotoId: values[18] || '',          // Y
+      palletFotoUploadedAt: values[19] || '',  // Z
     };
 
     return NextResponse.json({ data, rowId: rowNumber });
@@ -65,27 +71,25 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { caixas, pacotes, unidades, kg, photoUrl, photoId, photoUploadedAt } = body;
+    const { caixas, pacotes, unidades, kg } = body;
 
     // Validar dados
     if (caixas < 0 || pacotes < 0 || unidades < 0 || kg < 0) {
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
     }
 
-    // Atualizar colunas de produção e foto
+    // Atualizar apenas colunas de produção (M, N, O, P, Q)
+    // Não tocar nas colunas de foto (R-Z) que são gerenciadas pela API de upload
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    const range = `${tabName}!M${rowNumber}:T${rowNumber}`;
+    const range = `${tabName}!M${rowNumber}:Q${rowNumber}`;
     const values = [
       caixas || 0,                    // M - caixas
       pacotes || 0,                   // N - pacotes
       unidades || 0,                  // O - unidades
       kg || 0,                        // P - kg
       new Date().toISOString(),       // Q - producao_updated_at
-      photoUrl || '',                 // R - photo_url
-      photoId || '',                  // S - photo_id
-      photoUploadedAt || '',          // T - photo_uploaded_at
     ];
 
     await sheets.spreadsheets.values.update({

@@ -18,10 +18,10 @@ export interface PhotoInfo {
 }
 
 /**
- * Gera o nome do arquivo baseado no rowId e timestamp
+ * Gera o nome do arquivo baseado no rowId e tipo de foto
  */
-function generateFileName(rowId: number): string {
-  return `${rowId}.jpg`;
+function generateFileName(rowId: number, photoType: 'pacote' | 'etiqueta' | 'pallet'): string {
+  return `${rowId}-${photoType.toUpperCase()}.jpg`;
 }
 
 /**
@@ -130,12 +130,13 @@ export async function uploadPhotoToDrive(
   fileBuffer: Buffer,
   fileName: string,
   mimeType: string,
-  rowId: number
+  rowId: number,
+  photoType: 'pacote' | 'etiqueta' | 'pallet'
 ): Promise<PhotoUploadResult> {
   try {
     const drive = await getGoogleDriveClient();
     const folderId = await ensureDateFolder();
-    const finalFileName = generateFileName(rowId);
+    const finalFileName = generateFileName(rowId, photoType);
     
     // Upload do arquivo
     const response = await drive.files.create({
