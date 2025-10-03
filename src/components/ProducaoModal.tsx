@@ -112,8 +112,17 @@ export default function ProducaoModal({
           const photoType = photoTypes[i];
           
           if (!uploadRes.ok) {
-            const uploadData = await uploadRes.json();
-            throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
+            // Tentar parsear como JSON, mas se falhar, usar mensagem genérica
+            try {
+              const uploadData = await uploadRes.json();
+              throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
+            } catch (jsonError) {
+              // Se não conseguir parsear JSON, é provavelmente erro 413 ou similar
+              if (uploadRes.status === 413) {
+                throw new Error(`Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`);
+              }
+              throw new Error(`Erro ao fazer upload da foto ${photoType}. Status: ${uploadRes.status}`);
+            }
           }
           
           const uploadData = await uploadRes.json();

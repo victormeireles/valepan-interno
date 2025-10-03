@@ -3,6 +3,9 @@ import { uploadPhotoToDrive } from '@/lib/googleDrive';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 
+// Aumentar tempo máximo de execução para upload de fotos
+export const maxDuration = 30; // 30 segundos
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -32,9 +35,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Arquivo deve ser uma imagem' }, { status: 400 });
     }
 
-    // Validar tamanho (5MB máximo)
-    if (photo.size > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Imagem deve ter no máximo 5MB' }, { status: 400 });
+    // Validar tamanho (4MB máximo - limite seguro para Vercel)
+    if (photo.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Imagem deve ter no máximo 4MB. A imagem deveria ter sido comprimida automaticamente.' }, { status: 400 });
     }
 
     // Converter File para Buffer
