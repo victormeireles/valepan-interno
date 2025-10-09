@@ -1,0 +1,188 @@
+import { NextResponse } from 'next/server';
+import { getGoogleSheetsClient } from '@/lib/googleSheets';
+import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ rowId: string }> }
+) {
+  try {
+    const { rowId } = await context.params;
+    const rowNumber = parseInt(rowId);
+    
+    if (isNaN(rowNumber) || rowNumber < 2) {
+      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { 
+      caixas, 
+      pacotes, 
+      unidades, 
+      kg,
+      // Dados de fotos
+      pacoteFotoUrl,
+      pacoteFotoId,
+      pacoteFotoUploadedAt,
+      etiquetaFotoUrl,
+      etiquetaFotoId,
+      etiquetaFotoUploadedAt,
+      palletFotoUrl,
+      palletFotoId,
+      palletFotoUploadedAt,
+    } = body;
+
+    // Validar dados
+    if (caixas < 0 || pacotes < 0 || unidades < 0 || kg < 0) {
+      return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
+    }
+
+    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    const sheets = await getGoogleSheetsClient();
+    
+    // 1. Buscar dados completos da linha original (colunas A-Z)
+    const rangeOriginal = `${tabName}!A${rowNumber}:Z${rowNumber}`;
+    const responseOriginal = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: rangeOriginal,
+    });
+
+    const originalValues = responseOriginal.data.values?.[0] || [];
+    
+    if (originalValues.length === 0) {
+      return NextResponse.json({ error: 'Pedido original não encontrado' }, { status: 404 });
+    }
+
+    // Extrair dados originais
+    const dataPedido = originalValues[0] || '';          // A
+    const dataFabricacao = originalValues[1] || '';      // B
+    const cliente = originalValues[2] || '';             // C
+    const observacao = originalValues[3] || '';          // D
+    const produto = originalValues[4] || '';             // E
+    const congelado = originalValues[5] || 'Não';        // F
+    const pedidoCaixas = Number(originalValues[6] || 0);    // G
+    const pedidoPacotes = Number(originalValues[7] || 0);   // H
+    const pedidoUnidades = Number(originalValues[8] || 0);  // I
+    const pedidoKg = Number(originalValues[9] || 0);        // J
+
+    // 2. Validar que produção é menor que pedido em pelo menos um campo
+    const isPartial = (
+      (pedidoCaixas > 0 && caixas < pedidoCaixas) ||
+      (pedidoPacotes > 0 && pacotes < pedidoPacotes) ||
+      (pedidoUnidades > 0 && unidades < pedidoUnidades) ||
+      (pedidoKg > 0 && kg < pedidoKg)
+    );
+
+    if (!isPartial) {
+      return NextResponse.json({ 
+        error: 'Produção não é parcial. Use o botão "Salvar Produção" normal.' 
+      }, { status: 400 });
+    }
+
+    // 3. Calcular novo valor do pedido da linha original (descontar o produzido)
+    const novoPedidoCaixas = Math.max(0, pedidoCaixas - caixas);
+    const novoPedidoPacotes = Math.max(0, pedidoPacotes - pacotes);
+    const novoPedidoUnidades = Math.max(0, pedidoUnidades - unidades);
+    const novoPedidoKg = Math.max(0, pedidoKg - kg);
+
+    console.log('[PARTIAL] Pedido original:', { pedidoCaixas, pedidoPacotes, pedidoUnidades, pedidoKg });
+    console.log('[PARTIAL] Produção:', { caixas, pacotes, unidades, kg });
+    console.log('[PARTIAL] Novo pedido (linha original):', { novoPedidoCaixas, novoPedidoPacotes, novoPedidoUnidades, novoPedidoKg });
+
+    // 4. Atualizar APENAS colunas G-J da linha original (pedido) - NÃO TOCAR na produção (M-Q)
+    const rangePedido = `${tabName}!G${rowNumber}:J${rowNumber}`;
+    const valuesPedido = [
+      novoPedidoCaixas || 0,      // G - caixas
+      novoPedidoPacotes || 0,     // H - pacotes
+      novoPedidoUnidades || 0,    // I - unidades
+      novoPedidoKg || 0,          // J - kg
+    ];
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: rangePedido,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [valuesPedido]
+      }
+    });
+
+    console.log('[PARTIAL] Linha original atualizada - pedido descontado');
+
+    // 5. Criar nova linha
+    const now = new Date().toISOString();
+    const novaLinhaValues = [
+      dataPedido,           // A - data_pedido (copiado)
+      dataFabricacao,       // B - data_fabricacao (copiado)
+      cliente,              // C - cliente (copiado)
+      observacao,           // D - observacao (copiado)
+      produto,              // E - produto (copiado)
+      congelado,            // F - congelado (copiado)
+      caixas || 0,          // G - caixas pedido = produzido
+      pacotes || 0,         // H - pacotes pedido = produzido
+      unidades || 0,        // I - unidades pedido = produzido
+      kg || 0,              // J - kg pedido = produzido
+      now,                  // K - created_at (novo)
+      now,                  // L - updated_at (novo)
+      // M-Q produção (valores preenchidos pelo usuário)
+      caixas || 0,          // M - producao_caixas
+      pacotes || 0,         // N - producao_pacotes
+      unidades || 0,        // O - producao_unidades
+      kg || 0,              // P - producao_kg
+      now,                  // Q - producao_updated_at
+      // R-Z fotos (dados das fotos)
+      pacoteFotoUrl || '',         // R - pacote_foto_url
+      pacoteFotoId || '',          // S - pacote_foto_id
+      pacoteFotoUploadedAt || '',  // T - pacote_foto_uploaded_at
+      etiquetaFotoUrl || '',       // U - etiqueta_foto_url
+      etiquetaFotoId || '',        // V - etiqueta_foto_id
+      etiquetaFotoUploadedAt || '',// W - etiqueta_foto_uploaded_at
+      palletFotoUrl || '',         // X - pallet_foto_url
+      palletFotoId || '',          // Y - pallet_foto_id
+      palletFotoUploadedAt || '', // Z - pallet_foto_uploaded_at
+    ];
+
+    console.log('[PARTIAL] Criando nova linha - Pedido:', { caixas, pacotes, unidades, kg });
+    console.log('[PARTIAL] Criando nova linha - Produção:', { caixas, pacotes, unidades, kg });
+
+    // Inserir nova linha
+    const appendResponse = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${tabName}!A:A`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [novaLinhaValues]
+      }
+    });
+    
+    // Calcular o rowId da nova linha criada
+    // O range retornado tem formato: 'Pedido de embalagem!A253:Z253'
+    const updatedRange = appendResponse.data.updates?.updatedRange || '';
+    const match = updatedRange.match(/!A(\d+):/);
+    const novaLinhaRowId = match ? parseInt(match[1]) : null;
+    
+    console.log('[PARTIAL] Nova linha inserida com sucesso. RowId:', novaLinhaRowId);
+
+    return NextResponse.json({ 
+      message: 'Produção parcial salva com sucesso',
+      novaLinhaRowId, // Retornar o rowId da nova linha para o frontend
+      linhaOriginal: {
+        novoPedido: {
+          caixas: novoPedidoCaixas,
+          pacotes: novoPedidoPacotes,
+          unidades: novoPedidoUnidades,
+          kg: novoPedidoKg,
+        }
+      },
+      novaLinha: {
+        pedido: { caixas, pacotes, unidades, kg },
+        producao: { caixas, pacotes, unidades, kg },
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('[PARTIAL] Erro:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
