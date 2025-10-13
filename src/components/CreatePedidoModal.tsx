@@ -31,6 +31,20 @@ type CreatePedidoModalProps = {
   clientesOptions: string[];
   produtosOptions: string[];
   loading?: boolean;
+  visibleFields?: {
+    dataFabricacao?: boolean;
+    cliente?: boolean;
+    observacao?: boolean;
+    congelado?: boolean;
+    pacotes?: boolean;
+  };
+  labelsOverride?: {
+    title?: string;
+    caixas?: string;
+    pacotes?: string;
+    unidades?: string;
+    kg?: string;
+  };
 };
 
 export default function CreatePedidoModal({
@@ -39,7 +53,9 @@ export default function CreatePedidoModal({
   onSave,
   clientesOptions,
   produtosOptions,
-  loading = false
+  loading = false,
+  visibleFields,
+  labelsOverride
 }: CreatePedidoModalProps) {
   // Função para obter data de hoje no formato YYYY-MM-DD
   const getTodayISO = () => {
@@ -176,7 +192,7 @@ export default function CreatePedidoModal({
         <div className="p-6 sm:p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              Novo Pedido de Embalagem
+              {labelsOverride?.title || 'Novo Pedido de Embalagem'}
             </h2>
             <button
               onClick={handleClose}
@@ -208,27 +224,33 @@ export default function CreatePedidoModal({
                   required
                 />
                 
-                <DateInput
-                  label="Data de Fabricação na Etiqueta"
-                  value={formData.dataFabricacao}
-                  onChange={(value) => setFormData(prev => ({ ...prev, dataFabricacao: value }))}
-                  required
-                />
+                {(visibleFields?.dataFabricacao ?? true) && (
+                  <DateInput
+                    label="Data de Fabricação na Etiqueta"
+                    value={formData.dataFabricacao}
+                    onChange={(value) => setFormData(prev => ({ ...prev, dataFabricacao: value }))}
+                    required
+                  />
+                )}
                 
-                <AutocompleteInput
-                  label="Cliente"
-                  value={formData.cliente}
-                  onChange={(value) => setFormData(prev => ({ ...prev, cliente: value }))}
-                  options={clientesOptions}
-                  required
-                />
+                {(visibleFields?.cliente ?? true) && (
+                  <AutocompleteInput
+                    label="Cliente"
+                    value={formData.cliente}
+                    onChange={(value) => setFormData(prev => ({ ...prev, cliente: value }))}
+                    options={clientesOptions}
+                    required
+                  />
+                )}
                 
-                <TextInput
-                  label="Observação"
-                  value={formData.observacao}
-                  onChange={(value) => setFormData(prev => ({ ...prev, observacao: value }))}
-                  placeholder="Observações do cliente"
-                />
+                {(visibleFields?.observacao ?? true) && (
+                  <TextInput
+                    label="Observação"
+                    value={formData.observacao}
+                    onChange={(value) => setFormData(prev => ({ ...prev, observacao: value }))}
+                    placeholder="Observações do cliente"
+                  />
+                )}
               </div>
             </div>
 
@@ -263,32 +285,36 @@ export default function CreatePedidoModal({
                       />
                       
                       <div className="flex items-center space-x-4">
-                        <Switch
-                          value={item.congelado}
-                          onChange={(value) => updateItem(index, 'congelado', value)}
-                        />
+                        {(visibleFields?.congelado ?? true) && (
+                          <Switch
+                            value={item.congelado}
+                            onChange={(value) => updateItem(index, 'congelado', value)}
+                          />
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                       <NumberInput
-                        label="Caixas"
+                        label={labelsOverride?.caixas || 'Caixas'}
                         value={item.caixas}
                         onChange={(value) => updateItem(index, 'caixas', value)}
                         min={0}
                         step={1}
                       />
                       
-                      <NumberInput
-                        label="Pacotes"
-                        value={item.pacotes}
-                        onChange={(value) => updateItem(index, 'pacotes', value)}
-                        min={0}
-                        step={1}
-                      />
+                      {(visibleFields?.pacotes ?? true) && (
+                        <NumberInput
+                          label={labelsOverride?.pacotes || 'Pacotes'}
+                          value={item.pacotes}
+                          onChange={(value) => updateItem(index, 'pacotes', value)}
+                          min={0}
+                          step={1}
+                        />
+                      )}
                       
                       <NumberInput
-                        label="Unidades"
+                        label={labelsOverride?.unidades || 'Unidades'}
                         value={item.unidades}
                         onChange={(value) => updateItem(index, 'unidades', value)}
                         min={0}
@@ -296,7 +322,7 @@ export default function CreatePedidoModal({
                       />
                       
                       <NumberInput
-                        label="Kg"
+                        label={labelsOverride?.kg || 'Kg'}
                         value={item.kg}
                         onChange={(value) => updateItem(index, 'kg', value)}
                         min={0}

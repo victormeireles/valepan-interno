@@ -23,6 +23,7 @@ interface ProducaoModalProps {
     unidades: number;
     kg: number;
   };
+  mode?: 'embalagem' | 'forno' | 'fermentacao';
 }
 
 export default function ProducaoModal({
@@ -35,7 +36,8 @@ export default function ProducaoModal({
   produto = '',
   cliente = '',
   rowId,
-  pedidoQuantidades
+  pedidoQuantidades,
+  mode = 'embalagem'
 }: ProducaoModalProps) {
   const [formData, setFormData] = useState<ProducaoData>({
     caixas: 0,
@@ -76,7 +78,7 @@ export default function ProducaoModal({
       let updatedFormData = { ...formData };
       
       // Verificar se há fotos para upload
-      const hasPhotos = Object.values(photoFiles).some(file => file !== null);
+      const hasPhotos = mode === 'forno' || mode === 'fermentacao' ? Boolean(photoFiles.pacote) : Object.values(photoFiles).some(file => file !== null);
       
       // Upload de fotos se houver
       if (rowId && hasPhotos) {
@@ -91,7 +93,9 @@ export default function ProducaoModal({
             const formDataPhoto = new FormData();
             formDataPhoto.append('photo', photoFile);
             formDataPhoto.append('rowId', rowId.toString());
-            formDataPhoto.append('photoType', photoType);
+            formDataPhoto.append('photoType', mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : photoType);
+            if (mode === 'forno') formDataPhoto.append('process', 'forno');
+            if (mode === 'fermentacao') formDataPhoto.append('process', 'fermentacao');
             
             uploadPromises.push(
               fetch('/api/upload/photo', {
@@ -116,7 +120,7 @@ export default function ProducaoModal({
             try {
               const uploadData = await uploadRes.json();
               throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
-            } catch (jsonError) {
+            } catch {
               // Se não conseguir parsear JSON, é provavelmente erro 413 ou similar
               if (uploadRes.status === 413) {
                 throw new Error(`Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`);
@@ -128,8 +132,7 @@ export default function ProducaoModal({
           const uploadData = await uploadRes.json();
           
           // Atualizar formData com dados da foto baseado no tipo
-          const photoFieldPrefix = photoType === 'pacote' ? 'pacote' : 
-                                 photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+          const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
           
           updatedFormData = {
             ...updatedFormData,
@@ -181,7 +184,9 @@ export default function ProducaoModal({
     
     try {
       setPhotoLoading(true);
-      const res = await fetch(`/api/photo/${rowId}?type=${photoType}`, {
+      const typeParam = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : photoType;
+      const processParam = mode === 'forno' ? '&process=forno' : mode === 'fermentacao' ? '&process=fermentacao' : '';
+      const res = await fetch(`/api/photo/${rowId}?type=${typeParam}${processParam}`, {
         method: 'DELETE',
       });
       
@@ -191,8 +196,7 @@ export default function ProducaoModal({
       }
       
       // Atualizar formData para remover dados da foto
-      const photoFieldPrefix = photoType === 'pacote' ? 'pacote' : 
-                             photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+      const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
       
       setFormData(prev => ({
         ...prev,
@@ -212,126 +216,6 @@ export default function ProducaoModal({
     }
   };
 
-  // Verificar se é produção parcial (produção < pedido)
-  const isPartialProduction = (): boolean => {
-    if (!pedidoQuantidades) return false;
-    
-    return (
-      (pedidoQuantidades.caixas > 0 && formData.caixas < pedidoQuantidades.caixas) ||
-      (pedidoQuantidades.pacotes > 0 && formData.pacotes < pedidoQuantidades.pacotes) ||
-      (pedidoQuantidades.unidades > 0 && formData.unidades < pedidoQuantidades.unidades) ||
-      (pedidoQuantidades.kg > 0 && formData.kg < pedidoQuantidades.kg)
-    );
-  };
-
-  // Handler para salvar produção parcial
-  const handleSavePartial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Prevenir múltiplos cliques
-    if (isSubmitting || !rowId) return;
-    
-    try {
-      setIsSubmitting(true);
-      setMessage(null);
-      
-      // 1. Chamar API de salvar parcial PRIMEIRO (sem fazer upload de fotos)
-      const res = await fetch(`/api/producao/embalagem/${rowId}/partial`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          caixas: formData.caixas,
-          pacotes: formData.pacotes,
-          unidades: formData.unidades,
-          kg: formData.kg,
-          // Incluir dados de fotos JÁ EXISTENTES (não novas)
-          pacoteFotoUrl: formData.pacoteFotoUrl,
-          pacoteFotoId: formData.pacoteFotoId,
-          pacoteFotoUploadedAt: formData.pacoteFotoUploadedAt,
-          etiquetaFotoUrl: formData.etiquetaFotoUrl,
-          etiquetaFotoId: formData.etiquetaFotoId,
-          etiquetaFotoUploadedAt: formData.etiquetaFotoUploadedAt,
-          palletFotoUrl: formData.palletFotoUrl,
-          palletFotoId: formData.palletFotoId,
-          palletFotoUploadedAt: formData.palletFotoUploadedAt,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao salvar produção parcial');
-      }
-      
-      // 2. Se houver fotos novas para upload, fazer upload para a NOVA LINHA
-      const hasPhotos = Object.values(photoFiles).some(file => file !== null);
-      const novaLinhaRowId = data.novaLinhaRowId;
-      
-      if (hasPhotos && novaLinhaRowId) {
-        setPhotoLoading(true);
-        
-        // Fazer upload de todas as fotos para a NOVA linha
-        const uploadPromises = [];
-        const photoTypes = [];
-        
-        for (const [photoType, photoFile] of Object.entries(photoFiles)) {
-          if (photoFile) {
-            const formDataPhoto = new FormData();
-            formDataPhoto.append('photo', photoFile);
-            formDataPhoto.append('rowId', novaLinhaRowId.toString()); // Usar rowId da NOVA linha
-            formDataPhoto.append('photoType', photoType);
-            
-            uploadPromises.push(
-              fetch('/api/upload/photo', {
-                method: 'POST',
-                body: formDataPhoto,
-              })
-            );
-            photoTypes.push(photoType);
-          }
-        }
-        
-        // Aguardar todos os uploads
-        const uploadResults = await Promise.all(uploadPromises);
-        
-        // Verificar se todos os uploads foram bem-sucedidos
-        for (let i = 0; i < uploadResults.length; i++) {
-          const uploadRes = uploadResults[i];
-          const photoType = photoTypes[i];
-          
-          if (!uploadRes.ok) {
-            try {
-              const uploadData = await uploadRes.json();
-              throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
-            } catch (jsonError) {
-              if (uploadRes.status === 413) {
-                throw new Error(`Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`);
-              }
-              throw new Error(`Erro ao fazer upload da foto ${photoType}. Status: ${uploadRes.status}`);
-            }
-          }
-        }
-        
-        setPhotoLoading(false);
-      }
-      
-      // 3. Recarregar dados do painel se callback fornecido
-      if (onSaveSuccess) {
-        await onSaveSuccess();
-      }
-      
-      // Fechar modal imediatamente após salvar com sucesso
-      onClose();
-    } catch (error) {
-      setPhotoLoading(false);
-      setMessage({ 
-        type: 'error', 
-        text: error instanceof Error ? error.message : 'Erro ao salvar produção parcial' 
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleClose = () => {
     setFormData({
@@ -387,7 +271,7 @@ export default function ProducaoModal({
                   <div className="mt-1 flex flex-wrap gap-3">
                     {pedidoQuantidades.caixas > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium">
-                        {pedidoQuantidades.caixas} Caixas
+                        {pedidoQuantidades.caixas} {mode === 'forno' || mode === 'fermentacao' ? 'Latas' : 'Caixas'}
                       </span>
                     )}
                     {pedidoQuantidades.pacotes > 0 && (
@@ -414,20 +298,22 @@ export default function ProducaoModal({
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
               <NumberInput
-                label="Caixas"
+                label={mode === 'forno' || mode === 'fermentacao' ? 'Latas' : 'Caixas'}
                 value={formData.caixas}
                 onChange={(value) => setFormData(prev => ({ ...prev, caixas: value }))}
                 min={0}
                 step={1}
               />
               
-              <NumberInput
-                label="Pacotes"
-                value={formData.pacotes}
-                onChange={(value) => setFormData(prev => ({ ...prev, pacotes: value }))}
-                min={0}
-                step={1}
-              />
+              {mode !== 'forno' && mode !== 'fermentacao' && (
+                <NumberInput
+                  label="Pacotes"
+                  value={formData.pacotes}
+                  onChange={(value) => setFormData(prev => ({ ...prev, pacotes: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
               
               <NumberInput
                 label="Unidades"
@@ -451,16 +337,18 @@ export default function ProducaoModal({
               <h3 className="text-lg font-medium text-gray-900 mb-4">Fotos da Produção</h3>
               
               <div className="space-y-6">
-                {/* Foto do Pacote */}
+                {/* Foto principal: Pacote (ou Forno/Fermentacao) */}
                 <div>
-                  <h4 className="text-md font-medium text-gray-700 mb-3">📦 Foto do Pacote</h4>
+                  <h4 className="text-md font-medium text-gray-700 mb-3">
+                    {mode === 'forno' ? '🔥 Foto do Forno' : mode === 'fermentacao' ? '🥖 Foto da Fermentação' : '📦 Foto do Pacote'}
+                  </h4>
                   
                   {/* Mostrar botão "Ver Foto" se houver foto */}
-                  {formData.pacoteFotoUrl && (
+                  {(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl) && (
                     <div className="mb-4">
                       <PhotoManager
-                        photoUrl={formData.pacoteFotoUrl}
-                        photoId={formData.pacoteFotoId}
+                        photoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl) || ''}
+                        photoId={(mode === 'forno' ? formData.fornoFotoId : mode === 'fermentacao' ? formData.fermentacaoFotoId : formData.pacoteFotoId) || ''}
                         onPhotoRemove={() => handlePhotoManagerRemove('pacote')}
                         loading={photoLoading}
                         disabled={loading}
@@ -475,65 +363,60 @@ export default function ProducaoModal({
                     onPhotoRemove={() => handlePhotoRemove('pacote')}
                     loading={photoLoading}
                     disabled={loading}
-                    currentPhotoUrl={formData.pacoteFotoUrl}
+                    currentPhotoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl)}
                   />
                 </div>
-
-                {/* Foto da Etiqueta */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-700 mb-3">🏷️ Foto da Etiqueta</h4>
-                  
-                  {/* Mostrar botão "Ver Foto" se houver foto */}
-                  {formData.etiquetaFotoUrl && (
-                    <div className="mb-4">
-                      <PhotoManager
-                        photoUrl={formData.etiquetaFotoUrl}
-                        photoId={formData.etiquetaFotoId}
-                        onPhotoRemove={() => handlePhotoManagerRemove('etiqueta')}
+                {mode !== 'forno' && mode !== 'fermentacao' && (
+                  <>
+                    {/* Foto da Etiqueta */}
+                    <div>
+                      <h4 className="text-md font-medium text-gray-700 mb-3">🏷️ Foto da Etiqueta</h4>
+                      {formData.etiquetaFotoUrl && (
+                        <div className="mb-4">
+                          <PhotoManager
+                            photoUrl={formData.etiquetaFotoUrl}
+                            photoId={formData.etiquetaFotoId}
+                            onPhotoRemove={() => handlePhotoManagerRemove('etiqueta')}
+                            loading={photoLoading}
+                            disabled={loading}
+                            showRemoveButton={true}
+                          />
+                        </div>
+                      )}
+                      <PhotoUploader
+                        onPhotoSelect={(file) => handlePhotoSelect(file, 'etiqueta')}
+                        onPhotoRemove={() => handlePhotoRemove('etiqueta')}
                         loading={photoLoading}
                         disabled={loading}
-                        showRemoveButton={true}
+                        currentPhotoUrl={formData.etiquetaFotoUrl}
                       />
                     </div>
-                  )}
-                  
-                  {/* Input de upload sempre disponível */}
-                  <PhotoUploader
-                    onPhotoSelect={(file) => handlePhotoSelect(file, 'etiqueta')}
-                    onPhotoRemove={() => handlePhotoRemove('etiqueta')}
-                    loading={photoLoading}
-                    disabled={loading}
-                    currentPhotoUrl={formData.etiquetaFotoUrl}
-                  />
-                </div>
 
-                {/* Foto do Pallet */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-700 mb-3">🚛 Foto do Pallet</h4>
-                  
-                  {/* Mostrar botão "Ver Foto" se houver foto */}
-                  {formData.palletFotoUrl && (
-                    <div className="mb-4">
-                      <PhotoManager
-                        photoUrl={formData.palletFotoUrl}
-                        photoId={formData.palletFotoId}
-                        onPhotoRemove={() => handlePhotoManagerRemove('pallet')}
+                    {/* Foto do Pallet */}
+                    <div>
+                      <h4 className="text-md font-medium text-gray-700 mb-3">🚛 Foto do Pallet</h4>
+                      {formData.palletFotoUrl && (
+                        <div className="mb-4">
+                          <PhotoManager
+                            photoUrl={formData.palletFotoUrl}
+                            photoId={formData.palletFotoId}
+                            onPhotoRemove={() => handlePhotoManagerRemove('pallet')}
+                            loading={photoLoading}
+                            disabled={loading}
+                            showRemoveButton={true}
+                          />
+                        </div>
+                      )}
+                      <PhotoUploader
+                        onPhotoSelect={(file) => handlePhotoSelect(file, 'pallet')}
+                        onPhotoRemove={() => handlePhotoRemove('pallet')}
                         loading={photoLoading}
                         disabled={loading}
-                        showRemoveButton={true}
+                        currentPhotoUrl={formData.palletFotoUrl}
                       />
                     </div>
-                  )}
-                  
-                  {/* Input de upload sempre disponível */}
-                  <PhotoUploader
-                    onPhotoSelect={(file) => handlePhotoSelect(file, 'pallet')}
-                    onPhotoRemove={() => handlePhotoRemove('pallet')}
-                    loading={photoLoading}
-                    disabled={loading}
-                    currentPhotoUrl={formData.palletFotoUrl}
-                  />
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -545,25 +428,6 @@ export default function ProducaoModal({
                 disabled={loading || isSubmitting}
               >
                 Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePartial}
-                className="px-6 py-3 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
-                disabled={loading || isSubmitting || !isPartialProduction()}
-                title={!isPartialProduction() ? 'Disponível apenas quando produção é menor que o pedido' : 'Salvar produção parcial e criar novo pedido com a diferença'}
-              >
-                {isSubmitting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {photoLoading ? 'Enviando fotos...' : 'Salvando...'}
-                  </>
-                ) : (
-                  'Salvar Parcial'
-                )}
               </button>
               <button
                 type="submit"

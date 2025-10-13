@@ -112,7 +112,7 @@ export default function Navigation() {
                   Etapas de Produção
                 </h3>
                 {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => {
-                  const href = stageKey === 'producao-embalagem' ? '/producao/embalagem' : `/${stageKey}`;
+                  const href = stageKey === 'producao-embalagem' ? '/realizado/embalagem' : `/${stageKey}`;
                   
                   return (
                     <Link
@@ -137,22 +137,80 @@ export default function Navigation() {
               {/* Separador */}
               <div className="my-4 border-t border-gray-200" />
 
-              {/* Embalagem */}
+              {/* Meta de Produção */}
               <div className="space-y-1">
                 <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                  Embalagem
+                  📋 Meta de Produção
                 </h3>
                 <Link
-                  href="/pedido/embalagem"
+                  href="/meta/producao"
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/pedido/embalagem')
+                    isActive('/meta/producao')
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="material-icons text-xl mr-3">shopping_cart</span>
-                  Pedido de Embalagem
+                  <span className="material-icons text-xl mr-3">assignment</span>
+                  Meta: Produção
+                </Link>
+                <Link
+                  href="/meta/embalagem"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/meta/embalagem')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">inventory</span>
+                  Meta: Embalagem
+                </Link>
+              </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
+              {/* Produção Realizada */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  ✅ Produção Realizada
+                </h3>
+                <Link
+                  href="/realizado/fermentacao"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/realizado/fermentacao')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">eco</span>
+                  Realizado: Fermentação
+                </Link>
+                <Link
+                  href="/realizado/forno"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/realizado/forno')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">local_fire_department</span>
+                  Realizado: Forno
+                </Link>
+                <Link
+                  href="/realizado/embalagem"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/realizado/embalagem')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">inventory_2</span>
+                  Realizado: Embalagem
                 </Link>
               </div>
             </div>

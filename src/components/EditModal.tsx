@@ -29,6 +29,20 @@ type EditModalProps = {
   clientesOptions: string[];
   produtosOptions: string[];
   loading?: boolean;
+  visibleFields?: {
+    dataFabricacao?: boolean;
+    cliente?: boolean;
+    observacao?: boolean;
+    congelado?: boolean;
+    pacotes?: boolean;
+  };
+  labelsOverride?: {
+    title?: string;
+    caixas?: string;
+    pacotes?: string;
+    unidades?: string;
+    kg?: string;
+  };
 };
 
 export default function EditModal({
@@ -40,7 +54,9 @@ export default function EditModal({
   initialData,
   clientesOptions,
   produtosOptions,
-  loading = false
+  loading = false,
+  visibleFields,
+  labelsOverride
 }: EditModalProps) {
   const [formData, setFormData] = useState<EditData>({
     dataPedido: '',
@@ -120,7 +136,7 @@ export default function EditModal({
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              {rowId ? `Editar Pedido (Linha ${rowId})` : 'Novo Pedido'}
+              {labelsOverride?.title || (rowId ? `Editar Pedido (Linha ${rowId})` : 'Novo Pedido')}
             </h2>
             <button
               onClick={handleClose}
@@ -148,22 +164,26 @@ export default function EditModal({
                 onChange={(value) => setFormData(prev => ({ ...prev, dataPedido: value }))}
                 required
               />
-              <DateInput
-                label="Data de Fabricação na Etiqueta"
-                value={formData.dataFabricacao}
-                onChange={(value) => setFormData(prev => ({ ...prev, dataFabricacao: value }))}
-                required
-              />
+              {(visibleFields?.dataFabricacao ?? true) && (
+                <DateInput
+                  label="Data de Fabricação na Etiqueta"
+                  value={formData.dataFabricacao}
+                  onChange={(value) => setFormData(prev => ({ ...prev, dataFabricacao: value }))}
+                  required
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <AutocompleteInput
-                label="Cliente"
-                value={formData.cliente}
-                onChange={(value) => setFormData(prev => ({ ...prev, cliente: value }))}
-                options={clientesOptions}
-                required
-              />
+              {(visibleFields?.cliente ?? true) && (
+                <AutocompleteInput
+                  label="Cliente"
+                  value={formData.cliente}
+                  onChange={(value) => setFormData(prev => ({ ...prev, cliente: value }))}
+                  options={clientesOptions}
+                  required
+                />
+              )}
               <AutocompleteInput
                 label="Produto"
                 value={formData.produto}
@@ -173,48 +193,54 @@ export default function EditModal({
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Observação
-              </label>
-              <input
-                type="text"
-                value={formData.observacao}
-                onChange={(e) => setFormData(prev => ({ ...prev, observacao: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
-                placeholder="Observações do cliente"
-              />
-            </div>
+            {(visibleFields?.observacao ?? true) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observação
+                </label>
+                <input
+                  type="text"
+                  value={formData.observacao}
+                  onChange={(e) => setFormData(prev => ({ ...prev, observacao: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
+                  placeholder="Observações do cliente"
+                />
+              </div>
+            )}
 
-            <div className="flex items-center space-x-4">
-              <Switch
-                label="Congelado"
-                value={formData.congelado}
-                onChange={(checked) => setFormData(prev => ({ ...prev, congelado: checked }))}
-              />
-            </div>
+            {(visibleFields?.congelado ?? true) && (
+              <div className="flex items-center space-x-4">
+                <Switch
+                  label="Congelado"
+                  value={formData.congelado}
+                  onChange={(checked) => setFormData(prev => ({ ...prev, congelado: checked }))}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <NumberInput
-                label="Caixas"
+                label={labelsOverride?.caixas || 'Caixas'}
                 value={formData.caixas}
                 onChange={(value) => setFormData(prev => ({ ...prev, caixas: value }))}
                 min={0}
               />
+              {(visibleFields?.pacotes ?? true) && (
+                <NumberInput
+                  label={labelsOverride?.pacotes || 'Pacotes'}
+                  value={formData.pacotes}
+                  onChange={(value) => setFormData(prev => ({ ...prev, pacotes: value }))}
+                  min={0}
+                />
+              )}
               <NumberInput
-                label="Pacotes"
-                value={formData.pacotes}
-                onChange={(value) => setFormData(prev => ({ ...prev, pacotes: value }))}
-                min={0}
-              />
-              <NumberInput
-                label="Unidades"
+                label={labelsOverride?.unidades || 'Unidades'}
                 value={formData.unidades}
                 onChange={(value) => setFormData(prev => ({ ...prev, unidades: value }))}
                 min={0}
               />
               <NumberInput
-                label="Kg"
+                label={labelsOverride?.kg || 'Kg'}
                 value={formData.kg}
                 onChange={(value) => setFormData(prev => ({ ...prev, kg: value }))}
                 min={0}

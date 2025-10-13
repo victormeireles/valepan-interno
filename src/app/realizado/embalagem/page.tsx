@@ -255,7 +255,10 @@ export default function ProducaoEmbalagemPage() {
       <div className="mx-auto">
         <header className="mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Produção de Embalagem</h1>
+            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight flex items-center gap-3">
+              <span className="text-3xl">📦</span>
+              Realizado: Embalagem
+            </h1>
             
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex items-center gap-2 w-full sm:w-auto">

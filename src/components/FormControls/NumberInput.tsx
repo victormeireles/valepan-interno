@@ -1,7 +1,7 @@
 'use client';
 
 interface NumberInputProps {
-  value: number;
+  value: number | undefined;
   onChange: (value: number) => void;
   required?: boolean;
   disabled?: boolean;
@@ -21,13 +21,16 @@ export default function NumberInput({
   step = 1,
   max = 999
 }: NumberInputProps) {
+  // Garantir que value seja sempre um número válido
+  const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  
   const handleIncrement = () => {
-    const newValue = Math.min(value + step, max);
+    const newValue = Math.min(safeValue + step, max);
     onChange(newValue);
   };
 
   const handleDecrement = () => {
-    const newValue = Math.max(value - step, min);
+    const newValue = Math.max(safeValue - step, min);
     onChange(newValue);
   };
 
@@ -41,7 +44,7 @@ export default function NumberInput({
         <button
           type="button"
           onClick={handleDecrement}
-          disabled={disabled || value <= min}
+          disabled={disabled || safeValue <= min}
           className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
         >
           −
@@ -49,7 +52,7 @@ export default function NumberInput({
         
         <input
           type="number"
-          value={value}
+          value={safeValue}
           onChange={(e) => onChange(parseInt(e.target.value) || 0)}
           required={required}
           disabled={disabled}
@@ -62,7 +65,7 @@ export default function NumberInput({
         <button
           type="button"
           onClick={handleIncrement}
-          disabled={disabled || value >= max}
+          disabled={disabled || safeValue >= max}
           className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
         >
           +

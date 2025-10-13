@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { uploadPhotoToDrive } from '@/lib/googleDrive';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
+import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 
 // Aumentar tempo máximo de execução para upload de fotos
 export const maxDuration = 30; // 30 segundos
@@ -11,7 +13,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const photo = formData.get('photo') as File;
     const rowId = formData.get('rowId') as string;
-    const photoType = formData.get('photoType') as string;
+    const photoType = formData.get('photoType') as string; // pacote|etiqueta|pallet|forno
+    const processType = (formData.get('process') as string) || 'embalagem'; // embalagem|forno
 
     if (!photo) {
       return NextResponse.json({ error: 'Nenhuma foto foi enviada' }, { status: 400 });
@@ -21,8 +24,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
     }
 
     const rowNumber = parseInt(rowId);
@@ -50,27 +53,43 @@ export async function POST(request: NextRequest) {
       photo.name,
       photo.type,
       rowNumber,
-      photoType as 'pacote' | 'etiqueta' | 'pallet'
+      photoType as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao'
     );
 
     // Salvar dados da foto na planilha
     const sheets = await getGoogleSheetsClient();
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    let config;
+    if (processType === 'forno') {
+      config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
+    } else if (processType === 'fermentacao') {
+      config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else {
+      config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    }
+    const { spreadsheetId, tabName } = config;
     
     // Determinar as colunas baseado no tipo de foto
     let startColumn: string;
-    switch (photoType) {
-      case 'pacote':
-        startColumn = 'R'; // R, S, T
-        break;
-      case 'etiqueta':
-        startColumn = 'U'; // U, V, W
-        break;
-      case 'pallet':
-        startColumn = 'X'; // X, Y, Z
-        break;
-      default:
-        throw new Error('Tipo de foto inválido');
+    if (processType === 'forno') {
+      // Forno usa colunas L, M, N e sempre um único tipo 'forno'
+      startColumn = 'L';
+    } else if (processType === 'fermentacao') {
+      // Fermentacao usa colunas S, T, U e sempre um único tipo 'fermentacao'
+      startColumn = 'S';
+    } else {
+      switch (photoType) {
+        case 'pacote':
+          startColumn = 'R'; // R, S, T
+          break;
+        case 'etiqueta':
+          startColumn = 'U'; // U, V, W
+          break;
+        case 'pallet':
+          startColumn = 'X'; // X, Y, Z
+          break;
+        default:
+          throw new Error('Tipo de foto inválido');
+      }
     }
     
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);

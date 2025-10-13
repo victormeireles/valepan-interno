@@ -24,16 +24,16 @@ export default function PhotoUploader({
   const [compressing, setCompressing] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileValidation = (file: File) => {
+  const handleFileValidation = useCallback((file: File) => {
     setError(null);
     if (!file.type.startsWith('image/')) {
       setError('Apenas arquivos de imagem são permitidos');
       return false;
     }
     return true;
-  };
+  }, []);
 
-  const processFile = async (file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!handleFileValidation(file)) {
       return;
     }
@@ -60,14 +60,14 @@ export default function PhotoUploader({
     } finally {
       setCompressing(false);
     }
-  };
+  }, [handleFileValidation, onPhotoSelect]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
       processFile(file);
     }
-  }, []);
+  }, [processFile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop, 
@@ -114,6 +114,7 @@ export default function PhotoUploader({
           </div>
         ) : preview ? (
           <div className="relative w-full h-32 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg" />
             <button
               type="button"

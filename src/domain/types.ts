@@ -84,6 +84,14 @@ export interface PhotoData {
   palletFotoUrl?: string;
   palletFotoId?: string;
   palletFotoUploadedAt?: string;
+  // Forno: foto única
+  fornoFotoUrl?: string;
+  fornoFotoId?: string;
+  fornoFotoUploadedAt?: string;
+  // Fermentacao: foto única
+  fermentacaoFotoUrl?: string;
+  fermentacaoFotoId?: string;
+  fermentacaoFotoUploadedAt?: string;
 }
 
 // Dados de produção com fotos
@@ -95,7 +103,7 @@ export interface ProducaoData extends PhotoData {
 }
 
 // Tipo de foto para upload
-export type PhotoType = 'pacote' | 'etiqueta' | 'pallet';
+export type PhotoType = 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao';
 
 // Resposta da API de upload de foto
 export interface PhotoUploadResponse {

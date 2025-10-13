@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { deletePhotoFromDrive, getPhotoInfo } from '@/lib/googleDrive';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
+import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +12,8 @@ export async function GET(
   try {
     const { rowId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | null;
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | null;
+    const processType = (searchParams.get('process') as string) || 'embalagem';
     
     const rowNumber = parseInt(rowId);
     
@@ -18,28 +21,42 @@ export async function GET(
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
     }
 
     // Buscar dados da foto na planilha
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    let config;
+    if (processType === 'forno') {
+      config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
+    } else if (processType === 'fermentacao') {
+      config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else {
+      config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    }
+    const { spreadsheetId, tabName } = config;
     const sheets = await getGoogleSheetsClient();
     
     // Determinar as colunas baseado no tipo de foto
     let startColumn: string;
-    switch (photoType) {
-      case 'pacote':
-        startColumn = 'R'; // R, S, T
-        break;
-      case 'etiqueta':
-        startColumn = 'U'; // U, V, W
-        break;
-      case 'pallet':
-        startColumn = 'X'; // X, Y, Z
-        break;
-      default:
-        throw new Error('Tipo de foto inválido');
+    if (processType === 'forno') {
+      startColumn = 'L'; // L, M, N
+    } else if (processType === 'fermentacao') {
+      startColumn = 'S'; // S, T, U
+    } else {
+      switch (photoType) {
+        case 'pacote':
+          startColumn = 'R'; // R, S, T
+          break;
+        case 'etiqueta':
+          startColumn = 'U'; // U, V, W
+          break;
+        case 'pallet':
+          startColumn = 'X'; // X, Y, Z
+          break;
+        default:
+          throw new Error('Tipo de foto inválido');
+      }
     }
     
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
@@ -109,7 +126,8 @@ export async function DELETE(
   try {
     const { rowId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | null;
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | null;
+    const processType = (searchParams.get('process') as string) || 'embalagem';
     
     const rowNumber = parseInt(rowId);
     
@@ -117,28 +135,40 @@ export async function DELETE(
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta ou pallet' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
     }
 
     // Buscar dados da foto na planilha
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    let config;
+    if (processType === 'forno') {
+      config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
+    } else if (processType === 'fermentacao') {
+      config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else {
+      config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    }
+    const { spreadsheetId, tabName } = config;
     const sheets = await getGoogleSheetsClient();
     
     // Determinar as colunas baseado no tipo de foto
     let startColumn: string;
-    switch (photoType) {
-      case 'pacote':
-        startColumn = 'R'; // R, S, T
-        break;
-      case 'etiqueta':
-        startColumn = 'U'; // U, V, W
-        break;
-      case 'pallet':
-        startColumn = 'X'; // X, Y, Z
-        break;
-      default:
-        throw new Error('Tipo de foto inválido');
+    if (processType === 'forno') {
+      startColumn = 'L';
+    } else {
+      switch (photoType) {
+        case 'pacote':
+          startColumn = 'R'; // R, S, T
+          break;
+        case 'etiqueta':
+          startColumn = 'U'; // U, V, W
+          break;
+        case 'pallet':
+          startColumn = 'X'; // X, Y, Z
+          break;
+        default:
+          throw new Error('Tipo de foto inválido');
+      }
     }
     
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
