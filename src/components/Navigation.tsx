@@ -188,6 +188,7 @@ export default function Navigation() {
                   <span className="material-icons text-xl mr-3">eco</span>
                   Realizado: Fermentação
                 </Link>
+                {/* Temporariamente removido
                 <Link
                   href="/realizado/resfriamento"
                   onClick={closeMenu}
@@ -200,6 +201,7 @@ export default function Navigation() {
                   <span className="material-icons text-xl mr-3">ac_unit</span>
                   Realizado: Resfriamento
                 </Link>
+                */}
                 <Link
                   href="/realizado/forno"
                   onClick={closeMenu}

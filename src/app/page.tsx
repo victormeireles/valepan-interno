@@ -27,7 +27,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => {
             const href = stageKey === 'producao-embalagem' ? '/realizado/embalagem' : `/${stageKey}`;
             const colors = getStageColors(stageKey);
@@ -102,7 +102,7 @@ export default function Home() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
             ✅ Produção Realizada
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
             <Link
               href="/realizado/fermentacao"
               className="block bg-yellow-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
@@ -119,6 +119,7 @@ export default function Home() {
                 </p>
               </div>
             </Link>
+            {/* Temporariamente removido
             <Link
               href="/realizado/resfriamento"
               className="block bg-blue-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
@@ -135,6 +136,7 @@ export default function Home() {
                 </p>
               </div>
             </Link>
+            */}
             <Link
               href="/realizado/forno"
               className="block bg-red-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
