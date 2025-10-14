@@ -189,6 +189,18 @@ export default function Navigation() {
                   Realizado: Fermentação
                 </Link>
                 <Link
+                  href="/realizado/resfriamento"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/realizado/resfriamento')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">ac_unit</span>
+                  Realizado: Resfriamento
+                </Link>
+                <Link
                   href="/realizado/forno"
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
@@ -238,7 +250,6 @@ function getStageNumber(stageKey: string): string {
     'pre-mistura': '1',
     'massa': '2',
     'fermentacao': '3',
-    'resfriamento': '4',
     'forno': '5',
     'producao-embalagem': '6',
   };

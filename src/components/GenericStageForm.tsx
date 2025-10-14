@@ -24,7 +24,20 @@ interface GenericStageFormProps {
   };
 }
 
+// Mapeamento de cores para cada etapa
+const getStageColors = (stage: string) => {
+  const colorMap: Record<string, { bg: string; cardBg: string; text: string; icon: string }> = {
+    // Etapas de produção - cores neutras
+    'pre-mistura': { bg: 'bg-slate-800', cardBg: 'bg-slate-700', text: 'text-white', icon: '🥣' },
+    'massa': { bg: 'bg-slate-800', cardBg: 'bg-slate-700', text: 'text-white', icon: '🥖' },
+  };
+  
+  return colorMap[stage] || { bg: 'bg-gray-800', cardBg: 'bg-gray-700', text: 'text-white', icon: '📋' };
+};
+
 export default function GenericStageForm({ stage, stageName, stageDescription, fields }: GenericStageFormProps) {
+  const colors = getStageColors(stage);
+  
   // Inicializar todos os campos do formulário
   const getInitialFormData = () => {
     const initialData: Record<string, string | number> = {
@@ -176,19 +189,22 @@ export default function GenericStageForm({ stage, stageName, stageDescription, f
   };
 
   return (
-    <div className="bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
+    <div className={`${colors.bg} min-h-screen py-6 px-4 sm:px-6 lg:px-8`}>
       <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className={`${colors.cardBg} rounded-lg shadow-md p-6`}>
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{stageName}</h1>
-            <p className="text-gray-600">{stageDescription}</p>
+            <h1 className={`text-2xl font-bold ${colors.text} mb-2 flex items-center justify-center gap-3`}>
+              <span className="text-3xl">{colors.icon}</span>
+              {stageName}
+            </h1>
+            <p className={`${colors.text} opacity-80`}>{stageDescription}</p>
           </div>
 
           {submitMessage && (
             <div className={`mb-4 p-4 rounded-md ${
               submitMessage.type === 'success' 
-                ? 'bg-green-50 border border-green-200 text-green-800' 
-                : 'bg-red-50 border border-red-200 text-red-800'
+                ? 'bg-green-900/30 border border-green-600 text-green-100' 
+                : 'bg-red-900/30 border border-red-600 text-red-100'
             }`}>
               {submitMessage.text}
             </div>
@@ -202,7 +218,7 @@ export default function GenericStageForm({ stage, stageName, stageDescription, f
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-blue-600 text-white py-5 px-6 rounded-lg font-bold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-2xl shadow-lg"
+              className="w-full bg-blue-600 text-white py-5 px-6 rounded-lg font-bold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-2xl shadow-lg transition-colors"
             >
               {isSubmitting ? 'Salvando...' : 'Salvar Dados'}
             </button>

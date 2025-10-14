@@ -50,7 +50,7 @@ export type StageData =
   | FornoData;
 
 // Tipos para as etapas
-export type StageType = 'pre-mistura' | 'massa' | 'fermentacao' | 'resfriamento' | 'forno' | 'producao-embalagem';
+export type StageType = 'pre-mistura' | 'massa' | 'fermentacao' | 'forno' | 'producao-embalagem';
 
 // Resposta da API de opções
 export interface OptionsResponse {
@@ -92,6 +92,10 @@ export interface PhotoData {
   fermentacaoFotoUrl?: string;
   fermentacaoFotoId?: string;
   fermentacaoFotoUploadedAt?: string;
+  // Resfriamento: foto única
+  resfriamentoFotoUrl?: string;
+  resfriamentoFotoId?: string;
+  resfriamentoFotoUploadedAt?: string;
 }
 
 // Dados de produção com fotos
@@ -103,7 +107,7 @@ export interface ProducaoData extends PhotoData {
 }
 
 // Tipo de foto para upload
-export type PhotoType = 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao';
+export type PhotoType = 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento';
 
 // Resposta da API de upload de foto
 export interface PhotoUploadResponse {

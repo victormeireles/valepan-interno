@@ -4,6 +4,7 @@ import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
+import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 
 // Aumentar tempo máximo de execução para upload de fotos
 export const maxDuration = 30; // 30 segundos
@@ -24,8 +25,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao ou resfriamento' }, { status: 400 });
     }
 
     const rowNumber = parseInt(rowId);
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       photo.name,
       photo.type,
       rowNumber,
-      photoType as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao'
+      photoType as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento'
     );
 
     // Salvar dados da foto na planilha
@@ -63,6 +64,8 @@ export async function POST(request: NextRequest) {
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else if (processType === 'resfriamento') {
+      config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
     } else {
       config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     }
@@ -76,6 +79,9 @@ export async function POST(request: NextRequest) {
     } else if (processType === 'fermentacao') {
       // Fermentacao usa colunas S, T, U e sempre um único tipo 'fermentacao'
       startColumn = 'S';
+    } else if (processType === 'resfriamento') {
+      // Resfriamento usa colunas Z, AA, AB e sempre um único tipo 'resfriamento'
+      startColumn = 'Z';
     } else {
       switch (photoType) {
         case 'pacote':

@@ -15,7 +15,7 @@ export async function DELETE(
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     await deleteSheetRow(spreadsheetId, tabName, rowNumber);
-    return NextResponse.json({ message: 'Pedido de forno deletado com sucesso' });
+    return NextResponse.json({ message: 'Pedido de produção deletado com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

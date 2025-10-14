@@ -8,7 +8,7 @@ export const PEDIDOS_FORNO_CONFIG = {
   },
   destinoPedidos: {
     spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
-    tabName: 'Pedido de Forno',
+    tabName: 'Pedido de Produção',
   }
 } as const;
 

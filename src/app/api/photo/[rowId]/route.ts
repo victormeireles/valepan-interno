@@ -4,6 +4,7 @@ import { deletePhotoFromDrive, getPhotoInfo } from '@/lib/googleDrive';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
+import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 
 export async function GET(
   request: NextRequest,
@@ -12,7 +13,7 @@ export async function GET(
   try {
     const { rowId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | null;
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento' | null;
     const processType = (searchParams.get('process') as string) || 'embalagem';
     
     const rowNumber = parseInt(rowId);
@@ -21,8 +22,8 @@ export async function GET(
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao ou resfriamento' }, { status: 400 });
     }
 
     // Buscar dados da foto na planilha
@@ -31,6 +32,8 @@ export async function GET(
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else if (processType === 'resfriamento') {
+      config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
     } else {
       config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     }
@@ -43,6 +46,8 @@ export async function GET(
       startColumn = 'L'; // L, M, N
     } else if (processType === 'fermentacao') {
       startColumn = 'S'; // S, T, U
+    } else if (processType === 'resfriamento') {
+      startColumn = 'Z'; // Z, AA, AB
     } else {
       switch (photoType) {
         case 'pacote':
@@ -126,7 +131,7 @@ export async function DELETE(
   try {
     const { rowId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | null;
+    const photoType = searchParams.get('type') as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento' | null;
     const processType = (searchParams.get('process') as string) || 'embalagem';
     
     const rowNumber = parseInt(rowId);
@@ -135,8 +140,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno ou fermentacao' }, { status: 400 });
+    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento'].includes(photoType)) {
+      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao ou resfriamento' }, { status: 400 });
     }
 
     // Buscar dados da foto na planilha
@@ -145,6 +150,8 @@ export async function DELETE(
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
+    } else if (processType === 'resfriamento') {
+      config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
     } else {
       config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     }
@@ -155,6 +162,10 @@ export async function DELETE(
     let startColumn: string;
     if (processType === 'forno') {
       startColumn = 'L';
+    } else if (processType === 'fermentacao') {
+      startColumn = 'S';
+    } else if (processType === 'resfriamento') {
+      startColumn = 'Z';
     } else {
       switch (photoType) {
         case 'pacote':

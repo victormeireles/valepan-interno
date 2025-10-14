@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       await appendRow(spreadsheetId, tabName, values);
     }
 
-    return NextResponse.json({ message: 'Pedido de forno salvo com sucesso' });
+    return NextResponse.json({ message: 'Pedido de produção salvo com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
