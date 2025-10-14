@@ -26,14 +26,14 @@ export async function GET(
       pedidoUnidades: Number(values[1] || 0),  // D
       pedidoKg: Number(values[2] || 0),        // E
       // Produção
-      latas: Number(values[4] || 0),           // H (pula F,G)
-      unidades: Number(values[5] || 0),        // I
-      kg: Number(values[6] || 0),              // J
-      producaoUpdatedAt: values[7] || '',      // K
+      latas: Number(values[5] || 0),           // H (produção latas)
+      unidades: Number(values[6] || 0),        // I (produção unidades)
+      kg: Number(values[7] || 0),              // J (produção kg)
+      producaoUpdatedAt: values[8] || '',      // K
       // Foto
-      fornoFotoUrl: values[8] || '',           // L
-      fornoFotoId: values[9] || '',            // M
-      fornoFotoUploadedAt: values[10] || '',   // N
+      fornoFotoUrl: values[9] || '',           // L
+      fornoFotoId: values[10] || '',           // M
+      fornoFotoUploadedAt: values[11] || '',   // N
     };
 
     return NextResponse.json({ data, rowId: rowNumber });
