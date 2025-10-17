@@ -217,6 +217,127 @@ export default function ProducaoModal({
     }
   };
 
+  // Verificar se é produção parcial (produção < pedido) - APENAS para modo embalagem
+  const isPartialProduction = (): boolean => {
+    if (mode !== 'embalagem' || !pedidoQuantidades) return false;
+
+    return (
+      (pedidoQuantidades.caixas > 0 && formData.caixas < pedidoQuantidades.caixas) ||
+      (pedidoQuantidades.pacotes > 0 && formData.pacotes < pedidoQuantidades.pacotes) ||
+      (pedidoQuantidades.unidades > 0 && formData.unidades < pedidoQuantidades.unidades) ||
+      (pedidoQuantidades.kg > 0 && formData.kg < pedidoQuantidades.kg)
+    );
+  };
+
+  // Handler para salvar produção parcial - APENAS para modo embalagem
+  const handleSavePartial = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Prevenir múltiplos cliques
+    if (isSubmitting || !rowId || mode !== 'embalagem') return;
+
+    try {
+      setIsSubmitting(true);
+      setMessage(null);
+
+      // 1. Chamar API de salvar parcial PRIMEIRO (sem fazer upload de fotos)
+      const res = await fetch(`/api/producao/embalagem/${rowId}/partial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caixas: formData.caixas,
+          pacotes: formData.pacotes,
+          unidades: formData.unidades,
+          kg: formData.kg,
+          // Incluir dados de fotos JÁ EXISTENTES (não novas)
+          pacoteFotoUrl: formData.pacoteFotoUrl,
+          pacoteFotoId: formData.pacoteFotoId,
+          pacoteFotoUploadedAt: formData.pacoteFotoUploadedAt,
+          etiquetaFotoUrl: formData.etiquetaFotoUrl,
+          etiquetaFotoId: formData.etiquetaFotoId,
+          etiquetaFotoUploadedAt: formData.etiquetaFotoUploadedAt,
+          palletFotoUrl: formData.palletFotoUrl,
+          palletFotoId: formData.palletFotoId,
+          palletFotoUploadedAt: formData.palletFotoUploadedAt,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao salvar produção parcial');
+      }
+
+      // 2. Se houver fotos novas para upload, fazer upload para a NOVA LINHA
+      const hasPhotos = Object.values(photoFiles).some(file => file !== null);
+      const novaLinhaRowId = data.novaLinhaRowId;
+
+      if (hasPhotos && novaLinhaRowId) {
+        setPhotoLoading(true);
+
+        // Fazer upload de todas as fotos para a NOVA linha
+        const uploadPromises = [];
+        const photoTypes = [];
+
+        for (const [photoType, photoFile] of Object.entries(photoFiles)) {
+          if (photoFile) {
+            const formDataPhoto = new FormData();
+            formDataPhoto.append('photo', photoFile);
+            formDataPhoto.append('rowId', novaLinhaRowId.toString()); // Usar rowId da NOVA linha
+            formDataPhoto.append('photoType', photoType);
+
+            uploadPromises.push(
+              fetch('/api/upload/photo', {
+                method: 'POST',
+                body: formDataPhoto,
+              })
+            );
+            photoTypes.push(photoType);
+          }
+        }
+
+        // Aguardar todos os uploads
+        const uploadResults = await Promise.all(uploadPromises);
+
+        // Verificar se todos os uploads foram bem-sucedidos
+        for (let i = 0; i < uploadResults.length; i++) {
+          const uploadRes = uploadResults[i];
+          const photoType = photoTypes[i];
+
+          if (!uploadRes.ok) {
+            try {
+              const uploadData = await uploadRes.json();
+              throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
+            } catch {
+              if (uploadRes.status === 413) {
+                throw new Error(`Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`);
+              }
+              throw new Error(`Erro ao fazer upload da foto ${photoType}. Status: ${uploadRes.status}`);
+            }
+          }
+        }
+
+        setPhotoLoading(false);
+      }
+
+      // 3. Recarregar dados do painel se callback fornecido
+      if (onSaveSuccess) {
+        await onSaveSuccess();
+      }
+
+      // Fechar modal imediatamente após salvar com sucesso
+      onClose();
+    } catch (error) {
+      setPhotoLoading(false);
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Erro ao salvar produção parcial' 
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const handleClose = () => {
     setFormData({
@@ -430,6 +551,30 @@ export default function ProducaoModal({
               >
                 Cancelar
               </button>
+              
+              {/* Botão Salvar Parcial - APENAS para modo embalagem */}
+              {mode === 'embalagem' && (
+                <button
+                  type="button"
+                  onClick={handleSavePartial}
+                  className="px-6 py-3 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                  disabled={loading || isSubmitting || !isPartialProduction()}
+                  title={!isPartialProduction() ? 'Disponível apenas quando produção é menor que o pedido' : 'Salvar produção parcial e criar novo pedido com a diferença'}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {photoLoading ? 'Enviando fotos...' : 'Salvando...'}
+                    </>
+                  ) : (
+                    'Salvar Parcial'
+                  )}
+                </button>
+              )}
+
               <button
                 type="submit"
                 className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"

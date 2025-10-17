@@ -20,7 +20,7 @@ export default function NumberHalfStepInput({
   disabled = false, 
   label,
   min = 0,
-  max = 999,
+  max = 99999,
   step = 0.5
 }: NumberHalfStepInputProps) {
   const [displayValue, setDisplayValue] = useState(value.toString());

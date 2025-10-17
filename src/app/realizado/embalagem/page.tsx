@@ -646,6 +646,7 @@ export default function ProducaoEmbalagemPage() {
           kg: editingItem.pedidoKg || 0,
         } : undefined}
         loading={producaoLoading}
+        mode="embalagem"
       />
     </div>
   );

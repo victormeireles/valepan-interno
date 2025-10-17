@@ -19,7 +19,7 @@ export default function NumberInput({
   label,
   min = 0,
   step = 1,
-  max = 999
+  max = 99999
 }: NumberInputProps) {
   // Garantir que value seja sempre um número válido
   const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
