@@ -357,7 +357,7 @@ export default function ProducaoEmbalagemPage() {
                                           <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                         )}
                                       </span>
-                                      {(item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
+                                      {!isItemLoading && (item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
                                         <div className="relative ml-2">
                                           <button
                                             onClick={(e) => {
@@ -373,7 +373,16 @@ export default function ProducaoEmbalagemPage() {
                                               const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
                                               dropdown.classList.toggle('hidden');
                                             }}
-                                            className="text-white hover:text-gray-300 transition-colors cursor-pointer"
+                                            className={`transition-colors cursor-pointer ${
+                                              // Contar quantas fotos existem
+                                              (() => {
+                                                const photoCount = [item.pacoteFotoUrl, item.etiquetaFotoUrl, item.palletFotoUrl].filter(Boolean).length;
+                                                // Se tiver 1 ou 2 fotos (parcial), mostrar em amarelo
+                                                return photoCount === 1 || photoCount === 2 
+                                                  ? 'text-yellow-400 hover:text-yellow-300' 
+                                                  : 'text-white hover:text-gray-300';
+                                              })()
+                                            }`}
                                             title="Ver fotos"
                                           >
                                             <span className="material-icons text-lg">photo_camera</span>

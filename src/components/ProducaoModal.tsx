@@ -5,6 +5,7 @@ import NumberInput from './FormControls/NumberInput';
 import PhotoUploader from './PhotoUploader';
 import PhotoManager from './PhotoManager';
 import { ProducaoData } from '@/domain/types';
+import { PhotoValidator } from '@/domain/validators/PhotoValidator';
 
 
 interface ProducaoModalProps {
@@ -58,6 +59,9 @@ export default function ProducaoModal({
   });
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalMessage, setConfirmModalMessage] = useState('');
+  const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -71,6 +75,25 @@ export default function ProducaoModal({
     // Prevenir múltiplos cliques
     if (isSubmitting) return;
     
+    // Validação de fotos obrigatórias - APENAS para modo embalagem
+    if (mode === 'embalagem') {
+      const validator = new PhotoValidator(formData, photoFiles);
+      const validationResult = validator.validate();
+      
+      // Se faltam fotos, mostrar modal de confirmação
+      if (!validationResult.isValid && validationResult.errorMessage) {
+        setConfirmModalMessage(validationResult.errorMessage);
+        setShowConfirmModal(true);
+        setPendingAction('submit');
+        return;
+      }
+    }
+    
+    // Executar o submit
+    await executeSubmit();
+  };
+
+  const executeSubmit = async () => {
     try {
       setIsSubmitting(true);
       setMessage(null);
@@ -236,6 +259,25 @@ export default function ProducaoModal({
     // Prevenir múltiplos cliques
     if (isSubmitting || !rowId || mode !== 'embalagem') return;
 
+    // Validação de fotos obrigatórias
+    const validator = new PhotoValidator(formData, photoFiles);
+    const validationResult = validator.validate();
+    
+    // Se faltam fotos, mostrar modal de confirmação
+    if (!validationResult.isValid && validationResult.errorMessage) {
+      setConfirmModalMessage(validationResult.errorMessage);
+      setShowConfirmModal(true);
+      setPendingAction('partial');
+      return;
+    }
+
+    // Executar o salvamento parcial
+    await executeSavePartial();
+  };
+
+  const executeSavePartial = async () => {
+    if (!rowId) return;
+    
     try {
       setIsSubmitting(true);
       setMessage(null);
@@ -339,6 +381,24 @@ export default function ProducaoModal({
   };
 
 
+  const handleConfirmAction = async () => {
+    setShowConfirmModal(false);
+    
+    if (pendingAction === 'submit') {
+      await executeSubmit();
+    } else if (pendingAction === 'partial') {
+      await executeSavePartial();
+    }
+    
+    setPendingAction(null);
+  };
+
+  const handleCancelConfirmation = () => {
+    setShowConfirmModal(false);
+    setPendingAction(null);
+    setConfirmModalMessage('');
+  };
+
   const handleClose = () => {
     setFormData({
       caixas: 0,
@@ -352,6 +412,9 @@ export default function ProducaoModal({
       etiqueta: null,
       pallet: null,
     });
+    setShowConfirmModal(false);
+    setPendingAction(null);
+    setConfirmModalMessage('');
     onClose();
   };
 
@@ -379,7 +442,7 @@ export default function ProducaoModal({
                 ? 'bg-green-100 text-green-800 border border-green-200' 
                 : 'bg-red-100 text-red-800 border border-red-200'
             }`}>
-              {message.text}
+              <div className="whitespace-pre-line">{message.text}</div>
             </div>
           )}
 
@@ -596,6 +659,49 @@ export default function ProducaoModal({
           </form>
         </div>
       </div>
+
+      {/* Modal de Confirmação de Fotos Faltantes */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
+                  <span className="text-2xl">⚠️</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    Atenção: Fotos Incompletas
+                  </h3>
+                  <div className="text-sm text-gray-600 whitespace-pre-line">
+                    {confirmModalMessage}
+                  </div>
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-sm text-yellow-800 font-medium">
+                      Deseja continuar mesmo assim?
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleCancelConfirmation}
+                  className="px-5 py-2.5 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Voltar e Adicionar Fotos
+                </button>
+                <button
+                  onClick={handleConfirmAction}
+                  className="px-5 py-2.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors font-medium"
+                >
+                  Continuar Sem Fotos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
