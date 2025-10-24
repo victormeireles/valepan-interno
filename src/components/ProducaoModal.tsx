@@ -77,7 +77,7 @@ export default function ProducaoModal({
     
     // Validação de fotos obrigatórias - APENAS para modo embalagem
     if (mode === 'embalagem') {
-      const validator = new PhotoValidator(formData, photoFiles);
+      const validator = new PhotoValidator(formData, photoFiles, cliente);
       const validationResult = validator.validate();
       
       // Se faltam fotos, mostrar modal de confirmação
@@ -260,7 +260,7 @@ export default function ProducaoModal({
     if (isSubmitting || !rowId || mode !== 'embalagem') return;
 
     // Validação de fotos obrigatórias
-    const validator = new PhotoValidator(formData, photoFiles);
+    const validator = new PhotoValidator(formData, photoFiles, cliente);
     const validationResult = validator.validate();
     
     // Se faltam fotos, mostrar modal de confirmação

@@ -1,4 +1,5 @@
 import { ProducaoData } from '@/domain/types';
+import { isSpecialPhotoClient } from '@/config/photoRules';
 
 export type PhotoFiles = {
   pacote: File | null;
@@ -19,10 +20,12 @@ export type ValidationResult = {
 export class PhotoValidator {
   private readonly formData: ProducaoData;
   private readonly photoFiles: PhotoFiles;
+  private readonly cliente: string;
   
-  constructor(formData: ProducaoData, photoFiles: PhotoFiles) {
+  constructor(formData: ProducaoData, photoFiles: PhotoFiles, cliente: string) {
     this.formData = formData;
     this.photoFiles = photoFiles;
+    this.cliente = cliente;
   }
   
   /**
@@ -31,18 +34,19 @@ export class PhotoValidator {
    */
   validate(): ValidationResult {
     const missingPhotos: string[] = [];
+    const isSpecialClient = isSpecialPhotoClient(this.cliente);
     
-    // Verificar foto do pacote
+    // Verificar foto do pacote (obrigatória para todos)
     if (!this.hasPackagePhoto()) {
       missingPhotos.push('Foto do Pacote 📦');
     }
     
-    // Verificar foto da etiqueta
-    if (!this.hasLabelPhoto()) {
+    // Verificar foto da etiqueta (apenas para clientes normais)
+    if (!isSpecialClient && !this.hasLabelPhoto()) {
       missingPhotos.push('Foto da Etiqueta 🏷️');
     }
     
-    // Verificar foto do pallet
+    // Verificar foto do pallet (obrigatória para todos)
     if (!this.hasPalletPhoto()) {
       missingPhotos.push('Foto do Pallet 🚛');
     }

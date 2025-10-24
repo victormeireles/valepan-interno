@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
+import { isSpecialPhotoClient } from '@/config/photoRules';
 
 type PainelItem = {
   cliente: string;
@@ -78,6 +79,26 @@ function formatDateFull(dateString: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
+}
+
+// Helper para determinar a cor do ícone de foto baseado no cliente e fotos disponíveis
+function getPhotoIconColor(item: PainelItem): string {
+  const isSpecial = isSpecialPhotoClient(item.cliente);
+  const hasPacote = Boolean(item.pacoteFotoUrl);
+  const hasEtiqueta = Boolean(item.etiquetaFotoUrl);
+  const hasPallet = Boolean(item.palletFotoUrl);
+  
+  if (isSpecial) {
+    // Para clientes especiais: precisa pacote E pallet
+    return hasPacote && hasPallet 
+      ? 'text-white hover:text-gray-300' 
+      : 'text-yellow-400 hover:text-yellow-300';
+  } else {
+    // Para clientes normais: precisa das 3 fotos
+    return hasPacote && hasEtiqueta && hasPallet
+      ? 'text-white hover:text-gray-300'
+      : 'text-yellow-400 hover:text-yellow-300';
+  }
 }
 
 export default function ProducaoEmbalagemPage() {
@@ -357,39 +378,38 @@ export default function ProducaoEmbalagemPage() {
                                           <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                         )}
                                       </span>
-                                      {!isItemLoading && (item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) && (
+                                      {!isItemLoading && (
                                         <div className="relative ml-2">
-                                          <button
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              
-                                              // Fechar todos os outros dropdowns
-                                              document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
-                                                dropdown.classList.add('hidden');
-                                              });
-                                              
-                                              // Abrir/fechar o dropdown atual
-                                              const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
-                                              dropdown.classList.toggle('hidden');
-                                            }}
-                                            className={`transition-colors cursor-pointer ${
-                                              // Contar quantas fotos existem
-                                              (() => {
-                                                const photoCount = [item.pacoteFotoUrl, item.etiquetaFotoUrl, item.palletFotoUrl].filter(Boolean).length;
-                                                // Se tiver 1 ou 2 fotos (parcial), mostrar em amarelo
-                                                return photoCount === 1 || photoCount === 2 
-                                                  ? 'text-yellow-400 hover:text-yellow-300' 
-                                                  : 'text-white hover:text-gray-300';
-                                              })()
-                                            }`}
-                                            title="Ver fotos"
-                                          >
-                                            <span className="material-icons text-lg">photo_camera</span>
-                                          </button>
+                                          {/* Caso 1: Sem fotos mas com produção - ícone vermelho não clicável */}
+                                          {item.produzido > 0 && !item.pacoteFotoUrl && !item.etiquetaFotoUrl && !item.palletFotoUrl ? (
+                                            <span className="text-red-500" title="Sem fotos">
+                                              <span className="material-icons text-lg">photo_camera</span>
+                                            </span>
+                                          ) : (item.pacoteFotoUrl || item.etiquetaFotoUrl || item.palletFotoUrl) ? (
+                                            <>
+                                              {/* Caso 2: Tem fotos - ícone clicável com cor baseada no cliente */}
+                                              <button
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  
+                                                  // Fechar todos os outros dropdowns
+                                                  document.querySelectorAll('.photo-dropdown').forEach(dropdown => {
+                                                    dropdown.classList.add('hidden');
+                                                  });
+                                                  
+                                                  // Abrir/fechar o dropdown atual
+                                                  const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                                                  dropdown.classList.toggle('hidden');
+                                                }}
+                                                className={`transition-colors cursor-pointer ${getPhotoIconColor(item)}`}
+                                                title="Ver fotos"
+                                              >
+                                                <span className="material-icons text-lg">photo_camera</span>
+                                              </button>
                                           
-                                          {/* Dropdown de fotos */}
-                                          <div className="photo-dropdown absolute left-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden min-w-[200px]">
+                                              {/* Dropdown de fotos */}
+                                              <div className="photo-dropdown absolute left-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 hidden min-w-[200px]">
                                             {item.pacoteFotoUrl && (
                                               <a
                                                 href={item.pacoteFotoUrl}
@@ -447,7 +467,9 @@ export default function ProducaoEmbalagemPage() {
                                                 <span className="text-sm">Foto do Pallet</span>
                                               </a>
                                             )}
-                                          </div>
+                                              </div>
+                                            </>
+                                          ) : null}
                                         </div>
                                       )}
                                     </div>
