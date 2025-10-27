@@ -1,23 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { STAGES_CONFIG } from '@/config/stages';
 
-export default function Navigation() {
+interface NavigationProps {
+  hideHeader?: boolean;
+}
+
+export default function Navigation({ hideHeader = false }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
 
+  // Listener para evento de toggle vindo de RealizadoHeader
+  useEffect(() => {
+    const handleToggleMenu = () => {
+      setIsOpen(prev => !prev);
+    };
+
+    window.addEventListener('toggle-menu', handleToggleMenu);
+    return () => {
+      window.removeEventListener('toggle-menu', handleToggleMenu);
+    };
+  }, []);
+
   const isActive = (path: string) => pathname === path;
 
   return (
     <>
       {/* Header com botão hambúrguer */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+      {!hideHeader && (
+        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo/Título */}
@@ -57,7 +74,8 @@ export default function Navigation() {
             </button>
           </div>
         </div>
-      </header>
+        </header>
+      )}
 
       {/* Overlay para fechar o menu */}
       {isOpen && (
