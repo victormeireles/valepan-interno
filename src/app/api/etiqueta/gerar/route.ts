@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues, updateCell } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
-import JsBarcode from 'jsbarcode';
-import { createCanvas } from 'canvas';
 import fs from 'fs';
 import path from 'path';
 
@@ -103,8 +101,12 @@ async function getProdutoData(nomeProduto: string) {
   return result;
 }
 
-function generateBarcodeBase64(code: string): string {
+async function generateBarcodeBase64(code: string): Promise<string> {
   try {
+    // Importação dinâmica para funcionar na Vercel
+    const { createCanvas } = await import('canvas');
+    const JsBarcode = (await import('jsbarcode')).default;
+    
     const canvas = createCanvas(4, 1);
     JsBarcode(canvas, code, {
       format: code.length === 13 ? 'EAN13' : 'CODE128',
@@ -473,7 +475,7 @@ export async function POST(request: Request) {
 
     // Gerar código de barras
     const barcodeImage = produtoData.codigoBarras 
-      ? generateBarcodeBase64(produtoData.codigoBarras)
+      ? await generateBarcodeBase64(produtoData.codigoBarras)
       : '';
 
     // Gerar HTML da etiqueta
