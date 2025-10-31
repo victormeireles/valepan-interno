@@ -226,3 +226,67 @@ export async function deleteSheetRow(
     throw error;
   }
 }
+
+// Função para atualizar uma célula específica
+export async function updateCell(
+  spreadsheetId: string,
+  tabName: string,
+  row: number,
+  column: string,
+  value: string | number
+): Promise<void> {
+  const sheets = await getGoogleSheetsClient();
+  
+  try {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${tabName}!${column}${row}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[value]]
+      }
+    });
+  } catch (error) {
+    const getMessage = (e: unknown): string => (e instanceof Error ? (e.message ?? '') : '');
+    const msg = getMessage(error).toLowerCase();
+
+    const isPermissionError =
+      msg.includes('permission') ||
+      msg.includes('insufficient permissions') ||
+      msg.includes('permission_denied') ||
+      msg.includes('caller does not have permission') ||
+      msg.includes('request had insufficient authentication scopes');
+
+    if (isPermissionError) {
+      const authEmail = process.env.GOOGLE_SA_CLIENT_EMAIL || '';
+      throw new AccessDeniedError(
+        'Acesso à planilha necessário',
+        authEmail,
+        `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+      );
+    }
+
+    throw error;
+  }
+}
+
+// Função para obter o último lote usado em uma planilha
+export async function getLastLote(
+  spreadsheetId: string,
+  tabName: string,
+  loteColumn: string
+): Promise<number> {
+  const values = await readSheetValues(spreadsheetId, `${tabName}!${loteColumn}:${loteColumn}`);
+  
+  // Começar da linha 2 (pular cabeçalho) e buscar o maior número
+  const lotes = values
+    .slice(1) // Pula cabeçalho
+    .map(row => {
+      const val = row[0]?.toString().trim();
+      return val ? parseInt(val, 10) : 0;
+    })
+    .filter(num => !isNaN(num) && num > 0);
+  
+  // Retornar o maior lote encontrado, ou 0 se não houver nenhum
+  return lotes.length > 0 ? Math.max(...lotes) : 0;
+}

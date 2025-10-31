@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { appendRow } from '@/lib/googleSheets';
+import { appendRow, getLastLote } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG, PedidoEmbalagemPayload } from '@/config/embalagem';
 
 function isValidDateISO(date: string) {
@@ -20,8 +20,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Inclua ao menos um item' }, { status: 400 });
     }
 
-    // Persistir cada item como linha separada (regra 4: manter histórico)
+    // Buscar o último lote e incrementar
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+    const lastLote = await getLastLote(spreadsheetId, tabName, 'M'); // Coluna M = Lote
+    const newLote = lastLote + 1;
+
+    // Persistir cada item como linha separada (regra 4: manter histórico)
     const now = new Date().toISOString();
     
     for (const item of payload.itens) {
@@ -38,11 +42,13 @@ export async function POST(request: Request) {
         item.kg || 0,
         now, // created_at
         now, // updated_at (mesmo valor na criação)
+        newLote, // Lote (coluna M)
+        '', // Etiqueta Gerada (coluna N) - inicialmente vazio
       ];
       await appendRow(spreadsheetId, tabName, values);
     }
 
-    return NextResponse.json({ message: 'Pedido salvo com sucesso' });
+    return NextResponse.json({ message: 'Pedido salvo com sucesso', lote: newLote });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
