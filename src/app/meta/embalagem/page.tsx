@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
+import EtiquetaModal from '@/components/EtiquetaModal';
 
 type PainelItem = {
   cliente: string;
@@ -21,6 +22,9 @@ type PainelItem = {
   pacotes?: number;
   unidades?: number;
   kg?: number;
+  // Dados de etiqueta
+  lote?: number;
+  etiquetaGerada?: boolean;
   // Dados de foto
   photoUrl?: string;
   photoId?: string;
@@ -122,6 +126,10 @@ export default function PedidoEmbalagemPage() {
   // Estados para criação
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+  
+  // Estados para etiqueta
+  const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
+  const [etiquetaItem, setEtiquetaItem] = useState<PainelItem | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -140,11 +148,11 @@ export default function PedidoEmbalagemPage() {
     load();
     
     // Pausar atualização automática quando modal estiver aberto
-    if (!editModalOpen && !createModalOpen) {
+    if (!editModalOpen && !createModalOpen && !etiquetaModalOpen) {
       const interval = setInterval(load, 60_000); // atualizar a cada minuto
       return () => clearInterval(interval);
     }
-  }, [selectedDate, editModalOpen, createModalOpen]);
+  }, [selectedDate, editModalOpen, createModalOpen, etiquetaModalOpen]);
 
   // Carregar opções para o modal de edição
   useEffect(() => {
@@ -334,6 +342,35 @@ export default function PedidoEmbalagemPage() {
     }
   };
 
+  // Função para abrir modal de etiqueta
+  const handleEtiquetaClick = (item: PainelItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!item.lote) {
+      setMessage('Este item não possui lote definido');
+      return;
+    }
+    
+    setEtiquetaItem(item);
+    setEtiquetaModalOpen(true);
+  };
+
+  // Função chamada após gerar etiqueta com sucesso
+  const handleEtiquetaSuccess = async () => {
+    // Recarregar dados do painel para atualizar o status
+    try {
+      const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+      const painelData = await painelRes.json();
+      if (painelRes.ok) {
+        setItems((painelData.items || []) as PainelItem[]);
+      }
+      setMessage('Etiqueta gerada com sucesso!');
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Erro ao recarregar dados do painel:', err);
+    }
+  };
+
   // Agrupar itens por cliente/etiqueta/obs para exibição visual
   const groupedItems = useMemo(() => {
     const groups: { [key: string]: PainelItem[] } = {};
@@ -482,6 +519,19 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-lg">photo_camera</span>
                                       </a>
                                     )}
+                                    {item.lote && (
+                                      <button
+                                        onClick={(e) => handleEtiquetaClick(item, e)}
+                                        className={`ml-2 transition-colors cursor-pointer ${
+                                          item.etiquetaGerada 
+                                            ? 'text-green-500 hover:text-green-400' 
+                                            : 'text-white hover:text-gray-300'
+                                        }`}
+                                        title={item.etiquetaGerada ? 'Etiqueta já gerada' : 'Gerar etiqueta'}
+                                      >
+                                        <span className="material-icons text-lg">label</span>
+                                      </button>
+                                    )}
                                   </div>
                                   <div className="text-right ml-2 flex-shrink-0">
                                     <div className="text-base font-bold text-white">
@@ -564,6 +614,23 @@ export default function PedidoEmbalagemPage() {
         produtosOptions={produtosOptions}
         loading={createLoading}
       />
+
+      {/* Modal de Etiqueta */}
+      {etiquetaItem && (
+        <EtiquetaModal
+          isOpen={etiquetaModalOpen}
+          onClose={() => {
+            setEtiquetaModalOpen(false);
+            setEtiquetaItem(null);
+          }}
+          produto={etiquetaItem.produto}
+          dataFabricacao={etiquetaItem.dataFabricacao || selectedDate}
+          congeladoInicial={etiquetaItem.congelado === 'Sim'}
+          lote={etiquetaItem.lote || 0}
+          rowId={etiquetaItem.rowId}
+          onSuccess={handleEtiquetaSuccess}
+        />
+      )}
     </div>
   );
 }

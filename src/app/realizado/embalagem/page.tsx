@@ -180,16 +180,37 @@ export default function ProducaoEmbalagemPage() {
       groups[groupKey].push(item);
     });
     
-    return Object.entries(groups).map(([groupKey, groupItems]) => {
+    // Criar os grupos e ordenar itens dentro de cada grupo por row_id
+    const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
       const [cliente, dataFab, obs] = groupKey.split('|');
+      
+      // Ordenar itens dentro do grupo por row_id
+      const sortedItems = [...groupItems].sort((a, b) => {
+        const rowIdA = a.rowId ?? Number.MAX_SAFE_INTEGER;
+        const rowIdB = b.rowId ?? Number.MAX_SAFE_INTEGER;
+        return rowIdA - rowIdB;
+      });
+      
+      const minRowId = Math.min(...sortedItems.map(item => item.rowId ?? Number.MAX_SAFE_INTEGER));
+      
       return {
         key: groupKey,
         cliente,
         dataFabricacao: dataFab,
         observacao: obs || undefined,
-        items: groupItems,
+        items: sortedItems,
+        minRowId,
       };
     });
+    
+    // Ordenar grupos pelo menor row_id de cada grupo
+    const sortedGroups = groupsArray.sort((a, b) => {
+      const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
+      const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
+      return minRowIdA - minRowIdB;
+    });
+    
+    return sortedGroups.map(({ minRowId: _minRowId, ...group }) => group);
   }, [items, selectedDate]);
 
   const handlePhotoClick = (item: PainelItem) => {

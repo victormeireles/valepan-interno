@@ -49,6 +49,9 @@ type PainelItem = {
   pedidoPacotes?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
+  // Dados de etiqueta
+  lote?: number;
+  etiquetaGerada?: boolean;
   // Dados de fotos (novos campos)
   pacoteFotoUrl?: string;
   pacoteFotoId?: string;
@@ -66,9 +69,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISO();
 
-    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R, S, T, U, V, W, X, Y, Z)
+    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R-Z e lote/etiqueta AA-AB)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:Z`);
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AB`);
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
@@ -109,6 +112,11 @@ export async function GET(request: Request) {
       const palletFotoId = (r[24] || '').toString().trim();         // Y
       const palletFotoUploadedAt = (r[25] || '').toString().trim(); // Z
 
+      // Dados de lote e etiqueta (colunas AA, AB)
+      const lote = Number(r[26] || 0); // AA (índice 26)
+      const etiquetaGeradaStr = (r[27] || '').toString().trim(); // AB (índice 27)
+      const etiquetaGerada = etiquetaGeradaStr.toLowerCase() === 'sim';
+
       let unidade: PainelItem['unidade'] | '' = '';
       let aProduzir = 0;
       if (caixas > 0) { unidade = 'cx'; aProduzir = caixas; }
@@ -148,6 +156,9 @@ export async function GET(request: Request) {
         pedidoPacotes: pacotes,
         pedidoUnidades: unidades,
         pedidoKg: kg,
+        // Dados de etiqueta
+        lote: lote || undefined,
+        etiquetaGerada,
         // Dados de fotos
         pacoteFotoUrl: pacoteFotoUrl || undefined,
         pacoteFotoId: pacoteFotoId || undefined,
