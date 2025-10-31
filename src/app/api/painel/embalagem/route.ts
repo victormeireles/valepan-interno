@@ -170,9 +170,6 @@ export async function GET(request: Request) {
         palletFotoId: palletFotoId || undefined,
         palletFotoUploadedAt: palletFotoUploadedAt || undefined,
       });
-      
-      // Debug log para verificar rowId
-      console.log(`Item: ${produto} - Data: ${dataPedido} - RowId: ${rowNumber}`);
     }
 
 

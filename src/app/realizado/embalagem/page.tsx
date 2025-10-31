@@ -210,7 +210,9 @@ export default function ProducaoEmbalagemPage() {
       return minRowIdA - minRowIdB;
     });
     
-    return sortedGroups.map(({ minRowId: _minRowId, ...group }) => group);
+    // Remover minRowId do objeto final (usado apenas para ordenação)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    return sortedGroups.map(({ minRowId, ...group }) => group);
   }, [items, selectedDate]);
 
   const handlePhotoClick = (item: PainelItem) => {

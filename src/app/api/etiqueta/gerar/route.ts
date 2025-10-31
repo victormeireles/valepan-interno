@@ -108,12 +108,13 @@ async function generateBarcodeBase64(code: string): Promise<string> {
     const JsBarcode = (await import('jsbarcode')).default;
     
     const canvas = createCanvas(4, 1);
+    // displayValue: false para evitar problemas de fonte em produção
+    // O número será renderizado manualmente no HTML
     JsBarcode(canvas, code, {
       format: code.length === 13 ? 'EAN13' : 'CODE128',
       width: 4,
       height: 140,
-      displayValue: true,
-      fontSize: 20,
+      displayValue: false, // Desabilitado - número renderizado manualmente
       margin: 18,
     });
     return canvas.toDataURL();
@@ -442,6 +443,7 @@ function generateEtiquetaHTML(data: {
       ${data.barcodeImage ? `
       <div class="bottom-col-2">
         <img src="${data.barcodeImage}" alt="Código de Barras" class="barcode-image">
+        <div class="barcode-number">${data.codigoBarras}</div>
       </div>
       ` : ''}
     </div>
