@@ -69,9 +69,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISO();
 
-    // Buscar dados de pedidos (incluindo colunas de lote M, N, produção O, P, Q, R e fotos S, T, U, V, W, X, Y, Z, AA)
+    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R-Z e lote/etiqueta AA-AB)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AA`);
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AB`);
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
@@ -95,29 +95,27 @@ export async function GET(request: Request) {
       const unidades = Number(r[8] || 0);
       const kg = Number(r[9] || 0);
 
-      // Dados de lote e etiqueta (colunas M, N)
-      // M = índice 12 (A=0, B=1, ..., M=12)
-      const loteValue = r[12];
-      const lote = loteValue ? Number(loteValue) : 0; // M
-      const etiquetaGeradaStr = (r[13] || '').toString().trim(); // N
-      const etiquetaGerada = etiquetaGeradaStr.toLowerCase() === 'sim';
-
-      // Dados de produção (colunas O, P, Q, R)
-      const producaoCaixas = Number(r[14] || 0);  // O
-      const producaoPacotes = Number(r[15] || 0); // P
-      const producaoUnidades = Number(r[16] || 0); // Q
-      const producaoKg = Number(r[17] || 0);      // R
+      // Dados de produção (colunas M, N, O, P)
+      const producaoCaixas = Number(r[12] || 0);  // M
+      const producaoPacotes = Number(r[13] || 0); // N
+      const producaoUnidades = Number(r[14] || 0); // O
+      const producaoKg = Number(r[15] || 0);      // P
       
-      // Dados de fotos (colunas S, T, U, V, W, X, Y, Z, AA)
-      const pacoteFotoUrl = (r[18] || '').toString().trim();        // S
-      const pacoteFotoId = (r[19] || '').toString().trim();         // T
-      const pacoteFotoUploadedAt = (r[20] || '').toString().trim(); // U
-      const etiquetaFotoUrl = (r[21] || '').toString().trim();      // V
-      const etiquetaFotoId = (r[22] || '').toString().trim();       // W
-      const etiquetaFotoUploadedAt = (r[23] || '').toString().trim(); // X
-      const palletFotoUrl = (r[24] || '').toString().trim();        // Y
-      const palletFotoId = (r[25] || '').toString().trim();         // Z
-      const palletFotoUploadedAt = (r[26] || '').toString().trim(); // AA
+      // Dados de fotos (colunas R, S, T, U, V, W, X, Y, Z)
+      const pacoteFotoUrl = (r[17] || '').toString().trim();        // R
+      const pacoteFotoId = (r[18] || '').toString().trim();         // S
+      const pacoteFotoUploadedAt = (r[19] || '').toString().trim(); // T
+      const etiquetaFotoUrl = (r[20] || '').toString().trim();      // U
+      const etiquetaFotoId = (r[21] || '').toString().trim();       // V
+      const etiquetaFotoUploadedAt = (r[22] || '').toString().trim(); // W
+      const palletFotoUrl = (r[23] || '').toString().trim();        // X
+      const palletFotoId = (r[24] || '').toString().trim();         // Y
+      const palletFotoUploadedAt = (r[25] || '').toString().trim(); // Z
+
+      // Dados de lote e etiqueta (colunas AA, AB)
+      const lote = Number(r[26] || 0); // AA (índice 26)
+      const etiquetaGeradaStr = (r[27] || '').toString().trim(); // AB (índice 27)
+      const etiquetaGerada = etiquetaGeradaStr.toLowerCase() === 'sim';
 
       let unidade: PainelItem['unidade'] | '' = '';
       let aProduzir = 0;
@@ -136,18 +134,18 @@ export async function GET(request: Request) {
       else if (unidade === 'kg') { produzido = producaoKg; }
 
       // Cada item é individual, não agrupar
-      const item = {
+      items.push({
         cliente,
         produto,
         unidade,
         congelado,
         observacao,
         aProduzir,
-        produzido, // Usar dados de produção das colunas O, P, Q, R
+        produzido, // Usar dados de produção das colunas M, N, O, P
         dataPedido: dataPedido,
         dataFabricacao,
         rowId: rowNumber,
-        sourceType: 'pedido' as const,
+        sourceType: 'pedido',
         // Valores de PRODUÇÃO (o que foi realmente produzido)
         caixas: producaoCaixas,
         pacotes: producaoPacotes,
@@ -159,7 +157,7 @@ export async function GET(request: Request) {
         pedidoUnidades: unidades,
         pedidoKg: kg,
         // Dados de etiqueta
-        lote: lote > 0 ? lote : undefined,
+        lote: lote || undefined,
         etiquetaGerada,
         // Dados de fotos
         pacoteFotoUrl: pacoteFotoUrl || undefined,
@@ -171,25 +169,14 @@ export async function GET(request: Request) {
         palletFotoUrl: palletFotoUrl || undefined,
         palletFotoId: palletFotoId || undefined,
         palletFotoUploadedAt: palletFotoUploadedAt || undefined,
-      };
-      
-      items.push(item);
+      });
       
       // Debug log para verificar rowId
-      console.log(`[API] Item adicionado: ${produto} | Cliente: ${cliente} | Data: ${dataPedido} | RowId: ${rowNumber} | DataFab: ${dataFabricacao} | Obs: ${observacao}`);
+      console.log(`Item: ${produto} - Data: ${dataPedido} - RowId: ${rowNumber}`);
     }
 
 
     // Montar status no cliente; o front calcula a cor a partir de aProduzir vs produzido
-    console.log(`[API] Total de itens retornados para data ${date}:`, items.length);
-    console.log(`[API] Itens ordenados por rowId:`, items.map(i => ({
-      rowId: i.rowId,
-      cliente: i.cliente,
-      produto: i.produto,
-      dataFabricacao: i.dataFabricacao,
-      observacao: i.observacao
-    })).sort((a, b) => (a.rowId || 0) - (b.rowId || 0)));
-    
     return NextResponse.json({ items, date });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

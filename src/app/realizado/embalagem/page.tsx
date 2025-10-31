@@ -167,16 +167,6 @@ export default function ProducaoEmbalagemPage() {
   };
 
   const groupedItems = useMemo((): RealizadoGroup[] => {
-    console.log('=== INICIANDO AGRUPAMENTO ===');
-    console.log('Total de itens:', items.length);
-    console.log('Itens com rowId:', items.map(item => ({
-      produto: item.produto,
-      cliente: item.cliente,
-      rowId: item.rowId,
-      dataFabricacao: item.dataFabricacao,
-      observacao: item.observacao
-    })));
-    
     const groups: { [key: string]: PainelItem[] } = {};
     
     items.forEach(item => {
@@ -190,8 +180,6 @@ export default function ProducaoEmbalagemPage() {
       groups[groupKey].push(item);
     });
     
-    console.log('Grupos formados:', Object.keys(groups).length);
-    
     // Criar os grupos e ordenar itens dentro de cada grupo por row_id
     const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
       const [cliente, dataFab, obs] = groupKey.split('|');
@@ -204,11 +192,6 @@ export default function ProducaoEmbalagemPage() {
       });
       
       const minRowId = Math.min(...sortedItems.map(item => item.rowId ?? Number.MAX_SAFE_INTEGER));
-      
-      console.log(`Grupo: ${cliente} | MinRowId: ${minRowId} | Itens:`, sortedItems.map(i => ({
-        produto: i.produto,
-        rowId: i.rowId
-      })));
       
       return {
         key: groupKey,
@@ -224,16 +207,10 @@ export default function ProducaoEmbalagemPage() {
     const sortedGroups = groupsArray.sort((a, b) => {
       const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
       const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
-      console.log(`Comparando grupos: ${a.cliente} (minRowId: ${minRowIdA}) vs ${b.cliente} (minRowId: ${minRowIdB})`);
       return minRowIdA - minRowIdB;
     });
     
-    console.log('Ordem final dos grupos:', sortedGroups.map(g => ({
-      cliente: g.cliente,
-      minRowId: g.minRowId
-    })));
-    
-    return sortedGroups.map(({ minRowId, ...group }) => group);
+    return sortedGroups.map(({ minRowId: _minRowId, ...group }) => group);
   }, [items, selectedDate]);
 
   const handlePhotoClick = (item: PainelItem) => {

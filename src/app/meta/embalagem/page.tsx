@@ -138,13 +138,7 @@ export default function PedidoEmbalagemPage() {
         const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        const itemsData = (data.items || []) as PainelItem[];
-        console.log('Itens carregados:', itemsData.map(item => ({ 
-          produto: item.produto, 
-          lote: item.lote, 
-          temLote: !!item.lote && item.lote > 0 
-        })));
-        setItems(itemsData);
+        setItems((data.items || []) as PainelItem[]);
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'Erro ao carregar o painel');
       } finally {
@@ -350,20 +344,15 @@ export default function PedidoEmbalagemPage() {
 
   // Função para abrir modal de etiqueta
   const handleEtiquetaClick = (item: PainelItem, e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
     
-    console.log('Etiqueta click:', { lote: item.lote, item });
-    
-    if (!item.lote || item.lote === 0) {
-      setMessage('Este item não possui lote definido. Por favor, defina um lote na planilha ou crie um novo pedido.');
-      setTimeout(() => setMessage(null), 4000);
+    if (!item.lote) {
+      setMessage('Este item não possui lote definido');
       return;
     }
     
     setEtiquetaItem(item);
     setEtiquetaModalOpen(true);
-    console.log('Modal aberto:', { item, modalOpen: true });
   };
 
   // Função chamada após gerar etiqueta com sucesso
@@ -530,34 +519,19 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-lg">photo_camera</span>
                                       </a>
                                     )}
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        console.log('Botão etiqueta clicado:', { 
-                                          item, 
-                                          lote: item.lote, 
-                                          temLote: !!item.lote && item.lote > 0 
-                                        });
-                                        handleEtiquetaClick(item, e);
-                                      }}
-                                      disabled={!item.lote || item.lote === 0}
-                                      className={`ml-2 transition-colors ${
-                                        !item.lote || item.lote === 0
-                                          ? 'text-gray-500 cursor-not-allowed opacity-50 pointer-events-none'
-                                          : 'cursor-pointer ' + (item.etiquetaGerada 
+                                    {item.lote && (
+                                      <button
+                                        onClick={(e) => handleEtiquetaClick(item, e)}
+                                        className={`ml-2 transition-colors cursor-pointer ${
+                                          item.etiquetaGerada 
                                             ? 'text-green-500 hover:text-green-400' 
-                                            : 'text-white hover:text-gray-300')
-                                      }`}
-                                      title={
-                                        !item.lote || item.lote === 0
-                                          ? 'Este item não possui lote definido'
-                                          : item.etiquetaGerada 
-                                            ? 'Etiqueta já gerada' 
-                                            : 'Gerar etiqueta'
-                                      }
-                                    >
-                                      <span className="material-icons text-lg">label</span>
-                                    </button>
+                                            : 'text-white hover:text-gray-300'
+                                        }`}
+                                        title={item.etiquetaGerada ? 'Etiqueta já gerada' : 'Gerar etiqueta'}
+                                      >
+                                        <span className="material-icons text-lg">label</span>
+                                      </button>
+                                    )}
                                   </div>
                                   <div className="text-right ml-2 flex-shrink-0">
                                     <div className="text-base font-bold text-white">
@@ -642,19 +616,21 @@ export default function PedidoEmbalagemPage() {
       />
 
       {/* Modal de Etiqueta */}
-      <EtiquetaModal
-        isOpen={etiquetaModalOpen && etiquetaItem !== null}
-        onClose={() => {
-          setEtiquetaModalOpen(false);
-          setEtiquetaItem(null);
-        }}
-        produto={etiquetaItem?.produto || ''}
-        dataFabricacao={etiquetaItem?.dataFabricacao || selectedDate}
-        congeladoInicial={etiquetaItem?.congelado === 'Sim'}
-        lote={etiquetaItem?.lote || 0}
-        rowId={etiquetaItem?.rowId}
-        onSuccess={handleEtiquetaSuccess}
-      />
+      {etiquetaItem && (
+        <EtiquetaModal
+          isOpen={etiquetaModalOpen}
+          onClose={() => {
+            setEtiquetaModalOpen(false);
+            setEtiquetaItem(null);
+          }}
+          produto={etiquetaItem.produto}
+          dataFabricacao={etiquetaItem.dataFabricacao || selectedDate}
+          congeladoInicial={etiquetaItem.congelado === 'Sim'}
+          lote={etiquetaItem.lote || 0}
+          rowId={etiquetaItem.rowId}
+          onSuccess={handleEtiquetaSuccess}
+        />
+      )}
     </div>
   );
 }

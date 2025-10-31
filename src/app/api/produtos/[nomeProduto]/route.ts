@@ -3,10 +3,11 @@ import { readSheetValues } from '@/lib/googleSheets';
 
 export async function GET(
   request: Request,
-  { params }: { params: { nomeProduto: string } }
+  { params }: { params: Promise<{ nomeProduto: string }> }
 ) {
   try {
-    const nomeProduto = decodeURIComponent(params.nomeProduto);
+    const { nomeProduto: nomeProdutoParam } = await params;
+    const nomeProduto = decodeURIComponent(nomeProdutoParam);
     
     if (!nomeProduto) {
       return NextResponse.json({ error: 'Nome do produto é obrigatório' }, { status: 400 });

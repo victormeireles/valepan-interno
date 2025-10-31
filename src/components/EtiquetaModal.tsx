@@ -77,16 +77,11 @@ export default function EtiquetaModal({
     }
   };
 
-  if (!isOpen) {
-    console.log('EtiquetaModal: isOpen = false');
-    return null;
-  }
-
-  console.log('EtiquetaModal: renderizando com', { produto, lote, dataFabricacao });
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]" onClick={onClose}>
-      <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <span className="material-icons">label</span>

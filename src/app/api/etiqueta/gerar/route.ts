@@ -3,6 +3,8 @@ import { readSheetValues, updateCell } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import JsBarcode from 'jsbarcode';
 import { createCanvas } from 'canvas';
+import fs from 'fs';
+import path from 'path';
 
 interface GerarEtiquetaRequest {
   produto: string;
@@ -27,6 +29,14 @@ function addDays(dateStr: string, days: number): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatPesoLiquido(peso: number): string {
+  // Arredondar para número inteiro (sem casas decimais)
+  const pesoInteiro = Math.round(peso);
+  
+  // Formatar com separador de milhar usando ponto
+  return pesoInteiro.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
 async function getProdutoData(nomeProduto: string) {
   const spreadsheetId = process.env.NEXT_PUBLIC_PRODUTOS_SHEET_ID;
   if (!spreadsheetId) {
@@ -34,14 +44,38 @@ async function getProdutoData(nomeProduto: string) {
   }
 
   const tabName = 'Produtos';
-  const values = await readSheetValues(spreadsheetId, `${tabName}!A:F`);
+  // Ler todas as colunas possíveis (até Z pelo menos)
+  const values = await readSheetValues(spreadsheetId, `${tabName}!A:Z`);
 
   if (values.length < 3) {
     throw new Error('Planilha de produtos vazia ou sem dados');
   }
 
+  // Cabeçalhos estão na linha 2 (índice 1)
+  const headers = values[1] || [];
+
+  // Buscar índices das colunas pelos nomes dos cabeçalhos
+  const findColumnIndex = (searchTerms: string[]): number => {
+    return headers.findIndex((h: string) => {
+      if (!h) return false;
+      const headerLower = h.toString().trim().toLowerCase();
+      return searchTerms.some(term => headerLower === term.toLowerCase() || headerLower.includes(term.toLowerCase()));
+    });
+  };
+
+  const produtoColIdx = findColumnIndex(['Produto']);
+  const codigoBarrasColIdx = findColumnIndex(['Código de Barras', 'Codigo de Barras']);
+  const unCaixaColIdx = findColumnIndex(['UN Caixa', 'UN Caixa']);
+  const unPacoteColIdx = findColumnIndex(['UN Pacote', 'UN Pacote']);
+  const pesoLiquidoColIdx = findColumnIndex(['Peso Líquido', 'Peso Liquido']);
+
+  if (produtoColIdx < 0) {
+    throw new Error('Coluna "Produto" não encontrada na planilha');
+  }
+
+  // Buscar linha do produto
   const produtoRow = values.slice(2).find(row => {
-    const produto = row[0]?.toString().trim();
+    const produto = row[produtoColIdx]?.toString().trim();
     return produto && produto.toLowerCase() === nomeProduto.toLowerCase();
   });
 
@@ -49,30 +83,79 @@ async function getProdutoData(nomeProduto: string) {
     throw new Error('Produto não encontrado na planilha');
   }
 
-  return {
-    nome: produtoRow[0]?.toString().trim() || '',
-    unidade: produtoRow[1]?.toString().trim() || '',
-    codigoBarras: produtoRow[2]?.toString().trim() || '',
-    unPorCaixa: parseFloat(produtoRow[3]?.toString().trim() || '0'),
-    unPorPacote: parseFloat(produtoRow[4]?.toString().trim() || '0'),
-    pesoLiquido: parseFloat(produtoRow[5]?.toString().trim() || '0'),
+  // Função helper para parse seguro
+  const parseSafe = (val: string | undefined | null): number => {
+    if (!val) return 0;
+    const str = val.toString().trim().replace(',', '.');
+    const parsed = parseFloat(str);
+    return isNaN(parsed) ? 0 : parsed;
   };
+
+  const result = {
+    nome: produtoRow[produtoColIdx]?.toString().trim() || '',
+    unidade: produtoRow[1]?.toString().trim() || '', // Manter unidade da coluna B se existir
+    codigoBarras: codigoBarrasColIdx >= 0 ? (produtoRow[codigoBarrasColIdx]?.toString().trim() || '') : '',
+    unPorCaixa: unCaixaColIdx >= 0 ? parseSafe(produtoRow[unCaixaColIdx]) : 0,
+    unPorPacote: unPacoteColIdx >= 0 ? parseSafe(produtoRow[unPacoteColIdx]) : 0,
+    pesoLiquido: pesoLiquidoColIdx >= 0 ? parseSafe(produtoRow[pesoLiquidoColIdx]) : 0,
+  };
+  
+  return result;
 }
 
 function generateBarcodeBase64(code: string): string {
   try {
-    const canvas = createCanvas(2, 1);
+    const canvas = createCanvas(4, 1);
     JsBarcode(canvas, code, {
       format: code.length === 13 ? 'EAN13' : 'CODE128',
-      width: 2,
-      height: 80,
+      width: 4,
+      height: 140,
       displayValue: true,
-      fontSize: 14,
-      margin: 10,
+      fontSize: 20,
+      margin: 18,
     });
     return canvas.toDataURL();
-  } catch (error) {
-    console.error('Erro ao gerar código de barras:', error);
+  } catch {
+    return '';
+  }
+}
+
+function getLogoSVG(): string {
+  try {
+    // Tentar ler o arquivo SVG da pasta public
+    const svgPath = path.join(process.cwd(), 'public', 'logo-full-light.svg');
+    let svgContent = fs.readFileSync(svgPath, 'utf-8');
+    
+    // Extrair width e height originais ANTES de removê-los
+    const widthMatch = svgContent.match(/width\s*=\s*["'](\d+(?:\.\d+)?)/i);
+    const heightMatch = svgContent.match(/height\s*=\s*["'](\d+(?:\.\d+)?)/i);
+    
+    const originalWidth = widthMatch ? widthMatch[1] : '422';
+    const originalHeight = heightMatch ? heightMatch[1] : '301';
+    
+    // Adicionar viewBox se não existir (necessário para scaling correto)
+    if (!svgContent.includes('viewBox')) {
+      svgContent = svgContent.replace(
+        /<svg([^>]*)>/i,
+        `<svg$1 viewBox="0 0 ${originalWidth} ${originalHeight}">`
+      );
+    }
+    
+    // Remover width e height fixos para permitir redimensionamento via CSS
+    svgContent = svgContent.replace(/(<svg[^>]*)\s+width\s*=\s*["'][^"']*["']/gi, '$1');
+    svgContent = svgContent.replace(/(<svg[^>]*)\s+height\s*=\s*["'][^"']*["']/gi, '$1');
+    
+    // Adicionar preserveAspectRatio se não existir (garante que não corte)
+    if (!svgContent.includes('preserveAspectRatio')) {
+      svgContent = svgContent.replace(
+        /<svg([^>]*)>/i,
+        '<svg$1 preserveAspectRatio="xMidYMid meet">'
+      );
+    }
+    
+    return svgContent;
+  } catch {
+    // Fallback: retornar SVG vazio ou texto
     return '';
   }
 }
@@ -89,6 +172,7 @@ function generateEtiquetaHTML(data: {
   unPorCaixa: number;
   pacotesPorCaixa: number;
 }): string {
+  const logoSVG = getLogoSVG();
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -115,24 +199,56 @@ function generateEtiquetaHTML(data: {
     .etiqueta {
       width: 900px;
       height: 600px;
-      border: 2px solid #333;
+      border: 1px solid #000;
       background: white;
-      padding: 30px;
+      padding: 20px;
       display: flex;
       flex-direction: column;
-      position: relative;
+      color: #000;
     }
     
     .header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 20px;
+      margin-bottom: 35px;
     }
     
-    .logo {
-      width: 250px;
-      height: auto;
+    .logo-section {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
+    .logo-container {
+      width: 220px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      overflow: visible;
+      position: relative;
+    }
+    
+    .logo-container svg {
+      width: 100%;
+      height: 100%;
+      max-width: 220px;
+      max-height: 160px;
+      filter: brightness(0);
+      display: block;
+    }
+    
+    .logo-container svg path {
+      fill: #000 !important;
+      stroke: #000 !important;
+    }
+    
+    .brand-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #000;
+      text-transform: uppercase;
     }
     
     .produto-section {
@@ -141,102 +257,140 @@ function generateEtiquetaHTML(data: {
     }
     
     .produto-nome {
-      font-size: 42px;
+      font-size: 30px;
       font-weight: bold;
-      color: #3F0313;
-      line-height: 1.2;
-      margin-bottom: 5px;
+      color: #000;
+      line-height: 1.3;
+      margin-bottom: 10px;
+      text-transform: uppercase;
     }
     
-    .congelado-badge {
-      display: inline-block;
-      background: #2563eb;
-      color: white;
-      padding: 6px 16px;
-      border-radius: 20px;
-      font-size: 18px;
-      font-weight: bold;
-      margin-top: 8px;
+    .congelado-text {
+      font-size: 20px;
+      color: #000;
+      margin-top: 10px;
     }
     
-    .info-grid {
+    .produto-desc {
+      font-size: 14px;
+      color: #000;
+      margin-top: 3px;
+      font-style: italic;
+    }
+    
+    .info-row {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 25px;
       margin: 30px 0;
     }
     
     .info-item {
-      background: #f5f5f5;
-      padding: 15px 20px;
-      border-radius: 8px;
-      border-left: 4px solid #C6A848;
+      padding: 8px;
+      background: white;
     }
     
     .info-label {
-      font-size: 14px;
-      color: #666;
+      font-size: 17px;
+      color: #000;
       font-weight: 600;
-      margin-bottom: 4px;
+      margin-bottom: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
     
     .info-value {
-      font-size: 24px;
-      color: #333;
+      font-size: 48px;
+      color: #000;
       font-weight: bold;
     }
     
-    .barcode-section {
+    .bottom-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin: 35px 0;
+      gap: 40px;
+    }
+    
+    .bottom-col-1 {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .bottom-col-1 .info-item {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 0;
+    }
+    
+    .bottom-col-1 .info-label {
+      margin-bottom: 0;
+      white-space: nowrap;
+      font-size: 17px;
+    }
+    
+    .bottom-col-1 .info-value {
+      font-size: 32px;
+    }
+    
+    .bottom-col-2 {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
-      margin: 20px 0;
-      padding: 20px;
-      background: white;
-      border: 2px solid #eee;
-      border-radius: 8px;
     }
     
     .barcode-image {
       max-width: 100%;
-      height: auto;
+      height: 120px;
+      display: block;
+      margin: 0 auto;
     }
     
-    .footer {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-      margin-top: auto;
-    }
-    
-    .footer-item {
-      background: #3F0313;
-      color: white;
-      padding: 15px;
-      border-radius: 8px;
-      text-align: center;
-    }
-    
-    .footer-label {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-bottom: 4px;
-    }
-    
-    .footer-value {
-      font-size: 20px;
+    .barcode-number {
+      font-size: 28px;
+      color: #000;
+      margin-top: 15px;
+      letter-spacing: 2px;
       font-weight: bold;
     }
     
+    @page {
+      size: 900px 600px;
+      margin: 0;
+    }
+    
     @media print {
-      body {
-        background: white;
+      * {
+        margin: 0;
         padding: 0;
       }
       
+      html, body {
+        width: 900px;
+        height: 600px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      
       .etiqueta {
-        border: none;
+        width: 900px;
+        height: 600px;
+        border: 1px solid #000;
+        margin: 0;
+        padding: 20px;
         page-break-after: always;
+        page-break-inside: avoid;
       }
     }
   </style>
@@ -244,60 +398,52 @@ function generateEtiquetaHTML(data: {
 <body>
   <div class="etiqueta">
     <div class="header">
-      <img src="/logo-full-light.svg" alt="Valepan" class="logo">
+      <div class="logo-section">
+        ${logoSVG ? `<div class="logo-container">${logoSVG}</div>` : '<div class="brand-name">VALEPAN</div>'}
+      </div>
       <div class="produto-section">
         <div class="produto-nome">${data.produto}</div>
-        ${data.congelado ? '<span class="congelado-badge">❄️ CONGELADO</span>' : ''}
+        ${data.congelado ? '<div class="congelado-text">Congelado</div>' : ''}
       </div>
     </div>
     
-    <div class="info-grid">
+    <div class="info-row">
       <div class="info-item">
-        <div class="info-label">Data de Fabricação</div>
+        <div class="info-label">FAB:</div>
         <div class="info-value">${data.dataFabricacao}</div>
       </div>
       <div class="info-item">
-        <div class="info-label">Data de Validade</div>
+        <div class="info-label">VAL:</div>
         <div class="info-value">${data.dataValidade}</div>
       </div>
       <div class="info-item">
-        <div class="info-label">Lote</div>
+        <div class="info-label">LOTE</div>
         <div class="info-value">${data.lote}</div>
       </div>
-      <div class="info-item">
-        <div class="info-label">Peso Líquido</div>
-        <div class="info-value">${data.pesoLiquido.toFixed(2)} kg</div>
-      </div>
     </div>
     
-    ${data.barcodeImage ? `
-    <div class="barcode-section">
-      <img src="${data.barcodeImage}" alt="Código de Barras" class="barcode-image">
-    </div>
-    ` : ''}
-    
-    <div class="footer">
-      <div class="footer-item">
-        <div class="footer-label">Pães por Caixa</div>
-        <div class="footer-value">${data.unPorCaixa}</div>
+    <div class="bottom-row">
+      <div class="bottom-col-1">
+        <div class="info-item">
+          <div class="info-label">Peso Líquido:</div>
+          <div class="info-value">${formatPesoLiquido(data.pesoLiquido)} kg</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Pães por Caixa</div>
+          <div class="info-value">${data.unPorCaixa}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Pacotes por Caixa</div>
+          <div class="info-value">${data.pacotesPorCaixa > 0 ? data.pacotesPorCaixa.toFixed(0) : '0'}</div>
+        </div>
       </div>
-      ${data.pacotesPorCaixa > 0 ? `
-      <div class="footer-item">
-        <div class="footer-label">Pacotes por Caixa</div>
-        <div class="footer-value">${data.pacotesPorCaixa.toFixed(1)}</div>
+      ${data.barcodeImage ? `
+      <div class="bottom-col-2">
+        <img src="${data.barcodeImage}" alt="Código de Barras" class="barcode-image">
       </div>
       ` : ''}
-      <div class="footer-item">
-        <div class="footer-label">Código</div>
-        <div class="footer-value">${data.codigoBarras}</div>
-      </div>
     </div>
   </div>
-  
-  <script>
-    // Auto-print quando a página carregar (opcional)
-    // window.onload = function() { window.print(); }
-  </script>
 </body>
 </html>`;
 }
@@ -318,7 +464,9 @@ export async function POST(request: Request) {
 
     // Calcular valores
     const dataValidade = addDays(body.dataFabricacao, body.diasValidade);
+    
     const pesoLiquidoTotal = produtoData.unPorCaixa * produtoData.pesoLiquido;
+    
     const pacotesPorCaixa = produtoData.unPorPacote > 0 
       ? produtoData.unPorCaixa / produtoData.unPorPacote 
       : 0;
@@ -345,15 +493,12 @@ export async function POST(request: Request) {
     // Marcar etiqueta como gerada na planilha
     if (body.rowId) {
       const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-      await updateCell(spreadsheetId, tabName, body.rowId, 'N', 'Sim');
+      await updateCell(spreadsheetId, tabName, body.rowId, 'AB', 'Sim'); // Coluna AB = Etiqueta Gerada
     }
 
     return NextResponse.json({ html });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('Erro ao gerar etiqueta:', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
