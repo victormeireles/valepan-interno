@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { appendRow, getLastLote } from '@/lib/googleSheets';
+import { appendRow, calculateLoteFromDataFabricacao } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG, PedidoEmbalagemPayload } from '@/config/embalagem';
 
 function isValidDateISO(date: string) {
@@ -20,10 +20,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Inclua ao menos um item' }, { status: 400 });
     }
 
-    // Buscar o último lote e incrementar
+    // Calcular o lote baseado na data de fabricação
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const lastLote = await getLastLote(spreadsheetId, tabName, 'AA'); // Coluna AA = Lote
-    const newLote = lastLote + 1;
+    const newLote = calculateLoteFromDataFabricacao(payload.dataFabricacao);
 
     // Persistir cada item como linha separada (regra 4: manter histórico)
     const now = new Date().toISOString();

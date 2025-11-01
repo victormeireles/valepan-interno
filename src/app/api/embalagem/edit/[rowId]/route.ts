@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSheetValues } from '@/lib/googleSheets';
+import { readSheetValues, calculateLoteFromDataFabricacao, updateCell } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 
 function normalizeToISODate(value: unknown): string {
@@ -86,17 +86,23 @@ export async function PUT(
       return NextResponse.json({ error: 'Dados obrigatórios não fornecidos' }, { status: 400 });
     }
 
-    // Buscar o created_at original antes de atualizar
+    // Buscar dados originais (created_at, data de fabricação e lote) antes de atualizar
     const { getGoogleSheetsClient } = await import('@/lib/googleSheets');
     const sheets = await getGoogleSheetsClient();
     
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const originalRange = `${tabName}!K${rowNumber}`;
+    
+    // Ler linha original incluindo todas as colunas necessárias (A-AB)
+    const originalRange = `${tabName}!A${rowNumber}:AB${rowNumber}`;
     const originalResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: originalRange,
     });
-    const originalCreatedAt = originalResponse.data.values?.[0]?.[0] || new Date().toISOString();
+    
+    // Extrair valores originais
+    const originalValues = originalResponse.data.values?.[0] || [];
+    const originalDataFabricacao = originalValues[1] ? normalizeToISODate(originalValues[1]) : ''; // Coluna B (índice 1)
+    const originalCreatedAt = originalValues[10] || new Date().toISOString(); // Coluna K (índice 10)
 
     // Atualizar a linha no Google Sheets
     const range = `${tabName}!A${rowNumber}:L${rowNumber}`;
@@ -124,6 +130,12 @@ export async function PUT(
         values: [values]
       }
     });
+
+    // Se a data de fabricação mudou, recalcular e atualizar o lote
+    if (originalDataFabricacao !== normalizedDataFabricacao) {
+      const novoLote = calculateLoteFromDataFabricacao(normalizedDataFabricacao);
+      await updateCell(spreadsheetId, tabName, rowNumber, 'AA', novoLote);
+    }
 
     return NextResponse.json({ message: 'Linha atualizada com sucesso' });
   } catch (error) {

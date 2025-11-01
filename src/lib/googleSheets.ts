@@ -290,3 +290,14 @@ export async function getLastLote(
   // Retornar o maior lote encontrado, ou 0 se não houver nenhum
   return lotes.length > 0 ? Math.max(...lotes) : 0;
 }
+
+// Função para calcular o lote baseado na data de fabricação
+// Fórmula: (data de fabricação - 1º de janeiro do ano da data de fabricação) + 1
+export function calculateLoteFromDataFabricacao(dataFabricacao: string): number {
+  const dataFab = new Date(dataFabricacao + 'T00:00:00');
+  const ano = dataFab.getFullYear();
+  const primeiroJaneiro = new Date(ano, 0, 1); // Mês 0 = janeiro
+  const diffTime = dataFab.getTime() - primeiroJaneiro.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays + 1;
+}

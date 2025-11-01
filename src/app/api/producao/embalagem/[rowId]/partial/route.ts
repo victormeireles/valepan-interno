@@ -40,8 +40,8 @@ export async function POST(
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    // 1. Buscar dados completos da linha original (colunas A-Z)
-    const rangeOriginal = `${tabName}!A${rowNumber}:Z${rowNumber}`;
+    // 1. Buscar dados completos da linha original (colunas A-AB para incluir Lote e Etiqueta Gerada)
+    const rangeOriginal = `${tabName}!A${rowNumber}:AB${rowNumber}`;
     const responseOriginal = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: rangeOriginal,
@@ -64,6 +64,8 @@ export async function POST(
     const pedidoPacotes = Number(originalValues[7] || 0);   // H
     const pedidoUnidades = Number(originalValues[8] || 0);  // I
     const pedidoKg = Number(originalValues[9] || 0);        // J
+    const lote = originalValues[26] || '';              // AA - Lote (copiar)
+    const etiquetaGerada = originalValues[27] || '';    // AB - Etiqueta Gerada (copiar)
 
     // 2. Validar que produção é menor que pedido em pelo menos um campo
     const isPartial = (
@@ -85,10 +87,6 @@ export async function POST(
     const novoPedidoUnidades = Math.max(0, pedidoUnidades - unidades);
     const novoPedidoKg = Math.max(0, pedidoKg - kg);
 
-    console.log('[PARTIAL] Pedido original:', { pedidoCaixas, pedidoPacotes, pedidoUnidades, pedidoKg });
-    console.log('[PARTIAL] Produção:', { caixas, pacotes, unidades, kg });
-    console.log('[PARTIAL] Novo pedido (linha original):', { novoPedidoCaixas, novoPedidoPacotes, novoPedidoUnidades, novoPedidoKg });
-
     // 4. Atualizar APENAS colunas G-J da linha original (pedido) - NÃO TOCAR na produção (M-Q)
     const rangePedido = `${tabName}!G${rowNumber}:J${rowNumber}`;
     const valuesPedido = [
@@ -106,8 +104,6 @@ export async function POST(
         values: [valuesPedido]
       }
     });
-
-    console.log('[PARTIAL] Linha original atualizada - pedido descontado');
 
     // 5. Criar nova linha
     const now = new Date().toISOString();
@@ -140,10 +136,9 @@ export async function POST(
       palletFotoUrl || '',         // X - pallet_foto_url
       palletFotoId || '',          // Y - pallet_foto_id
       palletFotoUploadedAt || '', // Z - pallet_foto_uploaded_at
+      lote || '',                  // AA (26) - Lote (copiado da linha original)
+      etiquetaGerada || '',        // AB (27) - Etiqueta Gerada (copiada da linha original)
     ];
-
-    console.log('[PARTIAL] Criando nova linha - Pedido:', { caixas, pacotes, unidades, kg });
-    console.log('[PARTIAL] Criando nova linha - Produção:', { caixas, pacotes, unidades, kg });
 
     // Inserir nova linha
     const appendResponse = await sheets.spreadsheets.values.append({
@@ -161,8 +156,6 @@ export async function POST(
     const updatedRange = appendResponse.data.updates?.updatedRange || '';
     const match = updatedRange.match(/!A(\d+):/);
     const novaLinhaRowId = match ? parseInt(match[1]) : null;
-    
-    console.log('[PARTIAL] Nova linha inserida com sucesso. RowId:', novaLinhaRowId);
 
     return NextResponse.json({ 
       message: 'Produção parcial salva com sucesso',
@@ -182,7 +175,6 @@ export async function POST(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('[PARTIAL] Erro:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
