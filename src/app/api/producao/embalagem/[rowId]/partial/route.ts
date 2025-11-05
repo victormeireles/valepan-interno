@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 
 export async function POST(
   request: Request,
@@ -156,6 +157,39 @@ export async function POST(
     const updatedRange = appendResponse.data.updates?.updatedRange || '';
     const match = updatedRange.match(/!A(\d+):/);
     const novaLinhaRowId = match ? parseInt(match[1]) : null;
+
+    // Calcular meta original (soma dos valores originais + valores salvos)
+    const metaOriginalCaixas = pedidoCaixas + (caixas || 0);
+    const metaOriginalPacotes = pedidoPacotes + (pacotes || 0);
+    const metaOriginalUnidades = pedidoUnidades + (unidades || 0);
+    const metaOriginalKg = pedidoKg + (kg || 0);
+
+    // Enviar notificação WhatsApp (não bloquear resposta em caso de erro)
+    whatsAppNotificationService.notifyEmbalagemProduction({
+      produto,
+      cliente,
+      quantidadeEmbalada: {
+        caixas: caixas || 0,
+        pacotes: pacotes || 0,
+        unidades: unidades || 0,
+        kg: kg || 0,
+      },
+      metaOriginal: {
+        caixas: metaOriginalCaixas,
+        pacotes: metaOriginalPacotes,
+        unidades: metaOriginalUnidades,
+        kg: metaOriginalKg,
+      },
+      isPartial: true,
+      fotos: {
+        pacoteFotoUrl: pacoteFotoUrl || undefined,
+        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+        palletFotoUrl: palletFotoUrl || undefined,
+      } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+    }).catch((error) => {
+      // Logar erro mas não propagar
+      console.error("Erro ao enviar notificação WhatsApp:", error);
+    });
 
     return NextResponse.json({ 
       message: 'Produção parcial salva com sucesso',

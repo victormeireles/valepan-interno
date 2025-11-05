@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 
 export async function GET(
   request: Request,
@@ -83,6 +84,27 @@ export async function PUT(
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
+    // Buscar dados completos da linha antes de atualizar (para notificação)
+    // Buscar colunas A-J (dados básicos) e R-Z (fotos)
+    const rangeComplete = `${tabName}!A${rowNumber}:Z${rowNumber}`;
+    const responseComplete = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: rangeComplete,
+    });
+    
+    const completeValues = responseComplete.data.values?.[0] || [];
+    const cliente = completeValues[2] || '';             // C
+    const produto = completeValues[4] || '';             // E
+    const pedidoCaixas = Number(completeValues[6] || 0);    // G
+    const pedidoPacotes = Number(completeValues[7] || 0);   // H
+    const pedidoUnidades = Number(completeValues[8] || 0);  // I
+    const pedidoKg = Number(completeValues[9] || 0);        // J
+    
+    // Dados de fotos (colunas R, U, X)
+    const pacoteFotoUrl = completeValues[17] || '';         // R
+    const etiquetaFotoUrl = completeValues[20] || '';       // U
+    const palletFotoUrl = completeValues[23] || '';         // X
+    
     const range = `${tabName}!M${rowNumber}:Q${rowNumber}`;
     const values = [
       caixas || 0,                    // M - caixas
@@ -99,6 +121,33 @@ export async function PUT(
       requestBody: {
         values: [values]
       }
+    });
+
+    // Enviar notificação WhatsApp (não bloquear resposta em caso de erro)
+    whatsAppNotificationService.notifyEmbalagemProduction({
+      produto,
+      cliente,
+      quantidadeEmbalada: {
+        caixas: caixas || 0,
+        pacotes: pacotes || 0,
+        unidades: unidades || 0,
+        kg: kg || 0,
+      },
+      metaOriginal: {
+        caixas: pedidoCaixas,
+        pacotes: pedidoPacotes,
+        unidades: pedidoUnidades,
+        kg: pedidoKg,
+      },
+      isPartial: false,
+      fotos: {
+        pacoteFotoUrl: pacoteFotoUrl || undefined,
+        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+        palletFotoUrl: palletFotoUrl || undefined,
+      } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+    }).catch((error) => {
+      // Logar erro mas não propagar
+      console.error("Erro ao enviar notificação WhatsApp:", error);
     });
 
     return NextResponse.json({ message: 'Produção atualizada com sucesso' });

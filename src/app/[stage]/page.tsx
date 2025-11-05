@@ -1,9 +1,19 @@
 import { notFound } from 'next/navigation';
-import { getStageConfig, isValidStage } from '@/config/stages';
+import { getStageConfig, isValidStage, STAGES_CONFIG } from '@/config/stages';
 import GenericStageForm from '@/components/GenericStageForm';
+
+// Configurar rota como dinâmica
+export const dynamic = 'force-dynamic';
 
 interface StagePageProps {
   params: Promise<{ stage: string }>;
+}
+
+// Gerar parâmetros estáticos para build
+export async function generateStaticParams() {
+  return Object.keys(STAGES_CONFIG).map((stage) => ({
+    stage,
+  }));
 }
 
 export default async function StagePage({ params }: StagePageProps) {
