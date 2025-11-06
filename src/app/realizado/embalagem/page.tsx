@@ -47,6 +47,18 @@ function getPhotoStatus(item: PainelItem): { hasPhoto: boolean; color: 'white' |
   };
 }
 
+// Função helper para formatar quantidades no formato "X cx + Y pct"
+function formatQuantidade(caixas: number, pacotes: number): string {
+  const parts: string[] = [];
+  if (caixas > 0) {
+    parts.push(`${caixas} cx`);
+  }
+  if (pacotes > 0) {
+    parts.push(`${pacotes} pct`);
+  }
+  return parts.length > 0 ? parts.join(' + ') : '0';
+}
+
 export default function ProducaoEmbalagemPage() {
   const latestDate = useLatestDataDate('embalagem');
   const [items, setItems] = useState<PainelItem[]>([]);
@@ -215,6 +227,19 @@ export default function ProducaoEmbalagemPage() {
     return sortedGroups.map(({ minRowId, ...group }) => group);
   }, [items, selectedDate]);
 
+  // Calcular totais de produção e meta
+  const totais = useMemo(() => {
+    const totalCaixasProduzido = items.reduce((sum, item) => sum + (item.caixas || 0), 0);
+    const totalPacotesProduzido = items.reduce((sum, item) => sum + (item.pacotes || 0), 0);
+    const totalCaixasMeta = items.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
+    const totalPacotesMeta = items.reduce((sum, item) => sum + (item.pedidoPacotes || 0), 0);
+
+    return {
+      produzido: formatQuantidade(totalCaixasProduzido, totalPacotesProduzido),
+      meta: formatQuantidade(totalCaixasMeta, totalPacotesMeta),
+    };
+  }, [items]);
+
   const handlePhotoClick = (item: PainelItem) => {
     const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
     setPhotoDropdownOpen(photoDropdownOpen === itemKey ? null : itemKey);
@@ -339,7 +364,7 @@ export default function ProducaoEmbalagemPage() {
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {groupedItems.length} grupos • {items.length} itens
+          {groupedItems.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
         </footer>
       </div>
 
