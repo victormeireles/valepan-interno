@@ -26,6 +26,39 @@ interface ZApiSendMessageResponse {
   id: string;
 }
 
+interface ZApiButtonActionBase {
+  id?: string;
+  label: string;
+}
+
+interface ZApiButtonCallAction extends ZApiButtonActionBase {
+  type: "CALL";
+  phone: string;
+}
+
+interface ZApiButtonUrlAction extends ZApiButtonActionBase {
+  type: "URL";
+  url: string;
+}
+
+interface ZApiButtonReplyAction extends ZApiButtonActionBase {
+  type: "REPLY";
+}
+
+type ZApiButtonAction =
+  | ZApiButtonCallAction
+  | ZApiButtonUrlAction
+  | ZApiButtonReplyAction;
+
+interface ZApiSendButtonMessagePayload {
+  phone: string;
+  message: string;
+  title?: string;
+  footer?: string;
+  delayMessage?: number;
+  buttonActions: ZApiButtonAction[];
+}
+
 /**
  * Resposta da API Z-API ao checar status
  */
@@ -66,6 +99,23 @@ export class ZApiManager {
   }
 
   /**
+   * Normaliza telefone ou ID de grupo para uso na API
+   */
+  private normalizeRecipient(recipient: string): string {
+    const trimmed = recipient.trim();
+
+    if (trimmed.endsWith("@g.us") || trimmed.endsWith("-group")) {
+      return trimmed;
+    }
+
+    if (trimmed.includes("@") || trimmed.includes("-")) {
+      return trimmed;
+    }
+
+    return formatPhoneNumber(trimmed);
+  }
+
+  /**
    * Envia mensagem de texto via WhatsApp
    * 
    * @param phone - Número de telefone no formato +5511999999999
@@ -73,7 +123,7 @@ export class ZApiManager {
    * @returns Promise com resposta da API
    */
   async sendMessage(phone: string, message: string): Promise<ZApiSendMessageResponse> {
-    const formattedPhone = formatPhoneNumber(phone);
+    const formattedPhone = this.normalizeRecipient(phone);
 
     try {
       const response = await fetch(`${this.getBaseUrl()}/send-text`, {
@@ -114,7 +164,7 @@ export class ZApiManager {
     try {
       const url = `${this.getBaseUrl()}/send-text`;
       const payload = {
-        phone: groupId,
+        phone: this.normalizeRecipient(groupId),
         message: message,
       };
 
@@ -145,6 +195,50 @@ export class ZApiManager {
       return data;
     } catch (error) {
       console.error("💥 [Z-API] Erro ao enviar mensagem para grupo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Envia mensagem com botões de ação (CALL, URL, REPLY)
+   */
+  async sendButtonActionsMessage(
+    payload: ZApiSendButtonMessagePayload,
+  ): Promise<ZApiSendMessageResponse> {
+    const normalizedPayload: ZApiSendButtonMessagePayload = {
+      ...payload,
+      phone: this.normalizeRecipient(payload.phone),
+      delayMessage: payload.delayMessage,
+    };
+
+    if (normalizedPayload.delayMessage) {
+      normalizedPayload.delayMessage = Math.min(
+        Math.max(normalizedPayload.delayMessage, 1),
+        15,
+      );
+    }
+
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/send-button-actions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Client-Token": this.config.clientToken,
+        },
+        body: JSON.stringify(normalizedPayload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Z-API Error: ${response.status} - ${JSON.stringify(errorData)}`,
+        );
+      }
+
+      const data: ZApiSendMessageResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error("💥 [Z-API] Erro ao enviar mensagem com botões:", error);
       throw error;
     }
   }

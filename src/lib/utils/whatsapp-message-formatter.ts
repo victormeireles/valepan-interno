@@ -4,6 +4,11 @@
  */
 
 import { isSpecialPhotoClient } from "@/config/photoRules";
+import {
+  QuantityByUnit,
+  StageSummaryResult,
+} from "@/lib/services/daily-summary";
+import { EmbalagemSummaryResult } from "@/lib/services/daily-summary/embalagem-daily-summary-service";
 
 interface QuantidadeEmbalada {
   caixas?: number;
@@ -25,6 +30,31 @@ interface FotosInfo {
   palletFotoUrl?: string;
 }
 
+type StageQuantity = {
+  latas?: number;
+  unidades?: number;
+  kg?: number;
+};
+
+type StageQuantityLabels = {
+  latas: string;
+  unidades: string;
+  kg: string;
+};
+
+interface StageMessageData {
+  produto: string;
+  meta: StageQuantity;
+  produzido: StageQuantity;
+  data?: string;
+  turno?: string;
+  atualizadoEm?: string;
+}
+
+type FermentacaoMessageData = StageMessageData;
+
+type FornoMessageData = StageMessageData;
+
 interface EmbalagemMessageData {
   produto: string;
   cliente: string;
@@ -38,30 +68,180 @@ interface EmbalagemMessageData {
  * Formatador de mensagens WhatsApp para embalagem
  */
 export class WhatsAppMessageFormatter {
+  private quantityFormatter = new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: 2,
+  });
+
   /**
    * Formata quantidade no padrão da UI: "24 cx + 3 pct"
    */
   private formatQuantidade(quantidade: QuantidadeEmbalada): string {
+    return this.formatQuantidadeFromEntries([
+      { value: quantidade.caixas, label: 'cx' },
+      { value: quantidade.pacotes, label: 'pct' },
+      { value: quantidade.unidades, label: 'un' },
+      { value: quantidade.kg, label: 'kg' },
+    ]);
+  }
+
+  private formatQuantidadeFromEntries(
+    entries: Array<{ value?: number; label: string }>,
+  ): string {
     const parts: string[] = [];
-    
-    if (quantidade.caixas && quantidade.caixas > 0) {
-      parts.push(`${quantidade.caixas} cx`);
-    }
-    if (quantidade.pacotes && quantidade.pacotes > 0) {
-      parts.push(`${quantidade.pacotes} pct`);
-    }
-    if (quantidade.unidades && quantidade.unidades > 0) {
-      parts.push(`${quantidade.unidades} un`);
-    }
-    if (quantidade.kg && quantidade.kg > 0) {
-      parts.push(`${quantidade.kg} kg`);
-    }
-    
+
+    entries.forEach((entry) => {
+      if (entry.value && entry.value > 0) {
+        parts.push(`${entry.value} ${entry.label}`);
+      }
+    });
+
     if (parts.length === 0) {
       return "0";
     }
-    
+
     return parts.join(" + ");
+  }
+
+  private formatStageQuantidade(
+    quantidade: StageQuantity,
+    labels: StageQuantityLabels,
+  ): string {
+    return this.formatQuantidadeFromEntries([
+      { value: quantidade.latas, label: labels.latas },
+      { value: quantidade.unidades, label: labels.unidades },
+      { value: quantidade.kg, label: labels.kg },
+    ]);
+  }
+
+  private formatQuantityByUnit(quantity: QuantityByUnit): string {
+    const parts: string[] = [];
+
+    const pushPart = (value: number | undefined, suffix: string) => {
+      if (!value || value <= 0) return;
+      parts.push(`${this.quantityFormatter.format(value)} ${suffix}`);
+    };
+
+    pushPart(quantity.lt, "lt");
+    pushPart(quantity.un, "un");
+    pushPart(quantity.kg, "kg");
+    pushPart(quantity.cx, "cx");
+    pushPart(quantity.pct, "pct");
+
+    if (parts.length === 0) return "0";
+    return parts.join(" + ");
+  }
+
+  private formatSummaryHeader(
+    emoji: string,
+    title: string,
+    date: string,
+  ): string {
+    const formattedDate = date ? ` - ${date}` : "";
+    return `${emoji} *${title}${formattedDate}*`;
+  }
+
+  private formatSummaryLine(
+    icon: string,
+    label: string,
+    totals: { count: number; primary: string; secondary?: string },
+  ): string {
+    const countLabel = totals.count === 1 ? "1 item" : `${totals.count} itens`;
+    const base = `${icon} ${label}: ${countLabel}`;
+    if (totals.secondary) {
+      return `${base} • ${totals.primary} / ${totals.secondary}`;
+    }
+    return `${base} • ${totals.primary}`;
+  }
+
+  private buildSummaryLines(
+    summary: StageSummaryResult,
+    headerEmoji: string,
+    headerTitle: string,
+  ): string[] {
+    const lines: string[] = [];
+
+    lines.push(this.formatSummaryHeader(headerEmoji, headerTitle, summary.date));
+
+    lines.push(
+      this.formatSummaryLine("✅", "Completos", {
+        count: summary.totals.complete.itemCount,
+        primary: this.formatQuantityByUnit(summary.totals.complete.produced),
+      }),
+    );
+
+    lines.push(
+      this.formatSummaryLine("⚠️", "Quebra", {
+        count: summary.totals.partial.itemCount,
+        primary: this.formatQuantityByUnit(summary.totals.partial.produced),
+        secondary: this.formatQuantityByUnit(summary.totals.partial.meta ?? {}),
+      }),
+    );
+
+    lines.push(
+      this.formatSummaryLine("⛔️", "Não feitos", {
+        count: summary.totals.notProduced.itemCount,
+        primary: this.formatQuantityByUnit(summary.totals.notProduced.meta),
+      }),
+    );
+
+    if (summary.totals.notProduced.highlighted.length > 0) {
+      summary.totals.notProduced.highlighted.forEach((item) => {
+        lines.push(
+          `   • ${item.produto}` +
+            (item.cliente ? ` (${item.cliente})` : "") +
+            ` — ${this.formatQuantityByUnit(item.quantity)}`,
+        );
+      });
+    }
+
+    return lines;
+  }
+
+  private decorateSummaryLines(lines: string[]): string {
+    return `${lines.join("\n")}\n\n---\nResumo automático`;
+  }
+
+  private calculateStageDifferences(
+    meta: StageQuantity,
+    produzido: StageQuantity,
+  ) {
+    return [
+      { key: 'latas' as const, diff: (produzido.latas ?? 0) - (meta.latas ?? 0) },
+      {
+        key: 'unidades' as const,
+        diff: (produzido.unidades ?? 0) - (meta.unidades ?? 0),
+      },
+      { key: 'kg' as const, diff: (produzido.kg ?? 0) - (meta.kg ?? 0) },
+    ];
+  }
+
+  private formatStageMessage(
+    stage: StageMessageData,
+    labels: StageQuantityLabels,
+    titulo: string,
+    icone: string,
+  ): string {
+    const metaFormatada = this.formatStageQuantidade(stage.meta, labels);
+    const produzidoFormatado = this.formatStageQuantidade(stage.produzido, labels);
+    const differences = this.calculateStageDifferences(stage.meta, stage.produzido);
+    const isPartial = differences.some((entry) => entry.diff < 0);
+    const headerSuffix = isPartial ? ' - Parcial ⚠️' : '';
+
+    const infoLines: string[] = [];
+    if (stage.data) {
+      infoLines.push(stage.data);
+    }
+    if (stage.turno) {
+      infoLines.push(`Turno: ${stage.turno}`);
+    }
+    infoLines.push(`Produto: ${stage.produto}`);
+    infoLines.push(`Quantidade: ${produzidoFormatado} de ${metaFormatada}`);
+
+    let message = `${icone} *${titulo}${headerSuffix}*\n\n`;
+    message += `${infoLines.join('\n')}`;
+    message += `\n\n---\nGerado automaticamente`;
+
+    return message;
   }
 
   /**
@@ -204,6 +384,70 @@ export class WhatsAppMessageFormatter {
     message += `\n\n---\nGerado automaticamente`;
     
     return message;
+  }
+
+  formatFermentacaoMessage(data: FermentacaoMessageData): string {
+    return this.formatStageMessage(
+      data,
+      {
+        latas: 'lt',
+        unidades: 'un',
+        kg: 'kg',
+      },
+      'Fermentação Finalizada',
+      '🧪',
+    );
+  }
+
+  formatFornoMessage(data: FornoMessageData): string {
+    return this.formatStageMessage(
+      data,
+      {
+        latas: 'lt',
+        unidades: 'un',
+        kg: 'kg',
+      },
+      'Fornada Finalizada',
+      '🔥',
+    );
+  }
+
+  formatFermentacaoDailySummaryMessage(summary: StageSummaryResult): string {
+    const lines = this.buildSummaryLines(summary, '🧪', 'Fermentação');
+    return this.decorateSummaryLines(lines);
+  }
+
+  formatFornoDailySummaryMessage(summary: StageSummaryResult): string {
+    const lines = this.buildSummaryLines(summary, '🔥', 'Forno');
+    return this.decorateSummaryLines(lines);
+  }
+
+  formatEmbalagemDailySummaryMessage(
+    summary: EmbalagemSummaryResult,
+  ): string {
+    const lines = this.buildSummaryLines(summary, '📦', 'Embalagem');
+
+    const missingLabel = summary.photos.missingRequiredCount === 1
+      ? '1 item'
+      : `${summary.photos.missingRequiredCount} itens`;
+    lines.push(`📸 Sem foto obrigatória: ${missingLabel}`);
+
+    if (summary.photos.critical.length > 0) {
+      const criticalLabel = summary.photos.critical.length === 1
+        ? '1 produção'
+        : `${summary.photos.critical.length} produções`;
+      lines.push(
+        `🚨 ${criticalLabel} completas/parciais sem fotos!`,
+      );
+
+      summary.photos.critical.forEach((item) => {
+        lines.push(
+          `   • ${item.produto} (${item.cliente}) — ${this.formatQuantityByUnit(item.quantity)}`,
+        );
+      });
+    }
+
+    return this.decorateSummaryLines(lines);
   }
 }
 
