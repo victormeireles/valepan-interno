@@ -91,16 +91,16 @@ export class EmbalagemDailySummaryService extends BaseDailySummaryService {
 
       targetTotals.itemCount += 1;
 
-      if (!parsed.hasRequiredPhotos) {
+      const isFinished = status === "complete" || status === "partial";
+
+      if (!parsed.hasRequiredPhotos && isFinished) {
         missingRequiredCount += 1;
-        if (status === "complete" || status === "partial") {
-          if (criticalPhotoItems.length < 3) {
-            criticalPhotoItems.push({
-              produto: parsed.produto,
-              cliente: parsed.cliente,
-              quantity: parsed.produzidoBreakdown,
-            });
-          }
+        if (criticalPhotoItems.length < 3) {
+          criticalPhotoItems.push({
+            produto: parsed.produto,
+            cliente: parsed.cliente,
+            quantity: parsed.produzidoBreakdown,
+          });
         }
       }
     });

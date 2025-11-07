@@ -131,12 +131,32 @@ export class WhatsAppMessageFormatter {
     return parts.join(" + ");
   }
 
+  private formatDateToBr(date?: string): string {
+    if (!date) return "";
+
+    const isoMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return `${day}/${month}/${year}`;
+    }
+
+    const parsed = new Date(date);
+    if (!Number.isNaN(parsed.getTime())) {
+      const day = String(parsed.getDate()).padStart(2, "0");
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const year = String(parsed.getFullYear());
+      return `${day}/${month}/${year}`;
+    }
+
+    return date;
+  }
+
   private formatSummaryHeader(
     emoji: string,
     title: string,
     date: string,
   ): string {
-    const formattedDate = date ? ` - ${date}` : "";
+    const formattedDate = date ? ` - ${this.formatDateToBr(date)}` : "";
     return `${emoji} *${title}${formattedDate}*`;
   }
 
@@ -184,7 +204,10 @@ export class WhatsAppMessageFormatter {
       }),
     );
 
-    if (summary.totals.notProduced.highlighted.length > 0) {
+    if (
+      summary.totals.notProduced.itemCount > 0 &&
+      summary.totals.notProduced.itemCount <= 3
+    ) {
       summary.totals.notProduced.highlighted.forEach((item) => {
         lines.push(
           `   • ${item.produto}` +
@@ -427,9 +450,9 @@ export class WhatsAppMessageFormatter {
   ): string {
     const lines = this.buildSummaryLines(summary, '📦', 'Embalagem');
 
-    const missingLabel = summary.photos.missingRequiredCount === 1
-      ? '1 item'
-      : `${summary.photos.missingRequiredCount} itens`;
+    const missingCount = summary.photos.missingRequiredCount;
+    const missingLabel =
+      missingCount === 1 ? "1 item" : `${missingCount} itens`;
     lines.push(`📸 Sem foto obrigatória: ${missingLabel}`);
 
     if (summary.photos.critical.length > 0) {
@@ -439,12 +462,6 @@ export class WhatsAppMessageFormatter {
       lines.push(
         `🚨 ${criticalLabel} completas/parciais sem fotos!`,
       );
-
-      summary.photos.critical.forEach((item) => {
-        lines.push(
-          `   • ${item.produto} (${item.cliente}) — ${this.formatQuantityByUnit(item.quantity)}`,
-        );
-      });
     }
 
     return this.decorateSummaryLines(lines);
