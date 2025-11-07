@@ -5,6 +5,7 @@ import ProducaoModal from '@/components/ProducaoModal';
 import { RealizadoHeader, ProductCompactCard, ThreeColumnLayout } from '@/components/Realizado';
 import { RealizadoItemForno, RealizadoGroup } from '@/domain/types/realizado';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 
 type PainelItem = RealizadoItemForno & {
   fornoFotoId?: string;
@@ -159,6 +160,7 @@ export default function ProducaoFornoPage() {
         ) : (
           <ThreeColumnLayout
             groups={groupedItems}
+            columnCount={1}
             renderGroup={(group) => (
               <div className="bg-gray-800/20 border border-gray-600/30 rounded-lg p-3 space-y-2">
                 <div className="border-b border-gray-600/30 pb-1">
@@ -170,6 +172,16 @@ export default function ProducaoFornoPage() {
                     const fornoItem = item as PainelItem;
                     const itemKey = `${fornoItem.produto}-${fornoItem.rowId}`;
                     const isItemLoading = loadingCardId === itemKey;
+                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: fornoItem.latas, unidade: 'lt' },
+                      { quantidade: fornoItem.unidades, unidade: 'un' },
+                      { quantidade: fornoItem.kg, unidade: 'kg' },
+                    ]);
+                    const metaDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: fornoItem.pedidoLatas, unidade: 'lt' },
+                      { quantidade: fornoItem.pedidoUnidades, unidade: 'un' },
+                      { quantidade: fornoItem.pedidoKg, unidade: 'kg' },
+                    ]);
                     
                     return (
                       <ProductCompactCard
@@ -183,6 +195,8 @@ export default function ProducaoFornoPage() {
                         onPhotoClick={() => window.open(fornoItem.fornoFotoUrl, '_blank')}
                         onClick={() => handleEditProducao(fornoItem)}
                         isLoading={isItemLoading}
+                        detalhesProduzido={produzidoDetalhes}
+                        detalhesMeta={metaDetalhes}
                       />
                     );
                   })}

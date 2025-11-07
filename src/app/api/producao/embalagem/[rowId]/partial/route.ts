@@ -164,32 +164,33 @@ export async function POST(
     const metaOriginalUnidades = pedidoUnidades + (unidades || 0);
     const metaOriginalKg = pedidoKg + (kg || 0);
 
-    // Enviar notificação WhatsApp (não bloquear resposta em caso de erro)
-    whatsAppNotificationService.notifyEmbalagemProduction({
-      produto,
-      cliente,
-      quantidadeEmbalada: {
-        caixas: caixas || 0,
-        pacotes: pacotes || 0,
-        unidades: unidades || 0,
-        kg: kg || 0,
-      },
-      metaOriginal: {
-        caixas: metaOriginalCaixas,
-        pacotes: metaOriginalPacotes,
-        unidades: metaOriginalUnidades,
-        kg: metaOriginalKg,
-      },
-      isPartial: true,
-      fotos: {
-        pacoteFotoUrl: pacoteFotoUrl || undefined,
-        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
-        palletFotoUrl: palletFotoUrl || undefined,
-      } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
-    }).catch((error) => {
+    try {
+      await whatsAppNotificationService.notifyEmbalagemProduction({
+        produto,
+        cliente,
+        quantidadeEmbalada: {
+          caixas: caixas || 0,
+          pacotes: pacotes || 0,
+          unidades: unidades || 0,
+          kg: kg || 0,
+        },
+        metaOriginal: {
+          caixas: metaOriginalCaixas,
+          pacotes: metaOriginalPacotes,
+          unidades: metaOriginalUnidades,
+          kg: metaOriginalKg,
+        },
+        isPartial: true,
+        fotos: {
+          pacoteFotoUrl: pacoteFotoUrl || undefined,
+          etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+          palletFotoUrl: palletFotoUrl || undefined,
+        } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+      });
+    } catch (error) {
       // Logar erro mas não propagar
       console.error("Erro ao enviar notificação WhatsApp:", error);
-    });
+    }
 
     return NextResponse.json({ 
       message: 'Produção parcial salva com sucesso',

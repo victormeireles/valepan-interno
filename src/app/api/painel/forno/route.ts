@@ -31,13 +31,12 @@ type PainelItem = {
   produzido: number;
   dataProducao: string;
   rowId: number;
-  // Detalhes
   latas?: number;
   unidades?: number;
   kg?: number;
-  prodLatas?: number;
-  prodUnidades?: number;
-  prodKg?: number;
+  pedidoLatas?: number;
+  pedidoUnidades?: number;
+  pedidoKg?: number;
   fornoFotoUrl?: string;
   fornoFotoId?: string;
   fornoFotoUploadedAt?: string;
@@ -93,12 +92,12 @@ export async function GET(request: Request) {
         produzido,
         dataProducao,
         rowId: rowNumber,
-        latas,
-        unidades,
-        kg,
-        prodLatas,
-        prodUnidades,
-        prodKg,
+        latas: prodLatas,
+        unidades: prodUnidades,
+        kg: prodKg,
+        pedidoLatas: latas,
+        pedidoUnidades: unidades,
+        pedidoKg: kg,
         fornoFotoUrl: fornoFotoUrl || undefined,
         fornoFotoId: fornoFotoId || undefined,
         fornoFotoUploadedAt: fornoFotoUploadedAt || undefined,

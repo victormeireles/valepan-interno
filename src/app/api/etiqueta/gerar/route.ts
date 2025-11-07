@@ -11,6 +11,7 @@ interface GerarEtiquetaRequest {
   congelado: boolean;
   lote: number;
   rowId?: number;
+  nomeEtiqueta?: string;
 }
 
 function formatDate(dateStr: string): string {
@@ -164,7 +165,7 @@ function getLogoSVG(): string {
 }
 
 function generateEtiquetaHTML(data: {
-  produto: string;
+  nomeEtiqueta: string;
   congelado: boolean;
   dataFabricacao: string;
   dataValidade: string;
@@ -181,7 +182,7 @@ function generateEtiquetaHTML(data: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Etiqueta - ${data.produto}</title>
+  <title>Etiqueta - ${data.nomeEtiqueta}</title>
   <style>
     * {
       margin: 0;
@@ -405,7 +406,7 @@ function generateEtiquetaHTML(data: {
         ${logoSVG ? `<div class="logo-container">${logoSVG}</div>` : '<div class="brand-name">VALEPAN</div>'}
       </div>
       <div class="produto-section">
-        <div class="produto-nome">${data.produto}</div>
+        <div class="produto-nome">${data.nomeEtiqueta}</div>
         ${data.congelado ? '<div class="congelado-text">Congelado</div>' : ''}
       </div>
     </div>
@@ -466,6 +467,8 @@ export async function POST(request: Request) {
     // Buscar dados do produto
     const produtoData = await getProdutoData(body.produto);
 
+    const nomeEtiqueta = body.nomeEtiqueta?.trim() || body.produto;
+
     // Calcular valores
     const dataValidade = addDays(body.dataFabricacao, body.diasValidade);
     
@@ -482,7 +485,7 @@ export async function POST(request: Request) {
 
     // Gerar HTML da etiqueta
     const html = generateEtiquetaHTML({
-      produto: body.produto,
+      nomeEtiqueta,
       congelado: body.congelado,
       dataFabricacao: formatDate(body.dataFabricacao),
       dataValidade: formatDate(dataValidade),

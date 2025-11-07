@@ -1,6 +1,7 @@
 'use client';
 
 import { getProductionStatus, getStatusColor } from '@/domain/types/realizado';
+import { QuantityBreakdown, QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 
 interface ProductCompactCardProps {
   produto: string;
@@ -13,15 +14,8 @@ interface ProductCompactCardProps {
   onPhotoClick?: () => void;
   onClick?: () => void;
   isLoading?: boolean;
-  // Props adicionais para exibir detalhes de produção
-  caixas?: number;
-  pacotes?: number;
-  unidades?: number;
-  kg?: number;
-  pedidoCaixas?: number;
-  pedidoPacotes?: number;
-  pedidoUnidades?: number;
-  pedidoKg?: number;
+  detalhesProduzido?: QuantityBreakdownEntry[];
+  detalhesMeta?: QuantityBreakdownEntry[];
 }
 
 export default function ProductCompactCard({
@@ -35,14 +29,8 @@ export default function ProductCompactCard({
   onPhotoClick,
   onClick,
   isLoading = false,
-  caixas,
-  pacotes,
-  unidades: unidadesValue,
-  kg,
-  pedidoCaixas,
-  pedidoPacotes,
-  pedidoUnidades,
-  pedidoKg,
+  detalhesProduzido = [],
+  detalhesMeta = [],
 }: ProductCompactCardProps) {
   const status = getProductionStatus(produzido, aProduzir);
   const statusColor = getStatusColor(status);
@@ -53,53 +41,12 @@ export default function ProductCompactCard({
     red: 'text-red-500',
   }[photoColor];
 
-  // Formatar produção detalhada
-  const formatProducao = () => {
-    const parts = [];
-    
-    if (caixas && caixas > 0) {
-      parts.push(`${caixas} cx`);
-    }
-    if (pacotes && pacotes > 0) {
-      parts.push(`${pacotes} pct`);
-    }
-    if (unidadesValue && unidadesValue > 0) {
-      parts.push(`${unidadesValue} un`);
-    }
-    if (kg && kg > 0) {
-      parts.push(`${kg} kg`);
-    }
-    
-    if (parts.length === 0) {
-      return `${produzido} ${unidade.toLowerCase()}`;
-    }
-    
-    return parts.join(' + ');
-  };
+  const producedBreakdown = new QuantityBreakdown(detalhesProduzido);
+  const targetBreakdown = new QuantityBreakdown(detalhesMeta);
 
-  // Formatar meta detalhada
-  const formatMeta = () => {
-    const parts = [];
-    
-    if (pedidoCaixas && pedidoCaixas > 0) {
-      parts.push(`${pedidoCaixas} cx`);
-    }
-    if (pedidoPacotes && pedidoPacotes > 0) {
-      parts.push(`${pedidoPacotes} pct`);
-    }
-    if (pedidoUnidades && pedidoUnidades > 0) {
-      parts.push(`${pedidoUnidades} un`);
-    }
-    if (pedidoKg && pedidoKg > 0) {
-      parts.push(`${pedidoKg} kg`);
-    }
-    
-    if (parts.length === 0) {
-      return `${aProduzir} ${unidade.toLowerCase()}`;
-    }
-    
-    return parts.join(' + ');
-  };
+  const fallbackUnit = unidade ? unidade.toLowerCase() : undefined;
+  const producedLabel = producedBreakdown.format(produzido, fallbackUnit);
+  const targetLabel = targetBreakdown.format(aProduzir, fallbackUnit);
 
   return (
     <div
@@ -150,7 +97,7 @@ export default function ProductCompactCard({
 
       {/* Produção Realizada */}
       <div className="text-sm font-bold text-white flex-shrink-0">
-        {formatProducao()}
+        {producedLabel}
       </div>
 
       {/* Separador */}
@@ -158,7 +105,7 @@ export default function ProductCompactCard({
 
       {/* Meta de Produção */}
       <div className="text-sm text-gray-300 flex-shrink-0">
-        {formatMeta()}
+        {targetLabel}
       </div>
     </div>
   );

@@ -27,6 +27,7 @@ export default function EtiquetaModal({
   const [congelado, setCongelado] = useState(congeladoInicial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nomeEtiqueta, setNomeEtiqueta] = useState(produto);
 
   // Resetar estado quando o modal abre
   useEffect(() => {
@@ -34,8 +35,9 @@ export default function EtiquetaModal({
       setDiasValidade(21);
       setCongelado(congeladoInicial);
       setError(null);
+      setNomeEtiqueta(produto);
     }
-  }, [isOpen, congeladoInicial]);
+  }, [isOpen, congeladoInicial, produto]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +50,7 @@ export default function EtiquetaModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           produto,
+          nomeEtiqueta: nomeEtiqueta.trim() || produto,
           dataFabricacao,
           diasValidade,
           congelado,
@@ -113,6 +116,21 @@ export default function EtiquetaModal({
               value={produto}
               readOnly
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm cursor-not-allowed"
+            />
+          </div>
+
+          {/* Nome na Etiqueta */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Nome na Etiqueta
+            </label>
+            <input
+              type="text"
+              value={nomeEtiqueta}
+              onChange={(e) => setNomeEtiqueta(e.target.value)}
+              maxLength={120}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
             />
           </div>
 

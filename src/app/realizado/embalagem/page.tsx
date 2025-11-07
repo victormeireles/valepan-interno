@@ -6,6 +6,7 @@ import { RealizadoHeader, ProductCompactCard, ClientGroup, ThreeColumnLayout } f
 import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { isSpecialPhotoClient } from '@/config/photoRules';
+import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 
 type PainelItem = RealizadoItemEmbalagem & {
   pacoteFotoId?: string;
@@ -289,6 +290,18 @@ export default function ProducaoEmbalagemPage() {
                     const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
                     const isItemLoading = loadingCardId === itemKey;
                     const photoStatus = getPhotoStatus(embalagemItem);
+                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: embalagemItem.caixas, unidade: 'cx' },
+                      { quantidade: embalagemItem.pacotes, unidade: 'pct' },
+                      { quantidade: embalagemItem.unidades, unidade: 'un' },
+                      { quantidade: embalagemItem.kg, unidade: 'kg' },
+                    ]);
+                    const metaDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
+                      { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
+                      { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
+                      { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+                    ]);
                     
                     return (
                       <div key={`${embalagemItem.produto}-${idx}`} className="relative">
@@ -303,14 +316,8 @@ export default function ProducaoEmbalagemPage() {
                           onPhotoClick={() => handlePhotoClick(embalagemItem)}
                           onClick={() => handleEditProducao(embalagemItem)}
                           isLoading={isItemLoading}
-                          caixas={embalagemItem.caixas}
-                          pacotes={embalagemItem.pacotes}
-                          unidades={embalagemItem.unidades}
-                          kg={embalagemItem.kg}
-                          pedidoCaixas={embalagemItem.pedidoCaixas}
-                          pedidoPacotes={embalagemItem.pedidoPacotes}
-                          pedidoUnidades={embalagemItem.pedidoUnidades}
-                          pedidoKg={embalagemItem.pedidoKg}
+                          detalhesProduzido={produzidoDetalhes}
+                          detalhesMeta={metaDetalhes}
                         />
                         
                         {/* Dropdown de fotos */}

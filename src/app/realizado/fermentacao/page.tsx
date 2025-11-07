@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import { RealizadoHeader, ProductCompactCard, ThreeColumnLayout } from '@/components/Realizado';
 import { RealizadoItemFermentacao, RealizadoGroup } from '@/domain/types/realizado';
+import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 
 type PainelItem = RealizadoItemFermentacao & {
@@ -162,6 +163,7 @@ export default function ProducaoFermentacaoPage() {
         ) : (
           <ThreeColumnLayout
             groups={groupedItems}
+            columnCount={1}
             renderGroup={(group) => (
               <div className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-3 space-y-2">
                 <div className="border-b border-slate-600/30 pb-1">
@@ -173,6 +175,16 @@ export default function ProducaoFermentacaoPage() {
                     const fermentacaoItem = item as PainelItem;
                     const itemKey = `${fermentacaoItem.produto}-${fermentacaoItem.rowId}`;
                     const isItemLoading = loadingCardId === itemKey;
+                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: fermentacaoItem.latas, unidade: 'lt' },
+                      { quantidade: fermentacaoItem.unidades, unidade: 'un' },
+                      { quantidade: fermentacaoItem.kg, unidade: 'kg' },
+                    ]);
+                    const metaDetalhes = QuantityBreakdown.buildEntries([
+                      { quantidade: fermentacaoItem.pedidoLatas, unidade: 'lt' },
+                      { quantidade: fermentacaoItem.pedidoUnidades, unidade: 'un' },
+                      { quantidade: fermentacaoItem.pedidoKg, unidade: 'kg' },
+                    ]);
                     
                     return (
                       <ProductCompactCard
@@ -186,6 +198,8 @@ export default function ProducaoFermentacaoPage() {
                         onPhotoClick={() => window.open(fermentacaoItem.fermentacaoFotoUrl, '_blank')}
                         onClick={() => handleEditProducao(fermentacaoItem)}
                         isLoading={isItemLoading}
+                        detalhesProduzido={produzidoDetalhes}
+                        detalhesMeta={metaDetalhes}
                       />
                     );
                   })}

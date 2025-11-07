@@ -123,32 +123,33 @@ export async function PUT(
       }
     });
 
-    // Enviar notificação WhatsApp (não bloquear resposta em caso de erro)
-    whatsAppNotificationService.notifyEmbalagemProduction({
-      produto,
-      cliente,
-      quantidadeEmbalada: {
-        caixas: caixas || 0,
-        pacotes: pacotes || 0,
-        unidades: unidades || 0,
-        kg: kg || 0,
-      },
-      metaOriginal: {
-        caixas: pedidoCaixas,
-        pacotes: pedidoPacotes,
-        unidades: pedidoUnidades,
-        kg: pedidoKg,
-      },
-      isPartial: false,
-      fotos: {
-        pacoteFotoUrl: pacoteFotoUrl || undefined,
-        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
-        palletFotoUrl: palletFotoUrl || undefined,
-      } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
-    }).catch((error) => {
+    try {
+      await whatsAppNotificationService.notifyEmbalagemProduction({
+        produto,
+        cliente,
+        quantidadeEmbalada: {
+          caixas: caixas || 0,
+          pacotes: pacotes || 0,
+          unidades: unidades || 0,
+          kg: kg || 0,
+        },
+        metaOriginal: {
+          caixas: pedidoCaixas,
+          pacotes: pedidoPacotes,
+          unidades: pedidoUnidades,
+          kg: pedidoKg,
+        },
+        isPartial: false,
+        fotos: {
+          pacoteFotoUrl: pacoteFotoUrl || undefined,
+          etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+          palletFotoUrl: palletFotoUrl || undefined,
+        } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+      });
+    } catch (error) {
       // Logar erro mas não propagar
       console.error("Erro ao enviar notificação WhatsApp:", error);
-    });
+    }
 
     return NextResponse.json({ message: 'Produção atualizada com sucesso' });
   } catch (error) {
