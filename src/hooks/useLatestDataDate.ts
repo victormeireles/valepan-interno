@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-type ApiEndpoint = 'embalagem' | 'fermentacao' | 'forno';
+type ApiEndpoint = 'embalagem' | 'fermentacao' | 'forno' | 'saidas';
 
 /**
  * Hook para buscar a última data com dados disponíveis

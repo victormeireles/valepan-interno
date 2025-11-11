@@ -28,6 +28,7 @@ interface FotosInfo {
   pacoteFotoUrl?: string;
   etiquetaFotoUrl?: string;
   palletFotoUrl?: string;
+  saidaFotoUrl?: string;
 }
 
 type StageQuantity = {
@@ -62,6 +63,17 @@ interface EmbalagemMessageData {
   metaOriginal?: MetaOriginal;
   isPartial: boolean;
   fotos?: FotosInfo;
+}
+
+interface SaidaMessageData {
+  produto: string;
+  cliente: string;
+  meta: QuantidadeEmbalada;
+  realizado: QuantidadeEmbalada;
+  data?: string;
+  observacao?: string;
+  origem: 'criada' | 'atualizada';
+  fotoUrl?: string;
 }
 
 /**
@@ -262,7 +274,6 @@ export class WhatsAppMessageFormatter {
 
     let message = `${icone} *${titulo}${headerSuffix}*\n\n`;
     message += `${infoLines.join('\n')}`;
-    message += `\n\n---\nGerado automaticamente`;
 
     return message;
   }
@@ -404,8 +415,52 @@ export class WhatsAppMessageFormatter {
       message += this.formatPhotoSection(data.fotos, data.cliente);
     }
     
-    message += `\n\n---\nGerado automaticamente`;
-    
+    return message;
+  }
+
+  formatSaidaMessage(data: SaidaMessageData): string {
+    const metaFormatada = this.formatQuantidade(data.meta);
+    const realizadoFormatado = this.formatQuantidade(data.realizado);
+
+    const diffs = [
+      (data.realizado.caixas || 0) - (data.meta.caixas || 0),
+      (data.realizado.pacotes || 0) - (data.meta.pacotes || 0),
+      (data.realizado.unidades || 0) - (data.meta.unidades || 0),
+      (data.realizado.kg || 0) - (data.meta.kg || 0),
+    ];
+
+    const isParcial = diffs.some((diff) => diff < 0);
+    const excedeu = diffs.some((diff) => diff > 0);
+
+    const header =
+      data.origem === 'criada'
+        ? '📤 *Nova saída registrada*'
+        : '📤 *Saída atualizada*';
+
+    let message = `${header}\n\n`;
+    if (data.data) {
+      message += `*Data:* ${this.formatDateToBr(data.data)}\n`;
+    }
+    message += `*Cliente:* ${data.cliente}\n`;
+    message += `*Produto:* ${data.produto}\n`;
+    if (data.observacao) {
+      message += `*Obs Cliente:* ${data.observacao}\n`;
+    }
+    message += `*Meta:* ${metaFormatada}\n`;
+    message += `*Realizado:* ${realizadoFormatado}\n`;
+
+    if (isParcial) {
+      message += `⚠️ *Atenção:* Quantidade realizada abaixo da meta\n`;
+    } else if (excedeu) {
+      message += `ℹ️ Quantidade realizada acima da meta\n`;
+    }
+
+    if (data.fotoUrl) {
+      message += `📷 Foto: disponível\n${data.fotoUrl}\n`;
+    } else {
+      message += `📷 Foto ainda não anexada\n`;
+    }
+
     return message;
   }
 

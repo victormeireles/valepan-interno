@@ -20,7 +20,17 @@ export interface PhotoInfo {
 /**
  * Gera o nome do arquivo baseado no rowId e tipo de foto
  */
-function generateFileName(rowId: number, photoType: 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento'): string {
+function generateFileName(
+  rowId: number,
+  photoType:
+    | 'pacote'
+    | 'etiqueta'
+    | 'pallet'
+    | 'forno'
+    | 'fermentacao'
+    | 'resfriamento'
+    | 'saida',
+): string {
   return `${rowId}-${photoType.toUpperCase()}.jpg`;
 }
 
@@ -131,7 +141,14 @@ export async function uploadPhotoToDrive(
   fileName: string,
   mimeType: string,
   rowId: number,
-  photoType: 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento'
+  photoType:
+    | 'pacote'
+    | 'etiqueta'
+    | 'pallet'
+    | 'forno'
+    | 'fermentacao'
+    | 'resfriamento'
+    | 'saida',
 ): Promise<PhotoUploadResult> {
   try {
     const drive = await getGoogleDriveClient();

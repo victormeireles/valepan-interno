@@ -5,6 +5,7 @@ import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
+import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
 
 // Aumentar tempo máximo de execução para upload de fotos
 export const maxDuration = 30; // 30 segundos
@@ -25,8 +26,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
     }
 
-    if (!photoType || !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento'].includes(photoType)) {
-      return NextResponse.json({ error: 'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao ou resfriamento' }, { status: 400 });
+    if (
+      !photoType ||
+      ![
+        'pacote',
+        'etiqueta',
+        'pallet',
+        'forno',
+        'fermentacao',
+        'resfriamento',
+        'saida',
+      ].includes(photoType)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao, resfriamento ou saida',
+        },
+        { status: 400 },
+      );
     }
 
     const rowNumber = parseInt(rowId);
@@ -54,13 +72,22 @@ export async function POST(request: NextRequest) {
       photo.name,
       photo.type,
       rowNumber,
-      photoType as 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento'
+      photoType as
+        | 'pacote'
+        | 'etiqueta'
+        | 'pallet'
+        | 'forno'
+        | 'fermentacao'
+        | 'resfriamento'
+        | 'saida',
     );
 
     // Salvar dados da foto na planilha
     const sheets = await getGoogleSheetsClient();
     let config;
-    if (processType === 'forno') {
+    if (processType === 'saidas') {
+      config = SAIDAS_SHEET_CONFIG.destino;
+    } else if (processType === 'forno') {
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
@@ -73,7 +100,11 @@ export async function POST(request: NextRequest) {
     
     // Determinar as colunas baseado no tipo de foto
     let startColumn: string;
-    if (processType === 'forno') {
+    let columnsCount = 3;
+    if (processType === 'saidas') {
+      startColumn = 'P';
+      columnsCount = 2;
+    } else if (processType === 'forno') {
       // Forno usa colunas L, M, N e sempre um único tipo 'forno'
       startColumn = 'L';
     } else if (processType === 'fermentacao') {
@@ -98,13 +129,16 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + 2);
+    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
     const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
-    const values = [
-      uploadResult.photoUrl,           // URL da foto
-      uploadResult.photoId,            // ID do arquivo no Drive
-      new Date().toISOString(),        // Timestamp do upload
-    ];
+    const values =
+      columnsCount === 3
+        ? [
+            uploadResult.photoUrl, // URL da foto
+            uploadResult.photoId, // ID do arquivo no Drive
+            new Date().toISOString(), // Timestamp do upload
+          ]
+        : [uploadResult.photoUrl, uploadResult.photoId];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId,

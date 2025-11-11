@@ -61,6 +61,17 @@ type NotifyFermentacaoProductionParams = StageNotificationParams;
 
 type NotifyFornoProductionParams = StageNotificationParams;
 
+interface NotifySaidasProductionParams {
+  produto: string;
+  cliente: string;
+  meta: QuantidadeEmbalada;
+  realizado: QuantidadeEmbalada;
+  data?: string;
+  observacao?: string;
+  origem: 'criada' | 'atualizada';
+  fotoUrl?: string;
+}
+
 /**
  * Serviço para gerenciar notificações WhatsApp
  */
@@ -97,7 +108,7 @@ export class WhatsAppNotificationService {
   }
 
   private async sendSummaryWithButton(
-    stageKey: "fermentacao" | "forno" | "embalagem",
+    stageKey: "fermentacao" | "forno" | "embalagem" | "saidas",
     groupId: string,
     summaryResolver: () => Promise<
       | {
@@ -140,7 +151,7 @@ export class WhatsAppNotificationService {
     grupoId?: string;
     envVarName: string;
     stageLabel: string;
-    stageKey: "fermentacao" | "forno" | "embalagem";
+    stageKey: "fermentacao" | "forno" | "embalagem" | "saidas";
     buildMessage: () => string;
     buildSummary?: () => Promise<
       | {
@@ -252,6 +263,28 @@ export class WhatsAppNotificationService {
     });
   }
 
+  async notifySaidasProduction(
+    params: NotifySaidasProductionParams,
+  ): Promise<boolean> {
+    return this.sendMessageToConfiguredGroup({
+      grupoId: process.env.WHATSAPP_GRUPO_SAIDAS,
+      envVarName: 'WHATSAPP_GRUPO_SAIDAS',
+      stageLabel: 'saídas',
+      stageKey: 'saidas',
+      buildMessage: () =>
+        whatsAppMessageFormatter.formatSaidaMessage({
+          produto: params.produto,
+          cliente: params.cliente,
+          meta: params.meta,
+          realizado: params.realizado,
+          data: params.data,
+          observacao: params.observacao,
+          origem: params.origem,
+          fotoUrl: params.fotoUrl,
+        }),
+    });
+  }
+
   private async buildFermentacaoSummaryPayload(date?: string) {
     return this.buildStageSummaryPayload(
       'fermentacao',
@@ -280,7 +313,7 @@ export class WhatsAppNotificationService {
   }
 
   private async buildStageSummaryPayload<T extends StageSummaryResult>(
-    stageKey: 'fermentacao' | 'forno' | 'embalagem',
+    stageKey: 'fermentacao' | 'forno' | 'embalagem' | 'saidas',
     loader: () => Promise<T>,
     formatter: (summary: T) => string,
     buttonLabel: string,

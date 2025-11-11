@@ -61,7 +61,7 @@ export default function Home() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
             📋 Meta de Produção
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             <Link
               href="/meta/producao"
               className="block bg-slate-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
@@ -94,6 +94,22 @@ export default function Home() {
                 </p>
               </div>
             </Link>
+            <Link
+              href="/meta/saidas"
+              className="block bg-purple-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-purple-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-purple-200 text-3xl">📤</span>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Meta: Saídas
+                </h3>
+                <p className="text-gray-300 text-sm">
+                  Define metas de saídas por cliente e produto
+                </p>
+              </div>
+            </Link>
           </div>
         </div>
 
@@ -102,7 +118,7 @@ export default function Home() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
             ✅ Produção Realizada
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
             <Link
               href="/realizado/fermentacao"
               className="block bg-yellow-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
@@ -166,6 +182,22 @@ export default function Home() {
                 </h3>
                 <p className="text-gray-300 text-sm">
                   Registro de produção da embalagem
+                </p>
+              </div>
+            </Link>
+            <Link
+              href="/realizado/saidas"
+              className="block bg-purple-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-purple-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-purple-200 text-3xl">📤</span>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Realizado: Saídas
+                </h3>
+                <p className="text-gray-300 text-sm">
+                  Controle de saídas com meta e foto
                 </p>
               </div>
             </Link>
