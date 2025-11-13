@@ -113,12 +113,18 @@ export class WhatsAppNotificationService {
     stageLabel,
     buildMessage,
     fetchSummary,
+    buttonConfig,
   }: {
     grupoId?: string;
     envVarName: string;
     stageLabel: string;
     buildMessage: (summary?: TSummary) => string;
     fetchSummary?: () => Promise<TSummary | null>;
+    buttonConfig?: {
+      id: string;
+      path: string;
+      label: string;
+    };
   }): Promise<boolean> {
     try {
       if (!grupoId) {
@@ -147,7 +153,30 @@ export class WhatsAppNotificationService {
       console.log(`📝 [WhatsApp] Mensagem de ${stageLabel} formatada:`, `${message.substring(0, 100)}...`);
       console.log(`📤 [WhatsApp] Enviando mensagem de ${stageLabel} para grupo:`, grupoId);
 
-      const response = await zapiManager.sendMessageToGroup(grupoId, message);
+      let response: unknown;
+      if (buttonConfig) {
+        const buttonUrl = this.buildButtonUrl(buttonConfig.path, stageLabel);
+        if (buttonUrl) {
+          response = await zapiManager.sendButtonActionsMessage({
+            phone: grupoId,
+            message,
+            buttonActions: [
+              {
+                id: buttonConfig.id,
+                type: "URL",
+                url: buttonUrl,
+                label: buttonConfig.label,
+              },
+            ],
+          });
+        } else {
+          console.warn(`⚠️ [WhatsApp] URL base não configurada. Botão de ${stageLabel} não enviado, usando mensagem simples.`);
+          response = await zapiManager.sendMessageToGroup(grupoId, message);
+        }
+      } else {
+        response = await zapiManager.sendMessageToGroup(grupoId, message);
+      }
+
       console.log(`✅ [WhatsApp] Notificação de ${stageLabel} enviada com sucesso`);
       console.log(`📥 [WhatsApp] Resposta da API (${stageLabel}):`, JSON.stringify(response));
 
@@ -182,6 +211,11 @@ export class WhatsAppNotificationService {
           summary,
         }),
       fetchSummary: () => this.loadEmbalagemSummary(),
+      buttonConfig: {
+        id: 'embalagem-open-panel',
+        path: '/realizado/embalagem',
+        label: 'Abrir painel Embalagem',
+      },
     });
   }
 
@@ -203,6 +237,11 @@ export class WhatsAppNotificationService {
           summary,
         }),
       fetchSummary: () => this.loadFermentacaoSummary(params.data),
+      buttonConfig: {
+        id: 'fermentacao-open-panel',
+        path: '/realizado/fermentacao',
+        label: 'Abrir painel Fermentação',
+      },
     });
   }
 
@@ -224,6 +263,11 @@ export class WhatsAppNotificationService {
           summary,
         }),
       fetchSummary: () => this.loadFornoSummary(params.data),
+      buttonConfig: {
+        id: 'forno-open-panel',
+        path: '/realizado/forno',
+        label: 'Abrir painel Forno',
+      },
     });
   }
 
@@ -280,6 +324,18 @@ export class WhatsAppNotificationService {
       console.error(`💥 [WhatsApp] Falha ao montar resumo diário (${stageKey}):`, error);
       return null;
     }
+  }
+
+  private buildButtonUrl(path: string, stageLabel: string): string | null {
+    const baseUrl = process.env.NEXTAUTH_URL;
+    if (!baseUrl) {
+      console.warn(`⚠️ [WhatsApp] NEXTAUTH_URL não configurado. Link do botão (${stageLabel}) indisponível.`);
+      return null;
+    }
+
+    const normalizedBase = baseUrl.replace(/\/$/, '');
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${normalizedBase}${normalizedPath}`;
   }
 }
 
