@@ -50,6 +50,7 @@ interface StageMessageData {
   data?: string;
   turno?: string;
   atualizadoEm?: string;
+  summary?: StageSummaryResult;
 }
 
 type FermentacaoMessageData = StageMessageData;
@@ -63,6 +64,7 @@ interface EmbalagemMessageData {
   metaOriginal?: MetaOriginal;
   isPartial: boolean;
   fotos?: FotosInfo;
+  summary?: EmbalagemSummaryResult;
 }
 
 interface SaidaMessageData {
@@ -163,15 +165,6 @@ export class WhatsAppMessageFormatter {
     return date;
   }
 
-  private formatSummaryHeader(
-    emoji: string,
-    title: string,
-    date: string,
-  ): string {
-    const formattedDate = date ? ` - ${this.formatDateToBr(date)}` : "";
-    return `${emoji} *${title}${formattedDate}*`;
-  }
-
   private formatSummaryLine(
     icon: string,
     label: string,
@@ -185,14 +178,8 @@ export class WhatsAppMessageFormatter {
     return `${base} • ${totals.primary}`;
   }
 
-  private buildSummaryLines(
-    summary: StageSummaryResult,
-    headerEmoji: string,
-    headerTitle: string,
-  ): string[] {
+  private formatSummaryTotals(summary: StageSummaryResult): string[] {
     const lines: string[] = [];
-
-    lines.push(this.formatSummaryHeader(headerEmoji, headerTitle, summary.date));
 
     lines.push(
       this.formatSummaryLine("✅", "Completos", {
@@ -232,10 +219,6 @@ export class WhatsAppMessageFormatter {
     return lines;
   }
 
-  private decorateSummaryLines(lines: string[]): string {
-    return `${lines.join("\n")}\n\n---\nResumo automático`;
-  }
-
   private calculateStageDifferences(
     meta: StageQuantity,
     produzido: StageQuantity,
@@ -270,10 +253,17 @@ export class WhatsAppMessageFormatter {
       infoLines.push(`Turno: ${stage.turno}`);
     }
     infoLines.push(`Produto: ${stage.produto}`);
-    infoLines.push(`Quantidade: ${produzidoFormatado} de ${metaFormatada}`);
+    infoLines.push(`Quantidade: ${produzidoFormatado} / ${metaFormatada}`);
 
     let message = `${icone} *${titulo}${headerSuffix}*\n\n`;
     message += `${infoLines.join('\n')}`;
+
+    if (stage.summary) {
+      const summaryLines = this.formatSummaryTotals(stage.summary);
+      if (summaryLines.length > 0) {
+        message += `\n\nTotal:\n${summaryLines.join('\n')}`;
+      }
+    }
 
     return message;
   }
@@ -358,32 +348,12 @@ export class WhatsAppMessageFormatter {
     return { status, fotosSalvas, fotosFaltando };
   }
 
-  /**
-   * Formata seção de fotos na mensagem
-   */
-  private formatPhotoSection(fotos: FotosInfo | undefined, cliente: string): string {
-    const photoStatus = this.getPhotoStatus(fotos, cliente);
-
-    if (photoStatus.status === 'red') {
-      // Nenhuma foto - mensagem em MAIÚSCULAS
-      const obrigatorias = photoStatus.fotosFaltando.join(' | ');
-      return `\n⚠️ *ATENÇÃO: NENHUMA FOTO FOI SALVA!*\n📸 Fotos obrigatórias: ${obrigatorias}`;
-    }
-
-    if (photoStatus.status === 'white') {
-      // Todas as fotos obrigatórias salvas
-      if (isSpecialPhotoClient(cliente)) {
-        return `\n📸 Fotos: ✅ Todas salvas (Pacote + Pallet)`;
-      }
-      return `\n📸 Fotos: ✅ Todas salvas`;
-    }
-
-    // Faltam algumas fotos (status yellow)
-    let section = `\n📸 Fotos salvas: ${photoStatus.fotosSalvas.join(' | ')}`;
-    if (photoStatus.fotosFaltando.length > 0) {
-      section += `\n⚠️ Faltando: ${photoStatus.fotosFaltando.join(' | ')}`;
-    }
-    return section;
+  private hasAllRequiredPhotos(
+    fotos: FotosInfo | undefined,
+    cliente: string,
+  ): boolean {
+    const status = this.getPhotoStatus(fotos, cliente);
+    return status.status === 'white';
   }
 
   /**
@@ -391,31 +361,35 @@ export class WhatsAppMessageFormatter {
    */
   formatEmbalagemMessage(data: EmbalagemMessageData): string {
     const quantidadeFormatada = this.formatQuantidade(data.quantidadeEmbalada);
-    
-    let message = `📦 *Produção Embalagem*\n\n`;
-    message += `*Produto:* ${data.produto}\n`;
-    message += `*Cliente:* ${data.cliente}\n`;
-    message += `*Quantidade Embalada:* ${quantidadeFormatada}\n`;
-    
-    if (data.metaOriginal) {
-      const metaFormatada = this.formatQuantidade(data.metaOriginal);
-      if (data.isPartial) {
-        message += `*Meta Original:* ${metaFormatada}\n`;
-      } else {
-        message += `*Meta:* ${metaFormatada}\n`;
-      }
-    }
-    
+    const metaFormatada = data.metaOriginal
+      ? this.formatQuantidade(data.metaOriginal)
+      : undefined;
+    const quantidadeLinha = metaFormatada
+      ? `${quantidadeFormatada} / ${metaFormatada}`
+      : quantidadeFormatada;
+    const fotoIcon = this.hasAllRequiredPhotos(data.fotos, data.cliente) ? '✅' : '❌';
+
+    const linhas: string[] = [
+      `📦 *Produção Embalagem*`,
+      ``,
+      `*Produto:* ${data.produto}`,
+      `*Cliente:* ${data.cliente}`,
+      `*Quantidade:* ${quantidadeLinha}`,
+      `*Foto:* ${fotoIcon}`,
+    ];
+
     if (data.isPartial) {
-      message += `⚠️ *Salvamento Parcial*\n`;
+      linhas.push(`⚠️ *Salvamento Parcial*`);
     }
 
-    // Adicionar seção de fotos
-    if (data.fotos !== undefined) {
-      message += this.formatPhotoSection(data.fotos, data.cliente);
+    if (data.summary) {
+      const summaryLines = this.formatSummaryTotals(data.summary);
+      if (summaryLines.length > 0) {
+        linhas.push(``, `Total:`, ...summaryLines);
+      }
     }
-    
-    return message;
+
+    return linhas.join('\n');
   }
 
   formatSaidaMessage(data: SaidaMessageData): string {
@@ -490,37 +464,6 @@ export class WhatsAppMessageFormatter {
     );
   }
 
-  formatFermentacaoDailySummaryMessage(summary: StageSummaryResult): string {
-    const lines = this.buildSummaryLines(summary, '🧪', 'Fermentação');
-    return this.decorateSummaryLines(lines);
-  }
-
-  formatFornoDailySummaryMessage(summary: StageSummaryResult): string {
-    const lines = this.buildSummaryLines(summary, '🔥', 'Forno');
-    return this.decorateSummaryLines(lines);
-  }
-
-  formatEmbalagemDailySummaryMessage(
-    summary: EmbalagemSummaryResult,
-  ): string {
-    const lines = this.buildSummaryLines(summary, '📦', 'Embalagem');
-
-    const missingCount = summary.photos.missingRequiredCount;
-    const missingLabel =
-      missingCount === 1 ? "1 item" : `${missingCount} itens`;
-    lines.push(`📸 Sem foto obrigatória: ${missingLabel}`);
-
-    if (summary.photos.critical.length > 0) {
-      const criticalLabel = summary.photos.critical.length === 1
-        ? '1 produção'
-        : `${summary.photos.critical.length} produções`;
-      lines.push(
-        `🚨 ${criticalLabel} completas/parciais sem fotos!`,
-      );
-    }
-
-    return this.decorateSummaryLines(lines);
-  }
 }
 
 /**

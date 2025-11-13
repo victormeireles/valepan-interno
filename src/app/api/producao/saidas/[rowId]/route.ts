@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { SaidaRealizadoPayload, SaidaQuantidade } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 type UpdateBody = {
   realizado: SaidaQuantidade;
@@ -82,6 +83,11 @@ export async function PUT(
       );
     }
 
+    const existingRow = await saidasSheetManager.getRow(rowNumber);
+    if (!existingRow) {
+      return NextResponse.json({ error: 'Linha não encontrada' }, { status: 404 });
+    }
+
     const payload: SaidaRealizadoPayload = {
       rowIndex: rowNumber,
       realizado: body.realizado,
@@ -93,6 +99,7 @@ export async function PUT(
         : undefined;
 
     await saidasSheetManager.updateRealizado(payload, photoPayload);
+    await atualizarEstoque(existingRow, body.realizado);
 
     const updatedRow = await saidasSheetManager.getRow(rowNumber);
     if (updatedRow) {
@@ -113,6 +120,39 @@ export async function PUT(
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+type SaidaRow = NonNullable<Awaited<ReturnType<typeof saidasSheetManager.getRow>>>;
+
+async function atualizarEstoque(
+  row: SaidaRow,
+  realizadoNovo: SaidaQuantidade,
+) {
+  const delta = {
+    caixas: (realizadoNovo.caixas || 0) - (row.realizado.caixas || 0),
+    pacotes: (realizadoNovo.pacotes || 0) - (row.realizado.pacotes || 0),
+    unidades: (realizadoNovo.unidades || 0) - (row.realizado.unidades || 0),
+    kg: (realizadoNovo.kg || 0) - (row.realizado.kg || 0),
+  };
+
+  const houveMudanca =
+    delta.caixas !== 0 ||
+    delta.pacotes !== 0 ||
+    delta.unidades !== 0 ||
+    delta.kg !== 0;
+
+  if (!houveMudanca) return;
+
+  await estoqueService.aplicarDelta({
+    cliente: row.cliente,
+    produto: row.produto,
+    delta: {
+      caixas: -delta.caixas,
+      pacotes: -delta.pacotes,
+      unidades: -delta.unidades,
+      kg: -delta.kg,
+    },
+  });
 }
 
 

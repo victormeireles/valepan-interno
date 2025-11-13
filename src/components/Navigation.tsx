@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { STAGES_CONFIG } from '@/config/stages';
 
 interface NavigationProps {
   hideHeader?: boolean;
@@ -28,7 +27,33 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const closeIfMobile = () => {
+      if (window.innerWidth < 1024) {
+        setIsOpen(false);
+      }
+    };
+    closeIfMobile();
+    window.addEventListener('resize', closeIfMobile);
+    return () => window.removeEventListener('resize', closeIfMobile);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth < 1024) {
+      setIsOpen(false);
+    }
+  }, [pathname]);
+
   const isActive = (path: string) => pathname === path;
+
+  const baseClasses =
+    'fixed top-0 right-0 h-full w-80 bg-white shadow-xl transform transition-all duration-300 ease-in-out z-50';
+  const drawerState = isOpen
+    ? 'translate-x-0 opacity-100 pointer-events-auto'
+    : 'translate-x-full opacity-0 pointer-events-none';
+  const menuClasses = `${baseClasses} ${drawerState}`;
 
   return (
     <>
@@ -80,17 +105,16 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
       {/* Overlay para fechar o menu */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className={`fixed inset-0 bg-black bg-opacity-50 z-40 ${hideHeader ? '' : 'lg:hidden'}`}
           onClick={closeMenu}
         />
       )}
 
       {/* Menu lateral */}
-      <div 
-        className={`fixed top-0 right-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
+      {isOpen && (
+        <div
+          className={`${menuClasses}`}
+        >
         <div className="flex flex-col h-full">
           {/* Cabeçalho do menu */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -120,37 +144,6 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                 <span className="material-icons text-xl mr-3">home</span>
                 Página Inicial
               </Link>
-
-              {/* Separador */}
-              <div className="my-4 border-t border-gray-200" />
-
-              {/* Etapas de produção */}
-              <div className="space-y-1">
-                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                  Etapas de Produção
-                </h3>
-                {Object.entries(STAGES_CONFIG).map(([stageKey, config]) => {
-                  const href = stageKey === 'producao-embalagem' ? '/realizado/embalagem' : `/${stageKey}`;
-                  
-                  return (
-                    <Link
-                      key={stageKey}
-                      href={href}
-                      onClick={closeMenu}
-                      className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                        isActive(href) 
-                          ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700' 
-                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <span className="w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center text-sm font-bold mr-3">
-                        {getStageNumber(stageKey)}
-                      </span>
-                      {config.name}
-                    </Link>
-                  );
-                })}
-              </div>
 
               {/* Separador */}
               <div className="my-4 border-t border-gray-200" />
@@ -269,6 +262,28 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Realizado: Saídas
                 </Link>
               </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
+              {/* Inventário */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  📦 Inventário
+                </h3>
+                <Link
+                  href="/realizado/estoque"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/realizado/estoque')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">inventory</span>
+                  Inventário de Estoque
+                </Link>
+              </div>
             </div>
           </nav>
 
@@ -284,19 +299,9 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </>
   );
 }
 
-function getStageNumber(stageKey: string): string {
-  const numbers: Record<string, string> = {
-    'pre-mistura': '1',
-    'massa': '2',
-    'fermentacao': '3',
-    'forno': '5',
-    'producao-embalagem': '6',
-  };
-  
-  return numbers[stageKey] || '?';
-}

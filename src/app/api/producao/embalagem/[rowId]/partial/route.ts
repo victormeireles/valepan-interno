@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 export async function POST(
   request: Request,
@@ -163,6 +164,17 @@ export async function POST(
     const metaOriginalPacotes = pedidoPacotes + (pacotes || 0);
     const metaOriginalUnidades = pedidoUnidades + (unidades || 0);
     const metaOriginalKg = pedidoKg + (kg || 0);
+
+    await estoqueService.aplicarDelta({
+      cliente,
+      produto,
+      delta: {
+        caixas: caixas || 0,
+        pacotes: pacotes || 0,
+        unidades: unidades || 0,
+        kg: kg || 0,
+      },
+    });
 
     try {
       await whatsAppNotificationService.notifyEmbalagemProduction({

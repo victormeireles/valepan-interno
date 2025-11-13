@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 function parseRowId(rowId: string): number | null {
   const parsed = Number(rowId);
@@ -18,7 +19,26 @@ export async function DELETE(
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
+    const existingRow = await saidasSheetManager.getRow(rowNumber);
     await saidasSheetManager.deleteRow(rowNumber);
+
+    if (existingRow) {
+      const quantidade = existingRow.realizado;
+      const houveRealizado =
+        quantidade.caixas > 0 ||
+        quantidade.pacotes > 0 ||
+        quantidade.unidades > 0 ||
+        quantidade.kg > 0;
+
+      if (houveRealizado) {
+        await estoqueService.aplicarDelta({
+          cliente: existingRow.cliente,
+          produto: existingRow.produto,
+          delta: quantidade,
+        });
+      }
+    }
+
     return NextResponse.json({ message: 'Saída removida com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

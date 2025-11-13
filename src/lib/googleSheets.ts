@@ -81,6 +81,14 @@ export async function appendRow(
   tabName: string,
   values: (string | number)[]
 ): Promise<void> {
+  await appendRows(spreadsheetId, tabName, [values]);
+}
+
+export async function appendRows(
+  spreadsheetId: string,
+  tabName: string,
+  values: (string | number)[][],
+): Promise<void> {
   const sheets = await getGoogleSheetsClient();
   
   try {
@@ -92,7 +100,7 @@ export async function appendRow(
       valueInputOption: 'USER_ENTERED',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
-        values: [values]
+        values,
       }
     });
   } catch (error) {

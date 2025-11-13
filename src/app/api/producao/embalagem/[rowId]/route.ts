@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 export async function GET(
   request: Request,
@@ -99,6 +100,12 @@ export async function PUT(
     const pedidoPacotes = Number(completeValues[7] || 0);   // H
     const pedidoUnidades = Number(completeValues[8] || 0);  // I
     const pedidoKg = Number(completeValues[9] || 0);        // J
+    const producaoAnterior = {
+      caixas: Number(completeValues[12] || 0), // M
+      pacotes: Number(completeValues[13] || 0), // N
+      unidades: Number(completeValues[14] || 0), // O
+      kg: Number(completeValues[15] || 0), // P
+    };
     
     // Dados de fotos (colunas R, U, X)
     const pacoteFotoUrl = completeValues[17] || '';         // R
@@ -121,6 +128,13 @@ export async function PUT(
       requestBody: {
         values: [values]
       }
+    });
+
+    await atualizarEstoque(cliente, produto, producaoAnterior, {
+      caixas: caixas || 0,
+      pacotes: pacotes || 0,
+      unidades: unidades || 0,
+      kg: kg || 0,
     });
 
     try {
@@ -156,4 +170,32 @@ export async function PUT(
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+async function atualizarEstoque(
+  cliente: string,
+  produto: string,
+  anterior: { caixas: number; pacotes: number; unidades: number; kg: number },
+  novo: { caixas: number; pacotes: number; unidades: number; kg: number },
+) {
+  const delta = {
+    caixas: novo.caixas - anterior.caixas,
+    pacotes: novo.pacotes - anterior.pacotes,
+    unidades: novo.unidades - anterior.unidades,
+    kg: novo.kg - anterior.kg,
+  };
+
+  const houveMudanca =
+    delta.caixas !== 0 ||
+    delta.pacotes !== 0 ||
+    delta.unidades !== 0 ||
+    delta.kg !== 0;
+
+  if (!houveMudanca) return;
+
+  await estoqueService.aplicarDelta({
+    cliente,
+    produto,
+    delta,
+  });
 }

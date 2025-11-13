@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 interface AutocompleteInputProps {
   value: string;
   onChange: (value: string) => void;
+  onSelect?: (value: string) => void;
   options: string[];
   placeholder?: string;
   required?: boolean;
@@ -12,20 +13,22 @@ interface AutocompleteInputProps {
   label?: string;
 }
 
-export default function AutocompleteInput({ 
-  value, 
-  onChange, 
-  options, 
-  placeholder = "Digite para buscar...", 
-  required = false, 
+export default function AutocompleteInput({
+  value,
+  onChange,
+  onSelect,
+  options,
+  placeholder = 'Digite para buscar...',
+  required = false,
   disabled = false,
-  label = "Cliente"
+  label = 'Cliente',
 }: AutocompleteInputProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filteredOptions, setFilteredOptions] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (value) {
@@ -37,6 +40,9 @@ export default function AutocompleteInput({
       setFilteredOptions(options);
     }
     setHighlightedIndex(-1);
+    if (document.activeElement === inputRef.current) {
+      setIsOpen(true);
+    }
   }, [value, options]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,6 +53,7 @@ export default function AutocompleteInput({
 
   const handleOptionSelect = (option: string) => {
     onChange(option);
+    onSelect?.(option);
     setIsOpen(false);
     setHighlightedIndex(-1);
     inputRef.current?.blur();
@@ -82,17 +89,8 @@ export default function AutocompleteInput({
       case 'Escape':
         setIsOpen(false);
         setHighlightedIndex(-1);
-        inputRef.current?.blur();
         break;
     }
-  };
-
-  const handleBlur = () => {
-    // Delay para permitir que o clique na opção seja processado
-    setTimeout(() => {
-      setIsOpen(false);
-      setHighlightedIndex(-1);
-    }, 150);
   };
 
   const handleFocus = () => {
@@ -111,9 +109,30 @@ export default function AutocompleteInput({
     }
   }, [highlightedIndex]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        setHighlightedIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
-    <div className="relative w-full">
-      <label className="block text-base font-semibold text-gray-800 mb-3">
+    <div ref={containerRef} className="relative w-full">
+      <label className="mb-2 block text-sm font-semibold text-gray-300">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <div className="relative">
@@ -124,14 +143,13 @@ export default function AutocompleteInput({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
-          onBlur={handleBlur}
           placeholder={placeholder}
           required={required}
           disabled={disabled}
-          className="w-full px-4 py-4 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xl font-medium bg-white text-gray-900"
+          className="w-full rounded-lg border border-gray-800 bg-gray-900/60 px-4 py-3 text-sm text-white shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         />
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+          <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -140,15 +158,15 @@ export default function AutocompleteInput({
       {isOpen && filteredOptions.length > 0 && (
         <ul
           ref={listRef}
-          className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-800 bg-gray-900 shadow-xl"
         >
           {filteredOptions.map((option, index) => (
             <li
               key={option}
-              className={`px-4 py-3 cursor-pointer text-base ${
+              className={`cursor-pointer px-4 py-2 text-sm ${
                 index === highlightedIndex
-                  ? 'bg-blue-100 text-blue-900'
-                  : 'text-gray-900 hover:bg-gray-100'
+                  ? 'bg-blue-600/20 text-blue-200'
+                  : 'text-gray-200 hover:bg-gray-800'
               }`}
               onClick={() => handleOptionSelect(option)}
               onMouseEnter={() => setHighlightedIndex(index)}
@@ -160,9 +178,9 @@ export default function AutocompleteInput({
       )}
 
       {isOpen && filteredOptions.length === 0 && value && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg">
-          <div className="px-4 py-3 text-gray-500 text-base">
-            Nenhum cliente encontrado
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 shadow-xl">
+          <div className="px-4 py-3 text-sm text-gray-400">
+            Nenhum resultado encontrado
           </div>
         </div>
       )}

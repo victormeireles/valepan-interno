@@ -107,60 +107,18 @@ export class WhatsAppNotificationService {
     return this.getTodayISO();
   }
 
-  private async sendSummaryWithButton(
-    stageKey: "fermentacao" | "forno" | "embalagem" | "saidas",
-    groupId: string,
-    summaryResolver: () => Promise<
-      | {
-          message: string;
-          buttonLabel: string;
-          buttonUrl: string;
-        }
-      | null
-    >,
-  ): Promise<void> {
-    try {
-      const summaryPayload = await summaryResolver();
-      if (!summaryPayload) return;
-
-      await zapiManager.sendButtonActionsMessage({
-        phone: groupId,
-        message: summaryPayload.message,
-        buttonActions: [
-          {
-            id: `${stageKey}-open-panel`,
-            type: "URL",
-            url: summaryPayload.buttonUrl,
-            label: summaryPayload.buttonLabel,
-          },
-        ],
-      });
-    } catch (error) {
-      console.error(`💥 [WhatsApp] Erro ao enviar resumo diário (${stageKey}):`, error);
-    }
-  }
-
-  private async sendMessageToConfiguredGroup({
+  private async sendMessageToConfiguredGroup<TSummary>({
     grupoId,
     envVarName,
     stageLabel,
-    stageKey,
     buildMessage,
-    buildSummary,
+    fetchSummary,
   }: {
     grupoId?: string;
     envVarName: string;
     stageLabel: string;
-    stageKey: "fermentacao" | "forno" | "embalagem" | "saidas";
-    buildMessage: () => string;
-    buildSummary?: () => Promise<
-      | {
-          message: string;
-          buttonLabel: string;
-          buttonUrl: string;
-        }
-      | null
-    >;
+    buildMessage: (summary?: TSummary) => string;
+    fetchSummary?: () => Promise<TSummary | null>;
   }): Promise<boolean> {
     try {
       if (!grupoId) {
@@ -176,7 +134,16 @@ export class WhatsAppNotificationService {
         return false;
       }
 
-      const message = buildMessage();
+      let summaryData: TSummary | undefined;
+      if (fetchSummary) {
+        try {
+          summaryData = await fetchSummary() ?? undefined;
+        } catch (error) {
+          console.error(`💥 [WhatsApp] Falha ao montar resumo (${stageLabel}):`, error);
+        }
+      }
+
+      const message = buildMessage(summaryData);
       console.log(`📝 [WhatsApp] Mensagem de ${stageLabel} formatada:`, `${message.substring(0, 100)}...`);
       console.log(`📤 [WhatsApp] Enviando mensagem de ${stageLabel} para grupo:`, grupoId);
 
@@ -184,9 +151,6 @@ export class WhatsAppNotificationService {
       console.log(`✅ [WhatsApp] Notificação de ${stageLabel} enviada com sucesso`);
       console.log(`📥 [WhatsApp] Resposta da API (${stageLabel}):`, JSON.stringify(response));
 
-      if (buildSummary) {
-        await this.sendSummaryWithButton(stageKey, grupoId, buildSummary);
-      }
       return true;
     } catch (error) {
       console.error(`💥 [WhatsApp] Erro ao enviar notificação de ${stageLabel}:`, error);
@@ -203,12 +167,11 @@ export class WhatsAppNotificationService {
   async notifyEmbalagemProduction(
     params: NotifyEmbalagemProductionParams
   ): Promise<boolean> {
-    return this.sendMessageToConfiguredGroup({
+    return this.sendMessageToConfiguredGroup<EmbalagemSummaryResult>({
       grupoId: process.env.WHATSAPP_GRUPO_EMBALAGEM,
       envVarName: 'WHATSAPP_GRUPO_EMBALAGEM',
       stageLabel: 'embalagem',
-      stageKey: 'embalagem',
-      buildMessage: () =>
+      buildMessage: (summary) =>
         whatsAppMessageFormatter.formatEmbalagemMessage({
           produto: params.produto,
           cliente: params.cliente,
@@ -216,20 +179,20 @@ export class WhatsAppNotificationService {
           metaOriginal: params.metaOriginal,
           isPartial: params.isPartial,
           fotos: params.fotos,
+          summary,
         }),
-      buildSummary: () => this.buildEmbalagemSummaryPayload(),
+      fetchSummary: () => this.loadEmbalagemSummary(),
     });
   }
 
   async notifyFermentacaoProduction(
     params: NotifyFermentacaoProductionParams,
   ): Promise<boolean> {
-    return this.sendMessageToConfiguredGroup({
+    return this.sendMessageToConfiguredGroup<StageSummaryResult>({
       grupoId: process.env.WHATSAPP_GRUPO_PRODUCAO,
       envVarName: 'WHATSAPP_GRUPO_PRODUCAO',
       stageLabel: 'fermentação',
-      stageKey: 'fermentacao',
-      buildMessage: () =>
+      buildMessage: (summary) =>
         whatsAppMessageFormatter.formatFermentacaoMessage({
           produto: params.produto,
           meta: params.meta,
@@ -237,20 +200,20 @@ export class WhatsAppNotificationService {
           data: params.data,
           turno: params.turno,
           atualizadoEm: params.atualizadoEm,
+          summary,
         }),
-      buildSummary: () => this.buildFermentacaoSummaryPayload(params.data),
+      fetchSummary: () => this.loadFermentacaoSummary(params.data),
     });
   }
 
   async notifyFornoProduction(
     params: NotifyFornoProductionParams,
   ): Promise<boolean> {
-    return this.sendMessageToConfiguredGroup({
+    return this.sendMessageToConfiguredGroup<StageSummaryResult>({
       grupoId: process.env.WHATSAPP_GRUPO_FORNO,
       envVarName: 'WHATSAPP_GRUPO_FORNO',
       stageLabel: 'forno',
-      stageKey: 'forno',
-      buildMessage: () =>
+      buildMessage: (summary) =>
         whatsAppMessageFormatter.formatFornoMessage({
           produto: params.produto,
           meta: params.meta,
@@ -258,8 +221,9 @@ export class WhatsAppNotificationService {
           data: params.data,
           turno: params.turno,
           atualizadoEm: params.atualizadoEm,
+          summary,
         }),
-      buildSummary: () => this.buildFornoSummaryPayload(params.data),
+      fetchSummary: () => this.loadFornoSummary(params.data),
     });
   }
 
@@ -270,7 +234,6 @@ export class WhatsAppNotificationService {
       grupoId: process.env.WHATSAPP_GRUPO_SAIDAS,
       envVarName: 'WHATSAPP_GRUPO_SAIDAS',
       stageLabel: 'saídas',
-      stageKey: 'saidas',
       buildMessage: () =>
         whatsAppMessageFormatter.formatSaidaMessage({
           produto: params.produto,
@@ -285,50 +248,34 @@ export class WhatsAppNotificationService {
     });
   }
 
-  private async buildFermentacaoSummaryPayload(date?: string) {
-    return this.buildStageSummaryPayload(
-      'fermentacao',
-      () => fermentacaoDailySummaryService.build(this.normalizeToISODate(date)),
-      (summary) => whatsAppMessageFormatter.formatFermentacaoDailySummaryMessage(summary),
-      'Abrir painel Fermentação',
+  private async loadFermentacaoSummary(
+    date?: string,
+  ): Promise<StageSummaryResult | null> {
+    return this.tryLoadSummary('fermentacao', () =>
+      fermentacaoDailySummaryService.build(this.normalizeToISODate(date)),
     );
   }
 
-  private async buildFornoSummaryPayload(date?: string) {
-    return this.buildStageSummaryPayload(
-      'forno',
-      () => fornoDailySummaryService.build(this.normalizeToISODate(date)),
-      (summary) => whatsAppMessageFormatter.formatFornoDailySummaryMessage(summary),
-      'Abrir painel Forno',
+  private async loadFornoSummary(
+    date?: string,
+  ): Promise<StageSummaryResult | null> {
+    return this.tryLoadSummary('forno', () =>
+      fornoDailySummaryService.build(this.normalizeToISODate(date)),
     );
   }
 
-  private async buildEmbalagemSummaryPayload() {
-    return this.buildStageSummaryPayload<EmbalagemSummaryResult>(
-      'embalagem',
-      () => embalagemDailySummaryService.build(this.getTodayISO()),
-      (summary) => whatsAppMessageFormatter.formatEmbalagemDailySummaryMessage(summary),
-      'Abrir painel Embalagem',
+  private async loadEmbalagemSummary(): Promise<EmbalagemSummaryResult | null> {
+    return this.tryLoadSummary('embalagem', () =>
+      embalagemDailySummaryService.build(this.getTodayISO()),
     );
   }
 
-  private async buildStageSummaryPayload<T extends StageSummaryResult>(
+  private async tryLoadSummary<T extends StageSummaryResult>(
     stageKey: 'fermentacao' | 'forno' | 'embalagem' | 'saidas',
     loader: () => Promise<T>,
-    formatter: (summary: T) => string,
-    buttonLabel: string,
-  ): Promise<{ message: string; buttonLabel: string; buttonUrl: string } | null> {
-    const baseUrl = process.env.NEXTAUTH_URL;
-    if (!baseUrl) {
-      console.warn(`⚠️ [WhatsApp] NEXTAUTH_URL não configurado. Resumo diário (${stageKey}) não enviado.`);
-      return null;
-    }
-
+  ): Promise<T | null> {
     try {
-      const summary = await loader();
-      const message = formatter(summary);
-      const buttonUrl = `${baseUrl.replace(/\/$/, '')}/realizado/${stageKey}`;
-      return { message, buttonLabel, buttonUrl };
+      return await loader();
     } catch (error) {
       console.error(`💥 [WhatsApp] Falha ao montar resumo diário (${stageKey}):`, error);
       return null;
