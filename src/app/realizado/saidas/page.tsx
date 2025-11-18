@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import RealizadoHeader from '@/components/Realizado/RealizadoHeader';
 import ThreeColumnLayout from '@/components/Realizado/ThreeColumnLayout';
 import ProductCompactCard from '@/components/Realizado/ProductCompactCard';
+import ClientGroup from '@/components/Realizado/ClientGroup';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { SaidaSheetRecord, SaidaQuantidade } from '@/domain/types/saidas';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
@@ -325,22 +326,53 @@ export default function RealizadoSaidasPage() {
     }
   };
 
-  const groups = useMemo((): RealizadoGroup[] => {
-    const buckets: Record<string, PainelItem[]> = {};
-
-    items.forEach((item) => {
-      const key = item.data || selectedDate;
-      if (!buckets[key]) buckets[key] = [];
-      buckets[key].push(item);
+  const groupedItems = useMemo((): RealizadoGroup[] => {
+    const groups: { [key: string]: PainelItem[] } = {};
+    
+    items.forEach(item => {
+      const data = item.data || selectedDate;
+      const obs = item.observacao?.trim() || '';
+      const groupKey = `${item.cliente}|${data}|${obs}`;
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(item);
     });
-
-    return Object.entries(buckets)
-      .map(([date, list]) => ({
-        key: date,
-        dataFabricacao: date,
-        items: list as unknown as RealizadoGroup['items'],
-      }))
-      .sort((a, b) => (a.key < b.key ? 1 : -1));
+    
+    // Criar os grupos e ordenar itens dentro de cada grupo por rowIndex
+    const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
+      const [cliente, data, obs] = groupKey.split('|');
+      
+      // Ordenar itens dentro do grupo por rowIndex
+      const sortedItems = [...groupItems].sort((a, b) => {
+        const rowIdA = a.rowIndex ?? Number.MAX_SAFE_INTEGER;
+        const rowIdB = b.rowIndex ?? Number.MAX_SAFE_INTEGER;
+        return rowIdA - rowIdB;
+      });
+      
+      const minRowId = Math.min(...sortedItems.map(item => item.rowIndex ?? Number.MAX_SAFE_INTEGER));
+      
+      return {
+        key: groupKey,
+        cliente,
+        dataFabricacao: data,
+        observacao: obs || undefined,
+        items: sortedItems as unknown as RealizadoGroup['items'],
+        minRowId,
+      };
+    });
+    
+    // Ordenar grupos pelo menor rowIndex de cada grupo
+    const sortedGroups = groupsArray.sort((a, b) => {
+      const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
+      const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
+      return minRowIdA - minRowIdB;
+    });
+    
+    // Remover minRowId do objeto final (usado apenas para ordenação)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    return sortedGroups.map(({ minRowId, ...group }) => group);
   }, [items, selectedDate]);
 
   return (
@@ -378,20 +410,24 @@ export default function RealizadoSaidasPage() {
           <div className="text-center py-16 text-gray-200 text-xl">Carregando...</div>
         ) : (
           <ThreeColumnLayout
-            groups={groups}
-            columnCount={1}
-            renderGroup={(group) => (
-              <div className="bg-slate-900/40 border border-slate-700/40 rounded-lg p-3 space-y-2">
-                <div className="border-b border-slate-700/40 pb-1">
-                  <h3 className="text-sm text-gray-200 font-semibold">
-                    Data: {formatDateManual(group.key)}
-                  </h3>
-                </div>
-
-                <div className="space-y-1.5">
-                  {group.items.map((item, index) => {
+            groups={groupedItems}
+            renderGroup={(group) => {
+              const saidasGroup = group as RealizadoGroup & {
+                cliente?: string;
+                dataFabricacao?: string;
+                observacao?: string;
+              };
+              
+              return (
+                <ClientGroup
+                  cliente={saidasGroup.cliente}
+                  dataFabricacao={saidasGroup.dataFabricacao}
+                  observacao={saidasGroup.observacao}
+                  selectedDate={selectedDate}
+                >
+                  {group.items.map((item, idx) => {
                     const saidaItem = item as unknown as PainelItem;
-                    const itemKey = `${saidaItem.produto}-${saidaItem.rowIndex ?? index}`;
+                    const itemKey = `${saidaItem.produto}-${saidaItem.rowIndex ?? idx}`;
                     const isItemLoading = loadingCardId === saidaItem.rowIndex;
 
                     const detalhesProduzido = QuantityBreakdown.buildEntries([
@@ -429,14 +465,14 @@ export default function RealizadoSaidasPage() {
                       />
                     );
                   })}
-                </div>
-              </div>
-            )}
+                </ClientGroup>
+              );
+            }}
           />
         )}
 
         <footer className="mt-6 text-center text-gray-200 text-sm">
-          {groups.length} grupo{groups.length !== 1 ? 's' : ''} • {items.length} item{items.length !== 1 ? 's' : ''}
+          {groupedItems.length} grupo{groupedItems.length !== 1 ? 's' : ''} • {items.length} item{items.length !== 1 ? 's' : ''}
         </footer>
       </div>
 
@@ -482,16 +518,5 @@ export default function RealizadoSaidasPage() {
   );
 }
 
-function formatDateManual(dateString: string): string {
-  const parts = dateString.split('-');
-  if (parts.length === 3) {
-    const [, month, day] = parts;
-    return `${day}/${month}`;
-  }
-  const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `${day}/${month}`;
-}
 
 

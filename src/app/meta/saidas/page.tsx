@@ -311,25 +311,33 @@ export default function MetaSaidasPage() {
     }
   };
 
+  // Agrupar itens por cliente/data/obs para exibição visual
   const groupedItems = useMemo(() => {
-    const groups: Record<string, PainelItem[]> = {};
-
-    items.forEach((item) => {
-      const key = item.data || selectedDate;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+    const groups: { [key: string]: PainelItem[] } = {};
+    
+    items.forEach(item => {
+      // Criar chave única baseada em cliente + data + observacao
+      const data = item.data || selectedDate;
+      const obs = item.observacao?.trim() || '';
+      const groupKey = `${item.cliente}|${data}|${obs}`;
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(item);
     });
-
-    return Object.entries(groups)
-      .map(([date, groupItems]) => ({
-        date,
-        items: [...groupItems].sort((a, b) => {
-          const clientCompare = a.cliente.localeCompare(b.cliente);
-          if (clientCompare !== 0) return clientCompare;
-          return a.produto.localeCompare(b.produto);
-        }),
-      }))
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    
+    // Ordenar itens dentro de cada grupo por rowIndex
+    const sortedGroups: { [key: string]: PainelItem[] } = {};
+    Object.entries(groups).forEach(([groupKey, groupItems]) => {
+      sortedGroups[groupKey] = [...groupItems].sort((a, b) => {
+        const rowIdA = a.rowIndex ?? Number.MAX_SAFE_INTEGER;
+        const rowIdB = b.rowIndex ?? Number.MAX_SAFE_INTEGER;
+        return rowIdA - rowIdB;
+      });
+    });
+    
+    return sortedGroups;
   }, [items, selectedDate]);
 
   return (
@@ -386,22 +394,40 @@ export default function MetaSaidasPage() {
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
           <div className="flex flex-wrap gap-6">
-            {groupedItems.map((group) => (
-              <div
-                key={group.date}
-                className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-4 space-y-3 w-full lg:inline-block lg:w-auto"
-              >
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-white">
-                    Data: {formatDateManual(group.date)}
-                  </h3>
-                  <div className="text-gray-300 text-sm">
-                    {group.items.length} registro{group.items.length !== 1 ? "s" : ""}
+            {Object.entries(groupedItems).map(([groupKey, groupItems]) => {
+              // Extrair informações do grupo da chave
+              const [cliente, data, obs] = groupKey.split('|');
+              const dataDiferente = data !== selectedDate;
+              const observacao = obs || '';
+              
+              return (
+                <div
+                  key={groupKey}
+                  className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-4 space-y-3 w-full lg:inline-block lg:w-auto"
+                >
+                  {/* Header do Cliente com Data e Observação */}
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white">{cliente}</h3>
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      {dataDiferente && (
+                        <div className="text-yellow-300">
+                          <span className="font-medium">Data:</span> {formatDateManual(data)}
+                        </div>
+                      )}
+                      {observacao && (
+                        <div className="text-gray-300">
+                          Obs: {observacao}
+                        </div>
+                      )}
+                      <div className="text-gray-300">
+                        {groupItems.length} produto{groupItems.length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {group.items.map((item) => {
+                  {/* Cards de Produtos Individuais */}
+                  <div className="flex flex-wrap gap-2">
+                    {groupItems.map((item) => {
                     const metaEntries = QuantityBreakdown.buildEntries([
                       { quantidade: item.meta.caixas, unidade: "cx" },
                       { quantidade: item.meta.pacotes, unidade: "pct" },
@@ -506,14 +532,15 @@ export default function MetaSaidasPage() {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {groupedItems.length} grupo{groupedItems.length !== 1 ? "s" : ""} • {items.length} item{items.length !== 1 ? "s" : ""} • {formatDateFull(selectedDate)}
+          {Object.keys(groupedItems).length} grupo{Object.keys(groupedItems).length !== 1 ? "s" : ""} • {items.length} item{items.length !== 1 ? "s" : ""} • {formatDateFull(selectedDate)}
         </footer>
       </div>
 
