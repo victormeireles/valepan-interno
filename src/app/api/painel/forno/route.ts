@@ -1,28 +1,10 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
-
-function getTodayISO(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function normalizeToISODate(value: unknown): string {
-  if (value == null) return '';
-  const str = value.toString().trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
-  const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (brMatch) {
-    const [, dd, mm, yyyy] = brMatch;
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  const dt = new Date(str);
-  if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-  return '';
-}
+import {
+  getTodayISOInBrazilTimezone,
+  normalizeToISODate,
+} from '@/lib/utils/date-utils';
 
 type PainelItem = {
   produto: string;
@@ -45,7 +27,7 @@ type PainelItem = {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date') || getTodayISO();
+    const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     const rows = await readSheetValues(spreadsheetId, `${tabName}!A:N`);

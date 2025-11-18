@@ -6,11 +6,7 @@ export const PEDIDOS_EMBALAGEM_CONFIG = {
     headerRow: 1, // PRD menciona a partir da linha 2
   },
   origemProdutos: {
-    spreadsheetId: process.env.NEXT_PUBLIC_PRODUTOS_SHEET_ID || '1WsdJ4ocAhLis_7eDkPDHgYMraNqmRe0I2XQJK-mrHcI',
-    tabName: 'Produtos',
-    productColumn: 'A',
-    unitColumn: 'B',
-    headerRow: 2, // Dados começam na linha 3, igual ao forno
+    provider: 'supabase' as const,
   },
   destinoPedidos: {
     spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions, getProductsWithUnits } from '@/lib/googleSheets';
+import { getColumnOptions } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+
+const productService = new SupabaseProductService();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -14,14 +17,13 @@ export async function GET(request: Request) {
     }
 
     if (type === 'produtos') {
-      const { spreadsheetId, tabName, productColumn, unitColumn, headerRow } = PEDIDOS_EMBALAGEM_CONFIG.origemProdutos;
-      
-      // Buscar lista de produtos usando a mesma lógica das outras telas
-      const options = await getColumnOptions(spreadsheetId, tabName, productColumn, headerRow);
-      
-      // Buscar produtos com unidades para funcionalidade adicional
-      const productsWithUnits = await getProductsWithUnits(spreadsheetId, tabName, productColumn, unitColumn, headerRow);
-      
+      const products = await productService.listProducts();
+      const options = products.map(product => product.nome);
+      const productsWithUnits = products.map(product => ({
+        produto: product.nome,
+        unidade: product.unidade,
+      }));
+
       return NextResponse.json({ 
         options,
         productsWithUnits 

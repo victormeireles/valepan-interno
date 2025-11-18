@@ -1,31 +1,10 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
-
-function getTodayISO(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function normalizeToISODate(value: unknown): string {
-  if (value == null) return '';
-  const str = value.toString().trim();
-  // ISO já formatado
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
-  // Formato brasileiro dd/mm/aaaa
-  const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (brMatch) {
-    const [, dd, mm, yyyy] = brMatch;
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  // Tentar parsear datas como string completa
-  const dt = new Date(str);
-  if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
-  return '';
-}
+import {
+  getTodayISOInBrazilTimezone,
+  normalizeToISODate,
+} from '@/lib/utils/date-utils';
 
 type PainelItem = {
   cliente: string;
@@ -67,7 +46,7 @@ type PainelItem = {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date') || getTodayISO();
+    const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
 
     // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R-Z e lote/etiqueta AA-AB)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;

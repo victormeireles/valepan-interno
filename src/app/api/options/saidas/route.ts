@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions, getProductsWithUnits } from '@/lib/googleSheets';
+import { getColumnOptions } from '@/lib/googleSheets';
 import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+
+const productService = new SupabaseProductService();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -20,21 +23,12 @@ export async function GET(request: Request) {
     }
 
     if (type === 'produtos') {
-      const { spreadsheetId, tabName, productColumn, unitColumn, headerRow } =
-        SAIDAS_SHEET_CONFIG.origemProdutos;
-      const options = await getColumnOptions(
-        spreadsheetId,
-        tabName,
-        productColumn,
-        headerRow,
-      );
-      const productsWithUnits = await getProductsWithUnits(
-        spreadsheetId,
-        tabName,
-        productColumn,
-        unitColumn,
-        headerRow,
-      );
+      const products = await productService.listProducts();
+      const options = products.map(product => product.nome);
+      const productsWithUnits = products.map(product => ({
+        produto: product.nome,
+        unidade: product.unidade,
+      }));
       return NextResponse.json({ options, productsWithUnits });
     }
 

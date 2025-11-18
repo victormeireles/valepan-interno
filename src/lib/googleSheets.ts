@@ -146,37 +146,6 @@ export async function getColumnOptions(
   return [...new Set(options)]; // Remove duplicatas
 }
 
-// Função para extrair produtos com suas unidades padrão
-export async function getProductsWithUnits(
-  spreadsheetId: string,
-  tabName: string,
-  productColumn: string,
-  unitColumn: string,
-  headerRow: number = 1
-): Promise<{ produto: string; unidade: string }[]> {
-  const values = await readSheetValues(spreadsheetId, `${tabName}!${productColumn}:${unitColumn}`);
-  
-  // Remover cabeçalho e valores vazios
-  const products = values
-    .slice(headerRow) // Remove linhas de cabeçalho
-    .map(row => ({
-      produto: row[0]?.toString().trim() || '',
-      unidade: row[1]?.toString().trim() || ''
-    }))
-    .filter(item => item.produto && item.unidade);
-  
-  // Remover duplicatas baseado no nome do produto
-  const uniqueProducts = products.reduce((acc, current) => {
-    const existing = acc.find(item => item.produto === current.produto);
-    if (!existing) {
-      acc.push(current);
-    }
-    return acc;
-  }, [] as { produto: string; unidade: string }[]);
-  
-  return uniqueProducts;
-}
-
 // Função para deletar uma linha específica
 export async function deleteSheetRow(
   spreadsheetId: string,

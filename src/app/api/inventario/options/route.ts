@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions, getProductsWithUnits } from '@/lib/googleSheets';
+import { getColumnOptions } from '@/lib/googleSheets';
 import { INVENTARIO_SHEET_CONFIG } from '@/config/inventario';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+
+const productService = new SupabaseProductService();
 
 export async function GET() {
   try {
@@ -11,15 +14,15 @@ export async function GET() {
       INVENTARIO_SHEET_CONFIG.origemClientes.headerRow,
     );
 
-    const produtos = await getProductsWithUnits(
-      INVENTARIO_SHEET_CONFIG.origemProdutos.spreadsheetId,
-      INVENTARIO_SHEET_CONFIG.origemProdutos.tabName,
-      INVENTARIO_SHEET_CONFIG.origemProdutos.productColumn,
-      INVENTARIO_SHEET_CONFIG.origemProdutos.unitColumn,
-      INVENTARIO_SHEET_CONFIG.origemProdutos.headerRow,
-    );
+    const produtos = await productService.listProducts();
 
-    return NextResponse.json({ clientes, produtos });
+    return NextResponse.json({
+      clientes,
+      produtos: produtos.map(produto => ({
+        produto: produto.nome,
+        unidade: produto.unidade,
+      })),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Erro ao carregar opções';

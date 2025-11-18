@@ -448,12 +448,15 @@ export default function RealizadoSaidasPage() {
             setModalContext(null);
           }}
           onSubmit={handleSaveRealizado}
+          onSaveSuccess={refreshPainel}
           loading={modalLoading}
           meta={modalContext.item.meta}
           initialRealizado={modalContext.item.realizado}
           existingPhotoUrl={modalContext.item.fotoUrl}
+          existingPhotoId={modalContext.item.fotoId}
           cliente={modalContext.item.cliente}
           produto={modalContext.item.produto}
+          rowId={modalContext.rowId}
         />
       )}
 

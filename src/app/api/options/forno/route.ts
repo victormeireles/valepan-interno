@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions, getProductsWithUnits } from '@/lib/googleSheets';
-import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+
+const productService = new SupabaseProductService();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -8,9 +9,12 @@ export async function GET(request: Request) {
 
   try {
     if (type === 'produtos') {
-      const { spreadsheetId, tabName, productColumn, unitColumn, headerRow } = PEDIDOS_FORNO_CONFIG.origemProdutos;
-      const options = await getColumnOptions(spreadsheetId, tabName, productColumn, headerRow);
-      const productsWithUnits = await getProductsWithUnits(spreadsheetId, tabName, productColumn, unitColumn, headerRow);
+      const products = await productService.listProducts();
+      const options = products.map(product => product.nome);
+      const productsWithUnits = products.map(product => ({
+        produto: product.nome,
+        unidade: product.unidade,
+      }));
       return NextResponse.json({ options, productsWithUnits });
     }
 
@@ -20,5 +24,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
 

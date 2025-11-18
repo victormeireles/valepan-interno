@@ -12,6 +12,10 @@ import {
   StageSummaryResult,
 } from "@/lib/services/daily-summary";
 import { whatsAppMessageFormatter } from "@/lib/utils/whatsapp-message-formatter";
+import {
+  getTodayISOInBrazilTimezone,
+  normalizeToISODate as normalizeToISODateBrazil,
+} from "@/lib/utils/date-utils";
 
 interface QuantidadeEmbalada {
   caixas?: number;
@@ -76,36 +80,6 @@ interface NotifySaidasProductionParams {
  * Serviço para gerenciar notificações WhatsApp
  */
 export class WhatsAppNotificationService {
-  private getTodayISO(): string {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  private normalizeToISODate(value?: string): string {
-    if (!value) return this.getTodayISO();
-    const trimmed = value.trim();
-    if (!trimmed) return this.getTodayISO();
-
-    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-      return trimmed.slice(0, 10);
-    }
-
-    const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    if (brMatch) {
-      const [, dd, mm, yyyy] = brMatch;
-      return `${yyyy}-${mm}-${dd}`;
-    }
-
-    const parsed = new Date(trimmed);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
-    }
-
-    return this.getTodayISO();
-  }
 
   private async sendMessageToConfiguredGroup<TSummary>({
     grupoId,
@@ -252,7 +226,7 @@ export class WhatsAppNotificationService {
     date?: string,
   ): Promise<StageSummaryResult | null> {
     return this.tryLoadSummary('fermentacao', () =>
-      fermentacaoDailySummaryService.build(this.normalizeToISODate(date)),
+      fermentacaoDailySummaryService.build(normalizeToISODateBrazil(date)),
     );
   }
 
@@ -260,13 +234,13 @@ export class WhatsAppNotificationService {
     date?: string,
   ): Promise<StageSummaryResult | null> {
     return this.tryLoadSummary('forno', () =>
-      fornoDailySummaryService.build(this.normalizeToISODate(date)),
+      fornoDailySummaryService.build(normalizeToISODateBrazil(date)),
     );
   }
 
   private async loadEmbalagemSummary(): Promise<EmbalagemSummaryResult | null> {
     return this.tryLoadSummary('embalagem', () =>
-      embalagemDailySummaryService.build(this.getTodayISO()),
+      embalagemDailySummaryService.build(getTodayISOInBrazilTimezone()),
     );
   }
 

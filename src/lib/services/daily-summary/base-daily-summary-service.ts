@@ -1,4 +1,5 @@
 import { readSheetValues } from "@/lib/googleSheets";
+import { normalizeToISODate } from "@/lib/utils/date-utils";
 
 export type UnitKey = "lt" | "un" | "kg" | "cx" | "pct";
 
@@ -56,19 +57,13 @@ export abstract class BaseDailySummaryService {
     const str = value.toString().trim();
     if (!str) return "";
 
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      return str.slice(0, 10);
-    }
-
-    const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    if (brMatch) {
-      const [, dd, mm, yyyy] = brMatch;
-      return `${yyyy}-${mm}-${dd}`;
-    }
-
-    const parsed = new Date(str);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
+    // Usar a função utilitária que evita problemas de timezone
+    const normalized = normalizeToISODate(str);
+    
+    // Se a normalização retornou uma data válida, retornar
+    // Caso contrário, retornar string vazia (comportamento original)
+    if (normalized && /^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      return normalized;
     }
 
     return "";

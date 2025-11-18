@@ -12,12 +12,15 @@ interface SaidasRealizadoModalProps {
     uploadFile?: File;
     removeExistingPhoto?: boolean;
   }) => Promise<void>;
+  onSaveSuccess?: () => Promise<void>;
   loading?: boolean;
   meta: SaidaQuantidade;
   initialRealizado?: SaidaQuantidade;
   existingPhotoUrl?: string;
+  existingPhotoId?: string;
   cliente: string;
   produto: string;
+  rowId?: number;
 }
 
 type FormState = SaidaQuantidade;
@@ -35,19 +38,24 @@ export default function SaidasRealizadoModal({
   isOpen,
   onClose,
   onSubmit,
+  onSaveSuccess,
   loading = false,
   meta,
   initialRealizado,
   existingPhotoUrl,
+  existingPhotoId,
   cliente,
   produto,
+  rowId,
 }: SaidasRealizadoModalProps) {
   const [formState, setFormState] = useState<FormState>(() =>
     buildInitialState(initialRealizado),
   );
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
   const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -64,6 +72,18 @@ export default function SaidasRealizadoModal({
     setFormState((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Verificar se é saída parcial (realizado < meta)
+  const isPartialSaida = (): boolean => {
+    if (!meta) return false;
+
+    return (
+      (meta.caixas > 0 && formState.caixas < meta.caixas) ||
+      (meta.pacotes > 0 && formState.pacotes < meta.pacotes) ||
+      (meta.unidades > 0 && formState.unidades < meta.unidades) ||
+      (meta.kg > 0 && formState.kg < meta.kg)
+    );
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage(null);
@@ -74,11 +94,12 @@ export default function SaidasRealizadoModal({
       formState.unidades < 0 ||
       formState.kg < 0
     ) {
-      setMessage('Valores não podem ser negativos.');
+      setMessage({ type: 'error', text: 'Valores não podem ser negativos.' });
       return;
     }
 
     try {
+      setIsSubmitting(true);
       await onSubmit({
         realizado: formState,
         uploadFile: selectedPhoto || undefined,
@@ -86,9 +107,103 @@ export default function SaidasRealizadoModal({
       });
       onClose();
     } catch (error) {
-      const message =
+      const errorMessage =
         error instanceof Error ? error.message : 'Erro ao salvar produção';
-      setMessage(message);
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handler para salvar saída parcial
+  const handleSavePartial = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    // Prevenir múltiplos cliques
+    if (isSubmitting || !rowId) return;
+
+    // Executar o salvamento parcial
+    await executeSavePartial();
+  };
+
+  const executeSavePartial = async () => {
+    if (!rowId) return;
+    
+    try {
+      setIsSubmitting(true);
+      setMessage(null);
+
+      // 1. Chamar API de salvar parcial PRIMEIRO (sem fazer upload de fotos novas)
+      const res = await fetch(`/api/producao/saidas/${rowId}/partial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caixas: formState.caixas,
+          pacotes: formState.pacotes,
+          unidades: formState.unidades,
+          kg: formState.kg,
+          // Incluir dados de foto JÁ EXISTENTES (não novas)
+          fotoUrl: existingPhotoUrl,
+          fotoId: existingPhotoId,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao salvar saída parcial');
+      }
+
+      // 2. Se houver foto nova para upload, fazer upload para a NOVA LINHA
+      const novaLinhaRowId = data.novaLinhaRowId;
+      if (selectedPhoto && novaLinhaRowId) {
+        setPhotoLoading(true);
+        const formDataPhoto = new FormData();
+        formDataPhoto.append('photo', selectedPhoto);
+        formDataPhoto.append('rowId', novaLinhaRowId.toString()); // Usar rowId da NOVA linha
+        formDataPhoto.append('photoType', 'saida');
+        formDataPhoto.append('process', 'saidas');
+
+        const uploadRes = await fetch('/api/upload/photo', {
+          method: 'POST',
+          body: formDataPhoto,
+        });
+        
+        if (!uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          throw new Error(uploadData.error || 'Erro ao fazer upload da foto para nova linha');
+        }
+        
+        // Atualizar a nova linha com os dados da foto
+        const uploadData = await uploadRes.json();
+        await fetch(`/api/producao/saidas/${novaLinhaRowId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            realizado: formState,
+            fotoUrl: uploadData.photoUrl,
+            fotoId: uploadData.photoId,
+          }),
+        });
+        
+        setPhotoLoading(false);
+      }
+
+      // 4. Recarregar dados do painel se callback fornecido
+      if (onSaveSuccess) {
+        await onSaveSuccess();
+      }
+
+      // Fechar modal imediatamente após salvar com sucesso
+      onClose();
+    } catch (error) {
+      setPhotoLoading(false);
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Erro ao salvar saída parcial' 
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -112,8 +227,12 @@ export default function SaidasRealizadoModal({
 
         <form onSubmit={handleSubmit} className="px-6 py-6 space-y-6">
           {message && (
-            <div className="bg-red-900/30 border border-red-700 text-red-100 px-4 py-3 rounded-lg">
-              {message}
+            <div className={`px-4 py-3 rounded-lg border ${
+              message.type === 'success' 
+                ? 'bg-green-900/30 border-green-700 text-green-100' 
+                : 'bg-red-900/30 border-red-700 text-red-100'
+            }`}>
+              {message.text}
             </div>
           )}
 
@@ -207,7 +326,7 @@ export default function SaidasRealizadoModal({
               onPhotoRemove={() => {
                 setSelectedPhoto(null);
               }}
-              loading={loading}
+              loading={loading || photoLoading}
               currentPhotoUrl={existingPhotoUrl}
             />
 
@@ -223,16 +342,50 @@ export default function SaidasRealizadoModal({
               type="button"
               onClick={onClose}
               className="px-5 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
-              disabled={loading}
+              disabled={loading || isSubmitting}
             >
               Cancelar
             </button>
+            
+            {/* Botão Salvar Parcial */}
+            {rowId && (
+              <button
+                type="button"
+                onClick={handleSavePartial}
+                className="px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
+                disabled={loading || isSubmitting || !isPartialSaida()}
+                title={!isPartialSaida() ? 'Disponível apenas quando realizado é menor que a meta' : 'Salvar saída parcial e criar nova meta com a diferença'}
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {photoLoading ? 'Enviando foto...' : 'Salvando...'}
+                  </>
+                ) : (
+                  'Salvar Parcial'
+                )}
+              </button>
+            )}
+
             <button
               type="submit"
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              disabled={loading}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
+              disabled={loading || isSubmitting}
             >
-              {loading ? 'Salvando...' : 'Salvar'}
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  {photoLoading ? 'Enviando foto...' : 'Salvando...'}
+                </>
+              ) : (
+                'Salvar'
+              )}
             </button>
           </footer>
         </form>
