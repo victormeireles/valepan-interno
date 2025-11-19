@@ -183,6 +183,19 @@ export default function Home() {
                 </p>
               </div>
             </Link>
+            <Link
+              href="/painel/dashboard-estoque"
+              className="block bg-teal-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-teal-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-teal-200 text-3xl">📊</span>
+                </div>
+                <p className="text-gray-300 text-sm">
+                  Visualize gráficos e relatórios de estoque
+                </p>
+              </div>
+            </Link>
           </div>
         </div>
 

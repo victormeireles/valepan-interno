@@ -102,10 +102,10 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
         </header>
       )}
 
-      {/* Overlay para fechar o menu */}
+      {/* Overlay para fechar o menu - apenas em mobile */}
       {isOpen && (
         <div 
-          className={`fixed inset-0 bg-black bg-opacity-50 z-40 ${hideHeader ? '' : 'lg:hidden'}`}
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={closeMenu}
         />
       )}
@@ -282,6 +282,18 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                 >
                   <span className="material-icons text-xl mr-3">inventory</span>
                   Inventário de Estoque
+                </Link>
+                <Link
+                  href="/painel/dashboard-estoque"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/painel/dashboard-estoque')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">dashboard</span>
+                  Dashboard Estoque
                 </Link>
               </div>
             </div>

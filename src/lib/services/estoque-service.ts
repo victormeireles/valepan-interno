@@ -19,6 +19,10 @@ export class EstoqueService {
     return estoqueSheetManager.listByCliente(cliente);
   }
 
+  public async obterTodosEstoques(): Promise<EstoqueRecord[]> {
+    return estoqueSheetManager.listAll();
+  }
+
   public async avaliarInventario(
     cliente: string,
     itens: InventarioLancamentoItem[],

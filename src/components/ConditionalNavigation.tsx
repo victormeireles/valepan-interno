@@ -6,11 +6,12 @@ import Navigation from './Navigation';
 export default function ConditionalNavigation() {
   const pathname = usePathname();
   
-  // Páginas que usam RealizadoHeader ao invés do Navigation header
+  // Páginas que usam header customizado ao invés do Navigation header
   const isRealizadoPage = pathname?.startsWith('/realizado/');
+  const isDashboardPage = pathname?.startsWith('/painel/dashboard-estoque');
   
-  if (isRealizadoPage) {
-    // Nas páginas Realizado, só renderizar o menu lateral (sem o header)
+  if (isRealizadoPage || isDashboardPage) {
+    // Nessas páginas, só renderizar o menu lateral (sem o header)
     return <Navigation hideHeader />;
   }
   
