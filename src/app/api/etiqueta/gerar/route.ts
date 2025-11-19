@@ -90,10 +90,12 @@ async function getProdutoData(nomeProduto: string) {
     return isNaN(parsed) ? 0 : parsed;
   };
 
+  const codigoBarrasRaw = codigoBarrasColIdx >= 0 ? (produtoRow[codigoBarrasColIdx]?.toString().trim() || '') : '';
+
   const result = {
     nome: produtoRow[produtoColIdx]?.toString().trim() || '',
     unidade: produtoRow[1]?.toString().trim() || '', // Manter unidade da coluna B se existir
-    codigoBarras: codigoBarrasColIdx >= 0 ? (produtoRow[codigoBarrasColIdx]?.toString().trim() || '') : '',
+    codigoBarras: codigoBarrasRaw,
     unPorCaixa: unCaixaColIdx >= 0 ? parseSafe(produtoRow[unCaixaColIdx]) : 0,
     unPorPacote: unPacoteColIdx >= 0 ? parseSafe(produtoRow[unPacoteColIdx]) : 0,
     pesoLiquido: pesoLiquidoColIdx >= 0 ? parseSafe(produtoRow[pesoLiquidoColIdx]) : 0,
@@ -103,21 +105,27 @@ async function getProdutoData(nomeProduto: string) {
 }
 
 async function generateBarcodeBase64(code: string): Promise<string> {
+  if (!code || code.trim() === '') {
+    return '';
+  }
+
   try {
     // Importação dinâmica para funcionar na Vercel
     const { createCanvas } = await import('canvas');
     const JsBarcode = (await import('jsbarcode')).default;
     
     const canvas = createCanvas(4, 1);
-    // displayValue: false para evitar problemas de fonte em produção
-    // O número será renderizado manualmente no HTML
+    
+    // Sempre usar CODE128 para aceitar qualquer código sem validação
+    // CODE128 é mais flexível e não requer validação de checksum
     JsBarcode(canvas, code, {
-      format: code.length === 13 ? 'EAN13' : 'CODE128',
+      format: 'CODE128',
       width: 4,
       height: 140,
       displayValue: false, // Desabilitado - número renderizado manualmente
       margin: 18,
     });
+    
     return canvas.toDataURL();
   } catch {
     return '';
