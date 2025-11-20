@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import { RealizadoHeader, ProductCompactCard, ClientGroup, ThreeColumnLayout } from '@/components/Realizado';
 import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
+import { ProducaoData } from '@/domain/types';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { isSpecialPhotoClient } from '@/config/photoRules';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
@@ -19,6 +20,7 @@ type PainelItem = RealizadoItemEmbalagem & {
   pedidoPacotes?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
+  obsEmbalagem?: string;
 };
 
 function getPhotoStatus(item: PainelItem): { hasPhoto: boolean; color: 'white' | 'yellow' | 'red' } {
@@ -131,6 +133,7 @@ export default function ProducaoEmbalagemPage() {
         palletFotoUrl: data.data.palletFotoUrl,
         palletFotoId: data.data.palletFotoId,
         palletFotoUploadedAt: data.data.palletFotoUploadedAt,
+        obsEmbalagem: data.data.obsEmbalagem,
       });
       setProducaoModalOpen(true);
     } catch (err) {
@@ -153,7 +156,7 @@ export default function ProducaoEmbalagemPage() {
     }
   };
 
-  const handleSaveProducao = async (producaoData: { caixas: number; pacotes: number; unidades: number; kg: number }) => {
+  const handleSaveProducao = async (producaoData: ProducaoData) => {
     if (!editingItem?.rowId) return;
 
     try {
@@ -405,6 +408,7 @@ export default function ProducaoEmbalagemPage() {
           palletFotoUrl: editingItem.palletFotoUrl,
           palletFotoId: editingItem.palletFotoId,
           palletFotoUploadedAt: editingItem.palletFotoUploadedAt,
+          obsEmbalagem: editingItem.obsEmbalagem || '',
         } : undefined}
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}

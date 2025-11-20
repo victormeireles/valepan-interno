@@ -37,6 +37,7 @@ export interface ProducaoData extends PhotoData {
   pacotes: number;
   unidades: number;
   kg: number;
+  obsEmbalagem?: string;
 }
 
 // Tipo de foto para upload

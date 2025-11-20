@@ -64,6 +64,7 @@ interface EmbalagemMessageData {
   metaOriginal?: MetaOriginal;
   isPartial: boolean;
   fotos?: FotosInfo;
+  obsEmbalagem?: string;
   summary?: EmbalagemSummaryResult;
 }
 
@@ -377,6 +378,10 @@ export class WhatsAppMessageFormatter {
       `*Quantidade:* ${quantidadeLinha}`,
       `*Foto:* ${fotoIcon}`,
     ];
+
+    if (data.obsEmbalagem && data.obsEmbalagem.trim()) {
+      linhas.push(`*Obs Embalagem:* ${data.obsEmbalagem}`);
+    }
 
     if (data.isPartial) {
       linhas.push(`⚠️ *Salvamento Parcial*`);

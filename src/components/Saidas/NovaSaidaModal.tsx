@@ -68,6 +68,18 @@ export default function NovaSaidaModal({
   const [formState, setFormState] = useState<FormState>(DEFAULT_STATE);
   const [photoState, setPhotoState] = useState<PhotoState>(DEFAULT_PHOTO);
   const [message, setMessage] = useState<string | null>(null);
+  // Estado para valores de display (vazio quando zero)
+  const [quantidadeDisplayValues, setQuantidadeDisplayValues] = useState<{
+    caixas: string | number;
+    pacotes: string | number;
+    unidades: string | number;
+    kg: string | number;
+  }>({
+    caixas: '',
+    pacotes: '',
+    unidades: '',
+    kg: '',
+  });
   const clienteDatalistId = useId();
   const produtoDatalistId = useId();
 
@@ -79,8 +91,24 @@ export default function NovaSaidaModal({
       });
       setPhotoState(DEFAULT_PHOTO);
       setMessage(null);
+      setQuantidadeDisplayValues({
+        caixas: '',
+        pacotes: '',
+        unidades: '',
+        kg: '',
+      });
     }
   }, [isOpen]);
+
+  // Sincronizar display values quando formState.quantidade mudar externamente
+  useEffect(() => {
+    setQuantidadeDisplayValues({
+      caixas: formState.quantidade.caixas === 0 ? '' : formState.quantidade.caixas.toString(),
+      pacotes: formState.quantidade.pacotes === 0 ? '' : formState.quantidade.pacotes.toString(),
+      unidades: formState.quantidade.unidades === 0 ? '' : formState.quantidade.unidades.toString(),
+      kg: formState.quantidade.kg === 0 ? '' : formState.quantidade.kg.toString(),
+    });
+  }, [formState.quantidade]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -116,6 +144,33 @@ export default function NovaSaidaModal({
         ...prev.quantidade,
         [field]: value,
       },
+    }));
+  };
+
+  const handleQuantidadeChange = (field: keyof SaidaQuantidade, inputValue: string) => {
+    // Atualizar display value
+    setQuantidadeDisplayValues((prev) => ({
+      ...prev,
+      [field]: inputValue,
+    }));
+
+    // Converter para número e atualizar formState
+    if (inputValue === '') {
+      updateQuantidade(field, 0);
+    } else {
+      const numValue = field === 'kg' ? parseFloat(inputValue) : parseInt(inputValue);
+      if (!isNaN(numValue)) {
+        updateQuantidade(field, numValue);
+      }
+    }
+  };
+
+  const handleQuantidadeBlur = (field: keyof SaidaQuantidade) => {
+    // Normalizar display value no blur
+    const currentValue = formState.quantidade[field];
+    setQuantidadeDisplayValues((prev) => ({
+      ...prev,
+      [field]: currentValue === 0 ? '' : currentValue.toString(),
     }));
   };
 
@@ -284,10 +339,11 @@ export default function NovaSaidaModal({
                           min={0}
                           step={field === 'kg' ? 0.01 : 1}
                           inputMode={field === 'kg' ? 'decimal' : 'numeric'}
-                          value={formState.quantidade[field]}
+                          value={quantidadeDisplayValues[field]}
                           onChange={(event) =>
-                            updateQuantidade(field, Number(event.target.value))
+                            handleQuantidadeChange(field, event.target.value)
                           }
+                          onBlur={() => handleQuantidadeBlur(field)}
                           className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
                         />
                       </div>

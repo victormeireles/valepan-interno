@@ -41,6 +41,8 @@ type PainelItem = {
   palletFotoUrl?: string;
   palletFotoId?: string;
   palletFotoUploadedAt?: string;
+  // Observação de embalagem
+  obsEmbalagem?: string;
 };
 
 export async function GET(request: Request) {
@@ -48,9 +50,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
 
-    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P e fotos R-Z e lote/etiqueta AA-AB)
+    // Buscar dados de pedidos (incluindo colunas de produção M, N, O, P, fotos R-Z, lote/etiqueta AA-AB e obs embalagem AC)
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AB`);
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AC`);
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
@@ -95,6 +97,9 @@ export async function GET(request: Request) {
       const lote = Number(r[26] || 0); // AA (índice 26)
       const etiquetaGeradaStr = (r[27] || '').toString().trim(); // AB (índice 27)
       const etiquetaGerada = etiquetaGeradaStr.toLowerCase() === 'sim';
+      
+      // Dados de observação de embalagem (coluna AC)
+      const obsEmbalagem = (r[28] || '').toString().trim(); // AC (índice 28)
 
       let unidade: PainelItem['unidade'] | '' = '';
       let aProduzir = 0;
@@ -148,6 +153,7 @@ export async function GET(request: Request) {
         palletFotoUrl: palletFotoUrl || undefined,
         palletFotoId: palletFotoId || undefined,
         palletFotoUploadedAt: palletFotoUploadedAt || undefined,
+        obsEmbalagem: obsEmbalagem || undefined,
       });
     }
 

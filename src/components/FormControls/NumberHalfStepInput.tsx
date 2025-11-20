@@ -68,6 +68,11 @@ export default function NumberHalfStepInput({
   };
 
   const formatDisplayValue = (val: number): string => {
+    // Exibir vazio quando valor for 0
+    if (val === 0) {
+      return '';
+    }
+    
     if (Number.isInteger(val)) {
       return val.toString();
     }

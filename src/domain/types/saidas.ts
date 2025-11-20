@@ -67,6 +67,7 @@ export interface NovaSaidaPayload {
   produto: string;
   meta: SaidaQuantidade;
   observacao?: string;
+  skipNotification?: boolean;
 }
 
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 interface NumberInputProps {
   value: number | undefined;
   onChange: (value: number) => void;
@@ -23,6 +25,52 @@ export default function NumberInput({
 }: NumberInputProps) {
   // Garantir que value seja sempre um número válido
   const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  
+  // Estado para controlar o valor exibido (vazio quando 0)
+  const [displayValue, setDisplayValue] = useState<string>(
+    safeValue === 0 ? '' : safeValue.toString()
+  );
+
+  // Sincronizar displayValue quando value mudar externamente
+  useEffect(() => {
+    if (safeValue === 0) {
+      setDisplayValue('');
+    } else {
+      setDisplayValue(safeValue.toString());
+    }
+  }, [safeValue]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+    setDisplayValue(inputValue);
+    
+    // Se vazio, salvar 0; senão, converter normalmente
+    if (inputValue === '') {
+      onChange(0);
+    } else {
+      const numValue = parseInt(inputValue);
+      if (!isNaN(numValue)) {
+        onChange(numValue);
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    // Se vazio no blur, garantir que está 0
+    if (displayValue === '') {
+      onChange(0);
+      setDisplayValue('');
+    } else {
+      // Normalizar o valor exibido
+      const numValue = parseInt(displayValue);
+      if (isNaN(numValue)) {
+        setDisplayValue('');
+        onChange(0);
+      } else {
+        setDisplayValue(numValue.toString());
+      }
+    }
+  };
   
   const handleIncrement = () => {
     const newValue = Math.min(safeValue + step, max);
@@ -52,8 +100,9 @@ export default function NumberInput({
         
         <input
           type="number"
-          value={safeValue}
-          onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+          value={displayValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
           required={required}
           disabled={disabled}
           min={min}

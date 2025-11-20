@@ -1,64 +1,97 @@
-import { useMemo, useState } from 'react';
-import { EstoqueRecord } from '@/domain/types/inventario';
-import { DashboardData, MetricType, ChartDataPoint } from '../types';
+import { useMemo } from 'react';
+import { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
+import { StockByClientData, ClientStockSummary, StockSummary } from '../types';
+import { isQuantidadeZerada } from '@/lib/utils/quantidade-formatter';
 
 export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
-  const [metric, setMetric] = useState<MetricType>('caixas');
-  const [selectedClient, setSelectedClient] = useState<string>('');
+  const stockData: StockByClientData = useMemo(() => {
+    // Agrupar por cliente e produto
+    const stockByClient = new Map<string, Map<string, Quantidade>>();
 
-  const clients = useMemo(() => {
-    const uniqueClients = new Set(initialData.map(d => d.cliente));
-    return Array.from(uniqueClients).sort();
-  }, [initialData]);
+    initialData.forEach((record) => {
+      if (!stockByClient.has(record.cliente)) {
+        stockByClient.set(record.cliente, new Map());
+      }
 
-  const dashboardData: DashboardData = useMemo(() => {
-    // Se tiver cliente selecionado, filtramos os dados brutos ANTES de processar
-    const filteredData = selectedClient 
-      ? initialData.filter(r => r.cliente === selectedClient)
-      : initialData;
-
-    // 1. Agrupar por Cliente
-    const clientMap = new Map<string, number>();
-    
-    // 2. Agrupar por Produto
-    const productMap = new Map<string, number>();
-
-    filteredData.forEach((record) => {
-      const value = record.quantidade[metric] || 0;
+      const clientProducts = stockByClient.get(record.cliente)!;
       
-      // Cliente
-      const currentClientVal = clientMap.get(record.cliente) || 0;
-      clientMap.set(record.cliente, currentClientVal + value);
-
-      // Produto
-      const currentProdVal = productMap.get(record.produto) || 0;
-      productMap.set(record.produto, currentProdVal + value);
+      if (clientProducts.has(record.produto)) {
+        // Somar quantidades se o produto já existe
+        const existing = clientProducts.get(record.produto)!;
+        clientProducts.set(record.produto, {
+          caixas: existing.caixas + record.quantidade.caixas,
+          pacotes: existing.pacotes + record.quantidade.pacotes,
+          unidades: existing.unidades + record.quantidade.unidades,
+          kg: existing.kg + record.quantidade.kg,
+        });
+      } else {
+        // Adicionar novo produto
+        clientProducts.set(record.produto, { ...record.quantidade });
+      }
     });
 
-    // Converter para array e ordenar
-    const totalStockByClient: ChartDataPoint[] = Array.from(clientMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value); // Maior para menor
+    // Converter Map interno para ClientStockSummary, filtrando produtos zerados
+    const stockByClientArray = new Map<string, ClientStockSummary>();
+    
+    stockByClient.forEach((productsMap, cliente) => {
+      // Filtrar produtos zerados e calcular total do cliente
+      const produtos: Array<{ produto: string; quantidade: Quantidade }> = [];
+      const totalCliente: Quantidade = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
 
-    const totalStockByProduct: ChartDataPoint[] = Array.from(productMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
+      productsMap.forEach((quantidade, produto) => {
+        if (!isQuantidadeZerada(quantidade)) {
+          produtos.push({ produto, quantidade });
+          totalCliente.caixas += quantidade.caixas;
+          totalCliente.pacotes += quantidade.pacotes;
+          totalCliente.unidades += quantidade.unidades;
+          totalCliente.kg += quantidade.kg;
+        }
+      });
+
+      produtos.sort((a, b) => a.produto.localeCompare(b.produto));
+      
+      stockByClientArray.set(cliente, {
+        produtos,
+        total: totalCliente,
+      });
+    });
+
+    // Remover clientes sem produtos
+    const clientsComProdutos = Array.from(stockByClientArray.entries())
+      .filter(([, summary]) => summary.produtos.length > 0)
+      .map(([cliente]) => cliente)
+      .sort();
 
     return {
-      totalStockByClient,
-      totalStockByProduct,
-      rawData: filteredData,
+      stockByClient: stockByClientArray,
+      clients: clientsComProdutos,
+      isEmpty: initialData.length === 0,
     };
-  }, [initialData, metric, selectedClient]);
+  }, [initialData]);
+
+  const summary: StockSummary = useMemo(() => {
+    const totalEstoque: Quantidade = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+    let totalProdutos = 0;
+
+    stockData.stockByClient.forEach((summary) => {
+      totalEstoque.caixas += summary.total.caixas;
+      totalEstoque.pacotes += summary.total.pacotes;
+      totalEstoque.unidades += summary.total.unidades;
+      totalEstoque.kg += summary.total.kg;
+      totalProdutos += summary.produtos.length;
+    });
+
+    return {
+      totalEstoque,
+      totalClientes: stockData.clients.length,
+      totalProdutos,
+    };
+  }, [stockData]);
 
   return {
-    data: dashboardData,
-    metric,
-    setMetric,
-    selectedClient,
-    setSelectedClient,
-    clients,
-    isEmpty: initialData.length === 0
+    stockData,
+    summary,
+    isEmpty: initialData.length === 0,
   };
 };
 

@@ -98,6 +98,15 @@ export async function PUT(
         ? { url: body.fotoUrl, id: body.fotoId }
         : undefined;
 
+    // Verifica se é apenas adicionar foto (criação com foto)
+    const isAddingPhotoOnly =
+      photoPayload &&
+      !existingRow.fotoUrl &&
+      existingRow.realizado.caixas === body.realizado.caixas &&
+      existingRow.realizado.pacotes === body.realizado.pacotes &&
+      existingRow.realizado.unidades === body.realizado.unidades &&
+      existingRow.realizado.kg === body.realizado.kg;
+
     await saidasSheetManager.updateRealizado(payload, photoPayload);
     await atualizarEstoque(existingRow, body.realizado);
 
@@ -110,7 +119,8 @@ export async function PUT(
         realizado: updatedRow.realizado,
         data: updatedRow.data,
         observacao: updatedRow.observacao || undefined,
-        origem: 'atualizada',
+        // Se é apenas adicionar foto, trata como criação
+        origem: isAddingPhotoOnly ? 'criada' : 'atualizada',
         fotoUrl: updatedRow.fotoUrl || undefined,
       });
     }

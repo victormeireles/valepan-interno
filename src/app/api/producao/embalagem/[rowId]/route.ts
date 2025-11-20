@@ -20,8 +20,8 @@ export async function GET(
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
     
-    // Buscar colunas G, H, I, J (pedido), M, N, O, P, Q (produção) e R, S, T, U, V, W, X, Y, Z (fotos)
-    const range = `${tabName}!G${rowNumber}:Z${rowNumber}`;
+    // Buscar colunas G, H, I, J (pedido), M, N, O, P, Q (produção), R-Z (fotos) e AC (obs embalagem)
+    const range = `${tabName}!G${rowNumber}:AC${rowNumber}`;
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -51,6 +51,7 @@ export async function GET(
       palletFotoUrl: values[17] || '',         // X
       palletFotoId: values[18] || '',          // Y
       palletFotoUploadedAt: values[19] || '',  // Z
+      obsEmbalagem: values[22] || '',          // AC (G=0, H=1, ..., Z=19, AA=20, AB=21, AC=22)
     };
 
     return NextResponse.json({ data, rowId: rowNumber });
@@ -73,7 +74,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { caixas, pacotes, unidades, kg } = body;
+    const { caixas, pacotes, unidades, kg, obsEmbalagem } = body;
 
     // Validar dados
     if (caixas < 0 || pacotes < 0 || unidades < 0 || kg < 0) {
@@ -120,15 +121,30 @@ export async function PUT(
       kg || 0,                        // P - kg
       new Date().toISOString(),       // Q - producao_updated_at
     ];
+    
+    // Atualizar observação de embalagem na coluna AC (após AB)
+    const obsEmbalagemRange = `${tabName}!AC${rowNumber}:AC${rowNumber}`;
+    const obsEmbalagemValues = [[obsEmbalagem || '']];
+    
+    await Promise.all([
+      sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [values]
+        }
+      }),
+      sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: obsEmbalagemRange,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: obsEmbalagemValues
+        }
+      })
+    ]);
 
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [values]
-      }
-    });
 
     await atualizarEstoque(cliente, produto, producaoAnterior, {
       caixas: caixas || 0,
@@ -138,6 +154,14 @@ export async function PUT(
     });
 
     try {
+      // Buscar obsEmbalagem da coluna AC
+      const rangeAC = `${tabName}!AC${rowNumber}:AC${rowNumber}`;
+      const responseAC = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: rangeAC,
+      });
+      const obsEmbalagemValue = responseAC.data.values?.[0]?.[0] || '';
+      
       await whatsAppNotificationService.notifyEmbalagemProduction({
         produto,
         cliente,
@@ -159,6 +183,7 @@ export async function PUT(
           etiquetaFotoUrl: etiquetaFotoUrl || undefined,
           palletFotoUrl: palletFotoUrl || undefined,
         } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+        obsEmbalagem: obsEmbalagemValue || undefined,
       });
     } catch (error) {
       // Logar erro mas não propagar

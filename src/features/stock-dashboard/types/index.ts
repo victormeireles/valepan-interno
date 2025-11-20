@@ -1,17 +1,24 @@
-import { EstoqueRecord } from '@/domain/types/inventario';
+import { Quantidade } from '@/domain/types/inventario';
 
-export interface ChartDataPoint {
-  name: string;
-  value: number;
-  subValue?: number; // Secundário (ex: kg)
-  details?: Record<string, unknown>;
+export interface ProductStockItem {
+  produto: string;
+  quantidade: Quantidade;
 }
 
-export interface DashboardData {
-  totalStockByClient: ChartDataPoint[];
-  totalStockByProduct: ChartDataPoint[];
-  rawData: EstoqueRecord[];
+export interface ClientStockSummary {
+  produtos: ProductStockItem[];
+  total: Quantidade;
 }
 
-export type MetricType = 'caixas' | 'kg' | 'unidades' | 'pacotes';
+export interface StockByClientData {
+  stockByClient: Map<string, ClientStockSummary>;
+  clients: string[];
+  isEmpty: boolean;
+}
+
+export interface StockSummary {
+  totalEstoque: Quantidade;
+  totalClientes: number;
+  totalProdutos: number;
+}
 

@@ -45,6 +45,7 @@ export default function ProducaoModal({
     pacotes: 0,
     unidades: 0,
     kg: 0,
+    obsEmbalagem: '',
   });
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -301,6 +302,7 @@ export default function ProducaoModal({
           palletFotoUrl: formData.palletFotoUrl,
           palletFotoId: formData.palletFotoId,
           palletFotoUploadedAt: formData.palletFotoUploadedAt,
+          obsEmbalagem: formData.obsEmbalagem || '',
         }),
       });
 
@@ -405,6 +407,7 @@ export default function ProducaoModal({
       pacotes: 0,
       unidades: 0,
       kg: 0,
+      obsEmbalagem: '',
     });
     setMessage(null);
     setPhotoFiles({
@@ -516,6 +519,23 @@ export default function ProducaoModal({
                 step={1}
               />
             </div>
+
+            {/* Campo de Observação - APENAS para modo embalagem */}
+            {mode === 'embalagem' && (
+              <div className="border-t pt-6">
+                <label className="block text-base font-semibold text-gray-800 mb-3">
+                  Observação de Embalagem
+                </label>
+                <textarea
+                  value={formData.obsEmbalagem || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, obsEmbalagem: e.target.value }))}
+                  placeholder="Digite observações sobre a embalagem..."
+                  disabled={loading || isSubmitting}
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-medium bg-white text-gray-900 placeholder-gray-500 resize-y"
+                />
+              </div>
+            )}
 
             {/* Seção de Fotos */}
             <div className="border-t pt-6">

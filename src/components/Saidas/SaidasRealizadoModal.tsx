@@ -51,6 +51,21 @@ export default function SaidasRealizadoModal({
   const [formState, setFormState] = useState<FormState>(() =>
     buildInitialState(initialRealizado),
   );
+  // Estado para valores de display (vazio quando zero)
+  const [displayValues, setDisplayValues] = useState<{
+    caixas: string | number;
+    pacotes: string | number;
+    unidades: string | number;
+    kg: string | number;
+  }>(() => {
+    const initialState = buildInitialState(initialRealizado);
+    return {
+      caixas: initialState.caixas === 0 ? '' : initialState.caixas.toString(),
+      pacotes: initialState.pacotes === 0 ? '' : initialState.pacotes.toString(),
+      unidades: initialState.unidades === 0 ? '' : initialState.unidades.toString(),
+      kg: initialState.kg === 0 ? '' : initialState.kg.toString(),
+    };
+  });
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
   const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -59,17 +74,61 @@ export default function SaidasRealizadoModal({
 
   useEffect(() => {
     if (isOpen) {
-      setFormState(buildInitialState(initialRealizado));
+      const initialState = buildInitialState(initialRealizado);
+      setFormState(initialState);
+      setDisplayValues({
+        caixas: initialState.caixas === 0 ? '' : initialState.caixas.toString(),
+        pacotes: initialState.pacotes === 0 ? '' : initialState.pacotes.toString(),
+        unidades: initialState.unidades === 0 ? '' : initialState.unidades.toString(),
+        kg: initialState.kg === 0 ? '' : initialState.kg.toString(),
+      });
       setSelectedPhoto(null);
       setRemoveExistingPhoto(false);
       setMessage(null);
     }
   }, [isOpen, initialRealizado]);
 
+  // Sincronizar display values quando formState mudar externamente
+  useEffect(() => {
+    setDisplayValues({
+      caixas: formState.caixas === 0 ? '' : formState.caixas.toString(),
+      pacotes: formState.pacotes === 0 ? '' : formState.pacotes.toString(),
+      unidades: formState.unidades === 0 ? '' : formState.unidades.toString(),
+      kg: formState.kg === 0 ? '' : formState.kg.toString(),
+    });
+  }, [formState]);
+
   if (!isOpen) return null;
 
   const updateField = (field: keyof FormState, value: number) => {
     setFormState((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleFieldChange = (field: keyof FormState, inputValue: string) => {
+    // Atualizar display value
+    setDisplayValues((prev) => ({
+      ...prev,
+      [field]: inputValue,
+    }));
+
+    // Converter para número e atualizar formState
+    if (inputValue === '') {
+      updateField(field, 0);
+    } else {
+      const numValue = field === 'kg' ? parseFloat(inputValue) : parseInt(inputValue);
+      if (!isNaN(numValue)) {
+        updateField(field, numValue);
+      }
+    }
+  };
+
+  const handleFieldBlur = (field: keyof FormState) => {
+    // Normalizar display value no blur
+    const currentValue = formState[field];
+    setDisplayValues((prev) => ({
+      ...prev,
+      [field]: currentValue === 0 ? '' : currentValue.toString(),
+    }));
   };
 
   // Verificar se é saída parcial (realizado < meta)
@@ -281,10 +340,11 @@ export default function SaidasRealizadoModal({
                     type="number"
                     min={0}
                     step={field === 'kg' ? 0.01 : 1}
-                    value={formState[field]}
+                    value={displayValues[field]}
                     onChange={(event) =>
-                      updateField(field, Number(event.target.value))
+                      handleFieldChange(field, event.target.value)
                     }
+                    onBlur={() => handleFieldBlur(field)}
                     className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

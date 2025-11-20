@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
 
 export type InventarioProdutoInput = {
@@ -39,6 +39,24 @@ export function InventarioProductRow({
     return found?.unidade ?? '';
   }, [item.produto, produtoOptions]);
 
+  // Estado para valores de display (vazio quando zero)
+  const [displayValues, setDisplayValues] = useState<{ [key: string]: string }>({
+    caixas: item.quantidade.caixas === 0 ? '' : item.quantidade.caixas.toString(),
+    pacotes: item.quantidade.pacotes === 0 ? '' : item.quantidade.pacotes.toString(),
+    unidades: item.quantidade.unidades === 0 ? '' : item.quantidade.unidades.toString(),
+    kg: item.quantidade.kg === 0 ? '' : item.quantidade.kg.toString(),
+  });
+
+  // Sincronizar display values quando item.quantidade mudar externamente
+  useEffect(() => {
+    setDisplayValues({
+      caixas: item.quantidade.caixas === 0 ? '' : item.quantidade.caixas.toString(),
+      pacotes: item.quantidade.pacotes === 0 ? '' : item.quantidade.pacotes.toString(),
+      unidades: item.quantidade.unidades === 0 ? '' : item.quantidade.unidades.toString(),
+      kg: item.quantidade.kg === 0 ? '' : item.quantidade.kg.toString(),
+    });
+  }, [item.quantidade]);
+
   const updateQuantidade = (key: keyof InventarioProdutoInput['quantidade'], value: number) => {
     onChange({
       ...item,
@@ -47,6 +65,33 @@ export function InventarioProductRow({
         [key]: Number.isNaN(value) ? 0 : value,
       },
     });
+  };
+
+  const handleQuantidadeChange = (field: keyof InventarioProdutoInput['quantidade'], inputValue: string) => {
+    // Atualizar display value
+    setDisplayValues((prev) => ({
+      ...prev,
+      [field]: inputValue,
+    }));
+
+    // Converter para número e atualizar quantidade
+    if (inputValue === '') {
+      updateQuantidade(field, 0);
+    } else {
+      const numValue = field === 'kg' ? parseFloat(inputValue) : parseInt(inputValue);
+      if (!isNaN(numValue)) {
+        updateQuantidade(field, numValue);
+      }
+    }
+  };
+
+  const handleQuantidadeBlur = (field: keyof InventarioProdutoInput['quantidade']) => {
+    // Normalizar display value no blur
+    const currentValue = item.quantidade[field] ?? 0;
+    setDisplayValues((prev) => ({
+      ...prev,
+      [field]: currentValue === 0 ? '' : currentValue.toString(),
+    }));
   };
 
   return (
@@ -86,10 +131,11 @@ export function InventarioProductRow({
               type="number"
               min={0}
               step={field === 'kg' ? 0.01 : 1}
-              value={item.quantidade[field] ?? 0}
+              value={displayValues[field]}
               onChange={(event) =>
-                updateQuantidade(field, Number(event.target.value))
+                handleQuantidadeChange(field, event.target.value)
               }
+              onBlur={() => handleQuantidadeBlur(field)}
               inputMode="decimal"
               pattern="[0-9]*"
               className="w-full rounded-lg border border-gray-800 bg-gray-900/70 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"

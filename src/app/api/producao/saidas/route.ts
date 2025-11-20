@@ -40,15 +40,19 @@ export async function POST(request: Request) {
 
     await saidasSheetManager.appendNovaSaida(payload);
 
-    await whatsAppNotificationService.notifySaidasProduction({
-      produto: payload.produto,
-      cliente: payload.cliente,
-      meta: payload.meta,
-      realizado: payload.meta,
-      data: payload.data,
-      observacao: payload.observacao,
-      origem: 'criada',
-    });
+    // Só envia notificação se não foi solicitado para pular
+    // (quando há foto, a notificação será enviada no PUT)
+    if (!payload.skipNotification) {
+      await whatsAppNotificationService.notifySaidasProduction({
+        produto: payload.produto,
+        cliente: payload.cliente,
+        meta: payload.meta,
+        realizado: payload.meta,
+        data: payload.data,
+        observacao: payload.observacao,
+        origem: 'criada',
+      });
+    }
 
     return NextResponse.json({ message: 'Saída registrada com sucesso' });
   } catch (error) {

@@ -263,6 +263,8 @@ export default function RealizadoSaidasPage() {
           produto,
           observacao,
           meta: quantidade,
+          // Pula notificação se houver foto (será enviada no PUT)
+          skipNotification: !!foto,
         }),
       });
       const response = await res.json();

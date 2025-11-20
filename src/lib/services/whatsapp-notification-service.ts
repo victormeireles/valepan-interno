@@ -50,6 +50,7 @@ interface NotifyEmbalagemProductionParams {
   metaOriginal?: MetaOriginal;
   isPartial: boolean;
   fotos?: FotosInfo;
+  obsEmbalagem?: string;
 }
 
 interface StageNotificationParams {
@@ -153,6 +154,7 @@ export class WhatsAppNotificationService {
           metaOriginal: params.metaOriginal,
           isPartial: params.isPartial,
           fotos: params.fotos,
+          obsEmbalagem: params.obsEmbalagem,
           summary,
         }),
       fetchSummary: () => this.loadEmbalagemSummary(),

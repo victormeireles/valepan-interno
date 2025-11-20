@@ -22,6 +22,7 @@ export async function POST(
       pacotes, 
       unidades, 
       kg,
+      obsEmbalagem,
       // Dados de fotos
       pacoteFotoUrl,
       pacoteFotoId,
@@ -140,6 +141,7 @@ export async function POST(
       palletFotoUploadedAt || '', // Z - pallet_foto_uploaded_at
       lote || '',                  // AA (26) - Lote (copiado da linha original)
       etiquetaGerada || '',        // AB (27) - Etiqueta Gerada (copiada da linha original)
+      obsEmbalagem || '',          // AC (28) - Obs embalagem
     ];
 
     // Inserir nova linha
@@ -177,6 +179,10 @@ export async function POST(
     });
 
     try {
+      // ObsEmbalagem já está na nova linha criada, buscar dela se necessário
+      // Como a nova linha foi criada agora, a obsEmbalagem já está no array novaLinhaValues
+      const obsEmbalagemValue = obsEmbalagem || '';
+      
       await whatsAppNotificationService.notifyEmbalagemProduction({
         produto,
         cliente,
@@ -198,6 +204,7 @@ export async function POST(
           etiquetaFotoUrl: etiquetaFotoUrl || undefined,
           palletFotoUrl: palletFotoUrl || undefined,
         } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
+        obsEmbalagem: obsEmbalagemValue || undefined,
       });
     } catch (error) {
       // Logar erro mas não propagar
