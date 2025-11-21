@@ -90,6 +90,8 @@ export type Database = {
           id: string
           nome_fantasia: string
           razao_social: string
+          tem_texto_indicando_congelado_na_etiqueta: boolean | null
+          tem_validade_congelado_na_etiqueta: boolean | null
           updated_at: string | null
         }
         Insert: {
@@ -101,6 +103,8 @@ export type Database = {
           id?: string
           nome_fantasia: string
           razao_social: string
+          tem_texto_indicando_congelado_na_etiqueta?: boolean | null
+          tem_validade_congelado_na_etiqueta?: boolean | null
           updated_at?: string | null
         }
         Update: {
@@ -112,6 +116,8 @@ export type Database = {
           id?: string
           nome_fantasia?: string
           razao_social?: string
+          tem_texto_indicando_congelado_na_etiqueta?: boolean | null
+          tem_validade_congelado_na_etiqueta?: boolean | null
           updated_at?: string | null
         }
         Relationships: []

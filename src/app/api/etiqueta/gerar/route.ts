@@ -9,6 +9,8 @@ interface GerarEtiquetaRequest {
   dataFabricacao: string; // YYYY-MM-DD
   diasValidade: number;
   diasValidadeCongelado: number;
+  congelado: boolean;
+  mostrarTextoCongelado: boolean;
   lote: number;
   rowId?: number;
   nomeEtiqueta?: string;
@@ -176,7 +178,10 @@ function generateEtiquetaHTML(data: {
   nomeEtiqueta: string;
   dataFabricacao: string;
   dataValidade: string;
-  dataValidadeCongelado: string;
+  mostrarTextoCongelado: boolean;
+  congelado: boolean;
+  diasValidade: number;
+  diasValidadeCongelado: number;
   lote: number;
   codigoBarras: string;
   barcodeImage: string;
@@ -277,6 +282,13 @@ function generateEtiquetaHTML(data: {
       text-transform: uppercase;
     }
     
+    .congelado-text {
+      font-size: 20px;
+      color: #000;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+    
     .lote-text {
       font-size: 20px;
       color: #000;
@@ -293,9 +305,13 @@ function generateEtiquetaHTML(data: {
     
     .info-row {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 25px;
       margin: 10px 0 20px 0;
+    }
+    
+    .info-row-3 {
+      grid-template-columns: repeat(3, 1fr);
     }
     
     .info-item {
@@ -425,10 +441,12 @@ function generateEtiquetaHTML(data: {
       </div>
       <div class="produto-section">
         <div class="produto-nome">${data.nomeEtiqueta}</div>
+        ${data.mostrarTextoCongelado ? '<div class="congelado-text">CONGELADO</div>' : ''}
         <div class="lote-text">LOTE ${data.lote}</div>
       </div>
     </div>
     
+    ${data.congelado ? `
     <div class="info-row">
       <div class="info-item">
         <div class="info-label">
@@ -439,19 +457,37 @@ function generateEtiquetaHTML(data: {
       </div>
       <div class="info-item">
         <div class="info-label">
-          <div class="info-label-line">VALIDADE</div>
-          <div class="info-label-line">TEMPERATURA AMBIENTE:</div>
+          <div class="info-label-line">VALIDADE:</div>
+          <div class="info-label-line">&nbsp;</div>
         </div>
         <div class="info-value">${data.dataValidade}</div>
+      </div>
+    </div>
+    ` : `
+    <div class="info-row info-row-3">
+      <div class="info-item">
+        <div class="info-label">
+          <div class="info-label-line">&nbsp;</div>
+          <div class="info-label-line">FABRICAÇÃO:</div>
+        </div>
+        <div class="info-value">${data.dataFabricacao}</div>
       </div>
       <div class="info-item">
         <div class="info-label">
           <div class="info-label-line">VALIDADE</div>
-          <div class="info-label-line">CONGELADO:</div>
+          <div class="info-label-line">TEMPERATURA AMBIENTE</div>
         </div>
-        <div class="info-value">${data.dataValidadeCongelado}</div>
+        <div class="info-value">${data.diasValidade} DIAS</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">
+          <div class="info-label-line">VALIDADE</div>
+          <div class="info-label-line">CONGELADO</div>
+        </div>
+        <div class="info-value">${data.diasValidadeCongelado} DIAS</div>
       </div>
     </div>
+    `}
     
     <div class="bottom-row">
       <div class="bottom-col-1">
@@ -497,8 +533,10 @@ export async function POST(request: Request) {
     const nomeEtiqueta = body.nomeEtiqueta?.trim() || body.produto;
 
     // Calcular valores
-    const dataValidade = addDays(body.dataFabricacao, body.diasValidade);
-    const dataValidadeCongelado = addDays(body.dataFabricacao, body.diasValidadeCongelado);
+    // Se for congelado, usa diasValidadeCongelado, senão usa diasValidade
+    const dataValidade = body.congelado 
+      ? addDays(body.dataFabricacao, body.diasValidadeCongelado)
+      : addDays(body.dataFabricacao, body.diasValidade);
     
     const pesoLiquidoTotal = produtoData.unPorCaixa * produtoData.pesoLiquido;
     
@@ -516,7 +554,10 @@ export async function POST(request: Request) {
       nomeEtiqueta,
       dataFabricacao: formatDate(body.dataFabricacao),
       dataValidade: formatDate(dataValidade),
-      dataValidadeCongelado: formatDate(dataValidadeCongelado),
+      mostrarTextoCongelado: body.mostrarTextoCongelado,
+      congelado: body.congelado,
+      diasValidade: body.diasValidade,
+      diasValidadeCongelado: body.diasValidadeCongelado,
       lote: body.lote,
       codigoBarras: produtoData.codigoBarras,
       barcodeImage,
