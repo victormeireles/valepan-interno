@@ -7,7 +7,6 @@ interface EtiquetaModalProps {
   onClose: () => void;
   produto: string;
   dataFabricacao: string;
-  congeladoInicial?: boolean;
   lote: number;
   rowId?: number;
   onSuccess?: () => void;
@@ -18,26 +17,39 @@ export default function EtiquetaModal({
   onClose,
   produto,
   dataFabricacao,
-  congeladoInicial = true,
   lote,
   rowId,
   onSuccess,
 }: EtiquetaModalProps) {
   const [diasValidade, setDiasValidade] = useState(21);
-  const [congelado, setCongelado] = useState(congeladoInicial);
+  const [diasValidadeCongelado, setDiasValidadeCongelado] = useState(90);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nomeEtiqueta, setNomeEtiqueta] = useState(produto);
+
+  // Função para obter o nome padrão na etiqueta baseado no produto
+  const getNomeEtiquetaPadrao = (produtoNome: string): string => {
+    // Normalizar para comparação (remover espaços extras e converter para minúsculas)
+    const produtoNormalizado = produtoNome.trim().toLowerCase();
+    
+    // Se for "HB Brioche 50g 10cm", retornar "HB Smash Brioche 50g 10cm"
+    if (produtoNormalizado === 'hb brioche 50g 10cm') {
+      return 'HB Smash Brioche 50g 10cm';
+    }
+    
+    // Caso contrário, retornar o nome do produto original
+    return produtoNome;
+  };
 
   // Resetar estado quando o modal abre
   useEffect(() => {
     if (isOpen) {
       setDiasValidade(21);
-      setCongelado(congeladoInicial);
+      setDiasValidadeCongelado(90);
       setError(null);
-      setNomeEtiqueta(produto);
+      setNomeEtiqueta(getNomeEtiquetaPadrao(produto));
     }
-  }, [isOpen, congeladoInicial, produto]);
+  }, [isOpen, produto]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +65,7 @@ export default function EtiquetaModal({
           nomeEtiqueta: nomeEtiqueta.trim() || produto,
           dataFabricacao,
           diasValidade,
-          congelado,
+          diasValidadeCongelado,
           lote,
           rowId,
         }),
@@ -163,7 +175,7 @@ export default function EtiquetaModal({
           {/* Dias de Validade */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              Dias de Validade
+              Dias de Validade (Temperatura Ambiente)
             </label>
             <input
               type="number"
@@ -176,25 +188,20 @@ export default function EtiquetaModal({
             />
           </div>
 
-          {/* Switch Congelado */}
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-300">
-              Congelado
+          {/* Dias de Validade Congelado */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Dias de Validade (Congelado)
             </label>
-            <button
-              type="button"
-              onClick={() => setCongelado(!congelado)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                congelado ? 'bg-blue-600' : 'bg-gray-600'
-              }`}
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={diasValidadeCongelado}
+              onChange={(e) => setDiasValidadeCongelado(parseInt(e.target.value) || 90)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={loading}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  congelado ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            />
           </div>
 
           {/* Botões */}

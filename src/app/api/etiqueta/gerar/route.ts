@@ -8,7 +8,7 @@ interface GerarEtiquetaRequest {
   produto: string;
   dataFabricacao: string; // YYYY-MM-DD
   diasValidade: number;
-  congelado: boolean;
+  diasValidadeCongelado: number;
   lote: number;
   rowId?: number;
   nomeEtiqueta?: string;
@@ -174,9 +174,9 @@ function getLogoSVG(): string {
 
 function generateEtiquetaHTML(data: {
   nomeEtiqueta: string;
-  congelado: boolean;
   dataFabricacao: string;
   dataValidade: string;
+  dataValidadeCongelado: string;
   lote: number;
   codigoBarras: string;
   barcodeImage: string;
@@ -223,7 +223,7 @@ function generateEtiquetaHTML(data: {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 35px;
+      margin-bottom: 15px;
     }
     
     .logo-section {
@@ -277,10 +277,11 @@ function generateEtiquetaHTML(data: {
       text-transform: uppercase;
     }
     
-    .congelado-text {
+    .lote-text {
       font-size: 20px;
       color: #000;
-      margin-top: 10px;
+      margin-top: 5px;
+      font-weight: 600;
     }
     
     .produto-desc {
@@ -294,7 +295,7 @@ function generateEtiquetaHTML(data: {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 25px;
-      margin: 30px 0;
+      margin: 10px 0 20px 0;
     }
     
     .info-item {
@@ -303,11 +304,20 @@ function generateEtiquetaHTML(data: {
     }
     
     .info-label {
-      font-size: 17px;
+      font-size: 15px;
       color: #000;
       font-weight: 600;
       margin-bottom: 12px;
       text-transform: uppercase;
+      line-height: 1.3;
+      min-height: 2.6em;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    
+    .info-label-line {
+      line-height: 1.2;
     }
     
     .info-value {
@@ -415,22 +425,31 @@ function generateEtiquetaHTML(data: {
       </div>
       <div class="produto-section">
         <div class="produto-nome">${data.nomeEtiqueta}</div>
-        ${data.congelado ? '<div class="congelado-text">Congelado</div>' : ''}
+        <div class="lote-text">LOTE ${data.lote}</div>
       </div>
     </div>
     
     <div class="info-row">
       <div class="info-item">
-        <div class="info-label">FAB:</div>
+        <div class="info-label">
+          <div class="info-label-line">&nbsp;</div>
+          <div class="info-label-line">FABRICAÇÃO:</div>
+        </div>
         <div class="info-value">${data.dataFabricacao}</div>
       </div>
       <div class="info-item">
-        <div class="info-label">VAL:</div>
+        <div class="info-label">
+          <div class="info-label-line">VALIDADE</div>
+          <div class="info-label-line">TEMPERATURA AMBIENTE:</div>
+        </div>
         <div class="info-value">${data.dataValidade}</div>
       </div>
       <div class="info-item">
-        <div class="info-label">LOTE</div>
-        <div class="info-value">${data.lote}</div>
+        <div class="info-label">
+          <div class="info-label-line">VALIDADE</div>
+          <div class="info-label-line">CONGELADO:</div>
+        </div>
+        <div class="info-value">${data.dataValidadeCongelado}</div>
       </div>
     </div>
     
@@ -479,6 +498,7 @@ export async function POST(request: Request) {
 
     // Calcular valores
     const dataValidade = addDays(body.dataFabricacao, body.diasValidade);
+    const dataValidadeCongelado = addDays(body.dataFabricacao, body.diasValidadeCongelado);
     
     const pesoLiquidoTotal = produtoData.unPorCaixa * produtoData.pesoLiquido;
     
@@ -494,9 +514,9 @@ export async function POST(request: Request) {
     // Gerar HTML da etiqueta
     const html = generateEtiquetaHTML({
       nomeEtiqueta,
-      congelado: body.congelado,
       dataFabricacao: formatDate(body.dataFabricacao),
       dataValidade: formatDate(dataValidade),
+      dataValidadeCongelado: formatDate(dataValidadeCongelado),
       lote: body.lote,
       codigoBarras: produtoData.codigoBarras,
       barcodeImage,

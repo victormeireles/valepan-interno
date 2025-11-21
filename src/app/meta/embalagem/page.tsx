@@ -625,7 +625,6 @@ export default function PedidoEmbalagemPage() {
           }}
           produto={etiquetaItem.produto}
           dataFabricacao={etiquetaItem.dataFabricacao || selectedDate}
-          congeladoInicial={etiquetaItem.congelado === 'Sim'}
           lote={etiquetaItem.lote || 0}
           rowId={etiquetaItem.rowId}
           onSuccess={handleEtiquetaSuccess}
