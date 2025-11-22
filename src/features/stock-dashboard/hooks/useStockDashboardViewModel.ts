@@ -1,22 +1,24 @@
 import { useMemo } from 'react';
 import { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
-import { StockByClientData, ClientStockSummary, StockSummary } from '../types';
+import {
+  StockByClientData,
+  ClientStockSummary,
+  StockSummary,
+} from '../types';
 import { isQuantidadeZerada } from '@/lib/utils/quantidade-formatter';
 
-export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
+export const useStockDashboardViewModel = (records: EstoqueRecord[]) => {
   const stockData: StockByClientData = useMemo(() => {
-    // Agrupar por cliente e produto
     const stockByClient = new Map<string, Map<string, Quantidade>>();
 
-    initialData.forEach((record) => {
+    records.forEach((record) => {
       if (!stockByClient.has(record.cliente)) {
         stockByClient.set(record.cliente, new Map());
       }
 
       const clientProducts = stockByClient.get(record.cliente)!;
-      
+
       if (clientProducts.has(record.produto)) {
-        // Somar quantidades se o produto já existe
         const existing = clientProducts.get(record.produto)!;
         clientProducts.set(record.produto, {
           caixas: existing.caixas + record.quantidade.caixas,
@@ -25,18 +27,20 @@ export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
           kg: existing.kg + record.quantidade.kg,
         });
       } else {
-        // Adicionar novo produto
         clientProducts.set(record.produto, { ...record.quantidade });
       }
     });
 
-    // Converter Map interno para ClientStockSummary, filtrando produtos zerados
     const stockByClientArray = new Map<string, ClientStockSummary>();
-    
+
     stockByClient.forEach((productsMap, cliente) => {
-      // Filtrar produtos zerados e calcular total do cliente
       const produtos: Array<{ produto: string; quantidade: Quantidade }> = [];
-      const totalCliente: Quantidade = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+      const totalCliente: Quantidade = {
+        caixas: 0,
+        pacotes: 0,
+        unidades: 0,
+        kg: 0,
+      };
 
       productsMap.forEach((quantidade, produto) => {
         if (!isQuantidadeZerada(quantidade)) {
@@ -49,14 +53,13 @@ export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
       });
 
       produtos.sort((a, b) => a.produto.localeCompare(b.produto));
-      
+
       stockByClientArray.set(cliente, {
         produtos,
         total: totalCliente,
       });
     });
 
-    // Remover clientes sem produtos
     const clientsComProdutos = Array.from(stockByClientArray.entries())
       .filter(([, summary]) => summary.produtos.length > 0)
       .map(([cliente]) => cliente)
@@ -65,20 +68,25 @@ export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
     return {
       stockByClient: stockByClientArray,
       clients: clientsComProdutos,
-      isEmpty: initialData.length === 0,
+      isEmpty: records.length === 0,
     };
-  }, [initialData]);
+  }, [records]);
 
   const summary: StockSummary = useMemo(() => {
-    const totalEstoque: Quantidade = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+    const totalEstoque: Quantidade = {
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+    };
     let totalProdutos = 0;
 
-    stockData.stockByClient.forEach((summary) => {
-      totalEstoque.caixas += summary.total.caixas;
-      totalEstoque.pacotes += summary.total.pacotes;
-      totalEstoque.unidades += summary.total.unidades;
-      totalEstoque.kg += summary.total.kg;
-      totalProdutos += summary.produtos.length;
+    stockData.stockByClient.forEach((clientSummary) => {
+      totalEstoque.caixas += clientSummary.total.caixas;
+      totalEstoque.pacotes += clientSummary.total.pacotes;
+      totalEstoque.unidades += clientSummary.total.unidades;
+      totalEstoque.kg += clientSummary.total.kg;
+      totalProdutos += clientSummary.produtos.length;
     });
 
     return {
@@ -91,7 +99,7 @@ export const useStockDashboardViewModel = (initialData: EstoqueRecord[]) => {
   return {
     stockData,
     summary,
-    isEmpty: initialData.length === 0,
+    isEmpty: records.length === 0,
   };
 };
 
