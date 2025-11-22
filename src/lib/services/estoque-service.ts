@@ -14,6 +14,12 @@ type AjusteQuantidadeInput = {
   delta: Quantidade;
 };
 
+type AtualizarQuantidadeInput = {
+  cliente: string;
+  produto: string;
+  quantidade: Quantidade;
+};
+
 export class EstoqueService {
   public async obterEstoqueCliente(cliente: string): Promise<EstoqueRecord[]> {
     return estoqueSheetManager.listByCliente(cliente);
@@ -113,6 +119,36 @@ export class EstoqueService {
     };
   }
 
+  public async definirQuantidadeAbsoluta({
+    cliente,
+    produto,
+    quantidade,
+  }: AtualizarQuantidadeInput): Promise<EstoqueRecord> {
+    const estoqueAtual = await this.obterEstoqueCliente(cliente);
+    const existente = estoqueAtual.find(
+      (record) => record.produto === produto,
+    );
+    const atualizadoEm = new Date().toISOString();
+    const quantidadeNormalizada = this.normalizarQuantidade(quantidade);
+
+    await estoqueSheetManager.upsertQuantidade(
+      { cliente, produto },
+      quantidadeNormalizada,
+      {
+        inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
+        atualizadoEm,
+      },
+    );
+
+    return {
+      cliente,
+      produto,
+      quantidade: quantidadeNormalizada,
+      inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
+      atualizadoEm,
+    };
+  }
+
   private calcularDiffs(
     estoqueAtual: EstoqueRecord[],
     itens: InventarioLancamentoItem[],
@@ -177,6 +213,30 @@ export class EstoqueService {
 
   private clampZero(value: number): number {
     return value < 0 ? 0 : value;
+  }
+
+  private normalizarQuantidade(quantidade: Quantidade): Quantidade {
+    const normalizarInteiro = (valor: number | undefined): number => {
+      if (!Number.isFinite(valor)) {
+        return 0;
+      }
+      return this.clampZero(Math.trunc(valor ?? 0));
+    };
+
+    const normalizarKg = (valor: number | undefined): number => {
+      if (!Number.isFinite(valor)) {
+        return 0;
+      }
+      const kg = parseFloat((valor ?? 0).toFixed(3));
+      return this.clampZero(kg);
+    };
+
+    return {
+      caixas: normalizarInteiro(quantidade.caixas),
+      pacotes: normalizarInteiro(quantidade.pacotes),
+      unidades: normalizarInteiro(quantidade.unidades),
+      kg: normalizarKg(quantidade.kg),
+    };
   }
 
   private criarQuantidadeZerada(): Quantidade {
