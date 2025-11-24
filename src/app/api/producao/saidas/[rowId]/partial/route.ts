@@ -178,7 +178,7 @@ export async function POST(
         origem: 'atualizada',
         fotoUrl: fotoUrl || undefined,
       });
-    } catch (_error) {
+    } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 

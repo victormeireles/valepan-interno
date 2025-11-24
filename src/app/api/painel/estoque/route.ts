@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const allStock = await estoqueService.obterTodosEstoques();
     return NextResponse.json({ data: allStock });
-  } catch (_error) {
+  } catch {
     return NextResponse.json(
       { error: 'Erro ao buscar dados de estoque' },
       { status: 500 }

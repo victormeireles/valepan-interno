@@ -119,7 +119,7 @@ export default function PedidoFornoPage() {
         const produtosRes = await fetch('/api/options/forno?type=produtos');
         const produtosData = await produtosRes.json();
         if (produtosRes.ok) setProdutosOptions(produtosData.options || []);
-      } catch (_err) {
+      } catch {
         // Erro ao carregar opções
       }
     };

@@ -210,7 +210,7 @@ export async function POST(
         } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
         obsEmbalagem: obsEmbalagemValue || undefined,
       });
-    } catch (_error) {
+    } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 

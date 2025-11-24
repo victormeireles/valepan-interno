@@ -137,7 +137,7 @@ export default function ProducaoResfriamentoPage() {
       if (painelRes.ok) {
         setItems((painelData.items || []) as PainelItemResfriamento[]);
       }
-    } catch (_err) {
+    } catch {
       // Erro ao recarregar dados do painel
     }
   };

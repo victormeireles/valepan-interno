@@ -169,7 +169,7 @@ export async function PUT(request: Request, context: { params: Promise<{ rowId: 
         data: rowInfo.data,
         atualizadoEm: updatedAtBr,
       });
-    } catch (_error) {
+    } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 

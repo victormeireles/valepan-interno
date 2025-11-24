@@ -91,7 +91,7 @@ export default function ProducaoFornoPage() {
       const painelRes = await fetch(`/api/painel/forno?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) setItems((painelData.items || []) as PainelItem[]);
-    } catch (_err) {
+    } catch {
       // Erro ao recarregar dados do painel
     }
   };

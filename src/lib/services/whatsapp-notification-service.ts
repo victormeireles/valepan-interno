@@ -107,7 +107,7 @@ export class WhatsAppNotificationService {
       if (fetchSummary) {
         try {
           summaryData = await fetchSummary() ?? undefined;
-        } catch (_error) {
+        } catch {
           // Silenciosamente falha ao montar resumo
         }
       }
@@ -116,7 +116,7 @@ export class WhatsAppNotificationService {
       await zapiManager.sendMessageToGroup(grupoId, message);
 
       return true;
-    } catch (_error) {
+    } catch {
       return false;
     }
   }
@@ -240,7 +240,7 @@ export class WhatsAppNotificationService {
   ): Promise<T | null> {
     try {
       return await loader();
-    } catch (_error) {
+    } catch {
       return null;
     }
   }

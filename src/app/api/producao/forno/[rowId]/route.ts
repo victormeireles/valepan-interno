@@ -170,7 +170,7 @@ export async function PUT(
         data: rowInfo.data,
         atualizadoEm: updatedAtBr,
       });
-    } catch (_error) {
+    } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 

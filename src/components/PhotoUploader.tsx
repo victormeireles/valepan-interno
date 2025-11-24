@@ -54,7 +54,7 @@ export default function PhotoUploader({
       
       setPreview(URL.createObjectURL(compressedFile));
       onPhotoSelect(compressedFile);
-    } catch (_err) {
+    } catch {
       setError('Erro ao processar imagem. Tente novamente.');
     } finally {
       setCompressing(false);

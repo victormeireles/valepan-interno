@@ -35,7 +35,7 @@ function normalizeToISODate(dateStr: string): string {
       const dd = String(date.getDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
     }
-  } catch (_error) {
+  } catch {
     // Erro ao fazer parse da data
   }
   

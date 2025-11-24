@@ -88,7 +88,7 @@ async function cleanupPhotoDataFromSheets(deletedPhotos: { photoId: string; file
       });
     }
     
-  } catch (_error) {
+  } catch {
     // Não falhar a operação principal por causa disso
   }
 }

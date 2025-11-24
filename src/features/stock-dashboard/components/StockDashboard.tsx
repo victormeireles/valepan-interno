@@ -331,7 +331,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
                 message: 'Estoque criado/atualizado com sucesso!',
               });
             }
-          } catch (_error) {
+          } catch {
             // Erro ao recarregar estoque
           }
         }}

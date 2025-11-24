@@ -222,7 +222,7 @@ export async function DELETE(
     if (photoId) {
       try {
         await deletePhotoFromDrive(photoId);
-      } catch (_error) {
+      } catch {
         // Continuar mesmo se falhar, pois a foto pode já ter sido deletada
       }
     }

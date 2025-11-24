@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       tem_validade_congelado: clienteData.tem_validade_congelado_na_etiqueta ?? false,
       tem_texto_congelado: clienteData.tem_texto_indicando_congelado_na_etiqueta ?? false,
     });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({
       tem_validade_congelado: false,
       tem_texto_congelado: false,

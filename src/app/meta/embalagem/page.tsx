@@ -167,7 +167,7 @@ export default function PedidoEmbalagemPage() {
         const produtosData = await produtosRes.json();
         if (clientesRes.ok) setClientesOptions(clientesData.options || []);
         if (produtosRes.ok) setProdutosOptions(produtosData.options || []);
-      } catch (_err) {
+      } catch {
         // Erro ao carregar opções
       }
     };
@@ -367,7 +367,7 @@ export default function PedidoEmbalagemPage() {
       }
       setMessage('Etiqueta gerada com sucesso!');
       setTimeout(() => setMessage(null), 3000);
-    } catch (_err) {
+    } catch {
       // Erro ao recarregar dados do painel
     }
   };

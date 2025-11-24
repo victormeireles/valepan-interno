@@ -95,7 +95,7 @@ export class EstoqueService {
 
       // Retornar true apenas se o tipo de estoque existir e possui_etiqueta for true
       return tipoEstoque?.possuiEtiqueta ?? false;
-    } catch (_error) {
+    } catch {
       return false;
     }
   }

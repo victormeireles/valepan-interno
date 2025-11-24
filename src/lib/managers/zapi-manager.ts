@@ -257,7 +257,7 @@ export class ZApiManager {
       const isConnected = data.connected && data.smartphoneConnected;
 
       return isConnected;
-    } catch (_error) {
+    } catch {
       return false;
     }
   }
@@ -272,7 +272,7 @@ export class ZApiManager {
     try {
       const isConnected = await this.isInstanceConnected();
       return isConnected;
-    } catch (_error) {
+    } catch {
       return false;
     }
   }

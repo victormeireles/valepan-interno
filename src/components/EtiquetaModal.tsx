@@ -80,7 +80,7 @@ export default function EtiquetaModal({
             setCongelado(congeladoInicial);
             setMostrarTextoCongelado(false);
           }
-        } catch (_err) {
+        } catch {
           // Se der erro, usar valores padrão
           setCongelado(congeladoInicial);
           setMostrarTextoCongelado(false);

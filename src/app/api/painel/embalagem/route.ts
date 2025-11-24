@@ -70,7 +70,7 @@ export async function GET(request: Request) {
         const possuiEtiqueta = await estoqueService.clientePossuiEtiqueta(cliente);
         clientesComEtiquetaCache.set(cliente, possuiEtiqueta);
         return possuiEtiqueta;
-      } catch (_error) {
+      } catch {
         clientesComEtiquetaCache.set(cliente, false);
         return false;
       }

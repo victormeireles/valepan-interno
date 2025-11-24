@@ -17,7 +17,7 @@ export default function DashboardEstoquePage() {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Falha ao carregar estoque');
         setAllStock(json.data || []);
-      } catch (_error) {
+      } catch {
         // Erro ao carregar estoque
       } finally {
         setLoading(false);

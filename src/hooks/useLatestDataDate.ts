@@ -47,7 +47,7 @@ export function useLatestDataDate(endpoint: ApiEndpoint): string {
         }
         
         // Se não encontrou dados nos últimos 7 dias, manter data de hoje
-      } catch (_error) {
+      } catch {
         // Em caso de erro, manter data de hoje
       }
     };
