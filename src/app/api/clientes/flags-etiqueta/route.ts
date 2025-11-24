@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (error) {
-      console.error('Erro ao buscar cliente:', error);
       return NextResponse.json({
         tem_validade_congelado: false,
         tem_texto_congelado: false,
@@ -62,8 +61,7 @@ export async function GET(request: NextRequest) {
       tem_validade_congelado: clienteData.tem_validade_congelado_na_etiqueta ?? false,
       tem_texto_congelado: clienteData.tem_texto_indicando_congelado_na_etiqueta ?? false,
     });
-  } catch (error) {
-    console.error('Erro ao buscar flags do cliente:', error);
+  } catch (_error) {
     return NextResponse.json({
       tem_validade_congelado: false,
       tem_texto_congelado: false,

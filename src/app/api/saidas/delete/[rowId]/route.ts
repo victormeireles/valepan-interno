@@ -31,8 +31,13 @@ export async function DELETE(
         quantidade.kg > 0;
 
       if (houveRealizado) {
+        // Obter tipo de estoque do cliente
+        const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(existingRow.cliente);
+        const clienteEstoque = tipoEstoque ?? existingRow.cliente;
+
+        // Creditar estoque de volta (usando tipo de estoque)
         await estoqueService.aplicarDelta({
-          cliente: existingRow.cliente,
+          cliente: clienteEstoque,
           produto: existingRow.produto,
           delta: quantidade,
         });

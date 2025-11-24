@@ -80,9 +80,8 @@ export default function EtiquetaModal({
             setCongelado(congeladoInicial);
             setMostrarTextoCongelado(false);
           }
-        } catch (err) {
+        } catch (_err) {
           // Se der erro, usar valores padrão
-          console.error('Erro ao buscar flags do cliente:', err);
           setCongelado(congeladoInicial);
           setMostrarTextoCongelado(false);
         } finally {

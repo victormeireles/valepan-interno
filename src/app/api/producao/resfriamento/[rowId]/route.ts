@@ -35,7 +35,6 @@ export async function GET(request: Request, context: { params: Promise<{ rowId: 
 
     return NextResponse.json({ data, rowId: rowNumber });
   } catch (error) {
-    console.error('Erro ao carregar dados de produção de resfriamento:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -79,7 +78,6 @@ export async function PUT(request: Request, context: { params: Promise<{ rowId: 
 
     return NextResponse.json({ message: 'Produção de resfriamento atualizada com sucesso' });
   } catch (error) {
-    console.error('Erro ao atualizar produção de resfriamento:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }

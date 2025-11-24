@@ -170,8 +170,8 @@ export async function PUT(
         data: rowInfo.data,
         atualizadoEm: updatedAtBr,
       });
-    } catch (error) {
-      console.error('Erro ao enviar notificação WhatsApp (forno):', error);
+    } catch (_error) {
+      // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 
     return NextResponse.json({ message: 'Produção de forno atualizada com sucesso' });

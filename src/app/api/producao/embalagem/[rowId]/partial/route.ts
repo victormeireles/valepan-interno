@@ -167,8 +167,12 @@ export async function POST(
     const metaOriginalUnidades = pedidoUnidades + (unidades || 0);
     const metaOriginalKg = pedidoKg + (kg || 0);
 
+    // Obter tipo de estoque do cliente
+    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
+    const clienteEstoque = tipoEstoque ?? cliente;
+
     await estoqueService.aplicarDelta({
-      cliente,
+      cliente: clienteEstoque,
       produto,
       delta: {
         caixas: caixas || 0,
@@ -206,9 +210,8 @@ export async function POST(
         } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
         obsEmbalagem: obsEmbalagemValue || undefined,
       });
-    } catch (error) {
-      // Logar erro mas não propagar
-      console.error("Erro ao enviar notificação WhatsApp:", error);
+    } catch (_error) {
+      // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 
     return NextResponse.json({ 

@@ -84,8 +84,6 @@ export class WhatsAppNotificationService {
 
   private async sendMessageToConfiguredGroup<TSummary>({
     grupoId,
-    envVarName,
-    stageLabel,
     buildMessage,
     fetchSummary,
   }: {
@@ -97,15 +95,11 @@ export class WhatsAppNotificationService {
   }): Promise<boolean> {
     try {
       if (!grupoId) {
-        console.warn(`⚠️ [WhatsApp] ${envVarName} não configurado. Notificação de ${stageLabel} não enviada.`);
         return false;
       }
 
-      console.log(`🔍 [WhatsApp] Grupo ${stageLabel} configurado:`, grupoId);
-
       const isConnected = await zapiManager.isInstanceConnected();
       if (!isConnected) {
-        console.warn(`⚠️ [WhatsApp] Instância não conectada. Notificação de ${stageLabel} não enviada.`);
         return false;
       }
 
@@ -113,22 +107,16 @@ export class WhatsAppNotificationService {
       if (fetchSummary) {
         try {
           summaryData = await fetchSummary() ?? undefined;
-        } catch (error) {
-          console.error(`💥 [WhatsApp] Falha ao montar resumo (${stageLabel}):`, error);
+        } catch (_error) {
+          // Silenciosamente falha ao montar resumo
         }
       }
 
       const message = buildMessage(summaryData);
-      console.log(`📝 [WhatsApp] Mensagem de ${stageLabel} formatada:`, `${message.substring(0, 100)}...`);
-      console.log(`📤 [WhatsApp] Enviando mensagem de ${stageLabel} para grupo:`, grupoId);
-
-      const response = await zapiManager.sendMessageToGroup(grupoId, message);
-      console.log(`✅ [WhatsApp] Notificação de ${stageLabel} enviada com sucesso`);
-      console.log(`📥 [WhatsApp] Resposta da API (${stageLabel}):`, JSON.stringify(response));
+      await zapiManager.sendMessageToGroup(grupoId, message);
 
       return true;
-    } catch (error) {
-      console.error(`💥 [WhatsApp] Erro ao enviar notificação de ${stageLabel}:`, error);
+    } catch (_error) {
       return false;
     }
   }
@@ -247,13 +235,12 @@ export class WhatsAppNotificationService {
   }
 
   private async tryLoadSummary<T extends StageSummaryResult>(
-    stageKey: 'fermentacao' | 'forno' | 'embalagem' | 'saidas',
+    _stageKey: 'fermentacao' | 'forno' | 'embalagem' | 'saidas',
     loader: () => Promise<T>,
   ): Promise<T | null> {
     try {
       return await loader();
-    } catch (error) {
-      console.error(`💥 [WhatsApp] Falha ao montar resumo diário (${stageKey}):`, error);
+    } catch (_error) {
       return null;
     }
   }

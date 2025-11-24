@@ -141,9 +141,13 @@ export async function POST(
     const metaOriginalUnidades = metaUnidades;
     const metaOriginalKg = metaKg;
 
-    // Atualizar estoque (aplicar delta negativo para saidas)
+    // Obter tipo de estoque do cliente
+    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
+    const clienteEstoque = tipoEstoque ?? cliente;
+
+    // Atualizar estoque (aplicar delta negativo para saidas usando tipo de estoque)
     await estoqueService.aplicarDelta({
-      cliente,
+      cliente: clienteEstoque,
       produto,
       delta: {
         caixas: -(caixas || 0),
@@ -174,9 +178,8 @@ export async function POST(
         origem: 'atualizada',
         fotoUrl: fotoUrl || undefined,
       });
-    } catch (error) {
-      // Logar erro mas não propagar
-      console.error("Erro ao enviar notificação WhatsApp:", error);
+    } catch (_error) {
+      // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 
     return NextResponse.json({ 

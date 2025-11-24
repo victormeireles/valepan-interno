@@ -107,7 +107,6 @@ export async function GET(request: Request, context: { params: Promise<{ rowId: 
 
     return NextResponse.json({ data, rowId: rowNumber });
   } catch (error) {
-    console.error('Erro ao carregar dados de produção de fermentação:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -170,13 +169,12 @@ export async function PUT(request: Request, context: { params: Promise<{ rowId: 
         data: rowInfo.data,
         atualizadoEm: updatedAtBr,
       });
-    } catch (error) {
-      console.error('Erro ao enviar notificação WhatsApp (fermentação):', error);
+    } catch (_error) {
+      // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 
     return NextResponse.json({ message: 'Produção de fermentação atualizada com sucesso' });
   } catch (error) {
-    console.error('Erro ao atualizar produção de fermentação:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }

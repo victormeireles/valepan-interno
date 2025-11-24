@@ -5,6 +5,7 @@ import {
   getTodayISOInBrazilTimezone,
   normalizeToISODate,
 } from '@/lib/utils/date-utils';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 type PainelItem = {
   cliente: string;
@@ -31,6 +32,7 @@ type PainelItem = {
   // Dados de etiqueta
   lote?: number;
   etiquetaGerada?: boolean;
+  possuiEtiqueta?: boolean;
   // Dados de fotos (novos campos)
   pacoteFotoUrl?: string;
   pacoteFotoId?: string;
@@ -56,6 +58,23 @@ export async function GET(request: Request) {
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItem[] = [];
+    const clientesComEtiquetaCache = new Map<string, boolean>();
+
+    // Função auxiliar para verificar se cliente possui etiqueta (com cache)
+    const clientePossuiEtiqueta = async (cliente: string): Promise<boolean> => {
+      if (clientesComEtiquetaCache.has(cliente)) {
+        return clientesComEtiquetaCache.get(cliente)!;
+      }
+      
+      try {
+        const possuiEtiqueta = await estoqueService.clientePossuiEtiqueta(cliente);
+        clientesComEtiquetaCache.set(cliente, possuiEtiqueta);
+        return possuiEtiqueta;
+      } catch (_error) {
+        clientesComEtiquetaCache.set(cliente, false);
+        return false;
+      }
+    };
 
     // Processar pedidos (aProduzir) - processar todas as linhas para obter rowId correto
     for (let i = 0; i < pedidosDataRows.length; i++) {
@@ -117,6 +136,9 @@ export async function GET(request: Request) {
       else if (unidade === 'un') { produzido = producaoUnidades; }
       else if (unidade === 'kg') { produzido = producaoKg; }
 
+      // Verificar se o cliente possui etiqueta
+      const possuiEtiqueta = await clientePossuiEtiqueta(cliente);
+
       // Cada item é individual, não agrupar
       items.push({
         cliente,
@@ -143,6 +165,7 @@ export async function GET(request: Request) {
         // Dados de etiqueta
         lote: lote || undefined,
         etiquetaGerada,
+        possuiEtiqueta,
         // Dados de fotos
         pacoteFotoUrl: pacoteFotoUrl || undefined,
         pacoteFotoId: pacoteFotoId || undefined,

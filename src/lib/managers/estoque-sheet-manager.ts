@@ -46,7 +46,8 @@ export class EstoqueSheetManager {
 
   public async listByCliente(cliente: string): Promise<EstoqueRecord[]> {
     const all = await this.listAll();
-    return all.filter((record) => record.cliente === cliente);
+    const clienteNormalizado = cliente.trim();
+    return all.filter((record) => record.cliente.trim() === clienteNormalizado);
   }
 
   public async replaceClienteEstoque(
@@ -59,8 +60,9 @@ export class EstoqueSheetManager {
       `${this.tabName}!${ESTOQUE_FULL_RANGE}`,
     );
     const dataRows = allRows.slice(1);
+    const clienteNormalizado = cliente.trim();
     const preservedRows = dataRows.filter(
-      (row) => (row[ESTOQUE_SHEET_COLUMNS.cliente] || '').trim() !== cliente,
+      (row) => (row[ESTOQUE_SHEET_COLUMNS.cliente] || '').toString().trim() !== clienteNormalizado,
     );
     const atualizadoEm =
       metadata?.atualizadoEm ?? new Date().toISOString();
@@ -68,8 +70,8 @@ export class EstoqueSheetManager {
       metadata?.inventarioAtualizadoEm ?? atualizadoEm;
 
     const newRows = itens.map((item) => [
-      cliente,
-      item.produto,
+      clienteNormalizado,
+      item.produto.trim(),
       item.quantidade.caixas || 0,
       item.quantidade.pacotes || 0,
       item.quantidade.unidades || 0,
@@ -96,6 +98,9 @@ export class EstoqueSheetManager {
       metadata?.atualizadoEm ?? new Date().toISOString();
 
     let found = false;
+    const keyClienteNormalizado = key.cliente.trim();
+    const keyProdutoNormalizado = key.produto.trim();
+    
     const updatedRows = dataRows.map((row) => {
       const rowCliente = (row[ESTOQUE_SHEET_COLUMNS.cliente] || '')
         .toString()
@@ -104,11 +109,11 @@ export class EstoqueSheetManager {
         .toString()
         .trim();
 
-      if (rowCliente === key.cliente && rowProduto === key.produto) {
+      if (rowCliente === keyClienteNormalizado && rowProduto === keyProdutoNormalizado) {
         found = true;
         return [
-          key.cliente,
-          key.produto,
+          keyClienteNormalizado,
+          keyProdutoNormalizado,
           quantidade.caixas || 0,
           quantidade.pacotes || 0,
           quantidade.unidades || 0,
@@ -122,14 +127,16 @@ export class EstoqueSheetManager {
     });
 
     if (!found) {
+      const inventarioAtualizadoEm =
+        metadata?.inventarioAtualizadoEm ?? atualizadoEm;
       updatedRows.push([
-        key.cliente,
-        key.produto,
+        keyClienteNormalizado,
+        keyProdutoNormalizado,
         quantidade.caixas || 0,
         quantidade.pacotes || 0,
         quantidade.unidades || 0,
         quantidade.kg || 0,
-        metadata?.inventarioAtualizadoEm ?? '',
+        inventarioAtualizadoEm,
         atualizadoEm,
       ]);
     }

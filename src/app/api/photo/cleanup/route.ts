@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         const errorMsg = `Erro ao deletar foto ${photo.fileName}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
         errors.push(errorMsg);
-        console.error(errorMsg);
       }
     }
     
@@ -45,7 +44,6 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('Erro na limpeza de fotos:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -90,8 +88,7 @@ async function cleanupPhotoDataFromSheets(deletedPhotos: { photoId: string; file
       });
     }
     
-  } catch (error) {
-    console.error('Erro ao limpar dados da planilha:', error);
+  } catch (_error) {
     // Não falhar a operação principal por causa disso
   }
 }

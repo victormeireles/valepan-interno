@@ -461,6 +461,33 @@ export type Database = {
           },
         ]
       }
+      tipos_estoque: {
+        Row: {
+          id: string
+          nome: string
+          ativo: boolean
+          possui_etiqueta: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          nome: string
+          ativo?: boolean
+          possui_etiqueta?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          nome?: string
+          ativo?: boolean
+          possui_etiqueta?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       verification_tokens: {
         Row: {
           created_at: string | null

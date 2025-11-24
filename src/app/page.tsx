@@ -1,207 +1,259 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Sistema de Produção
-          </h1>
-          <p className="text-lg text-gray-600">
-            Registro de produção por etapas - Mobile First
+    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50/50 to-blue-50/30 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-100/20 to-indigo-100/20 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/2 -left-40 w-96 h-96 bg-gradient-to-br from-emerald-100/20 to-teal-100/20 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 right-1/3 w-96 h-96 bg-gradient-to-br from-yellow-100/20 to-amber-100/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
+        {/* Header */}
+        <div className="text-center mb-8 sm:mb-10">
+          <div className="flex justify-center mb-3 sm:mb-4">
+            <div className="relative w-32 sm:w-40 md:w-44 transition-all duration-500 hover:scale-105">
+              <Image
+                src="/logo-full-light.svg"
+                alt="Valepan"
+                width={422}
+                height={301}
+                className="w-full h-auto drop-shadow-lg"
+                priority
+              />
+            </div>
+          </div>
+          <p className="text-sm sm:text-base text-gray-600 max-w-xl mx-auto font-light">
+            Controle completo da produção em um só lugar
           </p>
         </div>
 
         {/* Seção de Meta de Produção */}
-        <div className="mt-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            📋 Meta de Produção
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <section className="mb-10 sm:mb-12 lg:mb-14">
+          <div className="flex items-center gap-4 mb-8 sm:mb-10">
+            <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-transparent"></div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+              Meta de Produção
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
             <Link
               href="/meta/producao"
-              className="block bg-slate-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-blue-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-slate-200 text-3xl">📊</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-50/0 via-slate-50/0 to-blue-50/0 group-hover:from-slate-50/50 group-hover:via-slate-50/30 group-hover:to-blue-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100/0 to-indigo-100/0 group-hover:from-blue-100/30 group-hover:to-indigo-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">📊</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
                   Meta: Produção
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Define metas para Fermentação e Forno
                 </p>
+                <div className="flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
               </div>
             </Link>
+
             <Link
               href="/meta/embalagem"
-              className="block bg-blue-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-blue-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-blue-200 text-3xl">📦</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50/0 via-indigo-50/0 to-purple-50/0 group-hover:from-blue-50/50 group-hover:via-indigo-50/30 group-hover:to-purple-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100/0 to-purple-100/0 group-hover:from-blue-100/30 group-hover:to-purple-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">📦</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
                   Meta: Embalagem
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Define metas de embalagem por cliente e produto
                 </p>
-              </div>
-            </Link>
-            <Link
-              href="/meta/saidas"
-              className="block bg-purple-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-purple-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-purple-200 text-3xl">📤</span>
+                <div className="flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Meta: Saídas
-                </h3>
-                <p className="text-gray-300 text-sm">
-                  Define metas de saídas por cliente e produto
-                </p>
               </div>
             </Link>
           </div>
-        </div>
+        </section>
 
         {/* Seção de Produção Realizada */}
-        <div className="mt-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            ✅ Produção Realizada
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+        <section className="mb-10 sm:mb-12 lg:mb-14">
+          <div className="flex items-center gap-4 mb-8 sm:mb-10">
+            <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-emerald-600 via-teal-600 to-transparent"></div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+              Produção Realizada
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             <Link
               href="/realizado/fermentacao"
-              className="block bg-yellow-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-yellow-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-yellow-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-yellow-200 text-3xl">🍞</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-50/0 via-amber-50/0 to-orange-50/0 group-hover:from-yellow-50/50 group-hover:via-amber-50/30 group-hover:to-orange-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-yellow-100/0 to-amber-100/0 group-hover:from-yellow-100/30 group-hover:to-amber-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-yellow-500 via-amber-500 to-orange-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">🍞</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Realizado: Fermentação
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-yellow-600 transition-colors duration-300">
+                  Fermentação
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Registro de produção da fermentação
                 </p>
-              </div>
-            </Link>
-            {/* Temporariamente removido
-            <Link
-              href="/realizado/resfriamento"
-              className="block bg-blue-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-blue-200 text-3xl">❄️</span>
+                <div className="flex items-center text-yellow-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Realizado: Resfriamento
-                </h3>
-                <p className="text-gray-300 text-sm">
-                  Registro de produção do resfriamento
-                </p>
               </div>
             </Link>
-            */}
+
             <Link
               href="/realizado/forno"
-              className="block bg-red-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-red-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-red-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-red-200 text-3xl">🔥</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 via-rose-50/0 to-pink-50/0 group-hover:from-red-50/50 group-hover:via-rose-50/30 group-hover:to-pink-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-red-100/0 to-rose-100/0 group-hover:from-red-100/30 group-hover:to-rose-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-red-600 via-rose-600 to-pink-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">🔥</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Realizado: Forno
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-red-600 transition-colors duration-300">
+                  Forno
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Registro de produção do forno
                 </p>
+                <div className="flex items-center text-red-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
               </div>
             </Link>
+
             <Link
               href="/realizado/embalagem"
-              className="block bg-blue-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-blue-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-blue-200 text-3xl">📦</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50/0 via-indigo-50/0 to-purple-50/0 group-hover:from-blue-50/50 group-hover:via-indigo-50/30 group-hover:to-purple-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100/0 to-indigo-100/0 group-hover:from-blue-100/30 group-hover:to-indigo-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">📦</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Realizado: Embalagem
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
+                  Embalagem
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Registro de produção da embalagem
                 </p>
-              </div>
-            </Link>
-            <Link
-              href="/realizado/saidas"
-              className="block bg-purple-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
-            >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-purple-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-purple-200 text-3xl">📤</span>
+                <div className="flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Realizado: Saídas
-                </h3>
-                <p className="text-gray-300 text-sm">
-                  Controle de saídas com meta e foto
-                </p>
               </div>
             </Link>
           </div>
-        </div>
+        </section>
 
         {/* Seção de Inventário */}
-        <div className="mt-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            📦 Inventário
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        <section className="mb-8 sm:mb-10">
+          <div className="flex items-center gap-4 mb-8 sm:mb-10">
+            <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-emerald-600 via-teal-600 to-transparent"></div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+              Inventário
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
             <Link
               href="/realizado/estoque"
-              className="block bg-emerald-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-emerald-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-emerald-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-emerald-200 text-3xl">🏷️</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/0 via-teal-50/0 to-cyan-50/0 group-hover:from-emerald-50/50 group-hover:via-teal-50/30 group-hover:to-cyan-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-emerald-100/0 to-teal-100/0 group-hover:from-emerald-100/30 group-hover:to-teal-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">🏷️</span>
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-emerald-600 transition-colors duration-300">
                   Inventário de Estoque
                 </h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Atualize o estoque físico e registre diferenças
                 </p>
+                <div className="flex items-center text-emerald-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
               </div>
             </Link>
+
             <Link
               href="/painel/dashboard-estoque"
-              className="block bg-teal-900 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 p-6 text-white hover:scale-105"
+              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-teal-300/50 overflow-hidden transform hover:-translate-y-1"
             >
-              <div className="text-center">
-                <div className="w-16 h-16 bg-teal-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-teal-200 text-3xl">📊</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-teal-50/0 via-cyan-50/0 to-blue-50/0 group-hover:from-teal-50/50 group-hover:via-cyan-50/30 group-hover:to-blue-50/50 transition-all duration-500"></div>
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-teal-100/0 to-cyan-100/0 group-hover:from-teal-100/30 group-hover:to-cyan-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
+              <div className="relative">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-teal-600 via-cyan-600 to-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                  <span className="text-3xl sm:text-4xl">📊</span>
                 </div>
-                <p className="text-gray-300 text-sm">
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-teal-600 transition-colors duration-300">
+                  Estoque
+                </h3>
+                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
                   Visualize gráficos e relatórios de estoque
                 </p>
+                <div className="flex items-center text-teal-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
+                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
+                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
               </div>
             </Link>
           </div>
-        </div>
+        </section>
 
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500">
-            Selecione uma etapa para registrar a produção ou defina as metas de produção
+        {/* Footer */}
+        <div className="mt-20 sm:mt-24 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="relative w-24 sm:w-28 h-auto opacity-40 hover:opacity-60 transition-opacity duration-300">
+              <Image
+                src="/logo-full-dark.png"
+                alt="Valepan"
+                width={422}
+                height={301}
+                className="w-full h-auto"
+              />
+            </div>
+          </div>
+          <p className="text-xs sm:text-sm text-gray-400 font-light tracking-widest uppercase">
+            Mobile First
           </p>
         </div>
       </div>

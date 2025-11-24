@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { NovaSaidaPayload } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { estoqueService } from '@/lib/services/estoque-service';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -39,6 +40,22 @@ export async function POST(request: Request) {
     }
 
     await saidasSheetManager.appendNovaSaida(payload);
+
+    // Obter tipo de estoque do cliente
+    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(payload.cliente);
+    const clienteEstoque = tipoEstoque ?? payload.cliente;
+
+    // Atualizar estoque (debitar quantidade da saída usando tipo de estoque)
+    await estoqueService.aplicarDelta({
+      cliente: clienteEstoque,
+      produto: payload.produto,
+      delta: {
+        caixas: -(payload.meta.caixas || 0),
+        pacotes: -(payload.meta.pacotes || 0),
+        unidades: -(payload.meta.unidades || 0),
+        kg: -(payload.meta.kg || 0),
+      },
+    });
 
     // Só envia notificação se não foi solicitado para pular
     // (quando há foto, a notificação será enviada no PUT)

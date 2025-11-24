@@ -35,8 +35,8 @@ function normalizeToISODate(dateStr: string): string {
       const dd = String(date.getDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
     }
-  } catch (error) {
-    console.warn('Error parsing date:', dateStr, error);
+  } catch (_error) {
+    // Erro ao fazer parse da data
   }
   
   return '';
@@ -131,7 +131,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ items, date });
   } catch (error) {
-    console.error('Erro ao carregar painel de fermentação:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }

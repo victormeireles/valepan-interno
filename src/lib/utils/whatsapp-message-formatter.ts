@@ -383,6 +383,19 @@ export class WhatsAppMessageFormatter {
       linhas.push(`*Obs Embalagem:* ${data.obsEmbalagem}`);
     }
 
+    // Adicionar links das fotos do Drive
+    if (data.fotos) {
+      if (data.fotos.palletFotoUrl) {
+        linhas.push(`Caixa: ${data.fotos.palletFotoUrl}`);
+      }
+      if (data.fotos.pacoteFotoUrl) {
+        linhas.push(`Pacote: ${data.fotos.pacoteFotoUrl}`);
+      }
+      if (data.fotos.etiquetaFotoUrl) {
+        linhas.push(`Etiqueta: ${data.fotos.etiquetaFotoUrl}`);
+      }
+    }
+
     if (data.isPartial) {
       linhas.push(`⚠️ *Salvamento Parcial*`);
     }

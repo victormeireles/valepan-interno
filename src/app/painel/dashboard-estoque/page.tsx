@@ -17,8 +17,8 @@ export default function DashboardEstoquePage() {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Falha ao carregar estoque');
         setAllStock(json.data || []);
-      } catch (error) {
-        console.error('Erro ao carregar estoque:', error);
+      } catch (_error) {
+        // Erro ao carregar estoque
       } finally {
         setLoading(false);
       }
@@ -28,7 +28,7 @@ export default function DashboardEstoquePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 relative z-0">
-      <DashboardHeader title="Dashboard de Estoque" icon="📊" />
+      <DashboardHeader title="Estoque" icon="📊" />
       
       <div className="p-6 max-w-[1600px] mx-auto relative z-0">
         {loading ? (

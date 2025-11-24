@@ -7,6 +7,8 @@ import {
 } from '@/domain/types/inventario';
 import { inventarioSheetManager } from '@/lib/managers/inventario-sheet-manager';
 import { estoqueSheetManager } from '@/lib/managers/estoque-sheet-manager';
+import { clientesService } from './clientes-service';
+import { tiposEstoqueService } from './tipos-estoque-service';
 
 type AjusteQuantidadeInput = {
   cliente: string;
@@ -21,6 +23,75 @@ export class EstoqueService {
 
   public async obterTodosEstoques(): Promise<EstoqueRecord[]> {
     return estoqueSheetManager.listAll();
+  }
+
+  public async obterTipoEstoqueCliente(cliente: string): Promise<string | null> {
+    // Buscar o cliente pelo nome
+    const clienteData = await clientesService.findByName(cliente);
+    
+    if (!clienteData) {
+      return null;
+    }
+
+    // Se o cliente tem tipo_estoque_id, buscar o tipo de estoque pelo ID
+    if (clienteData.tipoEstoqueId) {
+      const tipoEstoque = await tiposEstoqueService.findById(clienteData.tipoEstoqueId);
+      if (tipoEstoque) {
+        return tipoEstoque.nome;
+      }
+    }
+
+    // Fallback: tentar encontrar tipo de estoque pelo nome_fantasia
+    let tipoEstoque = await tiposEstoqueService.findByName(clienteData.nomeFantasia);
+    
+    // Se não encontrar, tentar por razao_social
+    if (!tipoEstoque) {
+      tipoEstoque = await tiposEstoqueService.findByName(clienteData.razaoSocial);
+    }
+
+    return tipoEstoque?.nome ?? null;
+  }
+
+  public async clientePossuiEtiqueta(cliente: string): Promise<boolean> {
+    try {
+      // Primeiro, tentar buscar diretamente pelo nome do cliente como tipo de estoque
+      // (caso comum onde o nome do cliente corresponde ao nome do tipo de estoque)
+      let tipoEstoque = await tiposEstoqueService.findByName(cliente);
+      
+      if (tipoEstoque) {
+        return tipoEstoque.possuiEtiqueta;
+      }
+
+      // Se não encontrou, buscar o cliente pelo nome
+      const clienteData = await clientesService.findByName(cliente);
+      
+      if (!clienteData) {
+        return false;
+      }
+
+      // Se o cliente tem tipo_estoque_id, buscar o tipo de estoque pelo ID
+      if (clienteData.tipoEstoqueId) {
+        tipoEstoque = await tiposEstoqueService.findById(clienteData.tipoEstoqueId);
+        if (tipoEstoque) {
+          return tipoEstoque.possuiEtiqueta;
+        }
+      }
+
+      // Tentar encontrar tipo de estoque pelo nome_fantasia
+      if (!tipoEstoque) {
+        tipoEstoque = await tiposEstoqueService.findByName(clienteData.nomeFantasia);
+      }
+      
+      // Se não encontrar, tentar por razao_social
+      if (!tipoEstoque) {
+        tipoEstoque = await tiposEstoqueService.findByName(clienteData.razaoSocial);
+      }
+
+      // Retornar true apenas se o tipo de estoque existir e possui_etiqueta for true
+      return tipoEstoque?.possuiEtiqueta ?? false;
+    } catch (_error) {
+      return false;
+    }
   }
 
   public async avaliarInventario(
@@ -85,13 +156,15 @@ export class EstoqueService {
     cliente,
     produto,
     delta,
-  }: AjusteQuantidadeInput): Promise<EstoqueRecord> {
+    allowNegative = false,
+  }: AjusteQuantidadeInput & { allowNegative?: boolean }): Promise<EstoqueRecord> {
     const estoqueAtual = await this.obterEstoqueCliente(cliente);
+    const produtoNormalizado = produto.trim();
     const existente = estoqueAtual.find(
-      (record) => record.produto === produto,
+      (record) => record.produto.trim() === produtoNormalizado,
     );
     const quantidadeAtual = existente?.quantidade ?? this.criarQuantidadeZerada();
-    const novaQuantidade = this.somarQuantidades(quantidadeAtual, delta);
+    const novaQuantidade = this.somarQuantidades(quantidadeAtual, delta, allowNegative);
 
     const atualizadoEm = new Date().toISOString();
 
@@ -100,7 +173,7 @@ export class EstoqueService {
       novaQuantidade,
       {
         atualizadoEm,
-        inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
+        inventarioAtualizadoEm: existente?.inventarioAtualizadoEm ?? atualizadoEm,
       },
     );
 
@@ -108,7 +181,7 @@ export class EstoqueService {
       cliente,
       produto,
       quantidade: novaQuantidade,
-      inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
+      inventarioAtualizadoEm: existente?.inventarioAtualizadoEm ?? atualizadoEm,
       atualizadoEm,
     };
   }
@@ -165,13 +238,18 @@ export class EstoqueService {
   private somarQuantidades(
     a: Quantidade,
     b: Quantidade,
+    allowNegative = false,
   ): Quantidade {
     const kgSomado = parseFloat((a.kg + (b.kg || 0)).toFixed(3));
+    const caixas = a.caixas + (b.caixas || 0);
+    const pacotes = a.pacotes + (b.pacotes || 0);
+    const unidades = a.unidades + (b.unidades || 0);
+    
     return {
-      caixas: this.clampZero(a.caixas + (b.caixas || 0)),
-      pacotes: this.clampZero(a.pacotes + (b.pacotes || 0)),
-      unidades: this.clampZero(a.unidades + (b.unidades || 0)),
-      kg: this.clampZero(kgSomado),
+      caixas: allowNegative ? caixas : this.clampZero(caixas),
+      pacotes: allowNegative ? pacotes : this.clampZero(pacotes),
+      unidades: allowNegative ? unidades : this.clampZero(unidades),
+      kg: allowNegative ? kgSomado : this.clampZero(kgSomado),
     };
   }
 

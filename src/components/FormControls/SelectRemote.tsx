@@ -39,7 +39,6 @@ export default function SelectRemote({
         const data = await response.json();
         setOptions(data.options || []);
       } catch (err) {
-        console.error('Erro ao carregar opções:', err);
         setError(err instanceof Error ? err.message : 'Erro desconhecido');
       } finally {
         setLoading(false);

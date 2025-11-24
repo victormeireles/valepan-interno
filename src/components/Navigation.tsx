@@ -177,18 +177,6 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   <span className="material-icons text-xl mr-3">inventory</span>
                   Meta: Embalagem
                 </Link>
-                <Link
-                  href="/meta/saidas"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/meta/saidas')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">outbox</span>
-                  Meta: Saídas
-                </Link>
               </div>
 
               {/* Separador */}
@@ -249,18 +237,6 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   <span className="material-icons text-xl mr-3">inventory_2</span>
                   Realizado: Embalagem
                 </Link>
-                <Link
-                  href="/realizado/saidas"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/realizado/saidas')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">assignment_turned_in</span>
-                  Realizado: Saídas
-                </Link>
               </div>
 
               {/* Separador */}
@@ -293,7 +269,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   }`}
                 >
                   <span className="material-icons text-xl mr-3">dashboard</span>
-                  Dashboard Estoque
+                  Estoque
                 </Link>
               </div>
             </div>

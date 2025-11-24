@@ -25,6 +25,7 @@ type PainelItem = {
   // Dados de etiqueta
   lote?: number;
   etiquetaGerada?: boolean;
+  possuiEtiqueta?: boolean;
   // Dados de foto
   photoUrl?: string;
   photoId?: string;
@@ -166,8 +167,8 @@ export default function PedidoEmbalagemPage() {
         const produtosData = await produtosRes.json();
         if (clientesRes.ok) setClientesOptions(clientesData.options || []);
         if (produtosRes.ok) setProdutosOptions(produtosData.options || []);
-      } catch (err) {
-        console.error('Erro ao carregar opções:', err);
+      } catch (_err) {
+        // Erro ao carregar opções
       }
     };
     loadOptions();
@@ -366,8 +367,8 @@ export default function PedidoEmbalagemPage() {
       }
       setMessage('Etiqueta gerada com sucesso!');
       setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      console.error('Erro ao recarregar dados do painel:', err);
+    } catch (_err) {
+      // Erro ao recarregar dados do painel
     }
   };
 
@@ -519,7 +520,7 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-lg">photo_camera</span>
                                       </a>
                                     )}
-                                    {item.lote && (
+                                    {item.lote && item.possuiEtiqueta && (
                                       <button
                                         onClick={(e) => handleEtiquetaClick(item, e)}
                                         className={`ml-2 transition-colors cursor-pointer ${

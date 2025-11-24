@@ -148,7 +148,6 @@ export class ZApiManager {
       const data: ZApiSendMessageResponse = await response.json();
       return data;
     } catch (error) {
-      console.error("💥 [Z-API] Erro ao enviar mensagem:", error);
       throw error;
     }
   }
@@ -168,9 +167,6 @@ export class ZApiManager {
         message: message,
       };
 
-      console.log("🌐 [Z-API] URL:", url);
-      console.log("📦 [Z-API] Payload:", JSON.stringify({ ...payload, message: payload.message.substring(0, 100) + "..." }));
-
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -180,21 +176,16 @@ export class ZApiManager {
         body: JSON.stringify(payload),
       });
 
-      console.log("📡 [Z-API] Status da resposta:", response.status, response.statusText);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("❌ [Z-API] Erro na resposta:", errorData);
         throw new Error(
           `Z-API Error: ${response.status} - ${JSON.stringify(errorData)}`
         );
       }
 
       const data: ZApiSendMessageResponse = await response.json();
-      console.log("✅ [Z-API] Resposta da API:", JSON.stringify(data));
       return data;
     } catch (error) {
-      console.error("💥 [Z-API] Erro ao enviar mensagem para grupo:", error);
       throw error;
     }
   }
@@ -238,7 +229,6 @@ export class ZApiManager {
       const data: ZApiSendMessageResponse = await response.json();
       return data;
     } catch (error) {
-      console.error("💥 [Z-API] Erro ao enviar mensagem com botões:", error);
       throw error;
     }
   }
@@ -259,23 +249,15 @@ export class ZApiManager {
       });
 
       if (!response.ok) {
-        console.error("❌ [Z-API] Erro ao checar status da instância:", response.status);
         return false;
       }
 
       const data: ZApiStatusResponse = await response.json();
       
       const isConnected = data.connected && data.smartphoneConnected;
-      
-      console.warn("📱 [Z-API] Status da instância:", {
-        connected: data.connected,
-        smartphoneConnected: data.smartphoneConnected,
-        session: data.session,
-      });
 
       return isConnected;
-    } catch (error) {
-      console.error("💥 [Z-API] Erro ao verificar conexão:", error);
+    } catch (_error) {
       return false;
     }
   }
@@ -289,15 +271,8 @@ export class ZApiManager {
   async testConnection(): Promise<boolean> {
     try {
       const isConnected = await this.isInstanceConnected();
-      if (!isConnected) {
-        console.warn("⚠️ [Z-API] Instância não está conectada. Leia o QRCode no painel da Z-API.");
-        return false;
-      }
-      
-      console.warn("✅ [Z-API] Conexão OK - Instância conectada e pronta para uso.");
-      return true;
-    } catch (error) {
-      console.error("💥 [Z-API] Erro ao testar conexão:", error);
+      return isConnected;
+    } catch (_error) {
       return false;
     }
   }

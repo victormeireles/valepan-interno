@@ -91,8 +91,7 @@ async function ensureDateFolder(): Promise<string> {
         
         currentFolderId = folderResponse.data.id!;
       }
-    } catch (error) {
-      console.error(`Erro ao criar/buscar pasta ${folderName}:`, error);
+    } catch (_error) {
       throw new Error(`Falha ao criar estrutura de pastas: ${folderName}`);
     }
   }
@@ -185,8 +184,7 @@ export async function uploadPhotoToDrive(
       photoId: response.data.id,
       fileName: finalFileName,
     };
-  } catch (error) {
-    console.error('Erro no upload para Google Drive:', error);
+  } catch (_error) {
     throw new Error('Falha ao fazer upload da foto para o Google Drive');
   }
 }
@@ -202,8 +200,7 @@ export async function deletePhotoFromDrive(photoId: string): Promise<void> {
       fileId: photoId,
       supportsAllDrives: true,
     });
-  } catch (error) {
-    console.error('Erro ao deletar foto do Google Drive:', error);
+  } catch (_error) {
     throw new Error('Falha ao deletar foto do Google Drive');
   }
 }
@@ -233,8 +230,7 @@ export async function getPhotoInfo(photoId: string): Promise<PhotoInfo | null> {
       fileName: response.data.name || 'unknown',
       uploadedAt: response.data.createdTime || new Date().toISOString(),
     };
-  } catch (error) {
-    console.error('Erro ao obter informações da foto:', error);
+  } catch (_error) {
     return null;
   }
 }
@@ -299,8 +295,7 @@ export async function listPhotosInPeriod(startDate: Date, endDate: Date): Promis
     }
     
     return photos;
-  } catch (error) {
-    console.error('Erro ao listar fotos do período:', error);
+  } catch (_error) {
     return [];
   }
 }

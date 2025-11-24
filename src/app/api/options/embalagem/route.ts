@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 
 const productService = new SupabaseProductService();
 
@@ -11,8 +10,8 @@ export async function GET(request: Request) {
 
   try {
     if (type === 'clientes') {
-      const { spreadsheetId, tabName, column, headerRow } = PEDIDOS_EMBALAGEM_CONFIG.origemClientes;
-      const options = await getColumnOptions(spreadsheetId, tabName, column, headerRow);
+      const tiposEstoque = await tiposEstoqueService.listTiposEstoque();
+      const options = tiposEstoque.map(tipo => tipo.nome);
       return NextResponse.json({ options });
     }
 

@@ -128,7 +128,6 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Erro ao buscar foto:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -223,8 +222,7 @@ export async function DELETE(
     if (photoId) {
       try {
         await deletePhotoFromDrive(photoId);
-      } catch (error) {
-        console.warn('Erro ao deletar foto do Drive (pode já ter sido deletada):', error);
+      } catch (_error) {
         // Continuar mesmo se falhar, pois a foto pode já ter sido deletada
       }
     }
@@ -246,7 +244,6 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error('Erro ao deletar foto:', error);
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }

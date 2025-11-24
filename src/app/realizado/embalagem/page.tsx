@@ -151,8 +151,8 @@ export default function ProducaoEmbalagemPage() {
       if (painelRes.ok) {
         setItems((painelData.items || []) as PainelItem[]);
       }
-    } catch (err) {
-      console.error('Erro ao recarregar dados do painel:', err);
+    } catch (_err) {
+      // Erro ao recarregar dados do painel
     }
   };
 

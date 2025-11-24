@@ -185,9 +185,8 @@ export async function PUT(
         } as { pacoteFotoUrl?: string; etiquetaFotoUrl?: string; palletFotoUrl?: string },
         obsEmbalagem: obsEmbalagemValue || undefined,
       });
-    } catch (error) {
-      // Logar erro mas não propagar
-      console.error("Erro ao enviar notificação WhatsApp:", error);
+    } catch (_error) {
+      // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
 
     return NextResponse.json({ message: 'Produção atualizada com sucesso' });
@@ -218,8 +217,12 @@ async function atualizarEstoque(
 
   if (!houveMudanca) return;
 
+  // Obter tipo de estoque do cliente
+  const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
+  const clienteEstoque = tipoEstoque ?? cliente;
+
   await estoqueService.aplicarDelta({
-    cliente,
+    cliente: clienteEstoque,
     produto,
     delta,
   });
