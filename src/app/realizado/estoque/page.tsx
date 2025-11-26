@@ -97,7 +97,7 @@ export default function InventarioPage() {
         });
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || 'Erro ao carregar estoque do cliente');
+          throw new Error(data.error || 'Erro ao carregar estoque do tipo de estoque');
         }
         const data = (await response.json()) as EstoqueResponse;
         const linhas = data.estoque.map<InventarioProdutoInput>((record) => ({
@@ -196,7 +196,7 @@ export default function InventarioPage() {
     if (!clienteSelecionado) {
       const resolved = assegurarClienteSelecionado();
       if (!resolved) {
-        setMessage('Selecione um cliente válido para continuar');
+        setMessage('Selecione um tipo de estoque válido para continuar');
         return;
       }
     }
@@ -211,7 +211,7 @@ export default function InventarioPage() {
       setMessage(null);
       const cliente = clienteSelecionado ?? assegurarClienteSelecionado();
       if (!cliente) {
-        setMessage('Selecione um cliente válido para continuar');
+        setMessage('Selecione um tipo de estoque válido para continuar');
         return;
       }
 
@@ -242,7 +242,7 @@ export default function InventarioPage() {
       setConfirming(true);
       const cliente = clienteSelecionado ?? assegurarClienteSelecionado();
       if (!cliente) {
-        setMessage('Selecione um cliente válido para continuar');
+        setMessage('Selecione um tipo de estoque válido para continuar');
         return;
       }
 
@@ -333,8 +333,8 @@ export default function InventarioPage() {
                 setPreview(null);
               }}
               options={options.clientes}
-              placeholder="Digite o nome do cliente..."
-              label="Cliente"
+              placeholder="Digite o tipo de estoque..."
+              label="Tipo de Estoque"
               required
               disabled={optionsLoading || confirming}
             />

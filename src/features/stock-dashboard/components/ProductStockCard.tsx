@@ -17,63 +17,25 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
   onAdjust,
   onOutflow,
 }) => {
-  const quantityEntries = [
-    { label: 'Cx', value: quantidade.caixas },
-    { label: 'Pct', value: quantidade.pacotes },
-    { label: 'Un', value: quantidade.unidades },
-    { label: 'Kg', value: quantidade.kg },
-  ].filter((entry) => entry.value > 0);
-
-  const hasQuantidade = quantityEntries.length > 0;
-
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <h3
-            className="text-base font-semibold text-gray-900 truncate"
-            title={produto}
-          >
-        {produto}
-      </h3>
-          <p className="text-xs text-gray-500 mt-1">
-            {hasQuantidade ? 'Em estoque agora' : 'Sem estoque disponível'}
-          </p>
-        </div>
-        <div className="text-right">
-          <span className="text-xs uppercase tracking-wider text-gray-400">
-            Total
-          </span>
-          <p className="text-lg font-bold text-gray-900">
-        {formatQuantidade(quantidade)}
-      </p>
-        </div>
+    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3
+          className="text-sm font-semibold text-gray-900 truncate flex-1"
+          title={produto}
+        >
+          {produto}
+        </h3>
+        <span className="text-base font-bold text-gray-900 whitespace-nowrap">
+          {formatQuantidade(quantidade)}
+        </span>
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-3">
-        {hasQuantidade ? (
-          <dl className="grid grid-cols-2 gap-3 text-sm text-gray-700">
-            {quantityEntries.map((entry) => (
-              <div key={entry.label} className="flex items-baseline gap-2">
-                <dt className="text-xs uppercase tracking-wide text-gray-500">
-                  {entry.label}
-                </dt>
-                <dd className="font-semibold text-gray-900">
-                  {entry.value.toLocaleString('pt-BR')}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        ) : (
-          <p className="text-sm text-gray-500 text-center">Tudo zerado</p>
-        )}
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex gap-2">
         <button
           type="button"
           onClick={onAdjust}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
         >
           <AdjustIcon />
           Ajustar
@@ -81,7 +43,7 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
         <button
           type="button"
           onClick={onOutflow}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 active:bg-blue-700 transition-colors"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 active:bg-blue-700 transition-colors"
         >
           <OutflowIcon />
           Saída
@@ -93,7 +55,7 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
 
 const AdjustIcon = () => (
   <svg
-    className="h-4 w-4 text-gray-500"
+    className="h-3.5 w-3.5 text-gray-500"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -109,7 +71,7 @@ const AdjustIcon = () => (
 
 const OutflowIcon = () => (
   <svg
-    className="h-4 w-4 text-white"
+    className="h-3.5 w-3.5 text-white"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"

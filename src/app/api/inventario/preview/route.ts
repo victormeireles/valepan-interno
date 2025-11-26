@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
 function validatePayload(body: PreviewRequest | null): string | null {
   if (!body) return 'Payload inválido';
-  if (!body.cliente) return 'Cliente é obrigatório';
+  if (!body.cliente) return 'Tipo de estoque é obrigatório';
   if (!Array.isArray(body.itens) || body.itens.length === 0) {
     return 'Informe ao menos um produto';
   }

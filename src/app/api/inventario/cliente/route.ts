@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const cliente = request.nextUrl.searchParams.get('cliente');
     if (!cliente) {
       return NextResponse.json(
-        { error: 'Cliente é obrigatório' },
+        { error: 'Tipo de estoque é obrigatório' },
         { status: HTTP_BAD_REQUEST },
       );
     }

@@ -70,9 +70,6 @@ export class ClientesService {
   }
 
   public async findByStockTypeId(stockTypeId: string): Promise<ClienteDTO[]> {
-    // Como a tabela clientes não tem tipo_estoque_id diretamente,
-    // vamos buscar clientes que tenham o nome do tipo de estoque
-    // igual ao nome_fantasia ou razao_social
     const tipoEstoque = await tiposEstoqueService.findById(stockTypeId);
     
     if (!tipoEstoque) {
@@ -83,34 +80,40 @@ export class ClientesService {
   }
 
   public async findByStockTypeName(stockTypeName: string): Promise<ClienteDTO[]> {
-    // Buscar clientes onde o nome_fantasia ou razao_social corresponde ao nome do tipo de estoque
     const client = this.resolveClient();
     const nomeNormalizado = stockTypeName.trim();
 
-    // Buscar por nome_fantasia
+    // Buscar clientes cujo nome_fantasia corresponde ao nome do tipo de estoque
     const { data: dataFantasia, error: errorFantasia } = await client
       .from('clientes')
       .select('id, nome_fantasia, razao_social, erp_codigo')
       .ilike('nome_fantasia', `%${nomeNormalizado}%`)
       .eq('ativo', true);
 
-    // Buscar por razao_social
-    const { data: dataSocial, error: errorSocial } = await client
+    if (errorFantasia) {
+      throw new Error(`Erro ao buscar clientes por tipo de estoque: ${errorFantasia.message}`);
+    }
+
+    // Buscar clientes cujo razao_social corresponde ao nome do tipo de estoque
+    const { data: dataRazao, error: errorRazao } = await client
       .from('clientes')
       .select('id, nome_fantasia, razao_social, erp_codigo')
       .ilike('razao_social', `%${nomeNormalizado}%`)
       .eq('ativo', true);
 
-    if (errorFantasia || errorSocial) {
-      const errorMsg = errorFantasia?.message || errorSocial?.message || 'Erro desconhecido';
-      throw new Error(`Erro ao buscar clientes por tipo de estoque: ${errorMsg}`);
+    if (errorRazao) {
+      throw new Error(`Erro ao buscar clientes por tipo de estoque: ${errorRazao.message}`);
     }
 
     // Combinar resultados e remover duplicatas
-    const allRecords = [...(dataFantasia ?? []), ...(dataSocial ?? [])];
+    const allRecords = [...(dataFantasia || []), ...(dataRazao || [])];
     const uniqueRecords = Array.from(
-      new Map(allRecords.map((r) => [r.id, r])).values()
+      new Map(allRecords.map((record) => [record.id, record])).values()
     );
+
+    if (uniqueRecords.length === 0) {
+      return [];
+    }
 
     return uniqueRecords.map((record) => this.mapCliente(record));
   }

@@ -1,23 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions } from '@/lib/googleSheets';
-import { INVENTARIO_SHEET_CONFIG } from '@/config/inventario';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 
 const productService = new SupabaseProductService();
 
 export async function GET() {
   try {
-    const clientes = await getColumnOptions(
-      INVENTARIO_SHEET_CONFIG.origemClientes.spreadsheetId,
-      INVENTARIO_SHEET_CONFIG.origemClientes.tabName,
-      INVENTARIO_SHEET_CONFIG.origemClientes.column,
-      INVENTARIO_SHEET_CONFIG.origemClientes.headerRow,
-    );
+    const tiposEstoque = await tiposEstoqueService.listTiposEstoque();
+    const tiposEstoqueNomes = tiposEstoque.map((tipo) => tipo.nome);
 
     const produtos = await productService.listProducts();
 
     return NextResponse.json({
-      clientes,
+      clientes: tiposEstoqueNomes,
       produtos: produtos.map(produto => ({
         produto: produto.nome,
         unidade: produto.unidade,
