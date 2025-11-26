@@ -8,6 +8,7 @@ type UpdateBody = {
   realizado: SaidaQuantidade;
   fotoUrl?: string;
   fotoId?: string;
+  quantidadeInicial?: SaidaQuantidade; // Quantidade inicial do formulário para cálculo correto de diferença
 };
 
 function parseRowId(rowId: string): number | null {
@@ -108,7 +109,9 @@ export async function PUT(
       existingRow.realizado.kg === body.realizado.kg;
 
     await saidasSheetManager.updateRealizado(payload, photoPayload);
-    await atualizarEstoque(existingRow, body.realizado);
+    // Usar quantidade inicial do formulário se fornecida, senão usar valor do banco
+    const quantidadeBase = body.quantidadeInicial || existingRow.realizado;
+    await atualizarEstoque(existingRow, body.realizado, quantidadeBase);
 
     const updatedRow = await saidasSheetManager.getRow(rowNumber);
     if (updatedRow) {
@@ -137,12 +140,16 @@ type SaidaRow = NonNullable<Awaited<ReturnType<typeof saidasSheetManager.getRow>
 async function atualizarEstoque(
   row: SaidaRow,
   realizadoNovo: SaidaQuantidade,
+  quantidadeInicial?: SaidaQuantidade,
 ) {
+  // Usar quantidade inicial fornecida ou valor do banco como base
+  const quantidadeBase = quantidadeInicial || row.realizado;
+  
   const delta = {
-    caixas: (realizadoNovo.caixas || 0) - (row.realizado.caixas || 0),
-    pacotes: (realizadoNovo.pacotes || 0) - (row.realizado.pacotes || 0),
-    unidades: (realizadoNovo.unidades || 0) - (row.realizado.unidades || 0),
-    kg: (realizadoNovo.kg || 0) - (row.realizado.kg || 0),
+    caixas: (realizadoNovo.caixas || 0) - (quantidadeBase.caixas || 0),
+    pacotes: (realizadoNovo.pacotes || 0) - (quantidadeBase.pacotes || 0),
+    unidades: (realizadoNovo.unidades || 0) - (quantidadeBase.unidades || 0),
+    kg: (realizadoNovo.kg || 0) - (quantidadeBase.kg || 0),
   };
 
   const houveMudanca =

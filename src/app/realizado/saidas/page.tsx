@@ -166,10 +166,12 @@ export default function RealizadoSaidasPage() {
     realizado,
     uploadFile,
     removeExistingPhoto,
+    quantidadeInicial,
   }: {
     realizado: SaidaQuantidade;
     uploadFile?: File;
     removeExistingPhoto?: boolean;
+    quantidadeInicial?: SaidaQuantidade;
   }) => {
     if (!modalContext) return;
 
@@ -214,8 +216,10 @@ export default function RealizadoSaidasPage() {
         realizado: SaidaQuantidade;
         fotoUrl?: string;
         fotoId?: string;
+        quantidadeInicial?: SaidaQuantidade;
       } = {
         realizado,
+        quantidadeInicial,
       };
 
       if (uploadFile || removeExistingPhoto) {

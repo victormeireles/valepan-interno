@@ -11,6 +11,7 @@ interface SaidasRealizadoModalProps {
     realizado: SaidaQuantidade;
     uploadFile?: File;
     removeExistingPhoto?: boolean;
+    quantidadeInicial?: SaidaQuantidade;
   }) => Promise<void>;
   onSaveSuccess?: () => Promise<void>;
   loading?: boolean;
@@ -71,11 +72,15 @@ export default function SaidasRealizadoModal({
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [quantidadeInicial, setQuantidadeInicial] = useState<FormState | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       const initialState = buildInitialState(initialRealizado);
       setFormState(initialState);
+      // Capturar quantidade inicial para cálculo de diferença
+      setQuantidadeInicial(initialState);
       setDisplayValues({
         caixas: initialState.caixas === 0 ? '' : initialState.caixas.toString(),
         pacotes: initialState.pacotes === 0 ? '' : initialState.pacotes.toString(),
@@ -163,6 +168,7 @@ export default function SaidasRealizadoModal({
         realizado: formState,
         uploadFile: selectedPhoto || undefined,
         removeExistingPhoto,
+        quantidadeInicial: quantidadeInicial || undefined,
       });
       onClose();
     } catch (error) {
@@ -171,6 +177,50 @@ export default function SaidasRealizadoModal({
       setMessage({ type: 'error', text: errorMessage });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!rowId) {
+      setMessage({ type: 'error', text: 'ID da saída não encontrado.' });
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      'Tem certeza que deseja deletar esta saída? O estoque será ajustado automaticamente.'
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      setIsDeleting(true);
+      setMessage(null);
+
+      const res = await fetch(`/api/saidas/delete/${rowId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao deletar saída');
+      }
+
+      setMessage({ type: 'success', text: 'Saída deletada com sucesso!' });
+      
+      if (onSaveSuccess) {
+        await onSaveSuccess();
+      }
+
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro ao deletar saída';
+      setMessage({ type: 'error', text: errorMessage });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -397,24 +447,67 @@ export default function SaidasRealizadoModal({
             )}
           </section>
 
-          <footer className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
-              disabled={loading || isSubmitting}
-            >
-              Cancelar
-            </button>
+          <footer className="flex justify-between gap-3 pt-4">
+            <div className="flex gap-3">
+              {rowId && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-5 py-3 bg-red-600 hover:bg-red-500 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                  disabled={loading || isSubmitting || isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Deletando...
+                    </>
+                  ) : (
+                    'Deletar'
+                  )}
+                </button>
+              )}
+            </div>
             
-            {/* Botão Salvar Parcial */}
-            {rowId && (
+            <div className="flex gap-3">
               <button
                 type="button"
-                onClick={handleSavePartial}
-                className="px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
-                disabled={loading || isSubmitting || !isPartialSaida()}
-                title={!isPartialSaida() ? 'Disponível apenas quando realizado é menor que a meta' : 'Salvar saída parcial e criar nova meta com a diferença'}
+                onClick={onClose}
+                className="px-5 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+                disabled={loading || isSubmitting || isDeleting}
+              >
+                Cancelar
+              </button>
+              
+              {/* Botão Salvar Parcial */}
+              {rowId && (
+                <button
+                  type="button"
+                  onClick={handleSavePartial}
+                  className="px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
+                  disabled={loading || isSubmitting || isDeleting || !isPartialSaida()}
+                  title={!isPartialSaida() ? 'Disponível apenas quando realizado é menor que a meta' : 'Salvar saída parcial e criar nova meta com a diferença'}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {photoLoading ? 'Enviando foto...' : 'Salvando...'}
+                    </>
+                  ) : (
+                    'Salvar Parcial'
+                  )}
+                </button>
+              )}
+
+              <button
+                type="submit"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
+                disabled={loading || isSubmitting || isDeleting}
               >
                 {isSubmitting ? (
                   <>
@@ -425,28 +518,10 @@ export default function SaidasRealizadoModal({
                     {photoLoading ? 'Enviando foto...' : 'Salvando...'}
                   </>
                 ) : (
-                  'Salvar Parcial'
+                  'Salvar'
                 )}
               </button>
-            )}
-
-            <button
-              type="submit"
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[140px]"
-              disabled={loading || isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  {photoLoading ? 'Enviando foto...' : 'Salvando...'}
-                </>
-              ) : (
-                'Salvar'
-              )}
-            </button>
+            </div>
           </footer>
         </form>
       </div>
