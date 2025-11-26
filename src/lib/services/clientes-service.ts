@@ -83,7 +83,50 @@ export class ClientesService {
     const client = this.resolveClient();
     const nomeNormalizado = stockTypeName.trim();
 
-    // Buscar clientes cujo nome_fantasia corresponde ao nome do tipo de estoque
+    // Primeiro, buscar o tipo de estoque pelo nome
+    const tipoEstoque = await tiposEstoqueService.findByName(nomeNormalizado);
+    
+    if (tipoEstoque) {
+      // Se encontrou o tipo de estoque, tentar buscar clientes pelo tipo_estoque_id
+      // Como o campo pode não existir no schema TypeScript, vamos usar uma abordagem segura
+      try {
+        // Usar type assertion para permitir acesso ao campo que pode não estar no schema
+        const queryBuilder = client
+          .from('clientes')
+          .select('id, nome_fantasia, razao_social, erp_codigo')
+          .eq('ativo', true) as unknown as {
+          eq: (column: string, value: string) => Promise<{
+            data: Array<Pick<ClienteRecord, 'id' | 'nome_fantasia' | 'razao_social' | 'erp_codigo'>> | null;
+            error: { message: string; code?: string } | null;
+          }>;
+        };
+        
+        const result = await queryBuilder.eq('tipo_estoque_id', tipoEstoque.id);
+        
+        if (result && result.data && Array.isArray(result.data) && result.data.length > 0) {
+          // Retornar clientes encontrados pelo tipo_estoque_id
+          return result.data.map((record) => this.mapCliente(record));
+        }
+      } catch (error) {
+        // Se houver erro (provavelmente campo não existe), continuar com fallback
+        // Verificar se é erro de coluna não encontrada
+        const errorObj = error as { message?: string; code?: string };
+        const errorMessage = errorObj?.message || String(error || '');
+        const errorCode = errorObj?.code || '';
+        if (
+          errorMessage.includes('tipo_estoque_id') || 
+          errorCode === '42703' || 
+          (errorMessage.includes('column') && errorMessage.includes('does not exist'))
+        ) {
+          // Campo não existe, usar fallback silenciosamente
+        } else {
+          // Outro tipo de erro, logar mas continuar
+          console.warn(`Erro ao buscar clientes por tipo_estoque_id: ${errorMessage}`);
+        }
+      }
+    }
+
+    // Fallback: Buscar clientes cujo nome_fantasia corresponde ao nome do tipo de estoque
     const { data: dataFantasia, error: errorFantasia } = await client
       .from('clientes')
       .select('id, nome_fantasia, razao_social, erp_codigo')
@@ -122,13 +165,13 @@ export class ClientesService {
     return this.factory.createServiceRoleClient();
   }
 
-  private mapCliente(record: Pick<ClienteRecord, 'id' | 'nome_fantasia' | 'razao_social' | 'erp_codigo'>): ClienteDTO {
+  private mapCliente(record: Pick<ClienteRecord, 'id' | 'nome_fantasia' | 'razao_social' | 'erp_codigo'> & { tipo_estoque_id?: string | null }): ClienteDTO {
     return {
       id: record.id,
       nomeFantasia: record.nome_fantasia,
       razaoSocial: record.razao_social,
       erpCodigo: record.erp_codigo,
-      tipoEstoqueId: null,
+      tipoEstoqueId: 'tipo_estoque_id' in record ? record.tipo_estoque_id ?? null : null,
     };
   }
 }
