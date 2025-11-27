@@ -55,6 +55,7 @@ export async function POST(request: Request) {
         unidades: -(payload.meta.unidades || 0),
         kg: -(payload.meta.kg || 0),
       },
+      allowNegative: true,
     });
 
     // Só envia notificação se não foi solicitado para pular

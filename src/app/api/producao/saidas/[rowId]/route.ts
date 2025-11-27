@@ -162,18 +162,20 @@ async function atualizarEstoque(
 
   // Obter tipo de estoque do cliente
   const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(row.cliente);
-  const clienteEstoque = tipoEstoque ?? row.cliente;
 
-  await estoqueService.aplicarDelta({
-    cliente: clienteEstoque,
-    produto: row.produto,
-    delta: {
-      caixas: -delta.caixas,
-      pacotes: -delta.pacotes,
-      unidades: -delta.unidades,
-      kg: -delta.kg,
-    },
-  });
+  if (tipoEstoque) {
+    await estoqueService.aplicarDelta({
+      cliente: tipoEstoque,
+      produto: row.produto,
+      delta: {
+        caixas: -delta.caixas,
+        pacotes: -delta.pacotes,
+        unidades: -delta.unidades,
+        kg: -delta.kg,
+      },
+      allowNegative: true,
+    });
+  }
 }
 
 

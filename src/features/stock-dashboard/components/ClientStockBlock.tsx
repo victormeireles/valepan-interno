@@ -25,10 +25,20 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
   onAdjustStock,
   onRegisterOutflow,
 }) => {
+  const isTotalNegative =
+    summary.total.caixas < 0 ||
+    summary.total.pacotes < 0 ||
+    summary.total.unidades < 0 ||
+    summary.total.kg < 0;
+
   return (
     <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4">
       <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-300">
-        <span className="text-gray-600 font-normal">
+        <span
+          className={`${
+            isTotalNegative ? 'text-red-600 font-bold' : 'text-gray-600 font-normal'
+          }`}
+        >
           {formatQuantidade(summary.total)}
         </span>{' '}
         - {cliente}

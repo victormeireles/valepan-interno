@@ -22,15 +22,19 @@ export function formatQuantidade(quantidade?: Quantidade | null): string {
   
   const partes: string[] = [];
   
-  if (quantidade.caixas > 0) {
+  if (quantidade.caixas !== 0) {
     partes.push(`${quantidade.caixas} cx`);
   }
   
-  if (quantidade.pacotes > 0) {
+  if (quantidade.pacotes !== 0) {
     partes.push(`${quantidade.pacotes} pct`);
   }
+
+  if (quantidade.unidades !== 0) {
+    partes.push(`${quantidade.unidades} un`);
+  }
   
-  if (quantidade.kg > 0) {
+  if (quantidade.kg !== 0) {
     partes.push(`${quantidade.kg.toFixed(2)} Kg`);
   }
 

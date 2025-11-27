@@ -423,14 +423,10 @@ function subtrairQuantidade(
   delta: Quantidade,
 ): Quantidade {
   return {
-    caixas: clampZero(base.caixas - (delta.caixas || 0)),
-    pacotes: clampZero(base.pacotes - (delta.pacotes || 0)),
-    unidades: clampZero(base.unidades - (delta.unidades || 0)),
-    kg: clampZero(base.kg - (delta.kg || 0)),
+    caixas: base.caixas - (delta.caixas || 0),
+    pacotes: base.pacotes - (delta.pacotes || 0),
+    unidades: base.unidades - (delta.unidades || 0),
+    kg: parseFloat((base.kg - (delta.kg || 0)).toFixed(3)),
   };
-}
-
-function clampZero(value: number) {
-  return value < 0 ? 0 : value;
 }
 

@@ -17,6 +17,12 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
   onAdjust,
   onOutflow,
 }) => {
+  const isNegative =
+    quantidade.caixas < 0 ||
+    quantidade.pacotes < 0 ||
+    quantidade.unidades < 0 ||
+    quantidade.kg < 0;
+
   return (
     <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -26,7 +32,11 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
         >
           {produto}
         </h3>
-        <span className="text-base font-bold text-gray-900 whitespace-nowrap">
+        <span
+          className={`text-base font-bold whitespace-nowrap ${
+            isNegative ? 'text-red-600' : 'text-gray-900'
+          }`}
+        >
           {formatQuantidade(quantidade)}
         </span>
       </div>

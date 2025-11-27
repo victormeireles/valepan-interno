@@ -33,14 +33,17 @@ export async function DELETE(
       if (houveRealizado) {
         // Obter tipo de estoque do cliente
         const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(existingRow.cliente);
-        const clienteEstoque = tipoEstoque ?? existingRow.cliente;
-
-        // Creditar estoque de volta (usando tipo de estoque)
-        await estoqueService.aplicarDelta({
-          cliente: clienteEstoque,
-          produto: existingRow.produto,
-          delta: quantidade,
-        });
+        
+        // Creditar estoque de volta SOMENTE se houver tipo de estoque definido
+        // Evita criar estoque no nome do cliente se ele não tiver tipo de estoque
+        if (tipoEstoque) {
+          await estoqueService.aplicarDelta({
+            cliente: tipoEstoque,
+            produto: existingRow.produto,
+            delta: quantidade,
+            allowNegative: true,
+          });
+        }
       }
     }
 

@@ -143,19 +143,22 @@ export async function POST(
 
     // Obter tipo de estoque do cliente
     const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
-    const clienteEstoque = tipoEstoque ?? cliente;
 
     // Atualizar estoque (aplicar delta negativo para saidas usando tipo de estoque)
-    await estoqueService.aplicarDelta({
-      cliente: clienteEstoque,
-      produto,
-      delta: {
-        caixas: -(caixas || 0),
-        pacotes: -(pacotes || 0),
-        unidades: -(unidades || 0),
-        kg: -(kg || 0),
-      },
-    });
+    // SOMENTE se houver tipo de estoque definido
+    if (tipoEstoque) {
+      await estoqueService.aplicarDelta({
+        cliente: tipoEstoque,
+        produto,
+        delta: {
+          caixas: -(caixas || 0),
+          pacotes: -(pacotes || 0),
+          unidades: -(unidades || 0),
+          kg: -(kg || 0),
+        },
+        allowNegative: true,
+      });
+    }
 
     try {
       await whatsAppNotificationService.notifySaidasProduction({
