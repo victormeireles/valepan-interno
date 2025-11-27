@@ -92,6 +92,7 @@ export type Database = {
           razao_social: string
           tem_texto_indicando_congelado_na_etiqueta: boolean | null
           tem_validade_congelado_na_etiqueta: boolean | null
+          tipo_estoque_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -105,6 +106,7 @@ export type Database = {
           razao_social: string
           tem_texto_indicando_congelado_na_etiqueta?: boolean | null
           tem_validade_congelado_na_etiqueta?: boolean | null
+          tipo_estoque_id?: string | null
           updated_at?: string | null
         }
         Update: {

@@ -27,7 +27,7 @@ export class ClientesService {
     // Tentar buscar por nome_fantasia primeiro
     let { data, error } = await client
       .from('clientes')
-      .select('id, nome_fantasia, razao_social, erp_codigo')
+      .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
       .ilike('nome_fantasia', nomeNormalizado)
       .limit(1)
       .maybeSingle();
@@ -36,7 +36,7 @@ export class ClientesService {
     if (!data && !error) {
       const result = await client
         .from('clientes')
-        .select('id, nome_fantasia, razao_social, erp_codigo')
+        .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
         .ilike('razao_social', nomeNormalizado)
         .limit(1)
         .maybeSingle();
@@ -49,7 +49,7 @@ export class ClientesService {
     if (!data && !error && /^\d+$/.test(nomeNormalizado)) {
       const result = await client
         .from('clientes')
-        .select('id, nome_fantasia, razao_social, erp_codigo')
+        .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
         .eq('erp_codigo', nomeNormalizado)
         .limit(1)
         .maybeSingle();
@@ -86,50 +86,23 @@ export class ClientesService {
     // Primeiro, buscar o tipo de estoque pelo nome
     const tipoEstoque = await tiposEstoqueService.findByName(nomeNormalizado);
     
-    if (tipoEstoque) {
-      // Se encontrou o tipo de estoque, tentar buscar clientes pelo tipo_estoque_id
-      // Como o campo pode não existir no schema TypeScript, vamos usar uma abordagem segura
-      try {
-        // Usar type assertion para permitir acesso ao campo que pode não estar no schema
-        const queryBuilder = client
+      if (tipoEstoque) {
+        // Se encontrou o tipo de estoque, tentar buscar clientes pelo tipo_estoque_id
+        const { data: dataTipoEstoque, error: errorTipoEstoque } = await client
           .from('clientes')
-          .select('id, nome_fantasia, razao_social, erp_codigo')
-          .eq('ativo', true) as unknown as {
-          eq: (column: string, value: string) => Promise<{
-            data: Array<Pick<ClienteRecord, 'id' | 'nome_fantasia' | 'razao_social' | 'erp_codigo'>> | null;
-            error: { message: string; code?: string } | null;
-          }>;
-        };
+          .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
+          .eq('ativo', true)
+          .eq('tipo_estoque_id', tipoEstoque.id);
         
-        const result = await queryBuilder.eq('tipo_estoque_id', tipoEstoque.id);
-        
-        if (result && result.data && Array.isArray(result.data) && result.data.length > 0) {
-          // Retornar clientes encontrados pelo tipo_estoque_id
-          return result.data.map((record) => this.mapCliente(record));
-        }
-      } catch (error) {
-        // Se houver erro (provavelmente campo não existe), continuar com fallback
-        // Verificar se é erro de coluna não encontrada
-        const errorObj = error as { message?: string; code?: string };
-        const errorMessage = errorObj?.message || String(error || '');
-        const errorCode = errorObj?.code || '';
-        if (
-          errorMessage.includes('tipo_estoque_id') || 
-          errorCode === '42703' || 
-          (errorMessage.includes('column') && errorMessage.includes('does not exist'))
-        ) {
-          // Campo não existe, usar fallback silenciosamente
-        } else {
-          // Outro tipo de erro, logar mas continuar
-          console.warn(`Erro ao buscar clientes por tipo_estoque_id: ${errorMessage}`);
+        if (!errorTipoEstoque && dataTipoEstoque && dataTipoEstoque.length > 0) {
+          return dataTipoEstoque.map((record) => this.mapCliente(record));
         }
       }
-    }
 
     // Fallback: Buscar clientes cujo nome_fantasia corresponde ao nome do tipo de estoque
     const { data: dataFantasia, error: errorFantasia } = await client
       .from('clientes')
-      .select('id, nome_fantasia, razao_social, erp_codigo')
+      .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
       .ilike('nome_fantasia', `%${nomeNormalizado}%`)
       .eq('ativo', true);
 
@@ -140,7 +113,7 @@ export class ClientesService {
     // Buscar clientes cujo razao_social corresponde ao nome do tipo de estoque
     const { data: dataRazao, error: errorRazao } = await client
       .from('clientes')
-      .select('id, nome_fantasia, razao_social, erp_codigo')
+      .select('id, nome_fantasia, razao_social, erp_codigo, tipo_estoque_id')
       .ilike('razao_social', `%${nomeNormalizado}%`)
       .eq('ativo', true);
 
