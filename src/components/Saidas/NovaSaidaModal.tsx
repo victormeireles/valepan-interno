@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SaidaQuantidade } from '@/domain/types/saidas';
 import PhotoUploader from '@/components/PhotoUploader';
+import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
 
 interface NovaSaidaModalProps {
   isOpen: boolean;
@@ -80,8 +81,6 @@ export default function NovaSaidaModal({
     unidades: '',
     kg: '',
   });
-  const clienteDatalistId = useId();
-  const produtoDatalistId = useId();
 
   useEffect(() => {
     if (isOpen) {
@@ -263,48 +262,38 @@ export default function NovaSaidaModal({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-300">Cliente</label>
-                  <input
-                    list={clienteDatalistId}
+                  <AutocompleteInput
+                    label="Cliente"
                     value={formState.cliente}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setFormState((prev) => ({
                         ...prev,
-                        cliente: event.target.value,
+                        cliente: value,
                       }))
                     }
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+                    options={clientesOptions}
                     placeholder="Selecione ou digite"
                     required
+                    strict
                   />
-                  <datalist id={clienteDatalistId}>
-                    {clientesOptions.map((client) => (
-                      <option key={client} value={client} />
-                    ))}
-                  </datalist>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Produto</label>
-                <input
-                  list={produtoDatalistId}
+                <AutocompleteInput
+                  label="Produto"
                   value={formState.produto}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormState((prev) => ({
                       ...prev,
-                      produto: event.target.value,
+                      produto: value,
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+                  options={produtosOptions}
                   placeholder="Selecione ou digite"
                   required
+                  strict
                 />
-                <datalist id={produtoDatalistId}>
-                  {produtosOptions.map((product) => (
-                    <option key={product} value={product} />
-                  ))}
-                </datalist>
               </div>
 
               <div className="space-y-2">
