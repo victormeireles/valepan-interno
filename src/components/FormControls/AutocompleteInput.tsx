@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface AutocompleteInputProps {
   value: string;
@@ -42,7 +42,7 @@ export default function AutocompleteInput({
   }, [value]);
 
   // Validação strict ao fechar ou sair
-  const validateStrict = (currentValue: string) => {
+  const validateStrict = useCallback((currentValue: string) => {
     if (!strict || !currentValue) return;
     
     const match = options.find(opt => opt.toLowerCase() === currentValue.toLowerCase());
@@ -55,7 +55,7 @@ export default function AutocompleteInput({
       onChange('');
       setInputValue('');
     }
-  };
+  }, [strict, options, onChange]);
 
   useEffect(() => {
     // Filtrar baseado no que está sendo digitado visualmente
@@ -161,7 +161,7 @@ export default function AutocompleteInput({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [strict, options]); 
+  }, [strict, options, validateStrict]); 
 
   return (
     <div ref={containerRef} className="relative w-full group">

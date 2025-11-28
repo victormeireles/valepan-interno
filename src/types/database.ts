@@ -180,6 +180,84 @@ export type Database = {
           },
         ]
       }
+      masseiras: {
+        Row: {
+          ativo: boolean
+          created_at: string | null
+          id: string
+          nome: string
+          tempo_mistura_lenta_padrao: number | null
+          tempo_mistura_rapida_padrao: number | null
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          nome: string
+          tempo_mistura_lenta_padrao?: number | null
+          tempo_mistura_rapida_padrao?: number | null
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          nome?: string
+          tempo_mistura_lenta_padrao?: number | null
+          tempo_mistura_rapida_padrao?: number | null
+        }
+        Relationships: []
+      }
+      ordens_producao: {
+        Row: {
+          created_at: string | null
+          data_producao: string | null
+          id: string
+          lote_codigo: string
+          pedido_id: string | null
+          prioridade: number | null
+          produto_id: string
+          qtd_planejada: number
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo: string
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id: string
+          qtd_planejada: number
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo?: string
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id?: string
+          qtd_planejada?: number
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_itens: {
         Row: {
           created_at: string | null
@@ -300,6 +378,8 @@ export type Database = {
           id: string
           nome: string
           package_units: number | null
+          receita_id: string | null
+          rendimento_receita_unidades: number | null
           unidade: string
           unidade_descricao: string | null
           unit_barcode: string | null
@@ -315,6 +395,8 @@ export type Database = {
           id?: string
           nome: string
           package_units?: number | null
+          receita_id?: string | null
+          rendimento_receita_unidades?: number | null
           unidade: string
           unidade_descricao?: string | null
           unit_barcode?: string | null
@@ -330,6 +412,8 @@ export type Database = {
           id?: string
           nome?: string
           package_units?: number | null
+          receita_id?: string | null
+          rendimento_receita_unidades?: number | null
           unidade?: string
           unidade_descricao?: string | null
           unit_barcode?: string | null
@@ -344,7 +428,112 @@ export type Database = {
             referencedRelation: "categorias"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "produtos_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      receita_ingredientes: {
+        Row: {
+          id: string
+          ingrediente_nome: string | null
+          quantidade_padrao: number
+          receita_id: string | null
+          unidade: string
+        }
+        Insert: {
+          id?: string
+          ingrediente_nome?: string | null
+          quantidade_padrao: number
+          receita_id?: string | null
+          unidade: string
+        }
+        Update: {
+          id?: string
+          ingrediente_nome?: string | null
+          quantidade_padrao?: number
+          receita_id?: string | null
+          unidade?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receita_ingredientes_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receita_masseira_parametros: {
+        Row: {
+          id: string
+          masseira_id: string | null
+          receita_id: string | null
+          tempo_mistura_lenta: number | null
+          tempo_mistura_rapida: number | null
+        }
+        Insert: {
+          id?: string
+          masseira_id?: string | null
+          receita_id?: string | null
+          tempo_mistura_lenta?: number | null
+          tempo_mistura_rapida?: number | null
+        }
+        Update: {
+          id?: string
+          masseira_id?: string | null
+          receita_id?: string | null
+          tempo_mistura_lenta?: number | null
+          tempo_mistura_rapida?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receita_masseira_parametros_masseira_id_fkey"
+            columns: ["masseira_id"]
+            isOneToOne: false
+            referencedRelation: "masseiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receita_masseira_parametros_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receitas: {
+        Row: {
+          ativo: boolean
+          codigo: string | null
+          created_at: string | null
+          id: string
+          nome: string
+          peso_total_massa: number | null
+        }
+        Insert: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+          peso_total_massa?: number | null
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+          peso_total_massa?: number | null
+        }
+        Relationships: []
       }
       sugestoes_envio_logs: {
         Row: {
