@@ -120,7 +120,7 @@ export async function getClientsForStockLocationAction(
   const { estoqueNome: nomeValidado } = stockLocationSchema.parse({
     estoqueNome,
   });
-  const clientes = await clientesService.findByStockTypeName(nomeValidado);
+  const clientes = await clientesService.findByStockTypeNameWithAddresses(nomeValidado);
   return clientes;
 }
 

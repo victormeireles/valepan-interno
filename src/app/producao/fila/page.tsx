@@ -1,12 +1,17 @@
 import { getProductionQueue } from '@/app/actions/producao-actions';
 import ProductionQueueClient from './ProductionQueueClient';
-import { ProductionQueueItem } from '@/domain/types/producao';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FilaPage() {
-  const queue = await getProductionQueue();
+interface FilaPageProps {
+  searchParams: Promise<{ station?: string }>;
+}
 
-  return <ProductionQueueClient initialQueue={(queue || []) as unknown as ProductionQueueItem[]} />;
+export default async function FilaPage({ searchParams }: FilaPageProps) {
+  const params = await searchParams;
+  const queue = await getProductionQueue();
+  const station = params?.station || 'planejamento';
+
+  return <ProductionQueueClient initialQueue={queue} station={station} />;
 }
 

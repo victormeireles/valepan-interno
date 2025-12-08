@@ -7,13 +7,13 @@ export type ProductRecord = Tables<'produtos'>;
 export type ProductDTO = {
   readonly id: string;
   readonly nome: string;
-  readonly unidade: string;
-  readonly unidadeDescricao: string | null;
+  readonly unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
   readonly codigo: string;
   readonly unitBarcode: string | null;
   readonly boxUnits: number | null;
   readonly packageUnits: number | null;
   readonly unitWeight: number | null;
+  readonly unidadesAssadeira: number | null;
 };
 
 type ProductFilters = {
@@ -32,7 +32,7 @@ export class SupabaseProductService {
     const query = client
       .from('produtos')
       .select(
-        'id, nome, unidade, unidade_descricao, codigo, unit_barcode, box_units, package_units, unit_weight, ativo',
+        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .order('nome', { ascending: true });
 
@@ -55,7 +55,7 @@ export class SupabaseProductService {
     const { data, error } = await client
       .from('produtos')
       .select(
-        'id, nome, unidade, unidade_descricao, codigo, unit_barcode, box_units, package_units, unit_weight, ativo',
+        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .eq('ativo', true)
       .ilike('nome', nome)
@@ -77,17 +77,30 @@ export class SupabaseProductService {
     return this.factory.createServiceRoleClient();
   }
 
-  private mapRecord(record: Pick<ProductRecord, 'id' | 'nome' | 'unidade' | 'unidade_descricao' | 'codigo' | 'unit_barcode' | 'box_units' | 'package_units' | 'unit_weight'>): ProductDTO {
+  private mapRecord(record: {
+    id: string;
+    nome: string;
+    unidade_padrao_id: string | null;
+    package_units: number | null;
+    box_units: number | null;
+    unidades_assadeira: number | null;
+    unidades?: { nome_resumido?: string } | null;
+    [key: string]: unknown;
+  }): ProductDTO {
+    // Extrair nome_resumido do join com unidades
+    const unidades = record.unidades as { nome_resumido?: string } | null;
+    const unidadeNomeResumido = unidades?.nome_resumido || null;
+
     return {
       id: record.id,
       nome: record.nome,
-      unidade: record.unidade,
-      unidadeDescricao: record.unidade_descricao,
-      codigo: record.codigo,
-      unitBarcode: record.unit_barcode,
-      boxUnits: record.box_units,
-      packageUnits: record.package_units,
-      unitWeight: record.unit_weight,
+      unidadeNomeResumido,
+      codigo: (record.codigo as string) || '',
+      unitBarcode: (record.unit_barcode as string | null) || null,
+      boxUnits: (record.box_units as number | null) || null,
+      packageUnits: (record.package_units as number | null) || null,
+      unitWeight: (record.unit_weight as number | null) || null,
+      unidadesAssadeira: (record.unidades_assadeira as number | null) || null,
     };
   }
 }

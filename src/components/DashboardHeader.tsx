@@ -35,7 +35,12 @@ export default function DashboardHeader({
 
           {/* Título */}
           <div className="flex items-center gap-2">
-            <span className="text-2xl">{icon}</span>
+            {/* Renderizar como Material Icon se não for emoji, caso contrário renderizar como texto */}
+            {icon.match(/[\u{1F300}-\u{1F9FF}]/u) ? (
+              <span className="text-2xl">{icon}</span>
+            ) : (
+              <span className="material-icons text-2xl text-gray-700">{icon}</span>
+            )}
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">
               {title}
             </h1>

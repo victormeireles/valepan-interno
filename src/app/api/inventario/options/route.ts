@@ -15,7 +15,7 @@ export async function GET() {
       clientes: tiposEstoqueNomes,
       produtos: produtos.map(produto => ({
         produto: produto.nome,
-        unidade: produto.unidade,
+        unidade: produto.unidadeNomeResumido || 'un',
       })),
     });
   } catch (error) {

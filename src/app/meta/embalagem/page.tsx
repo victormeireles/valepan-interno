@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+
+export const dynamic = 'force-dynamic';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
 import EtiquetaModal from '@/components/EtiquetaModal';

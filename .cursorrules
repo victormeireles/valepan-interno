@@ -50,3 +50,16 @@
 - Never let one file or class hold everything (e.g., massive ViewController, ViewModel, or Service).
 - Split into UI, State, Handlers, Networking, etc.
 </avoid_god_classes>
+
+<database_and_rls>
+- ALWAYS enable Row Level Security (RLS) on ALL new tables in Supabase.
+- When creating RLS policies, ALWAYS use (SELECT auth.uid()) and (SELECT is_admin()) instead of auth.uid() and is_admin() directly to avoid performance issues.
+- Pattern for RLS policies:
+  * SELECT: All authenticated users can read (USING (true))
+  * INSERT: All authenticated users can create (WITH CHECK (true)) OR specific conditions
+  * UPDATE: Users can update their own records OR admins (USING (usuario_id = (SELECT auth.uid()) OR (SELECT is_admin())))
+  * DELETE: Only admins (USING ((SELECT is_admin())))
+- For nested policies (e.g., child tables), verify permissions through parent table relationships.
+- Never create tables without RLS enabled and proper policies.
+- Avoid SECURITY DEFINER on views unless absolutely necessary (creates warnings).
+</database_and_rls>

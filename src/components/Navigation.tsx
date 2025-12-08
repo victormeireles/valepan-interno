@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 interface NavigationProps {
   hideHeader?: boolean;
@@ -11,6 +11,7 @@ interface NavigationProps {
 export default function Navigation({ hideHeader = false }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
@@ -282,6 +283,122 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                 >
                   <span className="material-icons text-xl mr-3">dashboard</span>
                   Estoque
+                </Link>
+              </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
+              {/* Cadastros */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  ⚙️ Cadastros
+                </h3>
+                <Link
+                  href="/insumos"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/insumos')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">inventory</span>
+                  Insumos
+                </Link>
+                <Link
+                  href="/receitas"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/receitas')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">menu_book</span>
+                  Receitas
+                </Link>
+                <Link
+                  href="/produtos/receitas"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/produtos/receitas')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">category</span>
+                  Receitas x Produto
+                </Link>
+              </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
+              {/* Fila de Produção */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  🏭 Fila de Produção
+                </h3>
+                <Link
+                  href="/producao/fila?station=planejamento"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'planejamento'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">schedule</span>
+                  Planejamento
+                </Link>
+                <Link
+                  href="/producao/fila?station=massa"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'massa'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">blender</span>
+                  Massa
+                </Link>
+                <Link
+                  href="/producao/fila?station=fermentacao"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'fermentacao'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">eco</span>
+                  Fermentação
+                </Link>
+                <Link
+                  href="/producao/fila?station=forno"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'forno'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">local_fire_department</span>
+                  Forno
+                </Link>
+                <Link
+                  href="/producao/fila?station=embalagem"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'embalagem'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">inventory_2</span>
+                  Embalagem
                 </Link>
               </div>
             </div>

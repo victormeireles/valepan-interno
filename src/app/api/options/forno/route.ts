@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       const options = products.map(product => product.nome);
       const productsWithUnits = products.map(product => ({
         produto: product.nome,
-        unidade: product.unidade,
+        unidade: product.unidadeNomeResumido || 'un',
       }));
       return NextResponse.json({ options, productsWithUnits });
     }

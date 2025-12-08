@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import { RealizadoHeader, ProductCompactCard, ClientGroup, ThreeColumnLayout } from '@/components/Realizado';

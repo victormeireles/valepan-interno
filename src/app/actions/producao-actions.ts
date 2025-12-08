@@ -8,6 +8,15 @@ interface CreateProductionOrderParams {
   qtdPlanejada: number;
   pedidoId?: string;
   prioridade?: number; // 0=Normal, 1=Alta, 2=Urgente
+  dataProducao?: string;
+}
+
+interface UpdateProductionOrderParams {
+  ordemId: string;
+  produtoId: string;
+  qtdPlanejada: number;
+  prioridade?: number; // 0=Normal, 1=Alta, 2=Urgente
+  dataProducao?: string;
 }
 
 export async function createProductionOrder(params: CreateProductionOrderParams) {
@@ -39,6 +48,10 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
     const loteCodigo = `OP-${dateStr}-${String(sequence).padStart(3, '0')}`;
 
     // 2. Criar a OP
+    const dataProducao = params.dataProducao 
+      ? new Date(params.dataProducao).toISOString()
+      : new Date().toISOString();
+
     const { data, error } = await supabase
       .from('ordens_producao')
       .insert({
@@ -48,7 +61,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
         prioridade: params.prioridade || 0,
         lote_codigo: loteCodigo,
         status: 'planejado',
-        data_producao: new Date().toISOString(),
+        data_producao: dataProducao,
       })
       .select()
       .single();
@@ -63,6 +76,37 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
   }
 }
 
+export async function updateProductionOrder(params: UpdateProductionOrderParams) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  try {
+    const updateData: Record<string, unknown> = {
+      produto_id: params.produtoId,
+      qtd_planejada: params.qtdPlanejada,
+      prioridade: params.prioridade ?? 0,
+    };
+
+    if (params.dataProducao) {
+      updateData.data_producao = new Date(params.dataProducao).toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from('ordens_producao')
+      .update(updateData)
+      .eq('id', params.ordemId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/producao/fila');
+    return { success: true, data };
+  } catch (error) {
+    console.error('Erro ao atualizar OP:', error);
+    return { success: false, error: 'Erro ao atualizar ordem de produção' };
+  }
+}
+
 export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
@@ -71,8 +115,13 @@ export async function getProductionQueue() {
     .select(`
       *,
       produtos (
+        id,
         nome,
-        unidade
+        unidade_padrao_id,
+        package_units,
+        box_units,
+        unidades_assadeira,
+        unidades (nome_resumido)
       ),
       pedidos (
         cliente_id,
@@ -91,5 +140,155 @@ export async function getProductionQueue() {
     return [];
   }
 
-  return data;
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  // Buscar receitas de massa para todos os produtos
+  type OrdemProducaoItem = {
+    id: string;
+    produto_id: string;
+    [key: string]: unknown;
+  };
+  const produtoIds = [...new Set(data.map((item: OrdemProducaoItem) => item.produto_id))];
+  
+  const { data: receitasVinculadas, error: receitasError } = await supabase
+    .from('produto_receitas')
+    .select(`
+      produto_id,
+      quantidade_por_produto,
+      receitas (
+        tipo,
+        ativo
+      )
+    `)
+    .in('produto_id', produtoIds)
+    .eq('ativo', true);
+
+  if (receitasError) {
+    console.error('Erro ao buscar receitas vinculadas:', receitasError);
+  }
+
+  // Criar mapa de produto_id -> receita_massa (filtrar apenas tipo massa e receita ativa)
+  type ProdutoReceitaItem = {
+    produto_id: string;
+    quantidade_por_produto: number;
+    receitas?: {
+      tipo?: string;
+      ativo?: boolean | null;
+    } | null;
+  };
+  const receitasMap = new Map<string, { quantidade_por_produto: number }>();
+  receitasVinculadas?.forEach((pr: ProdutoReceitaItem) => {
+    const receita = pr.receitas;
+    if (receita?.tipo === 'massa' && receita?.ativo !== false) {
+      receitasMap.set(pr.produto_id, {
+        quantidade_por_produto: pr.quantidade_por_produto,
+      });
+    }
+  });
+
+  // Buscar lotes de massa para calcular receitas batidas (apenas para estação massa)
+  // Agora os dados estão diretamente em producao_etapas_log
+  const { data: massaLogs } = await supabase
+    .from('producao_etapas_log')
+    .select(`
+      id,
+      ordem_producao_id,
+      receitas_batidas
+    `)
+    .eq('etapa', 'massa')
+    .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
+
+  // Criar mapa de ordem_producao_id -> total de receitas batidas
+  type MassaLogItem = {
+    ordem_producao_id: string;
+    receitas_batidas: number | null;
+  };
+  const receitasBatidasMap = new Map<string, number>();
+  massaLogs?.forEach((log: MassaLogItem) => {
+    // Agrupa por ordem_producao_id e soma receitas_batidas
+    const currentTotal = receitasBatidasMap.get(log.ordem_producao_id) || 0;
+    const receitas = log.receitas_batidas || 0;
+    receitasBatidasMap.set(log.ordem_producao_id, currentTotal + receitas);
+  });
+
+  // Buscar logs de fermentação para calcular receitas de fermentação executadas
+  const { data: fermentacaoLogs } = await supabase
+    .from('producao_etapas_log')
+    .select(`
+      id,
+      ordem_producao_id,
+      qtd_saida
+    `)
+    .eq('etapa', 'fermentacao')
+    .not('fim', 'is', null) // Apenas logs concluídos
+    .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
+
+  // Criar mapa de ordem_producao_id -> receitas de fermentação executadas
+  type FermentacaoLogItem = {
+    ordem_producao_id: string;
+    qtd_saida: number | null;
+  };
+  const receitasFermentacaoMap = new Map<string, number>();
+  fermentacaoLogs?.forEach((log: FermentacaoLogItem) => {
+    if (log.qtd_saida) {
+      // Buscar quantidade_por_produto do produto para converter unidades em receitas
+      const item = data.find((i: OrdemProducaoItem) => i.id === log.ordem_producao_id);
+      if (item) {
+        const receitaMassa = receitasMap.get(item.produto_id);
+        if (receitaMassa && receitaMassa.quantidade_por_produto > 0) {
+          const receitasFermentacao = log.qtd_saida / receitaMassa.quantidade_por_produto;
+          receitasFermentacaoMap.set(log.ordem_producao_id, receitasFermentacao);
+        }
+      }
+    }
+  });
+
+  // Transformar os dados para incluir receita_massa, receitas_batidas e receitas_fermentacao no formato esperado
+  type OrdemProducaoWithProduto = OrdemProducaoItem & {
+    produtos?: {
+      unidades?: { nome_resumido?: string } | null;
+      [key: string]: unknown;
+    } | null;
+  };
+  const transformedData = (data as OrdemProducaoWithProduto[]).map((item) => {
+    const produto = item.produtos;
+    const receitaMassa = receitasMap.get(item.produto_id) || null;
+    const receitasBatidas = receitasBatidasMap.get(item.id) || 0;
+    const receitasFermentacao = receitasFermentacaoMap.get(item.id) || 0;
+
+    // Extrair nome_resumido do join com unidades
+    const unidades = produto?.unidades as { nome_resumido?: string } | null;
+    const unidadeNomeResumido = unidades?.nome_resumido || null;
+
+    return {
+      id: item.id,
+      lote_codigo: item.lote_codigo as string,
+      produto_id: item.produto_id,
+      qtd_planejada: item.qtd_planejada as number,
+      status: (item.status as string | null) || null,
+      prioridade: (item.prioridade as number | null) || null,
+      created_at: (item.created_at as string | null) || null,
+      data_producao: (item.data_producao as string | null) || null,
+      produtos: {
+        nome: (produto?.nome as string) || '',
+        unidadeNomeResumido,
+        package_units: (produto?.package_units as number | null | undefined) || null,
+        box_units: (produto?.box_units as number | null | undefined) || null,
+        unidades_assadeira: (produto?.unidades_assadeira as number | null | undefined) || null,
+        receita_massa: receitaMassa,
+      },
+      receitas_batidas: receitasBatidas,
+      receitas_fermentacao: receitasFermentacao,
+      pedidos: (item.pedidos as {
+        cliente_id: string;
+        clientes?: {
+          nome_fantasia: string;
+        };
+      } | null | undefined) || null,
+    };
+  });
+
+  return transformedData;
 }

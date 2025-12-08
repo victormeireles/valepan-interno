@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import Navigation from './Navigation';
 
@@ -10,13 +11,31 @@ export default function ConditionalNavigation() {
   const isRealizadoPage = pathname?.startsWith('/realizado/');
   const isDashboardPage = pathname?.startsWith('/painel/dashboard-estoque');
   const isProducaoPage = pathname?.startsWith('/producao/');
-  
-  if (isRealizadoPage || isDashboardPage || isProducaoPage) {
+  const isInsumosPage = pathname?.startsWith('/insumos');
+  const isReceitasPage = pathname?.startsWith('/receitas');
+  const isProdutoReceitasPage = pathname?.startsWith('/produtos/receitas');
+
+  if (
+    isRealizadoPage ||
+    isDashboardPage ||
+    isProducaoPage ||
+    isInsumosPage ||
+    isReceitasPage ||
+    isProdutoReceitasPage
+  ) {
     // Nessas páginas, só renderizar o menu lateral (sem o header)
-    return <Navigation hideHeader />;
+    return (
+      <Suspense fallback={null}>
+        <Navigation hideHeader />
+      </Suspense>
+    );
   }
   
   // Nas outras páginas, renderizar Navigation completo
-  return <Navigation />;
+  return (
+    <Suspense fallback={null}>
+      <Navigation />
+    </Suspense>
+  );
 }
 

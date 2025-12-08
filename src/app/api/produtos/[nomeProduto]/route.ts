@@ -22,8 +22,8 @@ export async function GET(
 
     const produto = {
       nome: produtoRecord.nome,
-      unidade: produtoRecord.unidade,
-      unidadeDescricao: produtoRecord.unidadeDescricao,
+      unidade: produtoRecord.unidadeNomeResumido || 'un',
+      unidadeDescricao: produtoRecord.unidadeNomeResumido || 'un',
       codigo: produtoRecord.codigo,
       codigoBarras: produtoRecord.unitBarcode ?? '',
       unPorCaixa: produtoRecord.boxUnits ?? 0,

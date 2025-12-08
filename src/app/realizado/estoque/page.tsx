@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
