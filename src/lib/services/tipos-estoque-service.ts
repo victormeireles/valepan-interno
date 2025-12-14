@@ -37,40 +37,21 @@ export class TiposEstoqueService {
 
   public async findByName(nome: string): Promise<TipoEstoqueDTO | null> {
     const client = this.resolveClient();
-    const nomeNormalizado = nome.trim();
 
-    // Tentar busca exata primeiro (case-insensitive)
-    let { data, error } = await client
+    const { data, error } = await client
       .from('tipos_estoque')
       .select('id, nome, ativo, possui_etiqueta')
       .eq('ativo', true)
-      .ilike('nome', nomeNormalizado)
+      .ilike('nome', nome)
       .limit(1)
-      .maybeSingle();
-
-    // Se não encontrou com busca exata, tentar busca parcial
-    if (!data && !error) {
-      const result = await client
-        .from('tipos_estoque')
-        .select('id, nome, ativo, possui_etiqueta')
-        .eq('ativo', true)
-        .ilike('nome', `%${nomeNormalizado}%`)
-        .limit(1)
-        .maybeSingle();
-      
-      data = result.data;
-      error = result.error;
-    }
+      .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
         return null;
       }
-      throw new Error(`Erro ao buscar tipo de estoque: ${error.message}`);
-    }
 
-    if (!data) {
-      return null;
+      throw new Error(`Erro ao buscar tipo de estoque: ${error.message}`);
     }
 
     return this.mapRecord(data);
@@ -101,12 +82,14 @@ export class TiposEstoqueService {
     return this.factory.createServiceRoleClient();
   }
 
-  private mapRecord(record: Pick<TipoEstoqueRecord, 'id' | 'nome' | 'ativo' | 'possui_etiqueta'>): TipoEstoqueDTO {
+  private mapRecord(
+    record: Pick<TipoEstoqueRecord, 'id' | 'nome' | 'ativo' | 'possui_etiqueta'>,
+  ): TipoEstoqueDTO {
     return {
       id: record.id,
       nome: record.nome,
-      ativo: record.ativo ?? true,
-      possuiEtiqueta: record.possui_etiqueta ?? false,
+      ativo: record.ativo,
+      possuiEtiqueta: record.possui_etiqueta,
     };
   }
 }

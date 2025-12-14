@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useState } from 'react';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
@@ -121,8 +119,8 @@ export default function PedidoFornoPage() {
         const produtosRes = await fetch('/api/options/forno?type=produtos');
         const produtosData = await produtosRes.json();
         if (produtosRes.ok) setProdutosOptions(produtosData.options || []);
-      } catch {
-        // Erro ao carregar opções
+      } catch (err) {
+        console.error('Erro ao carregar opções:', err);
       }
     };
     loadOptions();

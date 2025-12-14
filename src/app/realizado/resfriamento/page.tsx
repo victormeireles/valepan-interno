@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 
@@ -139,8 +137,8 @@ export default function ProducaoResfriamentoPage() {
       if (painelRes.ok) {
         setItems((painelData.items || []) as PainelItemResfriamento[]);
       }
-    } catch {
-      // Erro ao recarregar dados do painel
+    } catch (err) {
+      console.error('Erro ao recarregar dados do painel:', err);
     }
   };
 

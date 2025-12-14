@@ -95,12 +95,12 @@ export class SupabaseProductService {
       id: record.id,
       nome: record.nome,
       unidadeNomeResumido,
-      codigo: (record.codigo as string) || '',
-      unitBarcode: (record.unit_barcode as string | null) || null,
-      boxUnits: (record.box_units as number | null) || null,
-      packageUnits: (record.package_units as number | null) || null,
-      unitWeight: (record.unit_weight as number | null) || null,
-      unidadesAssadeira: (record.unidades_assadeira as number | null) || null,
+      codigo: record.codigo,
+      unitBarcode: record.unit_barcode,
+      boxUnits: record.box_units,
+      packageUnits: record.package_units,
+      unitWeight: record.unit_weight,
+      unidadesAssadeira: record.unidades_assadeira,
     };
   }
 }

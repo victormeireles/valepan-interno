@@ -5,7 +5,7 @@ export type Station =
   | "forno"
   | "embalagem";
 
-export type ProductConversionInfo = {
+type ProductConversionInfo = {
   unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
   package_units?: number | null;
   box_units?: number | null;

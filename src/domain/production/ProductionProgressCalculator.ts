@@ -115,7 +115,7 @@ export class ProductionProgressCalculator {
     massaLogs.forEach((log) => {
       if (log.dados_qualidade && 'receitas_batidas' in log.dados_qualidade) {
         type DadosQualidadeComReceitas = Record<string, unknown> & { receitas_batidas?: number };
-        const receitas = (log.dados_qualidade as unknown as DadosQualidadeComReceitas | null)?.receitas_batidas;
+        const receitas = (log.dados_qualidade as DadosQualidadeComReceitas | null)?.receitas_batidas;
         if (typeof receitas === 'number') {
           totalReceitas += receitas;
         }

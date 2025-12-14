@@ -1,5 +1,5 @@
 /**
- * Repositório para acesso a dados de ingredientes usados em lotes de massa
+ * Repositório para acesso a dados de ingredientes de massa
  * Responsabilidade única: Queries e operações CRUD na tabela producao_massa_ingredientes
  */
 
@@ -7,7 +7,6 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { MassaIngrediente } from '@/domain/types/producao-massa';
 
-// Tipos temporários até os tipos do database serem atualizados
 type MassaIngredienteRow = {
   id: string;
   producao_etapas_log_id: string;
@@ -30,9 +29,11 @@ export class ProductionMassaIngredienteRepository {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
   /**
-   * Cria ingredientes para um lote
+   * Cria múltiplos ingredientes
    */
-  async createMany(ingredientes: MassaIngredienteInsert[]): Promise<MassaIngrediente[]> {
+  async createMany(
+    ingredientes: MassaIngredienteInsert[],
+  ): Promise<MassaIngrediente[]> {
     if (ingredientes.length === 0) {
       return [];
     }
@@ -43,14 +44,16 @@ export class ProductionMassaIngredienteRepository {
       .select();
 
     if (error) {
-      throw new Error(`Erro ao criar ingredientes: ${error.message}`);
+      throw new Error(
+        `Erro ao criar ingredientes: ${error.message}`,
+      );
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data ?? []).map((row) => this.mapRow(row));
   }
 
   /**
-   * Busca ingredientes de um lote (agora usa producao_etapas_log_id)
+   * Busca ingredientes por ID do lote (producao_etapas_log_id)
    */
   async findByLoteId(etapasLogId: string): Promise<MassaIngrediente[]> {
     const { data, error } = await this.supabase
@@ -60,14 +63,34 @@ export class ProductionMassaIngredienteRepository {
       .order('created_at', { ascending: true });
 
     if (error) {
-      throw new Error(`Erro ao buscar ingredientes: ${error.message}`);
+      throw new Error(
+        `Erro ao buscar ingredientes: ${error.message}`,
+      );
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data ?? []).map((row) => this.mapRow(row));
   }
 
   /**
-   * Deleta todos os ingredientes de um lote (agora usa producao_etapas_log_id)
+   * Atualiza ingredientes de um lote (deleta os antigos e cria os novos)
+   */
+  async updateByLoteId(
+    etapasLogId: string,
+    ingredientes: MassaIngredienteInsert[],
+  ): Promise<MassaIngrediente[]> {
+    // Deleta ingredientes existentes
+    await this.deleteByLoteId(etapasLogId);
+
+    // Cria novos ingredientes
+    if (ingredientes.length > 0) {
+      return await this.createMany(ingredientes);
+    }
+
+    return [];
+  }
+
+  /**
+   * Deleta ingredientes por ID do lote
    */
   async deleteByLoteId(etapasLogId: string): Promise<void> {
     const { error } = await this.supabase
@@ -76,25 +99,16 @@ export class ProductionMassaIngredienteRepository {
       .eq('producao_etapas_log_id', etapasLogId);
 
     if (error) {
-      throw new Error(`Erro ao deletar ingredientes: ${error.message}`);
+      throw new Error(
+        `Erro ao deletar ingredientes: ${error.message}`,
+      );
     }
   }
 
   /**
-   * Atualiza ingredientes de um lote (deleta e recria) - agora usa producao_etapas_log_id
+   * Mapeia uma linha do banco para o tipo de domínio
    */
-  async updateByLoteId(
-    etapasLogId: string,
-    ingredientes: MassaIngredienteInsert[],
-  ): Promise<MassaIngrediente[]> {
-    await this.deleteByLoteId(etapasLogId);
-    return this.createMany(ingredientes);
-  }
-
-  /**
-   * Mapeia uma row do banco para o tipo de domínio
-   */
-  private mapRowToDomain(row: MassaIngredienteRow): MassaIngrediente {
+  private mapRow(row: MassaIngredienteRow): MassaIngrediente {
     return {
       id: row.id,
       producao_etapas_log_id: row.producao_etapas_log_id,
@@ -106,4 +120,3 @@ export class ProductionMassaIngredienteRepository {
     };
   }
 }
-

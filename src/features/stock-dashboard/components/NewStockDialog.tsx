@@ -7,8 +7,8 @@ import {
   checkStockExistsAction,
   createStockAction,
   getStockTypesAction,
-  getProductsAction,
 } from '@/app/actions/stock-actions';
+import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 
 interface NewStockDialogProps {
   isOpen: boolean;
@@ -48,13 +48,12 @@ export function NewStockDialog({
     quantidade: emptyQuantidade,
   });
   const [tiposEstoque, setTiposEstoque] = useState<Array<{ nome: string }>>([]);
-  const [produtos, setProdutos] = useState<Array<{ nome: string }>>([]);
+  const [produtoId, setProdutoId] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(
     null,
   );
   const [loadingTipos, startLoadingTipos] = useTransition();
-  const [loadingProdutos, startLoadingProdutos] = useTransition();
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -64,10 +63,10 @@ export function NewStockDialog({
         produto: '',
         quantidade: emptyQuantidade,
       });
+      setProdutoId('');
       setMessage(null);
       setConfirmation(null);
       carregarTiposEstoque();
-      carregarProdutos();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -82,21 +81,6 @@ export function NewStockDialog({
           error instanceof Error
             ? error.message
             : 'Não foi possível carregar os tipos de estoque',
-        );
-      }
-    });
-  }, []);
-
-  const carregarProdutos = useCallback(() => {
-    startLoadingProdutos(async () => {
-      try {
-        const produtosList = await getProductsAction();
-        setProdutos(produtosList);
-      } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : 'Não foi possível carregar os produtos',
         );
       }
     });
@@ -355,33 +339,22 @@ export function NewStockDialog({
                     )}
                   </label>
 
-                  <label className="text-sm font-medium text-gray-700 space-y-2">
+                  <div className="text-sm font-medium text-gray-700 space-y-2">
                     <span>Produto</span>
-                    <select
-                      value={formState.produto}
-                      onChange={(event) =>
+                    <SelectRemoteAutocomplete
+                      value={produtoId}
+                      onChange={setProdutoId}
+                      stage="produtos"
+                      label=""
+                      placeholder="Busque o produto..."
+                      onOptionSelected={(option) => {
                         setFormState((prev) => ({
                           ...prev,
-                          produto: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                      required
-                      disabled={loadingProdutos}
-                    >
-                      <option value="">Selecione</option>
-                      {produtos.map((produto) => (
-                        <option key={produto.nome} value={produto.nome}>
-                          {produto.nome}
-                        </option>
-                      ))}
-                    </select>
-                    {loadingProdutos && (
-                      <p className="text-xs text-gray-500">
-                        Carregando produtos...
-                      </p>
-                    )}
-                  </label>
+                          produto: option?.label || '',
+                        }));
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <section className="space-y-3">

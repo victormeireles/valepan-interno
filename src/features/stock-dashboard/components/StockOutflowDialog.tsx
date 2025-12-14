@@ -71,26 +71,8 @@ export function StockOutflowDialog({
       try {
         setClientesMessage(null);
         const response = await getClientsForStockLocationAction(estoqueNome);
-        const opcoes: string[] = [];
-
-        response.forEach((cliente) => {
-          const numEnderecos = cliente.enderecos.length;
-
-          if (numEnderecos <= 1) {
-            // Se tem 0 ou 1 endereço, adicionar apenas o nome do cliente
-            opcoes.push(cliente.nomeFantasia);
-          } else {
-            // Se tem mais de 1 endereço, adicionar uma opção para cada endereço
-            cliente.enderecos.forEach((endereco) => {
-              opcoes.push(`${cliente.nomeFantasia} - ${endereco.nome}`);
-            });
-          }
-        });
-
-        // Remover duplicatas, ordenar alfabeticamente e adicionar "Amostra" no final
-        const opcoesUnicas = [...new Set(opcoes)];
-        opcoesUnicas.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
-        setClientes([...opcoesUnicas, 'Amostra']);
+        const nomes = response.map((cliente) => cliente.nomeFantasia);
+        setClientes([...new Set([...nomes, 'Amostra'])]);
       } catch (error) {
         setClientesMessage(
           error instanceof Error

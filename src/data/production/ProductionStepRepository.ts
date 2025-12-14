@@ -3,7 +3,7 @@
  * Responsabilidade única: Queries e operações CRUD na tabela producao_etapas_log
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase/supabase-js';
 import { Database } from '@/types/database';
 import {
   ProductionStepLog,
@@ -20,10 +20,10 @@ type ProductionStepLogRow = {
   usuario_id: string | null;
   qtd_entrada: number | null;
   qtd_saida: number | null;
-  perda_qtd: number | null;
-  dados_qualidade: Database['public']['Tables']['producao_etapas_log']['Row']['dados_qualidade'];
-  fotos: string[] | null;
-  inicio: string | null;
+  perda_qtd: number;
+  dados_qualidade: Record<string, unknown> | null;
+  fotos: string[];
+  inicio: string;
   fim: string | null;
   // Campos específicos da etapa massa (opcionais)
   receita_id: string | null;
@@ -42,7 +42,7 @@ type ProductionStepLogInsert = {
   qtd_entrada?: number | null;
   qtd_saida: number;
   perda_qtd?: number;
-  dados_qualidade?: Database['public']['Tables']['producao_etapas_log']['Insert']['dados_qualidade'];
+  dados_qualidade?: Record<string, unknown> | null;
   fotos?: string[];
   inicio?: string;
   fim?: string | null;
@@ -60,7 +60,7 @@ type ProductionStepLogUpdate = {
   qtd_entrada?: number | null;
   qtd_saida?: number;
   perda_qtd?: number;
-  dados_qualidade?: Database['public']['Tables']['producao_etapas_log']['Update']['dados_qualidade'];
+  dados_qualidade?: Record<string, unknown> | null;
   fotos?: string[];
   fim?: string | null;
   // Campos específicos da etapa massa (opcionais)
@@ -104,7 +104,7 @@ export class ProductionStepRepository {
       qtd_entrada: input.qtd_entrada || null,
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd || 0,
-      dados_qualidade: (input.dados_qualidade as unknown as Database['public']['Tables']['producao_etapas_log']['Insert']['dados_qualidade']) || null,
+      dados_qualidade: input.dados_qualidade || null,
       fotos: input.fotos || [],
       // Campos de massa
       receita_id: input.receita_id || null,
@@ -153,7 +153,7 @@ export class ProductionStepRepository {
     const updateData: ProductionStepLogUpdate = {
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd,
-      dados_qualidade: (input.dados_qualidade as unknown as Database['public']['Tables']['producao_etapas_log']['Update']['dados_qualidade']) || undefined,
+      dados_qualidade: input.dados_qualidade,
       fotos: input.fotos,
       fim: input.fim,
       // Campos de massa
@@ -326,7 +326,7 @@ export class ProductionStepRepository {
       perda_qtd: Number(row.perda_qtd || 0),
       dados_qualidade: row.dados_qualidade as Record<string, unknown> | null,
       fotos: row.fotos || [],
-      inicio: row.inicio || '',
+      inicio: row.inicio,
       fim: row.fim,
       // Campos específicos da etapa massa
       receita_id: row.receita_id || null,

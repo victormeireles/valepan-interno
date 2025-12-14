@@ -6,3 +6,4 @@ ALTER TABLE receitas DROP COLUMN IF EXISTS peso_total_massa;
 
 
 
+

@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
@@ -99,7 +97,7 @@ export default function InventarioPage() {
         });
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || 'Erro ao carregar estoque do tipo de estoque');
+          throw new Error(data.error || 'Erro ao carregar estoque do cliente');
         }
         const data = (await response.json()) as EstoqueResponse;
         const linhas = data.estoque.map<InventarioProdutoInput>((record) => ({
@@ -198,7 +196,7 @@ export default function InventarioPage() {
     if (!clienteSelecionado) {
       const resolved = assegurarClienteSelecionado();
       if (!resolved) {
-        setMessage('Selecione um tipo de estoque válido para continuar');
+        setMessage('Selecione um cliente válido para continuar');
         return;
       }
     }
@@ -213,7 +211,7 @@ export default function InventarioPage() {
       setMessage(null);
       const cliente = clienteSelecionado ?? assegurarClienteSelecionado();
       if (!cliente) {
-        setMessage('Selecione um tipo de estoque válido para continuar');
+        setMessage('Selecione um cliente válido para continuar');
         return;
       }
 
@@ -244,7 +242,7 @@ export default function InventarioPage() {
       setConfirming(true);
       const cliente = clienteSelecionado ?? assegurarClienteSelecionado();
       if (!cliente) {
-        setMessage('Selecione um tipo de estoque válido para continuar');
+        setMessage('Selecione um cliente válido para continuar');
         return;
       }
 
@@ -335,8 +333,8 @@ export default function InventarioPage() {
                 setPreview(null);
               }}
               options={options.clientes}
-              placeholder="Digite o tipo de estoque..."
-              label="Tipo de Estoque"
+              placeholder="Digite o nome do cliente..."
+              label="Cliente"
               required
               disabled={optionsLoading || confirming}
             />

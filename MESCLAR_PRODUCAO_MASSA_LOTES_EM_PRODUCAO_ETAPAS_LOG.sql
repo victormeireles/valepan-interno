@@ -105,3 +105,4 @@ COMMENT ON COLUMN public.producao_etapas_log.textura IS
 -- FIM DA PRIMEIRA PARTE - Adição de campos
 -- =====================================================
 
+

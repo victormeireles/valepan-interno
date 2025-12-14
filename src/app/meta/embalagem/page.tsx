@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-
-export const dynamic = 'force-dynamic';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
 import EtiquetaModal from '@/components/EtiquetaModal';
@@ -27,7 +25,6 @@ type PainelItem = {
   // Dados de etiqueta
   lote?: number;
   etiquetaGerada?: boolean;
-  possuiEtiqueta?: boolean;
   // Dados de foto
   photoUrl?: string;
   photoId?: string;
@@ -169,8 +166,8 @@ export default function PedidoEmbalagemPage() {
         const produtosData = await produtosRes.json();
         if (clientesRes.ok) setClientesOptions(clientesData.options || []);
         if (produtosRes.ok) setProdutosOptions(produtosData.options || []);
-      } catch {
-        // Erro ao carregar opções
+      } catch (err) {
+        console.error('Erro ao carregar opções:', err);
       }
     };
     loadOptions();
@@ -369,8 +366,8 @@ export default function PedidoEmbalagemPage() {
       }
       setMessage('Etiqueta gerada com sucesso!');
       setTimeout(() => setMessage(null), 3000);
-    } catch {
-      // Erro ao recarregar dados do painel
+    } catch (err) {
+      console.error('Erro ao recarregar dados do painel:', err);
     }
   };
 
@@ -522,7 +519,7 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-lg">photo_camera</span>
                                       </a>
                                     )}
-                                    {item.lote && item.possuiEtiqueta && (
+                                    {item.lote && (
                                       <button
                                         onClick={(e) => handleEtiquetaClick(item, e)}
                                         className={`ml-2 transition-colors cursor-pointer ${

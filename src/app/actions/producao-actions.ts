@@ -148,6 +148,8 @@ export async function getProductionQueue() {
   type OrdemProducaoItem = {
     id: string;
     produto_id: string;
+    lote_codigo: string;
+    qtd_planejada: number;
     [key: string]: unknown;
   };
   const produtoIds = [...new Set(data.map((item: OrdemProducaoItem) => item.produto_id))];
@@ -248,6 +250,10 @@ export async function getProductionQueue() {
   // Transformar os dados para incluir receita_massa, receitas_batidas e receitas_fermentacao no formato esperado
   type OrdemProducaoWithProduto = OrdemProducaoItem & {
     produtos?: {
+      nome?: string;
+      package_units?: number | null;
+      box_units?: number | null;
+      unidades_assadeira?: number | null;
       unidades?: { nome_resumido?: string } | null;
       [key: string]: unknown;
     } | null;
@@ -263,30 +269,15 @@ export async function getProductionQueue() {
     const unidadeNomeResumido = unidades?.nome_resumido || null;
 
     return {
-      id: item.id,
-      lote_codigo: item.lote_codigo as string,
-      produto_id: item.produto_id,
-      qtd_planejada: item.qtd_planejada as number,
-      status: (item.status as string | null) || null,
-      prioridade: (item.prioridade as number | null) || null,
-      created_at: (item.created_at as string | null) || null,
-      data_producao: (item.data_producao as string | null) || null,
+      ...item,
       produtos: {
-        nome: (produto?.nome as string) || '',
+        ...produto,
+        nome: produto?.nome || 'Produto sem nome',
         unidadeNomeResumido,
-        package_units: (produto?.package_units as number | null | undefined) || null,
-        box_units: (produto?.box_units as number | null | undefined) || null,
-        unidades_assadeira: (produto?.unidades_assadeira as number | null | undefined) || null,
         receita_massa: receitaMassa,
       },
       receitas_batidas: receitasBatidas,
       receitas_fermentacao: receitasFermentacao,
-      pedidos: (item.pedidos as {
-        cliente_id: string;
-        clientes?: {
-          nome_fantasia: string;
-        };
-      } | null | undefined) || null,
     };
   });
 

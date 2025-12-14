@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import { RealizadoHeader, ProductCompactCard, ThreeColumnLayout } from '@/components/Realizado';
@@ -93,8 +91,8 @@ export default function ProducaoFornoPage() {
       const painelRes = await fetch(`/api/painel/forno?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) setItems((painelData.items || []) as PainelItem[]);
-    } catch {
-      // Erro ao recarregar dados do painel
+    } catch (err) {
+      console.error('Erro ao recarregar dados do painel:', err);
     }
   };
 

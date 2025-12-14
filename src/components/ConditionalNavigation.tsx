@@ -1,6 +1,5 @@
 'use client';
 
-import { Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import Navigation from './Navigation';
 
@@ -24,18 +23,10 @@ export default function ConditionalNavigation() {
     isProdutoReceitasPage
   ) {
     // Nessas páginas, só renderizar o menu lateral (sem o header)
-    return (
-      <Suspense fallback={null}>
-        <Navigation hideHeader />
-      </Suspense>
-    );
+    return <Navigation hideHeader />;
   }
   
   // Nas outras páginas, renderizar Navigation completo
-  return (
-    <Suspense fallback={null}>
-      <Navigation />
-    </Suspense>
-  );
+  return <Navigation />;
 }
 

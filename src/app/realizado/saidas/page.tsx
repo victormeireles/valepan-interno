@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useState } from 'react';
 import RealizadoHeader from '@/components/Realizado/RealizadoHeader';
 import ThreeColumnLayout from '@/components/Realizado/ThreeColumnLayout';
@@ -168,12 +166,10 @@ export default function RealizadoSaidasPage() {
     realizado,
     uploadFile,
     removeExistingPhoto,
-    quantidadeInicial,
   }: {
     realizado: SaidaQuantidade;
     uploadFile?: File;
     removeExistingPhoto?: boolean;
-    quantidadeInicial?: SaidaQuantidade;
   }) => {
     if (!modalContext) return;
 
@@ -218,10 +214,8 @@ export default function RealizadoSaidasPage() {
         realizado: SaidaQuantidade;
         fotoUrl?: string;
         fotoId?: string;
-        quantidadeInicial?: SaidaQuantidade;
       } = {
         realizado,
-        quantidadeInicial,
       };
 
       if (uploadFile || removeExistingPhoto) {

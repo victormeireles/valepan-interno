@@ -169,19 +169,17 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
           });
         });
 
-        const ingredientesForm: IngredienteForm[] = lote.ingredientes
-          .filter((ing) => ing.insumo_id !== null)
-          .map((ing) => {
-            const info = ingredientesMap.get(ing.insumo_id!);
-            return {
-              id: ing.id,
-              insumo_id: ing.insumo_id!,
-              ingrediente_nome: info?.nome || 'Ingrediente sem nome',
-              quantidade_padrao: ing.quantidade_padrao,
-              quantidade_usada: ing.quantidade_usada,
-              unidade: ing.unidade || info?.unidade || 'un',
-            };
-          });
+        const ingredientesForm: IngredienteForm[] = lote.ingredientes.map((ing) => {
+          const info = ing.insumo_id ? ingredientesMap.get(ing.insumo_id) : undefined;
+          return {
+            id: ing.id,
+            insumo_id: ing.insumo_id,
+            ingrediente_nome: info?.nome || 'Ingrediente sem nome',
+            quantidade_padrao: ing.quantidade_padrao,
+            quantidade_usada: ing.quantidade_usada,
+            unidade: ing.unidade || info?.unidade || 'un',
+          };
+        });
         setIngredientes(ingredientesForm);
       } else {
         // Fallback: usar dados do lote sem nomes
@@ -235,16 +233,16 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
       // Buscar receitas de massa vinculadas ao produto
       const receitasResult = await getReceitasMassaByProduto(ordemProducao.produto.id);
       if (receitasResult.success && receitasResult.data) {
-        const receitasValidas = receitasResult.data
+        const receitasMapeadas = receitasResult.data
           .filter((r): r is { id: string; nome: string; codigo: string | null; tipo: string } => r !== null && r !== undefined)
           .map((r) => ({
             id: r.id,
             nome: r.nome,
             codigo: r.codigo || '',
           }));
-        setReceitas(receitasValidas);
-        if (receitasValidas.length === 1) {
-          setReceitaId(receitasValidas[0].id);
+        setReceitas(receitasMapeadas);
+        if (receitasMapeadas.length === 1) {
+          setReceitaId(receitasMapeadas[0].id);
         }
       }
 
@@ -268,21 +266,9 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
     const loadIngredientes = async () => {
       const result = await getReceitaDetalhes(receitaId);
       if (result && result.receita_ingredientes) {
-        type ReceitaIngredienteItem = {
-          id: string;
-          insumo_id: string | null;
-          quantidade_padrao: number;
-          insumos?: {
-            nome?: string;
-            unidades?: {
-              nome_resumido?: string;
-              nome?: string;
-            } | null;
-          } | null;
-        };
         const ingredientesForm: IngredienteForm[] = result.receita_ingredientes
-          .filter((ing: ReceitaIngredienteItem) => ing.insumo_id !== null)
-          .map((ing: ReceitaIngredienteItem) => {
+          .filter((ing) => ing !== null && ing !== undefined && ing.insumo_id !== null)
+          .map((ing) => {
             // Calcula quantidade inicial multiplicando padrão pela quantidade de receitas batidas
             const quantidadeCalculada = ing.quantidade_padrao * receitasBatidas;
             // Arredonda para 3 casas decimais
