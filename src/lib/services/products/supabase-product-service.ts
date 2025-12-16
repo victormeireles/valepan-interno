@@ -80,12 +80,14 @@ export class SupabaseProductService {
   private mapRecord(record: {
     id: string;
     nome: string;
+    codigo: string;
+    unit_barcode: string | null;
     unidade_padrao_id: string | null;
     package_units: number | null;
     box_units: number | null;
+    unit_weight: number | null;
     unidades_assadeira: number | null;
     unidades?: { nome_resumido?: string } | null;
-    [key: string]: unknown;
   }): ProductDTO {
     // Extrair nome_resumido do join com unidades
     const unidades = record.unidades as { nome_resumido?: string } | null;

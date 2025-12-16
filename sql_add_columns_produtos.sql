@@ -10,3 +10,5 @@ ADD COLUMN IF NOT EXISTS peso_pre_assado DECIMAL;
 
 
 
+
+

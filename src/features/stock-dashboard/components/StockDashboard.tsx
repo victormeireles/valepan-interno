@@ -50,6 +50,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
   const [outflowLoading, setOutflowLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [newStockOpen, setNewStockOpen] = useState(false);
+  const [filterTerm, setFilterTerm] = useState('');
 
   useEffect(() => {
     setCurrentData(initialData);
@@ -57,6 +58,29 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
 
   const { stockData, summary, isEmpty } =
     useStockDashboardViewModel(currentData);
+
+  const filteredClients = React.useMemo(() => {
+    if (!filterTerm.trim()) {
+      return stockData.clients;
+    }
+
+    const searchTerm = filterTerm.toLowerCase().trim();
+    
+    return stockData.clients.filter((cliente) => {
+      const clientSummary = stockData.stockByClient.get(cliente);
+      if (!clientSummary) return false;
+
+      // Verifica se o nome do cliente corresponde
+      const clienteMatches = cliente.toLowerCase().includes(searchTerm);
+      
+      // Verifica se algum produto corresponde
+      const produtoMatches = clientSummary.produtos.some((item) =>
+        item.produto.toLowerCase().includes(searchTerm)
+      );
+
+      return clienteMatches || produtoMatches;
+    });
+  }, [stockData, filterTerm]);
 
   const showFeedback = useCallback((feedbackState: FeedbackState) => {
     setFeedback(feedbackState);
@@ -276,8 +300,37 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
         </div>
       </div>
 
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg
+              className="h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={filterTerm}
+            onChange={(e) => setFilterTerm(e.target.value)}
+            placeholder="Filtrar por cliente ou produto..."
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            style={{ color: 'rgba(106, 114, 130, 1)' }}
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {stockData.clients.map((cliente) => {
+        {filteredClients.map((cliente) => {
           const clientSummary = stockData.stockByClient.get(cliente);
           if (!clientSummary) return null;
           
@@ -286,6 +339,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
               key={cliente}
               cliente={cliente}
               summary={clientSummary}
+              filterTerm={filterTerm.trim()}
               onAdjustStock={handleAdjustRequest}
               onRegisterOutflow={handleOutflowRequest}
             />

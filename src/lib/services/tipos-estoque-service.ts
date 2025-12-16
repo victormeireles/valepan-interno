@@ -88,8 +88,8 @@ export class TiposEstoqueService {
     return {
       id: record.id,
       nome: record.nome,
-      ativo: record.ativo,
-      possuiEtiqueta: record.possui_etiqueta,
+      ativo: record.ativo ?? false,
+      possuiEtiqueta: record.possui_etiqueta ?? false,
     };
   }
 }

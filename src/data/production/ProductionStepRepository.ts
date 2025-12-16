@@ -3,13 +3,14 @@
  * Responsabilidade única: Queries e operações CRUD na tabela producao_etapas_log
  */
 
-import { SupabaseClient } from '@supabase/supabase/supabase-js';
-import { Database } from '@/types/database';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database, Json } from '@/types/database';
 import {
   ProductionStepLog,
   CreateProductionStepLogInput,
   UpdateProductionStepLogInput,
   ProductionStep,
+  QualityData,
 } from '@/domain/types/producao-etapas';
 
 // Tipos temporários até os tipos do database serem atualizados
@@ -20,10 +21,10 @@ type ProductionStepLogRow = {
   usuario_id: string | null;
   qtd_entrada: number | null;
   qtd_saida: number | null;
-  perda_qtd: number;
-  dados_qualidade: Record<string, unknown> | null;
-  fotos: string[];
-  inicio: string;
+  perda_qtd: number | null;
+  dados_qualidade: Json | null;
+  fotos: string[] | null;
+  inicio: string | null;
   fim: string | null;
   // Campos específicos da etapa massa (opcionais)
   receita_id: string | null;
@@ -42,7 +43,7 @@ type ProductionStepLogInsert = {
   qtd_entrada?: number | null;
   qtd_saida: number;
   perda_qtd?: number;
-  dados_qualidade?: Record<string, unknown> | null;
+  dados_qualidade?: Json | null;
   fotos?: string[];
   inicio?: string;
   fim?: string | null;
@@ -60,7 +61,7 @@ type ProductionStepLogUpdate = {
   qtd_entrada?: number | null;
   qtd_saida?: number;
   perda_qtd?: number;
-  dados_qualidade?: Record<string, unknown> | null;
+  dados_qualidade?: Json | null;
   fotos?: string[];
   fim?: string | null;
   // Campos específicos da etapa massa (opcionais)
@@ -104,7 +105,7 @@ export class ProductionStepRepository {
       qtd_entrada: input.qtd_entrada || null,
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd || 0,
-      dados_qualidade: input.dados_qualidade || null,
+      dados_qualidade: (input.dados_qualidade as Json) || null,
       fotos: input.fotos || [],
       // Campos de massa
       receita_id: input.receita_id || null,
@@ -153,7 +154,7 @@ export class ProductionStepRepository {
     const updateData: ProductionStepLogUpdate = {
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd,
-      dados_qualidade: input.dados_qualidade,
+      dados_qualidade: input.dados_qualidade as Json | null | undefined,
       fotos: input.fotos,
       fim: input.fim,
       // Campos de massa
@@ -324,9 +325,9 @@ export class ProductionStepRepository {
       qtd_entrada: row.qtd_entrada ? Number(row.qtd_entrada) : null,
       qtd_saida: row.qtd_saida ? Number(row.qtd_saida) : null,
       perda_qtd: Number(row.perda_qtd || 0),
-      dados_qualidade: row.dados_qualidade as Record<string, unknown> | null,
+      dados_qualidade: (row.dados_qualidade as QualityData) || null,
       fotos: row.fotos || [],
-      inicio: row.inicio,
+      inicio: row.inicio || new Date().toISOString(),
       fim: row.fim,
       // Campos específicos da etapa massa
       receita_id: row.receita_id || null,

@@ -9,6 +9,7 @@ import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
 interface ClientStockBlockProps {
   cliente: string;
   summary: ClientStockSummary;
+  filterTerm?: string;
   onAdjustStock: (data: StockCardSelection) => void;
   onRegisterOutflow: (data: StockCardSelection) => void;
 }
@@ -22,6 +23,7 @@ export type StockCardSelection = {
 export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
   cliente,
   summary,
+  filterTerm = '',
   onAdjustStock,
   onRegisterOutflow,
 }) => {
@@ -30,6 +32,29 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
     summary.total.pacotes < 0 ||
     summary.total.unidades < 0 ||
     summary.total.kg < 0;
+
+  const filteredProdutos = React.useMemo(() => {
+    if (!filterTerm.trim()) {
+      return summary.produtos;
+    }
+
+    const searchTerm = filterTerm.toLowerCase().trim();
+    const clienteMatches = cliente.toLowerCase().includes(searchTerm);
+
+    // Se o cliente corresponde, mostra todos os produtos
+    if (clienteMatches) {
+      return summary.produtos;
+    }
+
+    // Caso contrário, filtra apenas os produtos que correspondem
+    return summary.produtos.filter((item) =>
+      item.produto.toLowerCase().includes(searchTerm)
+    );
+  }, [summary.produtos, filterTerm, cliente]);
+
+  if (filteredProdutos.length === 0) {
+    return null;
+  }
 
   return (
     <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4">
@@ -44,7 +69,7 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
         - {cliente}
       </h2>
       <div className="space-y-3">
-        {summary.produtos.map((item) => (
+        {filteredProdutos.map((item) => (
           <ProductStockCard
             key={item.produto}
             produto={item.produto}

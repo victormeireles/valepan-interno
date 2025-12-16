@@ -106,3 +106,5 @@ COMMENT ON COLUMN public.producao_etapas_log.textura IS
 -- =====================================================
 
 
+
+

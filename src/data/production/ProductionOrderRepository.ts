@@ -3,7 +3,7 @@
  * Responsabilidade única: Queries e operações CRUD na tabela ordens_producao
  */
 
-import { SupabaseClient } from '@supabase/supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { ProductionOrderStatus } from '@/domain/types/producao-etapas';
 

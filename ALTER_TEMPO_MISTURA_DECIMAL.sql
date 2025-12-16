@@ -56,3 +56,5 @@ COMMENT ON COLUMN public.producao_massa_lotes.tempo_rapida IS
 -- =====================================================
 
 
+
+
