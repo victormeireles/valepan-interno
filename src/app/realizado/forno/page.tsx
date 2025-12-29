@@ -121,7 +121,7 @@ export default function ProducaoFornoPage() {
     }
   };
 
-  const groupedItems = useMemo((): RealizadoGroup[] => {
+  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
     const groups: { [key: string]: PainelItem[] } = {};
     items.forEach(item => {
       const groupKey = `${item.dataProducao || selectedDate}`;
@@ -129,11 +129,82 @@ export default function ProducaoFornoPage() {
       groups[groupKey].push(item);
     });
     
-    return Object.entries(groups).map(([groupKey, groupItems]) => ({
-      key: groupKey,
-      items: groupItems,
-    }));
+    const gruposNaoFinalizados: RealizadoGroup[] = [];
+    const gruposFinalizados: RealizadoGroup[] = [];
+    
+    Object.entries(groups).forEach(([groupKey, groupItems]) => {
+      const naoFinalizados: PainelItem[] = [];
+      const finalizados: PainelItem[] = [];
+      
+      groupItems.forEach(item => {
+        const porcentagem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
+        if (porcentagem >= 90) {
+          finalizados.push(item);
+        } else {
+          naoFinalizados.push(item);
+        }
+      });
+      
+      if (naoFinalizados.length > 0) {
+        gruposNaoFinalizados.push({
+          key: groupKey,
+          items: naoFinalizados,
+        });
+      }
+      
+      if (finalizados.length > 0) {
+        gruposFinalizados.push({
+          key: groupKey,
+          items: finalizados,
+        });
+      }
+    });
+    
+    return { gruposNaoFinalizados, gruposFinalizados };
   }, [items, selectedDate]);
+
+  const renderGroup = (group: RealizadoGroup) => (
+    <div className="bg-gray-800/20 border border-gray-600/30 rounded-lg p-3 space-y-2">
+      <div className="border-b border-gray-600/30 pb-1">
+        {/* Header vazio para manter consistência visual */}
+      </div>
+      
+      <div className="space-y-1.5">
+        {group.items.map((item, itemIndex) => {
+          const fornoItem = item as PainelItem;
+          const itemKey = `${fornoItem.produto}-${fornoItem.rowId}`;
+          const isItemLoading = loadingCardId === itemKey;
+          const produzidoDetalhes = QuantityBreakdown.buildEntries([
+            { quantidade: fornoItem.latas, unidade: 'lt' },
+            { quantidade: fornoItem.unidades, unidade: 'un' },
+            { quantidade: fornoItem.kg, unidade: 'kg' },
+          ]);
+          const metaDetalhes = QuantityBreakdown.buildEntries([
+            { quantidade: fornoItem.pedidoLatas, unidade: 'lt' },
+            { quantidade: fornoItem.pedidoUnidades, unidade: 'un' },
+            { quantidade: fornoItem.pedidoKg, unidade: 'kg' },
+          ]);
+          
+          return (
+            <ProductCompactCard
+              key={`${fornoItem.produto}-${itemIndex}`}
+              produto={fornoItem.produto}
+              produzido={fornoItem.produzido}
+              aProduzir={fornoItem.aProduzir}
+              unidade={fornoItem.unidade}
+              hasPhoto={Boolean(fornoItem.fornoFotoUrl)}
+              photoColor="white"
+              onPhotoClick={() => window.open(fornoItem.fornoFotoUrl, '_blank')}
+              onClick={() => handleEditProducao(fornoItem)}
+              isLoading={isItemLoading}
+              detalhesProduzido={produzidoDetalhes}
+              detalhesMeta={metaDetalhes}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#330804' }}>
@@ -158,56 +229,34 @@ export default function ProducaoFornoPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
-          <ThreeColumnLayout
-            groups={groupedItems}
-            columnCount={1}
-            renderGroup={(group) => (
-              <div className="bg-gray-800/20 border border-gray-600/30 rounded-lg p-3 space-y-2">
-                <div className="border-b border-gray-600/30 pb-1">
-                  {/* Header vazio para manter consistência visual */}
-                </div>
-                
-                <div className="space-y-1.5">
-                  {group.items.map((item, itemIndex) => {
-                    const fornoItem = item as PainelItem;
-                    const itemKey = `${fornoItem.produto}-${fornoItem.rowId}`;
-                    const isItemLoading = loadingCardId === itemKey;
-                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: fornoItem.latas, unidade: 'lt' },
-                      { quantidade: fornoItem.unidades, unidade: 'un' },
-                      { quantidade: fornoItem.kg, unidade: 'kg' },
-                    ]);
-                    const metaDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: fornoItem.pedidoLatas, unidade: 'lt' },
-                      { quantidade: fornoItem.pedidoUnidades, unidade: 'un' },
-                      { quantidade: fornoItem.pedidoKg, unidade: 'kg' },
-                    ]);
-                    
-                    return (
-                      <ProductCompactCard
-                        key={`${fornoItem.produto}-${itemIndex}`}
-                        produto={fornoItem.produto}
-                        produzido={fornoItem.produzido}
-                        aProduzir={fornoItem.aProduzir}
-                        unidade={fornoItem.unidade}
-                        hasPhoto={Boolean(fornoItem.fornoFotoUrl)}
-                        photoColor="white"
-                        onPhotoClick={() => window.open(fornoItem.fornoFotoUrl, '_blank')}
-                        onClick={() => handleEditProducao(fornoItem)}
-                        isLoading={isItemLoading}
-                        detalhesProduzido={produzidoDetalhes}
-                        detalhesMeta={metaDetalhes}
-                      />
-                    );
-                  })}
-                </div>
+          <>
+            {/* Seção de Cards Não Finalizados */}
+            {gruposNaoFinalizados.length > 0 && (
+              <div className="mb-8">
+                <ThreeColumnLayout
+                  groups={gruposNaoFinalizados}
+                  columnCount={1}
+                  renderGroup={renderGroup}
+                />
               </div>
             )}
-          />
+
+            {/* Seção de Cards Finalizados */}
+            {gruposFinalizados.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
+                <ThreeColumnLayout
+                  groups={gruposFinalizados}
+                  columnCount={1}
+                  renderGroup={renderGroup}
+                />
+              </div>
+            )}
+          </>
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {groupedItems.length} grupos • {items.length} itens
+          {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens
         </footer>
       </div>
 

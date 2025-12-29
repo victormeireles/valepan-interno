@@ -9,7 +9,7 @@ import { MassaIngrediente } from '@/domain/types/producao-massa';
 
 type MassaIngredienteRow = {
   id: string;
-  producao_etapas_log_id: string;
+  producao_massa_lote_id: string;
   insumo_id: string | null;
   quantidade_padrao: number;
   quantidade_usada: number;
@@ -18,7 +18,7 @@ type MassaIngredienteRow = {
 };
 
 type MassaIngredienteInsert = {
-  producao_etapas_log_id: string;
+  producao_massa_lote_id: string;
   insumo_id: string | null;
   quantidade_padrao: number;
   quantidade_usada: number;
@@ -59,7 +59,7 @@ export class ProductionMassaIngredienteRepository {
     const { data, error } = await this.supabase
       .from('producao_massa_ingredientes')
       .select('*')
-      .eq('producao_etapas_log_id', etapasLogId)
+      .eq('producao_massa_lote_id', etapasLogId)
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -96,7 +96,7 @@ export class ProductionMassaIngredienteRepository {
     const { error } = await this.supabase
       .from('producao_massa_ingredientes')
       .delete()
-      .eq('producao_etapas_log_id', etapasLogId);
+      .eq('producao_massa_lote_id', etapasLogId);
 
     if (error) {
       throw new Error(
@@ -111,7 +111,7 @@ export class ProductionMassaIngredienteRepository {
   private mapRow(row: MassaIngredienteRow): MassaIngrediente {
     return {
       id: row.id,
-      producao_etapas_log_id: row.producao_etapas_log_id,
+      producao_etapas_log_id: row.producao_massa_lote_id,
       insumo_id: row.insumo_id,
       quantidade_padrao: Number(row.quantidade_padrao),
       quantidade_usada: Number(row.quantidade_usada),

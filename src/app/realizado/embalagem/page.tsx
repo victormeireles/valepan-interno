@@ -182,7 +182,7 @@ export default function ProducaoEmbalagemPage() {
     }
   };
 
-  const groupedItems = useMemo((): RealizadoGroup[] => {
+  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
     const groups: { [key: string]: PainelItem[] } = {};
     
     items.forEach(item => {
@@ -196,8 +196,11 @@ export default function ProducaoEmbalagemPage() {
       groups[groupKey].push(item);
     });
     
-    // Criar os grupos e ordenar itens dentro de cada grupo por row_id
-    const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
+    // Criar os grupos e separar em não finalizados e finalizados
+    const gruposNaoFinalizados: Array<RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }> = [];
+    const gruposFinalizados: Array<RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }> = [];
+    
+    Object.entries(groups).forEach(([groupKey, groupItems]) => {
       const [cliente, dataFab, obs] = groupKey.split('|');
       
       // Ordenar itens dentro do grupo por row_id
@@ -209,26 +212,63 @@ export default function ProducaoEmbalagemPage() {
       
       const minRowId = Math.min(...sortedItems.map(item => item.rowId ?? Number.MAX_SAFE_INTEGER));
       
-      return {
-        key: groupKey,
-        cliente,
-        dataFabricacao: dataFab,
-        observacao: obs || undefined,
-        items: sortedItems,
-        minRowId,
-      };
+      // Separar em não finalizados e finalizados
+      const naoFinalizados: PainelItem[] = [];
+      const finalizados: PainelItem[] = [];
+      
+      sortedItems.forEach(item => {
+        const porcentagem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
+        if (porcentagem >= 90) {
+          finalizados.push(item);
+        } else {
+          naoFinalizados.push(item);
+        }
+      });
+      
+      if (naoFinalizados.length > 0) {
+        gruposNaoFinalizados.push({
+          key: groupKey,
+          cliente,
+          dataFabricacao: dataFab,
+          observacao: obs || undefined,
+          items: naoFinalizados,
+          minRowId,
+        });
+      }
+      
+      if (finalizados.length > 0) {
+        gruposFinalizados.push({
+          key: groupKey,
+          cliente,
+          dataFabricacao: dataFab,
+          observacao: obs || undefined,
+          items: finalizados,
+          minRowId,
+        });
+      }
     });
     
     // Ordenar grupos pelo menor row_id de cada grupo
-    const sortedGroups = groupsArray.sort((a, b) => {
+    const sortByMinRowId = (a: { minRowId?: number }, b: { minRowId?: number }) => {
       const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
       const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
       return minRowIdA - minRowIdB;
-    });
+    };
+    
+    gruposNaoFinalizados.sort(sortByMinRowId);
+    gruposFinalizados.sort(sortByMinRowId);
     
     // Remover minRowId do objeto final (usado apenas para ordenação)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return sortedGroups.map(({ minRowId, ...group }) => group);
+    const removeMinRowId = (group: typeof gruposNaoFinalizados[0]): RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string } => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { minRowId, ...rest } = group;
+      return rest;
+    };
+    
+    return {
+      gruposNaoFinalizados: gruposNaoFinalizados.map(removeMinRowId) as RealizadoGroup[],
+      gruposFinalizados: gruposFinalizados.map(removeMinRowId) as RealizadoGroup[],
+    };
   }, [items, selectedDate]);
 
   // Calcular totais de produção e meta
@@ -272,109 +312,222 @@ export default function ProducaoEmbalagemPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
-          <ThreeColumnLayout
-            groups={groupedItems}
-            renderGroup={(group) => {
-              const embalagemGroup = group as RealizadoGroup & {
-                cliente?: string;
-                dataFabricacao?: string;
-                observacao?: string;
-              };
-              
-              return (
-                <ClientGroup
-                  cliente={embalagemGroup.cliente}
-                  dataFabricacao={embalagemGroup.dataFabricacao}
-                  observacao={embalagemGroup.observacao}
-                  selectedDate={selectedDate}
-                >
-                  {group.items.map((item, idx) => {
-                    const embalagemItem = item as PainelItem;
-                    const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
-                    const isItemLoading = loadingCardId === itemKey;
-                    const photoStatus = getPhotoStatus(embalagemItem);
-                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: embalagemItem.caixas, unidade: 'cx' },
-                      { quantidade: embalagemItem.pacotes, unidade: 'pct' },
-                      { quantidade: embalagemItem.unidades, unidade: 'un' },
-                      { quantidade: embalagemItem.kg, unidade: 'kg' },
-                    ]);
-                    const metaDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
-                      { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
-                      { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
-                      { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
-                    ]);
+          <>
+            {/* Seção de Cards Não Finalizados */}
+            {gruposNaoFinalizados.length > 0 && (
+              <div className="mb-8">
+                <ThreeColumnLayout
+                  groups={gruposNaoFinalizados}
+                  renderGroup={(group) => {
+                    const embalagemGroup = group as RealizadoGroup & {
+                      cliente?: string;
+                      dataFabricacao?: string;
+                      observacao?: string;
+                    };
                     
                     return (
-                      <div key={`${embalagemItem.produto}-${idx}`} className="relative">
-                        <ProductCompactCard
-                          produto={embalagemItem.produto}
-                          produzido={embalagemItem.produzido}
-                          aProduzir={embalagemItem.aProduzir}
-                          unidade={embalagemItem.unidade}
-                          congelado={embalagemItem.congelado === 'Sim'}
-                          hasPhoto={photoStatus.hasPhoto}
-                          photoColor={photoStatus.color}
-                          onPhotoClick={() => handlePhotoClick(embalagemItem)}
-                          onClick={() => handleEditProducao(embalagemItem)}
-                          isLoading={isItemLoading}
-                          detalhesProduzido={produzidoDetalhes}
-                          detalhesMeta={metaDetalhes}
-                        />
-                        
-                        {/* Dropdown de fotos */}
-                        {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
-                          <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
-                            {embalagemItem.pacoteFotoUrl && (
-                              <a
-                                href={embalagemItem.pacoteFotoUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                onClick={() => setPhotoDropdownOpen(null)}
-                              >
-                                <span className="text-sm">📦</span>
-                                <span className="text-sm">Foto do Pacote</span>
-                              </a>
-                            )}
-                            {embalagemItem.etiquetaFotoUrl && (
-                              <a
-                                href={embalagemItem.etiquetaFotoUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                onClick={() => setPhotoDropdownOpen(null)}
-                              >
-                                <span className="text-sm">🏷️</span>
-                                <span className="text-sm">Foto da Etiqueta</span>
-                              </a>
-                            )}
-                            {embalagemItem.palletFotoUrl && (
-                              <a
-                                href={embalagemItem.palletFotoUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                onClick={() => setPhotoDropdownOpen(null)}
-                              >
-                                <span className="text-sm">🚛</span>
-                                <span className="text-sm">Foto do Pallet</span>
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <ClientGroup
+                        cliente={embalagemGroup.cliente}
+                        dataFabricacao={embalagemGroup.dataFabricacao}
+                        observacao={embalagemGroup.observacao}
+                        selectedDate={selectedDate}
+                      >
+                        {group.items.map((item, idx) => {
+                          const embalagemItem = item as PainelItem;
+                          const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
+                          const isItemLoading = loadingCardId === itemKey;
+                          const photoStatus = getPhotoStatus(embalagemItem);
+                          const produzidoDetalhes = QuantityBreakdown.buildEntries([
+                            { quantidade: embalagemItem.caixas, unidade: 'cx' },
+                            { quantidade: embalagemItem.pacotes, unidade: 'pct' },
+                            { quantidade: embalagemItem.unidades, unidade: 'un' },
+                            { quantidade: embalagemItem.kg, unidade: 'kg' },
+                          ]);
+                          const metaDetalhes = QuantityBreakdown.buildEntries([
+                            { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
+                            { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
+                            { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
+                            { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+                          ]);
+                          
+                          return (
+                            <div key={`${embalagemItem.produto}-${idx}`} className="relative">
+                              <ProductCompactCard
+                                produto={embalagemItem.produto}
+                                produzido={embalagemItem.produzido}
+                                aProduzir={embalagemItem.aProduzir}
+                                unidade={embalagemItem.unidade}
+                                congelado={embalagemItem.congelado === 'Sim'}
+                                hasPhoto={photoStatus.hasPhoto}
+                                photoColor={photoStatus.color}
+                                onPhotoClick={() => handlePhotoClick(embalagemItem)}
+                                onClick={() => handleEditProducao(embalagemItem)}
+                                isLoading={isItemLoading}
+                                detalhesProduzido={produzidoDetalhes}
+                                detalhesMeta={metaDetalhes}
+                              />
+                              
+                              {/* Dropdown de fotos */}
+                              {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
+                                <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
+                                  {embalagemItem.pacoteFotoUrl && (
+                                    <a
+                                      href={embalagemItem.pacoteFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">📦</span>
+                                      <span className="text-sm">Foto do Pacote</span>
+                                    </a>
+                                  )}
+                                  {embalagemItem.etiquetaFotoUrl && (
+                                    <a
+                                      href={embalagemItem.etiquetaFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">🏷️</span>
+                                      <span className="text-sm">Foto da Etiqueta</span>
+                                    </a>
+                                  )}
+                                  {embalagemItem.palletFotoUrl && (
+                                    <a
+                                      href={embalagemItem.palletFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">🚛</span>
+                                      <span className="text-sm">Foto do Pallet</span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </ClientGroup>
                     );
-                  })}
-                </ClientGroup>
-              );
-            }}
-          />
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Seção de Cards Finalizados */}
+            {gruposFinalizados.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
+                <ThreeColumnLayout
+                  groups={gruposFinalizados}
+                  renderGroup={(group) => {
+                    const embalagemGroup = group as RealizadoGroup & {
+                      cliente?: string;
+                      dataFabricacao?: string;
+                      observacao?: string;
+                    };
+                    
+                    return (
+                      <ClientGroup
+                        cliente={embalagemGroup.cliente}
+                        dataFabricacao={embalagemGroup.dataFabricacao}
+                        observacao={embalagemGroup.observacao}
+                        selectedDate={selectedDate}
+                      >
+                        {group.items.map((item, idx) => {
+                          const embalagemItem = item as PainelItem;
+                          const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
+                          const isItemLoading = loadingCardId === itemKey;
+                          const photoStatus = getPhotoStatus(embalagemItem);
+                          const produzidoDetalhes = QuantityBreakdown.buildEntries([
+                            { quantidade: embalagemItem.caixas, unidade: 'cx' },
+                            { quantidade: embalagemItem.pacotes, unidade: 'pct' },
+                            { quantidade: embalagemItem.unidades, unidade: 'un' },
+                            { quantidade: embalagemItem.kg, unidade: 'kg' },
+                          ]);
+                          const metaDetalhes = QuantityBreakdown.buildEntries([
+                            { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
+                            { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
+                            { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
+                            { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+                          ]);
+                          
+                          return (
+                            <div key={`${embalagemItem.produto}-${idx}`} className="relative">
+                              <ProductCompactCard
+                                produto={embalagemItem.produto}
+                                produzido={embalagemItem.produzido}
+                                aProduzir={embalagemItem.aProduzir}
+                                unidade={embalagemItem.unidade}
+                                congelado={embalagemItem.congelado === 'Sim'}
+                                hasPhoto={photoStatus.hasPhoto}
+                                photoColor={photoStatus.color}
+                                onPhotoClick={() => handlePhotoClick(embalagemItem)}
+                                onClick={() => handleEditProducao(embalagemItem)}
+                                isLoading={isItemLoading}
+                                detalhesProduzido={produzidoDetalhes}
+                                detalhesMeta={metaDetalhes}
+                              />
+                              
+                              {/* Dropdown de fotos */}
+                              {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
+                                <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
+                                  {embalagemItem.pacoteFotoUrl && (
+                                    <a
+                                      href={embalagemItem.pacoteFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">📦</span>
+                                      <span className="text-sm">Foto do Pacote</span>
+                                    </a>
+                                  )}
+                                  {embalagemItem.etiquetaFotoUrl && (
+                                    <a
+                                      href={embalagemItem.etiquetaFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">🏷️</span>
+                                      <span className="text-sm">Foto da Etiqueta</span>
+                                    </a>
+                                  )}
+                                  {embalagemItem.palletFotoUrl && (
+                                    <a
+                                      href={embalagemItem.palletFotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                                      onClick={() => setPhotoDropdownOpen(null)}
+                                    >
+                                      <span className="text-sm">🚛</span>
+                                      <span className="text-sm">Foto do Pallet</span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </ClientGroup>
+                    );
+                  }}
+                />
+              </div>
+            )}
+          </>
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {groupedItems.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
+          {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
         </footer>
       </div>
 

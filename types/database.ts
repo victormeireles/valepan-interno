@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      caminhoes: {
+        Row: {
+          ativo: boolean
+          capacidade_caixas: number
+          created_at: string | null
+          id: string
+          nome: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          capacidade_caixas: number
+          created_at?: string | null
+          id?: string
+          nome: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          capacidade_caixas?: number
+          created_at?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       categorias: {
         Row: {
           aparece_por_padrao: boolean
@@ -144,16 +171,20 @@ export type Database = {
           empresa_id: string | null
           envia_sugestao_pedido: boolean
           erp_codigo: string
+          estado: string | null
           grupo_whatsapp: string | null
           id: string
           is_pessoa_juridica: boolean
+          nao_gerar_boleto: boolean
           nome_fantasia: string
           parcela_padrao_id: string | null
           razao_social: string
           tem_texto_indicando_congelado_na_etiqueta: boolean
           tem_validade_congelado_na_etiqueta: boolean
+          tipo_cliente: Database["public"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id: string | null
           updated_at: string | null
+          valepan_produz_fatura: boolean
         }
         Insert: {
           ativo?: boolean | null
@@ -162,16 +193,20 @@ export type Database = {
           empresa_id?: string | null
           envia_sugestao_pedido?: boolean
           erp_codigo: string
+          estado?: string | null
           grupo_whatsapp?: string | null
           id?: string
           is_pessoa_juridica?: boolean
+          nao_gerar_boleto?: boolean
           nome_fantasia: string
           parcela_padrao_id?: string | null
           razao_social: string
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
+          tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id?: string | null
           updated_at?: string | null
+          valepan_produz_fatura?: boolean
         }
         Update: {
           ativo?: boolean | null
@@ -180,16 +215,20 @@ export type Database = {
           empresa_id?: string | null
           envia_sugestao_pedido?: boolean
           erp_codigo?: string
+          estado?: string | null
           grupo_whatsapp?: string | null
           id?: string
           is_pessoa_juridica?: boolean
+          nao_gerar_boleto?: boolean
           nome_fantasia?: string
           parcela_padrao_id?: string | null
           razao_social?: string
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
+          tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id?: string | null
           updated_at?: string | null
+          valepan_produz_fatura?: boolean
         }
         Relationships: [
           {
@@ -221,8 +260,10 @@ export type Database = {
           app_secret: string
           ativo: boolean
           codigo_conta_corrente_erp: string | null
+          codigo_conta_corrente_s_boleto_erp: string | null
           created_at: string | null
           eh_cadastro_padrao: boolean
+          estado: string | null
           id: string
           nome: string
           updated_at: string | null
@@ -232,8 +273,10 @@ export type Database = {
           app_secret: string
           ativo?: boolean
           codigo_conta_corrente_erp?: string | null
+          codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
           eh_cadastro_padrao?: boolean
+          estado?: string | null
           id?: string
           nome: string
           updated_at?: string | null
@@ -243,8 +286,10 @@ export type Database = {
           app_secret?: string
           ativo?: boolean
           codigo_conta_corrente_erp?: string | null
+          codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
           eh_cadastro_padrao?: boolean
+          estado?: string | null
           id?: string
           nome?: string
           updated_at?: string | null
@@ -651,8 +696,10 @@ export type Database = {
           data_entrega: string
           endereco_entrega_id: string | null
           id: string
+          is_bonificacao: boolean
           observacoes: string | null
           status: string
+          tipo_pedido: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at: string | null
         }
         Insert: {
@@ -664,8 +711,10 @@ export type Database = {
           data_entrega: string
           endereco_entrega_id?: string | null
           id?: string
+          is_bonificacao?: boolean
           observacoes?: string | null
           status?: string
+          tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
         }
         Update: {
@@ -677,8 +726,10 @@ export type Database = {
           data_entrega?: string
           endereco_entrega_id?: string | null
           id?: string
+          is_bonificacao?: boolean
           observacoes?: string | null
           status?: string
+          tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
         }
         Relationships: [
@@ -720,17 +771,10 @@ export type Database = {
           fotos: string[] | null
           id: string
           inicio: string | null
-          masseira_id: string | null
           ordem_producao_id: string
           perda_qtd: number | null
           qtd_entrada: number | null
           qtd_saida: number | null
-          receita_id: string | null
-          receitas_batidas: number | null
-          temperatura_final: number | null
-          tempo_lenta: number | null
-          tempo_rapida: number | null
-          textura: string | null
           usuario_id: string | null
         }
         Insert: {
@@ -740,17 +784,10 @@ export type Database = {
           fotos?: string[] | null
           id?: string
           inicio?: string | null
-          masseira_id?: string | null
           ordem_producao_id: string
           perda_qtd?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
-          receita_id?: string | null
-          receitas_batidas?: number | null
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
           usuario_id?: string | null
         }
         Update: {
@@ -760,17 +797,10 @@ export type Database = {
           fotos?: string[] | null
           id?: string
           inicio?: string | null
-          masseira_id?: string | null
           ordem_producao_id?: string
           perda_qtd?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
-          receita_id?: string | null
-          receitas_batidas?: number | null
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
           usuario_id?: string | null
         }
         Relationships: [
@@ -795,20 +825,6 @@ export type Database = {
             referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "producao_etapas_log_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "receitas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_etapas_log_masseira_id_fkey"
-            columns: ["masseira_id"]
-            isOneToOne: false
-            referencedRelation: "masseiras"
-            referencedColumns: ["id"]
-          },
         ]
       }
       producao_massa_ingredientes: {
@@ -816,7 +832,7 @@ export type Database = {
           created_at: string | null
           id: string
           insumo_id: string | null
-          producao_etapas_log_id: string
+          producao_massa_lote_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -825,7 +841,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_etapas_log_id: string
+          producao_massa_lote_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -834,7 +850,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_etapas_log_id?: string
+          producao_massa_lote_id?: string
           quantidade_padrao?: number
           quantidade_usada?: number
           unidade?: string
@@ -848,10 +864,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "producao_massa_ingredientes_producao_etapas_log_id_fkey"
-            columns: ["producao_etapas_log_id"]
+            foreignKeyName: "producao_massa_ingredientes_producao_massa_lote_id_fkey"
+            columns: ["producao_massa_lote_id"]
             isOneToOne: false
-            referencedRelation: "producao_etapas_log"
+            referencedRelation: "producao_massa_lotes"
             referencedColumns: ["id"]
           },
         ]
@@ -1581,6 +1597,8 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
+      tipo_cliente_enum: "distribuidor" | "hamburgueria"
+      tipo_pedido_enum: "valepan" | "hamburgueria"
       tipo_receita:
         | "massa"
         | "brilho"
@@ -1715,6 +1733,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      tipo_cliente_enum: ["distribuidor", "hamburgueria"],
+      tipo_pedido_enum: ["valepan", "hamburgueria"],
       tipo_receita: [
         "massa",
         "brilho",

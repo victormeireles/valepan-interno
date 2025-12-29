@@ -85,18 +85,21 @@ export class ProductionStepRepository {
       ordem_producao_id: input.ordem_producao_id,
       etapa: input.etapa,
       qtd_saida: input.qtd_saida,
-      stack: new Error().stack?.split('\n').slice(1, 5).join('\n'), // Stack trace para identificar origem
+      usuario_id: input.usuario_id,
+      // Campos de massa (podem ser NULL na criação inicial)
+      receita_id: input.receita_id,
+      masseira_id: input.masseira_id,
+      receitas_batidas: input.receitas_batidas,
+      temperatura_final: input.temperatura_final,
+      tempo_lenta: input.tempo_lenta,
+      tempo_rapida: input.tempo_rapida,
+      textura: input.textura,
+      stack: new Error().stack?.split('\n').slice(1, 8).join('\n'), // Stack trace para identificar origem
     });
 
-    // Validação: se etapa é 'massa', campos de massa são obrigatórios
-    // Nota: A validação no banco de dados (constraint CHECK) também garante isso
-    if (input.etapa === 'massa') {
-      if (!input.receita_id || !input.masseira_id || input.receitas_batidas === undefined || 
-          input.temperatura_final === undefined || input.tempo_lenta === undefined || 
-          input.tempo_rapida === undefined || !input.textura) {
-        throw new Error('Campos de massa são obrigatórios quando etapa é "massa": receita_id, masseira_id, receitas_batidas, temperatura_final, tempo_lenta, tempo_rapida, textura');
-      }
-    }
+    // Nota: Campos de massa são opcionais na criação do log de etapa.
+    // Eles serão preenchidos quando um lote de massa for criado através do ProductionMassaManager.createLote.
+    // A validação dos campos de massa acontece na camada de domínio quando o lote é criado/atualizado.
 
     const insertData: ProductionStepLogInsert = {
       ordem_producao_id: input.ordem_producao_id,
@@ -107,7 +110,7 @@ export class ProductionStepRepository {
       perda_qtd: input.perda_qtd || 0,
       dados_qualidade: (input.dados_qualidade as Json) || null,
       fotos: input.fotos || [],
-      // Campos de massa
+      // Campos de massa (podem ser NULL na criação inicial)
       receita_id: input.receita_id || null,
       masseira_id: input.masseira_id || null,
       receitas_batidas: input.receitas_batidas !== undefined ? input.receitas_batidas : null,
@@ -117,6 +120,19 @@ export class ProductionStepRepository {
       textura: input.textura || null,
     };
 
+    console.log('[ProductionStepRepository.create] 📦 Dados que serão inseridos:', {
+      insertData: JSON.stringify(insertData, null, 2),
+      campos_massa: {
+        receita_id: insertData.receita_id,
+        masseira_id: insertData.masseira_id,
+        receitas_batidas: insertData.receitas_batidas,
+        temperatura_final: insertData.temperatura_final,
+        tempo_lenta: insertData.tempo_lenta,
+        tempo_rapida: insertData.tempo_rapida,
+        textura: insertData.textura,
+      },
+    });
+
     const { data, error } = await this.supabase
       .from('producao_etapas_log')
       .insert(insertData)
@@ -124,7 +140,13 @@ export class ProductionStepRepository {
       .single();
 
     if (error) {
-      console.error('[ProductionStepRepository.create] ❌ Erro ao criar:', error);
+      console.error('[ProductionStepRepository.create] ❌ Erro ao criar:', {
+        error_message: error.message,
+        error_code: error.code,
+        error_details: error.details,
+        error_hint: error.hint,
+        insertData: JSON.stringify(insertData, null, 2),
+      });
       throw new Error(`Erro ao criar log de etapa: ${error.message}`);
     }
 
@@ -135,7 +157,7 @@ export class ProductionStepRepository {
       qtd_saida: data.qtd_saida,
     });
 
-    return this.mapRowToDomain(data);
+    return this.mapRowToDomain(data as unknown as ProductionStepLogRow);
   }
 
   /**
@@ -191,7 +213,7 @@ export class ProductionStepRepository {
       qtd_saida: data.qtd_saida,
     });
 
-    return this.mapRowToDomain(data);
+    return this.mapRowToDomain(data as unknown as ProductionStepLogRow);
   }
 
   /**
@@ -219,7 +241,7 @@ export class ProductionStepRepository {
       }
 
       console.log('[ProductionStepRepository] Log encontrado:', { id, found: !!data });
-      return data ? this.mapRowToDomain(data) : null;
+      return data ? this.mapRowToDomain(data as unknown as ProductionStepLogRow) : null;
     } catch (err) {
       console.error('[ProductionStepRepository] Erro ao buscar log:', {
         id,
@@ -244,7 +266,7 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao buscar logs: ${error.message}`);
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data || []).map((row) => this.mapRowToDomain(row as unknown as ProductionStepLogRow));
   }
 
   /**
@@ -267,7 +289,7 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao buscar último log: ${error.message}`);
     }
 
-    return data ? this.mapRowToDomain(data) : null;
+    return data ? this.mapRowToDomain(data as unknown as ProductionStepLogRow) : null;
   }
 
   /**
@@ -287,7 +309,7 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao buscar logs em andamento: ${error.message}`);
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data || []).map((row) => this.mapRowToDomain(row as unknown as ProductionStepLogRow));
   }
 
   /**
@@ -309,7 +331,7 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao buscar última etapa concluída: ${error.message}`);
     }
 
-    return data ? this.mapRowToDomain(data) : null;
+    return data ? this.mapRowToDomain(data as unknown as ProductionStepLogRow) : null;
   }
 
   /**

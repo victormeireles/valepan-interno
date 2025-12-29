@@ -59,7 +59,7 @@ export class ProductionMassaManager {
 
     // Cria os ingredientes
     const ingredientesInsert = input.ingredientes.map((ing) => ({
-      producao_etapas_log_id: input.producao_etapas_log_id,
+      producao_massa_lote_id: input.producao_etapas_log_id,
       insumo_id: ing.insumo_id || null,
       quantidade_padrao: ing.quantidade_padrao,
       quantidade_usada: ing.quantidade_usada,
@@ -104,7 +104,7 @@ export class ProductionMassaManager {
     // Se houver ingredientes, atualiza
     if (input.ingredientes) {
       const ingredientesInsert = input.ingredientes.map((ing) => ({
-        producao_etapas_log_id: etapasLogId,
+        producao_massa_lote_id: etapasLogId,
         insumo_id: ing.insumo_id || null,
         quantidade_padrao: ing.quantidade_padrao,
         quantidade_usada: ing.quantidade_usada,

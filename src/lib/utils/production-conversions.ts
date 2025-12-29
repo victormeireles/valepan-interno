@@ -43,9 +43,18 @@ import { formatNumberWithThousands, formatIntegerWithThousands } from './number-
 const formatNumber = (value: number) =>
   formatNumberWithThousands(value);
 
-// Arredonda sempre para cima (1 receita, 2 receitas, etc.)
+// Formata receitas com no máximo 1 casa decimal (0.5, 1.0, 1.5, etc.)
+const formatReceitas = (value: number) => {
+  return formatNumberWithThousands(value, { 
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1 
+  });
+};
+
+// Arredonda para o próximo múltiplo de 0.5 (0.5, 1.0, 1.5, 2.0, etc.)
+// Exemplo: 0.1 → 0.5, 0.6 → 1.0, 0.9 → 1.0, 1.1 → 1.5
 const roundReceitasUp = (value: number): number => {
-  return Math.ceil(value);
+  return Math.ceil(value * 2) / 2;
 };
 
 const getUnitLabel = (product: ProductConversionInfo) =>
@@ -146,8 +155,8 @@ export function getQuantityByStation(
     // Exemplo: 120 unidades ÷ 100 unidades/receita = 1.2 receitas
     const receitasCalculadas = unidadesTotais / quantidadePorProduto;
     
-    // Passo 3: Arredondar sempre para cima (1 receita, 2 receitas, etc.)
-    // Exemplo: 1.1 receitas → 2 receitas, 1.9 receitas → 2 receitas
+    // Passo 3: Arredondar para o próximo múltiplo de 0.5
+    // Exemplo: 0.1 receitas → 0.5 receitas, 0.6 receitas → 1.0 receitas, 1.1 receitas → 1.5 receitas
     const receitasArredondadas = roundReceitasUp(receitasCalculadas);
     
     // Calcular assadeiras
@@ -177,10 +186,10 @@ export function getQuantityByStation(
     return {
       value: receitasArredondadas,
       unitLabel: "receitas",
-      readable: `${formatIntegerWithThousands(receitasArredondadas)} receitas`,
+      readable: `${formatReceitas(receitasArredondadas)} receitas`,
       receitas: {
         value: receitasArredondadas,
-        readable: `${formatIntegerWithThousands(receitasArredondadas)} receitas`,
+        readable: `${formatReceitas(receitasArredondadas)} receitas`,
       },
       assadeiras: assadeirasInfo,
       unidades: unidadesInfo,
@@ -227,11 +236,11 @@ export function getQuantityByStation(
       console.log(`[PLANEJAMENTO - Receitas] Cálculo: ${baseUnits} unidades ÷ ${quantidadePorProduto} unidades/receita = ${receitasCalculadas.toFixed(4)} receitas`);
       
       const receitasArredondadas = roundReceitasUp(receitasCalculadas);
-      console.log(`[PLANEJAMENTO - Receitas] Arredondado para cima: ${receitasCalculadas.toFixed(4)} → ${receitasArredondadas} receitas`);
+      console.log(`[PLANEJAMENTO - Receitas] Arredondado para múltiplo de 0.5: ${receitasCalculadas.toFixed(4)} → ${receitasArredondadas} receitas`);
       
       receitasInfo = {
         value: receitasArredondadas,
-        readable: `${formatIntegerWithThousands(receitasArredondadas)} receitas`,
+        readable: `${formatReceitas(receitasArredondadas)} receitas`,
       };
     } else {
       console.log(`[PLANEJAMENTO - Receitas] AVISO: Receita não configurada ou inválida`);

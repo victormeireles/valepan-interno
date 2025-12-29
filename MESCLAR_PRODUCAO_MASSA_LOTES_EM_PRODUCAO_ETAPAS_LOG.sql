@@ -60,22 +60,15 @@ ALTER TABLE public.producao_etapas_log
   ADD CONSTRAINT producao_etapas_log_textura_check
   CHECK (textura IS NULL OR textura IN ('ok', 'rasga'));
 
--- 4. CRIAR CONSTRAINT CHECK PARA VALIDAR CAMPOS OBRIGATÓRIOS QUANDO etapa='massa'
+-- 4. CONSTRAINT CHECK PARA VALIDAR CAMPOS OBRIGATÓRIOS QUANDO etapa='massa'
 -- =====================================================
+-- NOTA: Esta constraint foi REMOVIDA porque os campos de massa podem ser NULL
+-- na criação inicial do log de etapa. Eles serão preenchidos quando um lote
+-- for criado através do ProductionMassaManager.createLote.
+-- A validação dos campos de massa é feita na camada de aplicação.
 
-ALTER TABLE public.producao_etapas_log
-  ADD CONSTRAINT producao_etapas_log_massa_fields_check
-  CHECK (
-    (etapa != 'massa') OR (
-      receita_id IS NOT NULL AND
-      masseira_id IS NOT NULL AND
-      receitas_batidas IS NOT NULL AND
-      temperatura_final IS NOT NULL AND
-      tempo_lenta IS NOT NULL AND
-      tempo_rapida IS NOT NULL AND
-      textura IS NOT NULL
-    )
-  );
+-- Se você já executou esta migration anteriormente e a constraint foi criada,
+-- execute REMOVER_CONSTRAINT_MASSA_OBRIGATORIA.sql para removê-la.
 
 -- 5. ADICIONAR COMENTÁRIOS NAS COLUNAS
 -- =====================================================

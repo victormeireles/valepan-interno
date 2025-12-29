@@ -131,9 +131,7 @@ export async function getProductionQueue() {
       )
     `)
     .neq('status', 'concluido')
-    .neq('status', 'cancelado')
-    .order('prioridade', { ascending: false }) // Urgentes primeiro
-    .order('created_at', { ascending: true }); // Mais antigos primeiro
+    .neq('status', 'cancelado');
 
   if (error) {
     console.error('Erro ao buscar fila:', error);
@@ -208,12 +206,14 @@ export async function getProductionQueue() {
     receitas_batidas: number | null;
   };
   const receitasBatidasMap = new Map<string, number>();
-  massaLogs?.forEach((log: MassaLogItem) => {
-    // Agrupa por ordem_producao_id e soma receitas_batidas
-    const currentTotal = receitasBatidasMap.get(log.ordem_producao_id) || 0;
-    const receitas = log.receitas_batidas || 0;
-    receitasBatidasMap.set(log.ordem_producao_id, currentTotal + receitas);
-  });
+  if (massaLogs && Array.isArray(massaLogs)) {
+    (massaLogs as unknown as MassaLogItem[]).forEach((log) => {
+      // Agrupa por ordem_producao_id e soma receitas_batidas
+      const currentTotal = receitasBatidasMap.get(log.ordem_producao_id) || 0;
+      const receitas = log.receitas_batidas || 0;
+      receitasBatidasMap.set(log.ordem_producao_id, currentTotal + receitas);
+    });
+  }
 
   // Buscar logs de fermentação para calcular receitas de fermentação executadas
   const { data: fermentacaoLogs } = await supabase
@@ -281,5 +281,32 @@ export async function getProductionQueue() {
     };
   });
 
-  return transformedData;
+  // Ordenação: data_producao (crescente, nulos por último) > prioridade (descendente) > created_at (crescente)
+  type OrdemProducaoCompleta = OrdemProducaoWithProduto & {
+    data_producao?: string | null;
+    prioridade?: number | null;
+    created_at?: string | null;
+  };
+  const sortedData = (transformedData as OrdemProducaoCompleta[]).sort((a, b) => {
+    // 1. Comparar data_producao (nulos vão para o final)
+    const dataA = a.data_producao ? new Date(a.data_producao).getTime() : Number.MAX_SAFE_INTEGER;
+    const dataB = b.data_producao ? new Date(b.data_producao).getTime() : Number.MAX_SAFE_INTEGER;
+    if (dataA !== dataB) {
+      return dataA - dataB;
+    }
+
+    // 2. Comparar prioridade (urgentes primeiro - descendente)
+    const prioridadeA = a.prioridade ?? 0;
+    const prioridadeB = b.prioridade ?? 0;
+    if (prioridadeA !== prioridadeB) {
+      return prioridadeB - prioridadeA;
+    }
+
+    // 3. Comparar created_at (mais antigas primeiro - ascendente)
+    const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return createdA - createdB;
+  });
+
+  return sortedData;
 }

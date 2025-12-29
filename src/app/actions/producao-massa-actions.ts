@@ -180,24 +180,66 @@ export async function ensureMassaStepLog(ordemProducaoId: string, usuarioId?: st
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
+    console.log('[ensureMassaStepLog] 🔍 Verificando log de etapa massa existente...', {
+      ordem_producao_id: ordemProducaoId,
+      usuario_id: usuarioId,
+    });
+
     // Verifica se já existe log de massa em andamento
     const log = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    console.log('[ensureMassaStepLog] Log encontrado:', {
+      log_id: log?.id,
+      tem_fim: !!log?.fim,
+      log_completo: log ? {
+        id: log.id,
+        etapa: log.etapa,
+        fim: log.fim,
+        receita_id: log.receita_id,
+        masseira_id: log.masseira_id,
+      } : null,
+    });
+
     if (log && !log.fim) {
+      console.log('[ensureMassaStepLog] ✅ Log em andamento encontrado, retornando...');
       return { success: true, data: log };
     }
 
     // Cria novo log de etapa massa
+    // Nota: Campos de massa são NULL na criação inicial, serão preenchidos quando um lote for criado
     const createInput = {
       ordem_producao_id: ordemProducaoId,
       etapa: 'massa' as const,
       usuario_id: usuarioId,
       qtd_saida: 0, // Será atualizado quando lotes forem criados
+      // Campos de massa deixados como undefined (serão NULL no banco)
+      // Eles serão preenchidos quando createMassaLote for chamado
     };
 
+    console.log('[ensureMassaStepLog] 📝 Criando novo log de etapa massa...', {
+      createInput: {
+        ordem_producao_id: createInput.ordem_producao_id,
+        etapa: createInput.etapa,
+        usuario_id: createInput.usuario_id,
+        qtd_saida: createInput.qtd_saida,
+      },
+    });
+
     const newLog = await stepManager.startStep(createInput);
+    console.log('[ensureMassaStepLog] ✅ Log criado com sucesso:', {
+      log_id: newLog.id,
+      etapa: newLog.etapa,
+      receita_id: newLog.receita_id,
+      masseira_id: newLog.masseira_id,
+    });
+
     return { success: true, data: newLog };
   } catch (error) {
-    console.error('Erro ao garantir log de etapa massa:', error);
+    console.error('[ensureMassaStepLog] ❌ Erro ao garantir log de etapa massa:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      ordem_producao_id: ordemProducaoId,
+      usuario_id: usuarioId,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro ao garantir log de etapa massa',

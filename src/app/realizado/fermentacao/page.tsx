@@ -124,7 +124,7 @@ export default function ProducaoFermentacaoPage() {
     }
   };
 
-  const groupedItems = useMemo((): RealizadoGroup[] => {
+  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
     const groups: { [key: string]: PainelItem[] } = {};
     items.forEach(item => {
       const groupKey = `${item.dataProducao || selectedDate}`;
@@ -132,11 +132,82 @@ export default function ProducaoFermentacaoPage() {
       groups[groupKey].push(item);
     });
     
-    return Object.entries(groups).map(([groupKey, groupItems]) => ({
-      key: groupKey,
-      items: groupItems,
-    }));
+    const gruposNaoFinalizados: RealizadoGroup[] = [];
+    const gruposFinalizados: RealizadoGroup[] = [];
+    
+    Object.entries(groups).forEach(([groupKey, groupItems]) => {
+      const naoFinalizados: PainelItem[] = [];
+      const finalizados: PainelItem[] = [];
+      
+      groupItems.forEach(item => {
+        const porcentagem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
+        if (porcentagem >= 90) {
+          finalizados.push(item);
+        } else {
+          naoFinalizados.push(item);
+        }
+      });
+      
+      if (naoFinalizados.length > 0) {
+        gruposNaoFinalizados.push({
+          key: groupKey,
+          items: naoFinalizados,
+        });
+      }
+      
+      if (finalizados.length > 0) {
+        gruposFinalizados.push({
+          key: groupKey,
+          items: finalizados,
+        });
+      }
+    });
+    
+    return { gruposNaoFinalizados, gruposFinalizados };
   }, [items, selectedDate]);
+
+  const renderGroup = (group: RealizadoGroup) => (
+    <div className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-3 space-y-2">
+      <div className="border-b border-slate-600/30 pb-1">
+        {/* Header vazio para manter consistência visual */}
+      </div>
+      
+      <div className="space-y-1.5">
+        {group.items.map((item, idx) => {
+          const fermentacaoItem = item as PainelItem;
+          const itemKey = `${fermentacaoItem.produto}-${fermentacaoItem.rowId}`;
+          const isItemLoading = loadingCardId === itemKey;
+          const produzidoDetalhes = QuantityBreakdown.buildEntries([
+            { quantidade: fermentacaoItem.latas, unidade: 'lt' },
+            { quantidade: fermentacaoItem.unidades, unidade: 'un' },
+            { quantidade: fermentacaoItem.kg, unidade: 'kg' },
+          ]);
+          const metaDetalhes = QuantityBreakdown.buildEntries([
+            { quantidade: fermentacaoItem.pedidoLatas, unidade: 'lt' },
+            { quantidade: fermentacaoItem.pedidoUnidades, unidade: 'un' },
+            { quantidade: fermentacaoItem.pedidoKg, unidade: 'kg' },
+          ]);
+          
+          return (
+            <ProductCompactCard
+              key={`${fermentacaoItem.produto}-${idx}`}
+              produto={fermentacaoItem.produto}
+              produzido={fermentacaoItem.produzido}
+              aProduzir={fermentacaoItem.aProduzir}
+              unidade={fermentacaoItem.unidade}
+              hasPhoto={Boolean(fermentacaoItem.fermentacaoFotoUrl)}
+              photoColor="white"
+              onPhotoClick={() => window.open(fermentacaoItem.fermentacaoFotoUrl, '_blank')}
+              onClick={() => handleEditProducao(fermentacaoItem)}
+              isLoading={isItemLoading}
+              detalhesProduzido={produzidoDetalhes}
+              detalhesMeta={metaDetalhes}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#8b773a' }}>
@@ -161,56 +232,34 @@ export default function ProducaoFermentacaoPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
-          <ThreeColumnLayout
-            groups={groupedItems}
-            columnCount={1}
-            renderGroup={(group) => (
-              <div className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-3 space-y-2">
-                <div className="border-b border-slate-600/30 pb-1">
-                  {/* Header vazio para manter consistência visual */}
-                </div>
-                
-                <div className="space-y-1.5">
-                  {group.items.map((item, idx) => {
-                    const fermentacaoItem = item as PainelItem;
-                    const itemKey = `${fermentacaoItem.produto}-${fermentacaoItem.rowId}`;
-                    const isItemLoading = loadingCardId === itemKey;
-                    const produzidoDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: fermentacaoItem.latas, unidade: 'lt' },
-                      { quantidade: fermentacaoItem.unidades, unidade: 'un' },
-                      { quantidade: fermentacaoItem.kg, unidade: 'kg' },
-                    ]);
-                    const metaDetalhes = QuantityBreakdown.buildEntries([
-                      { quantidade: fermentacaoItem.pedidoLatas, unidade: 'lt' },
-                      { quantidade: fermentacaoItem.pedidoUnidades, unidade: 'un' },
-                      { quantidade: fermentacaoItem.pedidoKg, unidade: 'kg' },
-                    ]);
-                    
-                    return (
-                      <ProductCompactCard
-                        key={`${fermentacaoItem.produto}-${idx}`}
-                        produto={fermentacaoItem.produto}
-                        produzido={fermentacaoItem.produzido}
-                        aProduzir={fermentacaoItem.aProduzir}
-                        unidade={fermentacaoItem.unidade}
-                        hasPhoto={Boolean(fermentacaoItem.fermentacaoFotoUrl)}
-                        photoColor="white"
-                        onPhotoClick={() => window.open(fermentacaoItem.fermentacaoFotoUrl, '_blank')}
-                        onClick={() => handleEditProducao(fermentacaoItem)}
-                        isLoading={isItemLoading}
-                        detalhesProduzido={produzidoDetalhes}
-                        detalhesMeta={metaDetalhes}
-                      />
-                    );
-                  })}
-                </div>
+          <>
+            {/* Seção de Cards Não Finalizados */}
+            {gruposNaoFinalizados.length > 0 && (
+              <div className="mb-8">
+                <ThreeColumnLayout
+                  groups={gruposNaoFinalizados}
+                  columnCount={1}
+                  renderGroup={renderGroup}
+                />
               </div>
             )}
-          />
+
+            {/* Seção de Cards Finalizados */}
+            {gruposFinalizados.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
+                <ThreeColumnLayout
+                  groups={gruposFinalizados}
+                  columnCount={1}
+                  renderGroup={renderGroup}
+                />
+              </div>
+            )}
+          </>
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {groupedItems.length} grupos • {items.length} itens
+          {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens
         </footer>
       </div>
 

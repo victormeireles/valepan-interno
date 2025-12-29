@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   createMassaLote,
@@ -15,10 +15,12 @@ import {
 import { getReceitaDetalhes } from '@/app/actions/receitas-actions';
 import { getQuantityByStation } from '@/lib/utils/production-conversions';
 import { MassaLote } from '@/domain/types/producao-massa';
+import { formatNumberWithThousands, formatIntegerWithThousands } from '@/lib/utils/number-utils';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
 import ProductionProgressCard from '@/components/Producao/ProductionProgressCard';
 import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
+import Accordion from '@/components/Accordion';
 
 interface MassaStepClientProps {
   ordemProducao: {
@@ -77,6 +79,7 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
   const [temperatura, setTemperatura] = useState<number>(0);
   const [texturaOk, setTexturaOk] = useState(false);
   const [etapasLogId, setEtapasLogId] = useState<string>('');
+  const errorAlertRef = useRef<HTMLDivElement>(null);
 
   // Função para converter minutos e segundos para decimal (ex: 5min 30seg = 5.50)
   const minutosSegundosParaDecimal = (minutos: number, segundos: number): number => {
@@ -336,14 +339,52 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
     );
   };
 
-  // Calcular quantidade de saída
-  const calcularQtdSaida = () => {
-    if (!ordemProducao.produto.receita_massa) return 0;
-    return receitasBatidas * ordemProducao.produto.receita_massa.quantidade_por_produto;
+  // Calcular produção estimada (assadeiras e unidades)
+  const calcularProducaoEstimada = () => {
+    if (!ordemProducao.produto.receita_massa) return null;
+    
+    const unidadesTotais = receitasBatidas * ordemProducao.produto.receita_massa.quantidade_por_produto;
+    const unidadesArredondadas = Math.round(unidadesTotais);
+    
+    const partes: string[] = [];
+    
+    // Calcular assadeiras se disponível
+    if (ordemProducao.produto.unidades_assadeira && ordemProducao.produto.unidades_assadeira > 0) {
+      const assadeiras = unidadesTotais / ordemProducao.produto.unidades_assadeira;
+      const unidadesPorAssadeira = ordemProducao.produto.unidades_assadeira;
+      partes.push(`${formatNumberWithThousands(assadeiras, { minimumFractionDigits: 0, maximumFractionDigits: 1 })} LT c/ ${formatIntegerWithThousands(unidadesPorAssadeira)}`);
+    }
+    
+    // Adicionar unidades arredondadas
+    partes.push(`${formatIntegerWithThousands(unidadesArredondadas)} un`);
+    
+    return partes.join(' / ');
   };
 
   // Calcular receitas já batidas
   const receitasJaBatidas = lotes.reduce((sum, lote) => sum + lote.receitas_batidas, 0);
+
+  const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
+    unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
+    unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
+    box_units: ordemProducao.produto.box_units || null,
+    receita_massa: ordemProducao.produto.receita_massa,
+  });
+
+  const receitasNecessarias = quantityInfo.receitas?.value || 0;
+  const receitasRestantes = Math.max(0, receitasNecessarias - receitasJaBatidas);
+
+  // Definir valor inicial do input de receitas baseado no restante
+  useEffect(() => {
+    // Só atualiza o valor inicial se não estiver editando um lote existente e o formulário estiver visível
+    if (!editingLoteId && showForm && receitasRestantes > 0) {
+      if (Math.abs(receitasRestantes - 0.5) < 0.01) {
+        setReceitasBatidas(0.5);
+      } else {
+        setReceitasBatidas(1);
+      }
+    }
+  }, [receitasRestantes, editingLoteId, showForm]);
 
   // Função para cancelar edição/criação
   const cancelForm = () => {
@@ -382,8 +423,15 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
     setLoading(true);
 
     try {
-      if (!etapasLogId) {
-        throw new Error('Log de etapa não encontrado');
+      // Se não há etapasLogId, tenta criar o log novamente
+      let logId = etapasLogId;
+      if (!logId) {
+        const logResult = await ensureMassaStepLog(ordemProducao.id);
+        if (!logResult.success || !logResult.data) {
+          throw new Error(logResult.error || 'Erro ao criar log de etapa. Por favor, recarregue a página e tente novamente.');
+        }
+        logId = logResult.data.id;
+        setEtapasLogId(logId);
       }
 
       const ingredientesData = ingredientes.map((ing) => ({
@@ -407,7 +455,7 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
       } else {
         // Cria novo lote
         result = await createMassaLote({
-          producao_etapas_log_id: etapasLogId,
+          producao_etapas_log_id: logId,
           receita_id: receitaId,
           masseira_id: masseiraId || null,
           receitas_batidas: receitasBatidas,
@@ -437,20 +485,17 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar');
+      // Scroll para o erro após um pequeno delay para garantir que o DOM foi atualizado
+      setTimeout(() => {
+        errorAlertRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }, 100);
     } finally {
       setLoading(false);
     }
   };
-
-  const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
-    unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
-    unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
-    box_units: ordemProducao.produto.box_units || null,
-    receita_massa: ordemProducao.produto.receita_massa,
-  });
-
-  const receitasNecessarias = quantityInfo.receitas?.value || 0;
-  const receitasRestantes = Math.max(0, receitasNecessarias - receitasJaBatidas);
 
   return (
     <ProductionStepLayout
@@ -487,7 +532,9 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
                 {editingLoteId ? 'Editar Lote de Massa' : 'Novo Lote de Massa'}
               </h3>
 
-              <ProductionErrorAlert error={error} />
+              <div ref={errorAlertRef}>
+                <ProductionErrorAlert error={error} />
+              </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Quantidade de Receitas Batidas - PRIMEIRO */}
@@ -509,9 +556,9 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
                       receitas
                     </span>
                   </div>
-                  {receitasBatidas > 0 && (
+                  {receitasBatidas > 0 && calcularProducaoEstimada() && (
                     <p className="text-sm text-gray-600 ml-1">
-                      Quantidade produzida: <strong>{calcularQtdSaida().toLocaleString('pt-BR')} unidades</strong>
+                      Produção estimada: <strong>{calcularProducaoEstimada()}</strong>
                     </p>
                   )}
                 </div>
@@ -543,15 +590,12 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
 
                 {/* Lista de Ingredientes com Quantidades Editáveis */}
                 {ingredientes.length > 0 && (
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-gray-700 ml-1">
-                      Ingredientes e Quantidades Utilizadas
-                    </label>
+                  <Accordion title="Ingredientes e Quantidades Utilizadas" defaultOpen={false}>
                     <div className="space-y-3">
                       {ingredientes.map((ing) => (
                         <div
                           key={ing.id}
-                          className="px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl"
+                          className="px-4 py-3 bg-white border-2 border-gray-200 rounded-xl"
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm font-medium text-gray-900">
@@ -600,7 +644,7 @@ export default function MassaStepClient({ ordemProducao, initialLoteId }: MassaS
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </Accordion>
                 )}
 
                 {/* Seleção de Masseira - apenas para novo lote */}

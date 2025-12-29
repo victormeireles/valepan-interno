@@ -30,13 +30,6 @@ export default function ProductionProgressBar({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Progresso de Receitas</h3>
-        <span className="text-xs text-gray-500">
-          {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} receitas
-        </span>
-      </div>
-
       {/* Barra de progresso principal (massa) */}
       <div className="relative h-6 bg-gray-100 rounded-full overflow-hidden">
         <div
@@ -45,7 +38,7 @@ export default function ProductionProgressBar({
         />
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-xs font-semibold text-gray-700 z-10">
-            {percentualMassaLimitado.toFixed(0)}%
+            {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} receitas
           </span>
         </div>
       </div>
@@ -64,24 +57,6 @@ export default function ProductionProgressBar({
           </div>
         </div>
       )}
-
-      {/* Legenda */}
-      <div className="flex items-center gap-4 text-xs text-gray-600">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-blue-500" />
-          <span>Massa: {formatarReceita(receitasMassa)} receitas</span>
-        </div>
-        {receitasFermentacao > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-green-500" />
-            <span>Fermentação: {formatarReceita(receitasFermentacao)} receitas</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-gray-300" />
-          <span>Meta: {formatarReceita(receitasOP)} receitas</span>
-        </div>
-      </div>
     </div>
   );
 }

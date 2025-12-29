@@ -170,8 +170,9 @@ export class ProductionOrderRepository {
       .select('*')
       .neq('status', 'concluido')
       .neq('status', 'cancelado')
-      .order('prioridade', { ascending: false })
-      .order('created_at', { ascending: true });
+      .order('data_producao', { ascending: true, nullsFirst: false }) // Data produção crescente (nulos por último)
+      .order('prioridade', { ascending: false }) // Urgentes primeiro
+      .order('created_at', { ascending: true }); // Data criação OP crescente
 
     if (error) {
       throw new Error(`Erro ao buscar ordens ativas: ${error.message}`);

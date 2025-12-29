@@ -104,21 +104,11 @@ export default function ProductionQueueClient({
     };
   };
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  };
 
   const formatDay = (dateString?: string | null) => {
     if (!dateString) return null;
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('pt-BR', {
-      weekday: 'short',
       day: '2-digit',
       month: '2-digit',
     }).format(date);
@@ -194,7 +184,6 @@ export default function ProductionQueueClient({
               const priorityStyle = getPriorityStyles(item.prioridade ?? 0);
               const quantityInfo = getQuantityByStation(effectiveStation, item.qtd_planejada, item.produtos);
               const productionDate = formatDay(item.data_producao);
-              const createdLabel = item.created_at ? formatDateTime(item.created_at) : 'sem registro';
               const disableMassaAction = isMassa && quantityInfo.hasWarning;
               
               // Calcular progresso de receitas (apenas para estação massa)
@@ -218,22 +207,37 @@ export default function ProductionQueueClient({
 
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pl-4">
                     <div className="flex-1 space-y-3">
-                      <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide">
-                        <span className="font-mono text-gray-400">{item.lote_codigo}</span>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold border ${priorityStyle.bg} ${priorityStyle.text} ${priorityStyle.border}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${priorityStyle.dot}`} />
-                          {priorityStyle.label}
-                        </span>
-                        <span className="text-gray-400 flex items-center gap-1 normal-case">
-                          <span className="material-icons text-[10px]">schedule</span>
-                          Criada {createdLabel}
-                        </span>
-                        {productionDate && (
-                          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full lowercase">
-                            Produzir em {productionDate}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide">
+                          <span className="font-mono text-gray-400">{item.lote_codigo}</span>
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold border ${priorityStyle.bg} ${priorityStyle.text} ${priorityStyle.border}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${priorityStyle.dot}`} />
+                            {priorityStyle.label}
                           </span>
+                          {productionDate && (
+                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-medium">
+                              {productionDate}
+                            </span>
+                          )}
+                        </div>
+                        {isMassa && (
+                          <button
+                            onClick={() => {
+                              setSelectedMassaOrder(item);
+                              setIsMassaLotesModalOpen(true);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium shadow-sm flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                              disableMassaAction
+                                ? 'bg-gray-50 border border-gray-200 text-gray-400 cursor-not-allowed'
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 active:scale-95'
+                            }`}
+                            disabled={disableMassaAction}
+                          >
+                            <span className="material-icons text-base">play_circle</span>
+                            <span>Iniciar</span>
+                          </button>
                         )}
                       </div>
 
@@ -331,8 +335,8 @@ export default function ProductionQueueClient({
                           </div>
                         )}
 
-                        <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                          {isPlanning && (
+                        {isPlanning && (
+                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
                             <button
                               onClick={() => {
                                 setEditingOrder(item);
@@ -343,45 +347,27 @@ export default function ProductionQueueClient({
                               <span className="material-icons text-gray-400">edit</span>
                               <span className="sm:hidden">Editar</span>
                             </button>
-                          )}
-
-                          {isMassa ? (
-                            <button
-                              onClick={() => {
-                                setSelectedMassaOrder(item);
-                                setIsMassaLotesModalOpen(true);
-                              }}
-                              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-medium shadow-sm flex items-center justify-center gap-2 whitespace-nowrap ${
-                                disableMassaAction
-                                  ? 'bg-gray-50 border border-gray-200 text-gray-400 cursor-not-allowed'
-                                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 transition-all active:scale-95'
-                              }`}
-                              disabled={disableMassaAction}
-                            >
-                              <span className="material-icons text-gray-400 group-hover:text-green-600 transition-colors">
-                                play_circle
-                              </span>
-                              Iniciar Produção
-                            </button>
-                          ) : isFermentacao ? (
+                          </div>
+                        )}
+                        {isFermentacao && (
+                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
                             <button
                               onClick={() => router.push(`/producao/etapas/${item.id}/fermentacao`)}
-                              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-medium shadow-sm flex items-center justify-center gap-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 transition-all active:scale-95"
+                              className="flex-1 sm:flex-none px-4 py-2 rounded-xl font-medium shadow-sm flex items-center justify-center gap-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 transition-all active:scale-95"
                             >
-                              <span className="material-icons text-gray-400 group-hover:text-green-600 transition-colors">
-                                play_circle
-                              </span>
-                              Iniciar Fermentação
+                              <span className="material-icons text-base">play_circle</span>
+                              <span>Iniciar</span>
                             </button>
-                          ) : (
-                            !isPlanning && (
-                              <button className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-gray-100 text-gray-600 rounded-xl font-medium shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                                <span className="material-icons text-gray-400">visibility</span>
-                                Detalhes
-                              </button>
-                            )
-                          )}
-                        </div>
+                          </div>
+                        )}
+                        {!isPlanning && !isMassa && !isFermentacao && (
+                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+                            <button className="flex-1 sm:flex-none px-4 py-2 bg-white border border-gray-100 text-gray-600 rounded-xl font-medium shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                              <span className="material-icons text-gray-400">visibility</span>
+                              Detalhes
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
