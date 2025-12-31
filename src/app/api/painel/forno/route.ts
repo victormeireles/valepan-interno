@@ -22,6 +22,7 @@ type PainelItem = {
   fornoFotoUrl?: string;
   fornoFotoId?: string;
   fornoFotoUploadedAt?: string;
+  observacao?: string;
 };
 
 export async function GET(request: Request) {
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
-    const rows = await readSheetValues(spreadsheetId, `${tabName}!A:N`);
+    const rows = await readSheetValues(spreadsheetId, `${tabName}!A:AC`);
     const dataRows = rows.slice(1);
 
     const items: PainelItem[] = [];
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
       const fornoFotoUrl = (r[11] || '').toString().trim(); // L
       const fornoFotoId = (r[12] || '').toString().trim(); // M
       const fornoFotoUploadedAt = (r[13] || '').toString().trim(); // N
+      const observacao = (r[28] || '').toString().trim(); // AC
 
       // Determinar unidade principal
       let unidade: PainelItem['unidade'] | '' = '';
@@ -83,6 +85,7 @@ export async function GET(request: Request) {
         fornoFotoUrl: fornoFotoUrl || undefined,
         fornoFotoId: fornoFotoId || undefined,
         fornoFotoUploadedAt: fornoFotoUploadedAt || undefined,
+        observacao: observacao || undefined,
       });
     }
 

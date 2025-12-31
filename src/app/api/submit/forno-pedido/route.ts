@@ -22,15 +22,16 @@ export async function POST(request: Request) {
 
     for (const item of payload.itens) {
       if (!item.produto) continue;
-      const values = [
-        payload.dataProducao, // A
-        item.produto,         // B
-        item.latas || 0,      // C
-        item.unidades || 0,   // D
-        item.kg || 0,         // E
-        now,                  // F created_at
-        now,                  // G updated_at
-      ];
+      // Criar array com 29 elementos (A até AC), preenchendo com valores vazios onde necessário
+      const values: (string | number)[] = new Array(29).fill('');
+      values[0] = payload.dataProducao;  // A
+      values[1] = item.produto;          // B
+      values[2] = item.latas || 0;       // C
+      values[3] = item.unidades || 0;    // D
+      values[4] = item.kg || 0;           // E
+      values[5] = now;                    // F created_at
+      values[6] = now;                    // G updated_at
+      values[28] = item.observacao || ''; // AC observação
       await appendRow(spreadsheetId, tabName, values);
     }
 

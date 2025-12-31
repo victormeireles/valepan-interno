@@ -13,6 +13,7 @@ export type PedidoFornoItem = {
   latas: number;
   unidades: number;
   kg: number;
+  observacao?: string;
 };
 
 export type PedidoFornoPayload = {

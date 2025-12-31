@@ -85,7 +85,7 @@ export async function GET(request: Request, context: { params: Promise<{ rowId: 
 
     const { spreadsheetId, tabName } = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
-    const range = `${tabName}!C${rowNumber}:U${rowNumber}`; // Read from C to U
+    const range = `${tabName}!C${rowNumber}:AC${rowNumber}`; // Read from C to AC to include observacao
     const response = await sheets.spreadsheets.values.get({ spreadsheetId, range });
     const values = response.data.values?.[0] || [];
     
@@ -103,6 +103,8 @@ export async function GET(request: Request, context: { params: Promise<{ rowId: 
       fermentacaoFotoUrl: values[16] || '',    // S
       fermentacaoFotoId: values[17] || '',     // T
       fermentacaoFotoUploadedAt: values[18] || '', // U
+      // Observação
+      observacao: (values[26] || '').toString().trim() || undefined, // AC (índice 26 quando começa de C)
     };
 
     return NextResponse.json({ data, rowId: rowNumber });

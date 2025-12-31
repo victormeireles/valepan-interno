@@ -13,6 +13,7 @@ type PainelItem = RealizadoItemFermentacao & {
   pedidoLatas?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
+  observacao?: string;
 };
 
 export default function ProducaoFermentacaoPage() {
@@ -202,6 +203,7 @@ export default function ProducaoFermentacaoPage() {
               isLoading={isItemLoading}
               detalhesProduzido={produzidoDetalhes}
               detalhesMeta={metaDetalhes}
+              observacao={fermentacaoItem.observacao}
             />
           );
         })}

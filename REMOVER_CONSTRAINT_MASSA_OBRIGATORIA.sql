@@ -15,3 +15,4 @@ ALTER TABLE public.producao_etapas_log
 -- quando um lote de massa for criado/atualizado, não na criação do log.
 -- =====================================================
 
+

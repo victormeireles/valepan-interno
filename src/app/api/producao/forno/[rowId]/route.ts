@@ -87,8 +87,8 @@ export async function GET(
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     const sheets = await getGoogleSheetsClient();
-    // C-E (pedido), H-K (produção + updated_at), L-N (foto)
-    const range = `${tabName}!C${rowNumber}:N${rowNumber}`;
+    // C-E (pedido), H-K (produção + updated_at), L-N (foto), AC (observação)
+    const range = `${tabName}!C${rowNumber}:AC${rowNumber}`;
     const response = await sheets.spreadsheets.values.get({ spreadsheetId, range });
     const values = response.data.values?.[0] || [];
 
@@ -106,6 +106,8 @@ export async function GET(
       fornoFotoUrl: values[9] || '',           // L
       fornoFotoId: values[10] || '',           // M
       fornoFotoUploadedAt: values[11] || '',   // N
+      // Observação
+      observacao: (values[26] || '').toString().trim() || undefined, // AC (índice 26 quando começa de C)
     };
 
     return NextResponse.json({ data, rowId: rowNumber });

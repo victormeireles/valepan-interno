@@ -19,6 +19,8 @@ type PainelItem = {
   fornoFotoUrl?: string;
   fornoFotoId?: string;
   fornoFotoUploadedAt?: string;
+  // Observação
+  observacao?: string;
 };
 
 type CreatePedidoData = {
@@ -32,6 +34,7 @@ type EditData = {
   latas: number;
   unidades: number;
   kg: number;
+  observacao?: string;
 };
 
 function formatUnidade(u: PainelItem['unidade']): string {
@@ -148,6 +151,7 @@ export default function PedidoFornoPage() {
         latas: data.data.latas || 0,
         unidades: data.data.unidades || 0,
         kg: data.data.kg || 0,
+        observacao: data.data.observacao,
       });
       setIsNewOrder(false);
       setEditModalOpen(true);
@@ -350,8 +354,13 @@ export default function PedidoFornoPage() {
                           </div>
                         )}
                         <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-1 flex-1">
-                            <span className="font-semibold text-white text-sm">{item.produto}</span>
+                          <div className="flex flex-col gap-0.5 flex-1">
+                            <div className="flex items-center gap-1">
+                              <span className="font-semibold text-white text-sm">{item.produto}</span>
+                            </div>
+                            {item.observacao && (
+                              <span className="text-xs text-gray-400 italic">{item.observacao}</span>
+                            )}
                           </div>
                           <div className="text-right ml-2 flex-shrink-0">
                             <div className="text-base font-bold text-white">{item.produzido} / {item.aProduzir} {formatUnidade(item.unidade)}</div>
@@ -384,6 +393,7 @@ export default function PedidoFornoPage() {
           latas: data.caixas,
           unidades: data.unidades,
           kg: data.kg,
+          observacao: data.observacao,
         })}
         onDelete={!isNewOrder ? handleDeleteOrder : undefined}
         rowId={isNewOrder ? undefined : editingItem?.rowId}
@@ -402,7 +412,7 @@ export default function PedidoFornoPage() {
           dataPedido: editingItem.dataProducao || selectedDate,
           dataFabricacao: selectedDate,
           cliente: '',
-          observacao: '',
+          observacao: editingItem.observacao || '',
           produto: editingItem.produto,
           congelado: false,
           caixas: editingItem.latas || 0,
@@ -413,7 +423,7 @@ export default function PedidoFornoPage() {
         clientesOptions={[]}
         produtosOptions={produtosOptions}
         loading={editLoading}
-        visibleFields={{ dataFabricacao: false, cliente: false, observacao: false, congelado: false, pacotes: false }}
+        visibleFields={{ dataFabricacao: false, cliente: false, observacao: true, congelado: false, pacotes: false }}
         labelsOverride={{ caixas: 'Latas' }}
       />
 
@@ -429,13 +439,13 @@ export default function PedidoFornoPage() {
             unidades: i.unidades, 
             kg: i.kg,
             tipoCliente: i.tipoCliente || null,
-            observacao: i.observacao || ''
+            observacao: data.observacao || '' // Usar observação geral do pedido para cada item
           }))
         })}
         clientesOptions={[]}
         produtosOptions={produtosOptions}
         loading={createLoading}
-        visibleFields={{ dataFabricacao: false, cliente: false, observacao: false, congelado: false, pacotes: false }}
+        visibleFields={{ dataFabricacao: false, cliente: false, observacao: true, congelado: false, pacotes: false }}
         labelsOverride={{ caixas: 'Latas' }}
       />
     </div>

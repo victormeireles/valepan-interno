@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
-    const range = `${tabName}!A${rowNumber}:G${rowNumber}`;
+    const range = `${tabName}!A${rowNumber}:AC${rowNumber}`;
     const rows = await readSheetValues(spreadsheetId, range);
     if (!rows || rows.length === 0 || !rows[0]) {
       return NextResponse.json({ error: 'Linha não encontrada' }, { status: 404 });
@@ -42,6 +42,7 @@ export async function GET(
       unidades: Number(row[3] || 0),
       kg: Number(row[4] || 0),
       createdAt: row[5] || '',
+      observacao: (row[28] || '').toString().trim() || undefined, // AC
     };
 
     return NextResponse.json({ data, rowId: rowNumber });
@@ -63,7 +64,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { dataProducao, produto, latas, unidades, kg } = body;
+    const { dataProducao, produto, latas, unidades, kg, observacao } = body;
 
     const normalizedData = normalizeToISODate(dataProducao);
     if (!normalizedData || !produto) {
@@ -78,22 +79,32 @@ export async function PUT(
     const originalResponse = await sheets.spreadsheets.values.get({ spreadsheetId, range: originalRange });
     const originalCreatedAt = originalResponse.data.values?.[0]?.[0] || new Date().toISOString();
 
-    const range = `${tabName}!A${rowNumber}:G${rowNumber}`;
-    const values = [
+    // Atualizar colunas A-G e AC (observação)
+    const rangeAtoG = `${tabName}!A${rowNumber}:G${rowNumber}`;
+    const valuesAtoG = [
       normalizedData,  // A
       produto,         // B
       latas || 0,      // C
-      unidades || 0,   // D
+      unidades || 0,    // D
       kg || 0,         // E
       originalCreatedAt, // F
       new Date().toISOString(), // G updated_at
     ];
-
+    
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range,
+      range: rangeAtoG,
       valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [values] }
+      requestBody: { values: [valuesAtoG] }
+    });
+
+    // Atualizar observação na coluna AC
+    const rangeAC = `${tabName}!AC${rowNumber}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: rangeAC,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[observacao || '']] }
     });
 
     return NextResponse.json({ message: 'Linha atualizada com sucesso' });

@@ -60,6 +60,7 @@ type PainelItemFermentacao = {
   fermentacaoFotoUrl?: string;
   fermentacaoFotoId?: string;
   fermentacaoFotoUploadedAt?: string;
+  observacao?: string;
 };
 
 export async function GET(request: Request) {
@@ -68,7 +69,7 @@ export async function GET(request: Request) {
     const date = searchParams.get('date') || getTodayISO();
 
     const { spreadsheetId: pedidosSpreadsheetId, tabName: pedidosTabName } = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
-    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:U`); // Read up to U for fermentacao
+    const pedidosRows = await readSheetValues(pedidosSpreadsheetId, `${pedidosTabName}!A:AC`); // Read up to AC to include observacao
     const pedidosDataRows = pedidosRows.slice(1);
 
     const items: PainelItemFermentacao[] = [];
@@ -94,6 +95,7 @@ export async function GET(request: Request) {
       const fermentacaoFotoUrl = (r[18] || '').toString().trim(); // S
       const fermentacaoFotoId = (r[19] || '').toString().trim();  // T
       const fermentacaoFotoUploadedAt = (r[20] || '').toString().trim(); // U
+      const observacao = (r[28] || '').toString().trim(); // AC
 
       let unidade: PainelItemFermentacao['unidade'] | '' = '';
       let aProduzir = 0;
@@ -126,6 +128,7 @@ export async function GET(request: Request) {
         fermentacaoFotoUrl: fermentacaoFotoUrl || undefined,
         fermentacaoFotoId: fermentacaoFotoId || undefined,
         fermentacaoFotoUploadedAt: fermentacaoFotoUploadedAt || undefined,
+        observacao: observacao || undefined,
       });
     }
 

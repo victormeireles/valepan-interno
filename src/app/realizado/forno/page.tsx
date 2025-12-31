@@ -13,6 +13,7 @@ type PainelItem = RealizadoItemForno & {
   pedidoLatas?: number;
   pedidoUnidades?: number;
   pedidoKg?: number;
+  observacao?: string;
 };
 
 export default function ProducaoFornoPage() {
@@ -76,6 +77,7 @@ export default function ProducaoFornoPage() {
         fornoFotoUrl: data.data.fornoFotoUrl,
         fornoFotoId: data.data.fornoFotoId,
         fornoFotoUploadedAt: data.data.fornoFotoUploadedAt,
+        observacao: data.data.observacao,
       });
       setProducaoModalOpen(true);
     } catch (err) {
@@ -199,6 +201,7 @@ export default function ProducaoFornoPage() {
               isLoading={isItemLoading}
               detalhesProduzido={produzidoDetalhes}
               detalhesMeta={metaDetalhes}
+              observacao={fornoItem.observacao}
             />
           );
         })}
