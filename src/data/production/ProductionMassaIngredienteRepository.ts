@@ -38,9 +38,18 @@ export class ProductionMassaIngredienteRepository {
       return [];
     }
 
+    // Usar producao_massa_lote_id diretamente (a tabela espera esse campo)
+    const ingredientesParaInsert = ingredientes.map(ing => ({
+      producao_massa_lote_id: ing.producao_massa_lote_id,
+      insumo_id: ing.insumo_id,
+      quantidade_padrao: ing.quantidade_padrao,
+      quantidade_usada: ing.quantidade_usada,
+      unidade: ing.unidade,
+    }));
+
     const { data, error } = await this.supabase
       .from('producao_massa_ingredientes')
-      .insert(ingredientes)
+      .insert(ingredientesParaInsert)
       .select();
 
     if (error) {
@@ -53,13 +62,13 @@ export class ProductionMassaIngredienteRepository {
   }
 
   /**
-   * Busca ingredientes por ID do lote (producao_etapas_log_id)
+   * Busca ingredientes por ID do lote (producao_massa_lote_id)
    */
-  async findByLoteId(etapasLogId: string): Promise<MassaIngrediente[]> {
+  async findByLoteId(loteId: string): Promise<MassaIngrediente[]> {
     const { data, error } = await this.supabase
       .from('producao_massa_ingredientes')
       .select('*')
-      .eq('producao_massa_lote_id', etapasLogId)
+      .eq('producao_massa_lote_id', loteId)
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -75,11 +84,11 @@ export class ProductionMassaIngredienteRepository {
    * Atualiza ingredientes de um lote (deleta os antigos e cria os novos)
    */
   async updateByLoteId(
-    etapasLogId: string,
+    loteId: string,
     ingredientes: MassaIngredienteInsert[],
   ): Promise<MassaIngrediente[]> {
     // Deleta ingredientes existentes
-    await this.deleteByLoteId(etapasLogId);
+    await this.deleteByLoteId(loteId);
 
     // Cria novos ingredientes
     if (ingredientes.length > 0) {
@@ -92,11 +101,11 @@ export class ProductionMassaIngredienteRepository {
   /**
    * Deleta ingredientes por ID do lote
    */
-  async deleteByLoteId(etapasLogId: string): Promise<void> {
+  async deleteByLoteId(loteId: string): Promise<void> {
     const { error } = await this.supabase
       .from('producao_massa_ingredientes')
       .delete()
-      .eq('producao_massa_lote_id', etapasLogId);
+      .eq('producao_massa_lote_id', loteId);
 
     if (error) {
       throw new Error(
@@ -107,11 +116,12 @@ export class ProductionMassaIngredienteRepository {
 
   /**
    * Mapeia uma linha do banco para o tipo de domínio
+   * Converte producao_massa_lote_id (banco) para producao_etapas_log_id (domínio)
    */
   private mapRow(row: MassaIngredienteRow): MassaIngrediente {
     return {
       id: row.id,
-      producao_etapas_log_id: row.producao_massa_lote_id,
+      producao_etapas_log_id: row.producao_massa_lote_id, // Mapeia para o formato esperado pelo domínio
       insumo_id: row.insumo_id,
       quantidade_padrao: Number(row.quantidade_padrao),
       quantidade_usada: Number(row.quantidade_usada),

@@ -14,6 +14,8 @@ type PedidoItem = {
   pacotes: number;
   unidades: number;
   kg: number;
+  tipoCliente?: string | null;
+  observacao?: string;
 };
 
 type CreatePedidoData = {
@@ -78,10 +80,14 @@ export default function CreatePedidoModal({
       pacotes: 0,
       unidades: 0,
       kg: 0,
+      tipoCliente: null,
+      observacao: '',
     }]
   });
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [tiposClienteOptions, setTiposClienteOptions] = useState<string[]>([]);
+  const [conversoes, setConversoes] = useState<{ [index: number]: { caixas: number | null; error?: string } }>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -98,11 +104,73 @@ export default function CreatePedidoModal({
           pacotes: 0,
           unidades: 0,
           kg: 0,
+          tipoCliente: null,
+          observacao: '',
         }]
       });
       setMessage(null);
     }
   }, [isOpen]);
+
+  // Carregar opções de tipos de cliente
+  useEffect(() => {
+    const loadTiposCliente = async () => {
+      try {
+        const res = await fetch('/api/options/embalagem?type=clientes');
+        const data = await res.json();
+        if (res.ok) {
+          setTiposClienteOptions(data.options || []);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar tipos de cliente:', err);
+      }
+    };
+    loadTiposCliente();
+  }, []);
+
+  // Calcular conversão de latas para caixas quando necessário
+  useEffect(() => {
+    const calcularConversoes = async () => {
+      const novasConversoes: { [index: number]: { caixas: number | null; error?: string } } = {};
+      
+      for (let i = 0; i < formData.itens.length; i++) {
+        const item = formData.itens[i];
+        
+        // Só calcular se tipoCliente, produto e latas estiverem preenchidos
+        if (item.tipoCliente && item.produto && item.caixas > 0) {
+          try {
+            const res = await fetch(`/api/produtos/${encodeURIComponent(item.produto)}/conversao`);
+            const data = await res.json();
+            
+            if (!res.ok) {
+              novasConversoes[i] = { caixas: null, error: data.error || 'Erro ao buscar dados do produto' };
+              continue;
+            }
+            
+            const { box_units, unidades_assadeiras } = data;
+            
+            if (!box_units || box_units === 0 || !unidades_assadeiras || unidades_assadeiras === 0) {
+              novasConversoes[i] = { caixas: null, error: 'Produto não possui dados de conversão configurados' };
+              continue;
+            }
+            
+            // Fórmula: (latas * unidades_assadeiras) / box_units
+            const caixasCalculadas = Math.round((item.caixas * unidades_assadeiras) / box_units);
+            novasConversoes[i] = { caixas: caixasCalculadas };
+          } catch {
+            novasConversoes[i] = { caixas: null, error: 'Erro ao calcular conversão' };
+          }
+        } else {
+          // Limpar conversão se não atender aos requisitos
+          novasConversoes[i] = { caixas: null };
+        }
+      }
+      
+      setConversoes(novasConversoes);
+    };
+    
+    calcularConversoes();
+  }, [formData.itens]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +214,8 @@ export default function CreatePedidoModal({
         pacotes: 0,
         unidades: 0,
         kg: 0,
+        tipoCliente: null,
+        observacao: '',
       }]
     });
     setMessage(null);
@@ -162,6 +232,8 @@ export default function CreatePedidoModal({
         pacotes: 0,
         unidades: 0,
         kg: 0,
+        tipoCliente: null,
+        observacao: '',
       }]
     }));
   };
@@ -175,7 +247,7 @@ export default function CreatePedidoModal({
     }
   };
 
-  const updateItem = (index: number, field: keyof PedidoItem, value: string | number | boolean) => {
+  const updateItem = (index: number, field: keyof PedidoItem, value: string | number | boolean | null | undefined) => {
     setFormData(prev => ({
       ...prev,
       itens: prev.itens.map((item, i) => 
@@ -328,6 +400,43 @@ export default function CreatePedidoModal({
                         min={0}
                         step={1}
                       />
+                    </div>
+
+                    {/* Campos para meta de embalagem */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <AutocompleteInput
+                          label="Tipo de Cliente (para meta de embalagem)"
+                          value={item.tipoCliente || ''}
+                          onChange={(value) => updateItem(index, 'tipoCliente', value || null)}
+                          options={tiposClienteOptions}
+                        />
+                        
+                        <TextInput
+                          label="Observação (para meta de embalagem)"
+                          value={item.observacao || ''}
+                          onChange={(value) => updateItem(index, 'observacao', value)}
+                          placeholder="Observações do cliente"
+                        />
+                      </div>
+                      
+                      {/* Preview da conversão */}
+                      {item.tipoCliente && item.produto && item.caixas > 0 && conversoes[index] && (
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                          {conversoes[index].error ? (
+                            <div className="text-sm text-red-600">
+                              {conversoes[index].error}
+                            </div>
+                          ) : conversoes[index].caixas !== null ? (
+                            <div className="text-sm text-blue-800">
+                              <span className="font-semibold">Conversão:</span> {item.caixas} LT → {conversoes[index].caixas} CX
+                              <span className="ml-2 text-xs text-gray-600">
+                                (será criada meta de embalagem automaticamente)
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

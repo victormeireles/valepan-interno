@@ -23,7 +23,7 @@ type PainelItem = {
 
 type CreatePedidoData = {
   dataProducao: string;
-  itens: { produto: string; latas: number; unidades: number; kg: number }[];
+  itens: { produto: string; latas: number; unidades: number; kg: number; tipoCliente?: string | null; observacao?: string }[];
 };
 
 type EditData = {
@@ -168,6 +168,7 @@ export default function PedidoFornoPage() {
       setCreateLoading(true);
       setMessage(null);
 
+      // Criar meta de produção
       const res = await fetch('/api/submit/forno-pedido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,6 +176,53 @@ export default function PedidoFornoPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao criar pedido');
+
+      // Criar meta de embalagem para itens que tiverem tipoCliente preenchido
+      const itensComEmbalagem = createData.itens.filter(item => item.tipoCliente);
+      
+      for (const item of itensComEmbalagem) {
+        try {
+          // Buscar dados do produto para conversão
+          const produtoRes = await fetch(`/api/produtos/${encodeURIComponent(item.produto)}/conversao`);
+          const produtoData = await produtoRes.json();
+          
+          if (!produtoRes.ok || !produtoData.box_units || produtoData.box_units === 0 || 
+              !produtoData.unidades_assadeiras || produtoData.unidades_assadeiras === 0) {
+            console.warn(`Produto ${item.produto} não possui dados de conversão configurados, pulando criação de meta de embalagem`);
+            continue;
+          }
+          
+          // Calcular caixas: (latas * unidades_assadeiras) / box_units
+          const caixas = Math.round((item.latas * produtoData.unidades_assadeiras) / produtoData.box_units);
+          
+          // Criar meta de embalagem
+          const embalagemRes = await fetch('/api/submit/embalagem-pedido', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dataPedido: createData.dataProducao,
+              dataFabricacao: createData.dataProducao,
+              cliente: item.tipoCliente,
+              observacao: item.observacao || '',
+              itens: [{
+                produto: item.produto,
+                congelado: false,
+                caixas: caixas,
+                pacotes: 0,
+                unidades: 0,
+                kg: 0,
+              }]
+            }),
+          });
+          
+          if (!embalagemRes.ok) {
+            const embalagemData = await embalagemRes.json();
+            console.error(`Erro ao criar meta de embalagem para ${item.produto}:`, embalagemData.error);
+          }
+        } catch (err) {
+          console.error(`Erro ao criar meta de embalagem para ${item.produto}:`, err);
+        }
+      }
 
       setMessage('Pedido criado com sucesso!');
 
@@ -375,7 +423,14 @@ export default function PedidoFornoPage() {
         onClose={() => setCreateModalOpen(false)}
         onSave={async (data) => handleCreatePedido({
           dataProducao: data.dataPedido,
-          itens: data.itens.map(i => ({ produto: i.produto, latas: i.caixas, unidades: i.unidades, kg: i.kg }))
+          itens: data.itens.map(i => ({ 
+            produto: i.produto, 
+            latas: i.caixas, 
+            unidades: i.unidades, 
+            kg: i.kg,
+            tipoCliente: i.tipoCliente || null,
+            observacao: i.observacao || ''
+          }))
         })}
         clientesOptions={[]}
         produtosOptions={produtosOptions}
