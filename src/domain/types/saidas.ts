@@ -68,6 +68,8 @@ export interface NovaSaidaPayload {
   meta: SaidaQuantidade;
   observacao?: string;
   skipNotification?: boolean;
+  fotoUrl?: string;
+  fotoId?: string;
 }
 
 

@@ -61,6 +61,7 @@ export class SaidasSheetManager {
   public async appendMeta(
     payload: SaidaMetaPayload,
     realizedOverride?: SaidaQuantidade,
+    photo?: PhotoPayload,
   ): Promise<void> {
     const now = new Date().toISOString();
     const metaValues = this.toQuantityArray(payload.meta);
@@ -79,12 +80,17 @@ export class SaidasSheetManager {
       now,
       ...realizedValues,
       saidaUpdatedAt,
-      '',
-      '',
+      photo?.url || '',
+      photo?.id || '',
     ]);
   }
 
   public async appendNovaSaida(payload: NovaSaidaPayload): Promise<void> {
+    const photoPayload: PhotoPayload | undefined =
+      payload.fotoUrl || payload.fotoId
+        ? { url: payload.fotoUrl, id: payload.fotoId }
+        : undefined;
+
     await this.appendMeta(
       {
         data: payload.data,
@@ -94,6 +100,7 @@ export class SaidasSheetManager {
         meta: payload.meta,
       },
       payload.meta,
+      photoPayload,
     );
   }
 
