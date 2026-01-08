@@ -155,7 +155,8 @@ export default function CreatePedidoModal({
             }
             
             // Fórmula: (latas * unidades_assadeiras) / box_units
-            const caixasCalculadas = Math.round((item.caixas * unidades_assadeiras) / box_units);
+            // Arredondar para baixo (floor) para garantir que não exceda a quantidade disponível
+            const caixasCalculadas = Math.floor((item.caixas * unidades_assadeiras) / box_units);
             novasConversoes[i] = { caixas: caixasCalculadas };
           } catch {
             novasConversoes[i] = { caixas: null, error: 'Erro ao calcular conversão' };

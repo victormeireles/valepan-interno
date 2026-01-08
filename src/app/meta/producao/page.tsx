@@ -197,7 +197,8 @@ export default function PedidoFornoPage() {
           }
           
           // Calcular caixas: (latas * unidades_assadeiras) / box_units
-          const caixas = Math.round((item.latas * produtoData.unidades_assadeiras) / produtoData.box_units);
+          // Arredondar para baixo (floor) para garantir que não exceda a quantidade disponível
+          const caixas = Math.floor((item.latas * produtoData.unidades_assadeiras) / produtoData.box_units);
           
           // Criar meta de embalagem
           const embalagemRes = await fetch('/api/submit/embalagem-pedido', {
