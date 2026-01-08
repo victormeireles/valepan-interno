@@ -832,7 +832,7 @@ export type Database = {
           created_at: string | null
           id: string
           insumo_id: string | null
-          producao_massa_lote_id: string
+          producao_etapas_log_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -841,7 +841,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_massa_lote_id: string
+          producao_etapas_log_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -850,7 +850,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_massa_lote_id?: string
+          producao_etapas_log_id?: string
           quantidade_padrao?: number
           quantidade_usada?: number
           unidade?: string
@@ -864,10 +864,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "producao_massa_ingredientes_producao_massa_lote_id_fkey"
-            columns: ["producao_massa_lote_id"]
+            foreignKeyName: "producao_massa_ingredientes_producao_etapas_log_id_fkey"
+            columns: ["producao_etapas_log_id"]
             isOneToOne: false
-            referencedRelation: "producao_massa_lotes"
+            referencedRelation: "producao_etapas_log"
             referencedColumns: ["id"]
           },
         ]
