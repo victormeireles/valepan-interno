@@ -215,6 +215,34 @@ export async function getProductionQueue() {
     });
   }
 
+  // Buscar logs de massa finalizados para calcular quantidade finalizada (qtd_saida)
+  // qtd_saida na etapa massa representa receitas batidas finalizadas
+  const { data: massaLogsFinalizados } = await supabase
+    .from('producao_etapas_log')
+    .select(`
+      id,
+      ordem_producao_id,
+      qtd_saida
+    `)
+    .eq('etapa', 'massa')
+    .not('fim', 'is', null) // Apenas logs finalizados
+    .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
+
+  // Criar mapa de ordem_producao_id -> quantidade finalizada de massa (em receitas)
+  type MassaLogFinalizadoItem = {
+    ordem_producao_id: string;
+    qtd_saida: number | null;
+  };
+  const qtdMassaFinalizadaMap = new Map<string, number>();
+  if (massaLogsFinalizados && Array.isArray(massaLogsFinalizados)) {
+    (massaLogsFinalizados as unknown as MassaLogFinalizadoItem[]).forEach((log) => {
+      // Agrupa por ordem_producao_id e soma qtd_saida (receitas finalizadas)
+      const currentTotal = qtdMassaFinalizadaMap.get(log.ordem_producao_id) || 0;
+      const qtdSaida = log.qtd_saida || 0;
+      qtdMassaFinalizadaMap.set(log.ordem_producao_id, currentTotal + qtdSaida);
+    });
+  }
+
   // Buscar logs de fermentação para calcular receitas de fermentação executadas
   const { data: fermentacaoLogs } = await supabase
     .from('producao_etapas_log')
@@ -263,6 +291,7 @@ export async function getProductionQueue() {
     const receitaMassa = receitasMap.get(item.produto_id) || null;
     const receitasBatidas = receitasBatidasMap.get(item.id) || 0;
     const receitasFermentacao = receitasFermentacaoMap.get(item.id) || 0;
+    const qtdMassaFinalizada = qtdMassaFinalizadaMap.get(item.id) || null;
 
     // Extrair nome_resumido do join com unidades
     const unidades = produto?.unidades as { nome_resumido?: string } | null;
@@ -278,6 +307,7 @@ export async function getProductionQueue() {
       },
       receitas_batidas: receitasBatidas,
       receitas_fermentacao: receitasFermentacao,
+      qtd_massa_finalizada: qtdMassaFinalizada,
     };
   });
 

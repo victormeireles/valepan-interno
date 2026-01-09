@@ -18,6 +18,7 @@ interface QueueItem {
   data_producao?: string | null;
   receitas_batidas?: number;
   receitas_fermentacao?: number;
+  qtd_massa_finalizada?: number | null;
   produtos: {
     nome: string;
     unidadeNomeResumido: string | null;

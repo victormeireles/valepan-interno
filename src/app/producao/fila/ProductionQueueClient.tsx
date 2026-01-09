@@ -19,6 +19,7 @@ interface QueueItem {
   data_producao?: string | null;
   receitas_batidas?: number;
   receitas_fermentacao?: number;
+  qtd_massa_finalizada?: number | null;
   produtos: {
     nome: string;
     unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
@@ -75,10 +76,21 @@ export default function ProductionQueueClient({
 
   const stationInfo = getStationInfo(effectiveStation);
 
+  // Filtrar fila para fermentação: mostrar apenas itens com massa finalizada > 0
+  const filteredQueue = useMemo(() => {
+    if (isFermentacao) {
+      return initialQueue.filter((item) => {
+        const qtdMassaFinalizada = item.qtd_massa_finalizada ?? 0;
+        return qtdMassaFinalizada > 0;
+      });
+    }
+    return initialQueue;
+  }, [initialQueue, isFermentacao]);
+
   // Stats Calculation
-  const totalOrders = initialQueue.length;
-  const urgentOrders = initialQueue.filter(i => i.prioridade === 2).length;
-  const plannedOrders = initialQueue.filter(i => i.status === 'planejado').length;
+  const totalOrders = filteredQueue.length;
+  const urgentOrders = filteredQueue.filter(i => i.prioridade === 2).length;
+  const plannedOrders = filteredQueue.filter(i => i.status === 'planejado').length;
 
   const getPriorityStyles = (p: number) => {
     if (p === 2) return {
@@ -157,20 +169,25 @@ export default function ProductionQueueClient({
 
         {/* Cards Grid */}
         <div className="grid grid-cols-1 gap-4">
-          {initialQueue.length === 0 ? (
+          {filteredQueue.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
               <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <span className="material-icons text-3xl text-gray-300">inbox</span>
               </div>
               <h3 className="text-lg font-medium text-gray-900">Fila vazia</h3>
-              <p className="text-gray-500 max-w-sm text-center mt-1">Não há ordens de produção pendentes no momento. Crie uma nova ordem para começar.</p>
+              <p className="text-gray-500 max-w-sm text-center mt-1">
+                {isFermentacao 
+                  ? 'Não há ordens de produção com massa finalizada no momento.'
+                  : 'Não há ordens de produção pendentes no momento. Crie uma nova ordem para começar.'}
+              </p>
             </div>
           ) : (
-            initialQueue.map((item) => {
+            filteredQueue.map((item) => {
               console.log(`\n🔍 [FILA] Processando item:`, {
                 produto: item.produtos.nome,
                 lote: item.lote_codigo,
                 qtd_planejada: item.qtd_planejada,
+                qtd_massa_finalizada: item.qtd_massa_finalizada,
                 estacao: effectiveStation,
                 produto_dados: {
                   unidadeNomeResumido: item.produtos.unidadeNomeResumido,
@@ -182,7 +199,21 @@ export default function ProductionQueueClient({
               });
               
               const priorityStyle = getPriorityStyles(item.prioridade ?? 0);
-              const quantityInfo = getQuantityByStation(effectiveStation, item.qtd_planejada, item.produtos);
+              
+              // Para fermentação, usar quantidade finalizada de massa convertida para unidades
+              let quantidadeParaCalculo = item.qtd_planejada;
+              if (isFermentacao && item.qtd_massa_finalizada && item.qtd_massa_finalizada > 0) {
+                // Converter receitas finalizadas de massa para unidades
+                const receitasMassaFinalizadas = item.qtd_massa_finalizada;
+                const quantidadePorProduto = item.produtos.receita_massa?.quantidade_por_produto;
+                if (quantidadePorProduto && quantidadePorProduto > 0) {
+                  // Receitas × quantidade_por_produto = unidades
+                  const unidadesConvertidas = receitasMassaFinalizadas * quantidadePorProduto;
+                  quantidadeParaCalculo = unidadesConvertidas;
+                }
+              }
+              
+              const quantityInfo = getQuantityByStation(effectiveStation, quantidadeParaCalculo, item.produtos);
               const productionDate = formatDay(item.data_producao);
               const disableMassaAction = isMassa && quantityInfo.hasWarning;
               
