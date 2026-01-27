@@ -11,3 +11,4 @@ ALTER TYPE public.tipo_receita ADD VALUE IF NOT EXISTS 'antimofo';
 
 
 
+
