@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
@@ -188,6 +189,8 @@ export async function PUT(
     } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
+
+    revalidatePath('/api/painel/embalagem');
 
     return NextResponse.json({ message: 'Produção atualizada com sucesso' });
   } catch (error) {

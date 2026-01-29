@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { apiKeyAuthService } from '@/lib/services/api-key-auth-service';
@@ -121,6 +122,8 @@ export async function DELETE(request: Request) {
         });
       }
     }
+
+    revalidatePath('/api/painel/estoque');
 
     return NextResponse.json(
       {

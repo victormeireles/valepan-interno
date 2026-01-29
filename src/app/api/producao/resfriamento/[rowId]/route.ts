@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 
@@ -75,6 +76,8 @@ export async function PUT(request: Request, context: { params: Promise<{ rowId: 
         values: [values]
       }
     });
+
+    revalidatePath('/api/painel/resfriamento');
 
     return NextResponse.json({ message: 'Produção de resfriamento atualizada com sucesso' });
   } catch (error) {

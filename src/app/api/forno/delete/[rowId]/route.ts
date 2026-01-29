@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { deleteSheetRow } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 
@@ -15,6 +16,7 @@ export async function DELETE(
 
     const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     await deleteSheetRow(spreadsheetId, tabName, rowNumber);
+    revalidatePath('/api/painel/forno');
     return NextResponse.json({ message: 'Pedido de produção deletado com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

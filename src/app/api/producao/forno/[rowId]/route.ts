@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
@@ -175,6 +176,8 @@ export async function PUT(
     } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
+
+    revalidatePath('/api/painel/forno');
 
     return NextResponse.json({ message: 'Produção de forno atualizada com sucesso' });
   } catch (error) {

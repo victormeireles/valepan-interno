@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { readSheetValues, calculateLoteFromDataFabricacao, updateCell } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 
@@ -136,6 +137,8 @@ export async function PUT(
       const novoLote = calculateLoteFromDataFabricacao(normalizedDataFabricacao);
       await updateCell(spreadsheetId, tabName, rowNumber, 'AA', novoLote);
     }
+
+    revalidatePath('/api/painel/embalagem');
 
     return NextResponse.json({ message: 'Linha atualizada com sucesso' });
   } catch (error) {

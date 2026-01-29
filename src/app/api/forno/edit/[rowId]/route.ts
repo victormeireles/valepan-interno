@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { readSheetValues, getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 
@@ -106,6 +107,8 @@ export async function PUT(
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[observacao || '']] }
     });
+
+    revalidatePath('/api/painel/forno');
 
     return NextResponse.json({ message: 'Linha atualizada com sucesso' });
   } catch (error) {

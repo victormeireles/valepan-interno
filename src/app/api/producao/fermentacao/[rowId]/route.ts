@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
@@ -174,6 +175,8 @@ export async function PUT(request: Request, context: { params: Promise<{ rowId: 
     } catch {
       // Erro ao enviar notificação WhatsApp - silenciosamente ignorado
     }
+
+    revalidatePath('/api/painel/fermentacao');
 
     return NextResponse.json({ message: 'Produção de fermentação atualizada com sucesso' });
   } catch (error) {

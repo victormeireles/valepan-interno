@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues } from '@/lib/googleSheets';
+
+export const revalidate = 3600;
+
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 
 // Helper function to get today's date in ISO format (YYYY-MM-DD)

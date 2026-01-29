@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { appendRow, calculateLoteFromDataFabricacao } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG, PedidoEmbalagemPayload } from '@/config/embalagem';
 
@@ -61,6 +62,8 @@ export async function POST(request: Request) {
       ];
       await appendRow(spreadsheetId, tabName, values);
     }
+
+    revalidatePath('/api/painel/embalagem');
 
     return NextResponse.json({ message: 'Pedido salvo com sucesso', lote: newLote });
   } catch (error) {

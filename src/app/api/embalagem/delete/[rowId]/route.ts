@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { deleteSheetRow } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 
@@ -17,6 +18,8 @@ export async function DELETE(
     // Deletar a linha no Google Sheets
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
     await deleteSheetRow(spreadsheetId, tabName, rowNumber);
+
+    revalidatePath('/api/painel/embalagem');
 
     return NextResponse.json({ message: 'Pedido deletado com sucesso' });
   } catch (error) {

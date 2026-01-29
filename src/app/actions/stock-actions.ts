@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { clientesService } from '@/lib/services/clientes-service';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
@@ -72,6 +73,8 @@ export async function adjustStockAction(input: AdjustStockInput) {
     delta,
   });
 
+  revalidatePath('/api/painel/estoque');
+
   return { success: true, record: atualizado };
 }
 
@@ -105,6 +108,8 @@ export async function registerOutflowAction(input: RegisterOutflowInput) {
       kg: -(payload.quantidade.kg || 0),
     },
   });
+
+  revalidatePath('/api/painel/estoque');
 
   if (!payload.skipNotification) {
     await whatsAppNotificationService.notifySaidasProduction({
@@ -189,6 +194,8 @@ export async function createStockAction(input: CreateStockInput) {
       delta: payload.quantidade,
     });
   }
+
+  revalidatePath('/api/painel/estoque');
 
   return { success: true };
 }

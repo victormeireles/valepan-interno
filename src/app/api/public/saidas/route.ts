@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { NovaSaidaPayload } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
@@ -89,6 +90,8 @@ export async function POST(request: Request) {
         fotoUrl: payload.fotoUrl,
       });
     }
+
+    revalidatePath('/api/painel/estoque');
 
     return NextResponse.json(
       {

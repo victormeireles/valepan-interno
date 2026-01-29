@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readSheetValues } from '@/lib/googleSheets';
+
+export const revalidate = 3600;
+
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import {
   getTodayISOInBrazilTimezone,

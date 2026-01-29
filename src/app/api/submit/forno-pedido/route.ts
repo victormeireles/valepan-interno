@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { appendRow } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG, PedidoFornoPayload } from '@/config/forno';
 
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
       values[28] = item.observacao || ''; // AC observação
       await appendRow(spreadsheetId, tabName, values);
     }
+
+    revalidatePath('/api/painel/forno');
 
     return NextResponse.json({ message: 'Pedido de produção salvo com sucesso' });
   } catch (error) {
