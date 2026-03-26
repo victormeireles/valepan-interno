@@ -16,6 +16,11 @@ type PainelItem = RealizadoItemForno & {
   observacao?: string;
 };
 
+function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
+  const message = error instanceof Error ? error.message : fallback;
+  return /fail(?:ed)? to fetch/i.test(message) ? null : message;
+}
+
 export default function ProducaoFornoPage() {
   const latestDate = useLatestDataDate('forno');
   const [items, setItems] = useState<PainelItem[]>([]);
@@ -40,7 +45,7 @@ export default function ProducaoFornoPage() {
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
         setItems((data.items || []) as PainelItem[]);
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Erro ao carregar o painel');
+        setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
       } finally {
         setLoading(false);
       }
@@ -81,7 +86,7 @@ export default function ProducaoFornoPage() {
       });
       setProducaoModalOpen(true);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Erro ao carregar dados de produção');
+      setMessage(getVisibleErrorMessage(err, 'Erro ao carregar dados de produção'));
     } finally {
       setProducaoLoading(false);
       setLoadingCardId(null);
@@ -118,7 +123,7 @@ export default function ProducaoFornoPage() {
       await refreshPainelData();
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Erro ao salvar produção');
+      setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção'));
       setProducaoLoading(false);
     }
   };

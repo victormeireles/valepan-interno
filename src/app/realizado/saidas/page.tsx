@@ -36,6 +36,11 @@ type NovaSaidaPayload = {
   quantidade: SaidaQuantidade;
 };
 
+function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
+  const message = error instanceof Error ? error.message : fallback;
+  return /fail(?:ed)? to fetch/i.test(message) ? null : message;
+}
+
 function getPrimaryQuantity(meta: SaidaQuantidade, realizado: SaidaQuantidade) {
   for (const key of PRIMARY_ORDER) {
     const metaValue = meta[key] || 0;
@@ -111,7 +116,7 @@ export default function RealizadoSaidasPage() {
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
         setItems((data.items || []) as PainelItem[]);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Erro ao carregar o painel');
+        setMessage(getVisibleErrorMessage(error, 'Erro ao carregar o painel'));
       } finally {
         setLoading(false);
       }
@@ -155,7 +160,7 @@ export default function RealizadoSaidasPage() {
       setModalContext({ rowId: item.rowIndex, item: enrichedItem });
       setModalOpen(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao carregar dados da saída');
+      setMessage(getVisibleErrorMessage(error, 'Erro ao carregar dados da saída'));
     } finally {
       setModalLoading(false);
       setLoadingCardId(null);
@@ -235,7 +240,7 @@ export default function RealizadoSaidasPage() {
       await refreshPainel();
       setTimeout(() => setMessage(null), 3000);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao salvar saída');
+      setMessage(getVisibleErrorMessage(error, 'Erro ao salvar saída'));
       throw error;
     } finally {
       setModalLoading(false);
@@ -321,7 +326,7 @@ export default function RealizadoSaidasPage() {
       setMessage('Saída registrada com sucesso!');
       setTimeout(() => setMessage(null), 3000);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao registrar saída');
+      setMessage(getVisibleErrorMessage(error, 'Erro ao registrar saída'));
       throw error;
     } finally {
       setNovaSaidaLoading(false);
