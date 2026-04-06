@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      cadastro_hamburgueria_comentarios: {
+        Row: {
+          cliente_id: string
+          comentario: string
+          created_at: string
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          cliente_id: string
+          comentario: string
+          created_at?: string
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          cliente_id?: string
+          comentario?: string
+          created_at?: string
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cadastro_hamburgueria_comentarios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cadastro_hamburgueria_comentarios_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       caminhoes: {
         Row: {
           ativo: boolean
@@ -165,77 +204,191 @@ export type Database = {
       }
       clientes: {
         Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
           ativo: boolean | null
+          cnpj: string | null
           codigo_cenario_imposto_erp: number | null
+          comissao_distribuidor_percentual: number
           created_at: string | null
+          dia_semana_entrega: number | null
+          dias_entrega_frequente: number[] | null
+          distribuidor_id: string | null
+          email: string | null
           empresa_id: string | null
           envia_sugestao_pedido: boolean
-          erp_codigo: string
-          estado: string | null
+          erp_codigo: string | null
+          faz_fechamento: boolean
+          foto_fachada_url: string | null
+          frequencia_pedido: Database["public"]["Enums"]["frequencia_pedido_enum"]
           grupo_whatsapp: string | null
           id: string
+          indicador_id: string | null
+          inscricao_estadual: string | null
+          instagram: string | null
           is_pessoa_juridica: boolean
+          marca_pao_atual: string | null
+          media_paes_semana: number | null
+          motivo_rejeicao: string | null
           nao_gerar_boleto: boolean
+          nome_contato: string | null
           nome_fantasia: string
+          notificado_distribuidor: boolean
+          notificado_interno: boolean
           parcela_padrao_id: string | null
+          prazo_aprovacao: string | null
           razao_social: string
+          regiao: string | null
+          regiao_selecionada: string | null
+          rejeitado_em: string | null
+          rejeitado_por: string | null
+          status_cadastro:
+            | Database["public"]["Enums"]["tipo_status_cadastro_enum"]
+            | null
           tem_texto_indicando_congelado_na_etiqueta: boolean
           tem_validade_congelado_na_etiqueta: boolean
           tipo_cliente: Database["public"]["Enums"]["tipo_cliente_enum"]
-          tipo_estoque_id: string | null
+          tipo_estoque_id: string
+          tipos_paes: string | null
           updated_at: string | null
-          valepan_produz_fatura: boolean
+          usuario_padrao_id: string | null
+          vendedor_id: string | null
+          whatsapp_ddd: string | null
+          whatsapp_numero: string | null
         }
         Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
           ativo?: boolean | null
+          cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          comissao_distribuidor_percentual?: number
           created_at?: string | null
+          dia_semana_entrega?: number | null
+          dias_entrega_frequente?: number[] | null
+          distribuidor_id?: string | null
+          email?: string | null
           empresa_id?: string | null
           envia_sugestao_pedido?: boolean
-          erp_codigo: string
-          estado?: string | null
+          erp_codigo?: string | null
+          faz_fechamento?: boolean
+          foto_fachada_url?: string | null
+          frequencia_pedido?: Database["public"]["Enums"]["frequencia_pedido_enum"]
           grupo_whatsapp?: string | null
           id?: string
+          indicador_id?: string | null
+          inscricao_estadual?: string | null
+          instagram?: string | null
           is_pessoa_juridica?: boolean
+          marca_pao_atual?: string | null
+          media_paes_semana?: number | null
+          motivo_rejeicao?: string | null
           nao_gerar_boleto?: boolean
+          nome_contato?: string | null
           nome_fantasia: string
+          notificado_distribuidor?: boolean
+          notificado_interno?: boolean
           parcela_padrao_id?: string | null
+          prazo_aprovacao?: string | null
           razao_social: string
+          regiao?: string | null
+          regiao_selecionada?: string | null
+          rejeitado_em?: string | null
+          rejeitado_por?: string | null
+          status_cadastro?:
+            | Database["public"]["Enums"]["tipo_status_cadastro_enum"]
+            | null
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
           tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
-          tipo_estoque_id?: string | null
+          tipo_estoque_id?: string
+          tipos_paes?: string | null
           updated_at?: string | null
-          valepan_produz_fatura?: boolean
+          usuario_padrao_id?: string | null
+          vendedor_id?: string | null
+          whatsapp_ddd?: string | null
+          whatsapp_numero?: string | null
         }
         Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
           ativo?: boolean | null
+          cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          comissao_distribuidor_percentual?: number
           created_at?: string | null
+          dia_semana_entrega?: number | null
+          dias_entrega_frequente?: number[] | null
+          distribuidor_id?: string | null
+          email?: string | null
           empresa_id?: string | null
           envia_sugestao_pedido?: boolean
-          erp_codigo?: string
-          estado?: string | null
+          erp_codigo?: string | null
+          faz_fechamento?: boolean
+          foto_fachada_url?: string | null
+          frequencia_pedido?: Database["public"]["Enums"]["frequencia_pedido_enum"]
           grupo_whatsapp?: string | null
           id?: string
+          indicador_id?: string | null
+          inscricao_estadual?: string | null
+          instagram?: string | null
           is_pessoa_juridica?: boolean
+          marca_pao_atual?: string | null
+          media_paes_semana?: number | null
+          motivo_rejeicao?: string | null
           nao_gerar_boleto?: boolean
+          nome_contato?: string | null
           nome_fantasia?: string
+          notificado_distribuidor?: boolean
+          notificado_interno?: boolean
           parcela_padrao_id?: string | null
+          prazo_aprovacao?: string | null
           razao_social?: string
+          regiao?: string | null
+          regiao_selecionada?: string | null
+          rejeitado_em?: string | null
+          rejeitado_por?: string | null
+          status_cadastro?:
+            | Database["public"]["Enums"]["tipo_status_cadastro_enum"]
+            | null
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
           tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
-          tipo_estoque_id?: string | null
+          tipo_estoque_id?: string
+          tipos_paes?: string | null
           updated_at?: string | null
-          valepan_produz_fatura?: boolean
+          usuario_padrao_id?: string | null
+          vendedor_id?: string | null
+          whatsapp_ddd?: string | null
+          whatsapp_numero?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "clientes_aprovado_por_fkey"
+            columns: ["aprovado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clientes_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_indicador_id_fkey"
+            columns: ["indicador_id"]
+            isOneToOne: false
+            referencedRelation: "parceiros_indicadores"
             referencedColumns: ["id"]
           },
           {
@@ -246,11 +399,416 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clientes_rejeitado_por_fkey"
+            columns: ["rejeitado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "clientes_tipo_estoque_id_fkey"
             columns: ["tipo_estoque_id"]
             isOneToOne: false
             referencedRelation: "tipos_estoque"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_usuario_padrao_id_fkey"
+            columns: ["usuario_padrao_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clube_beneficios: {
+        Row: {
+          ativo: boolean
+          created_at: string | null
+          custo_pontos: number | null
+          descricao: string
+          id: string
+          imagem_url: string | null
+          nome: string
+          produto_id: string | null
+          requer_aprovacao: boolean
+          tipo: Database["public"]["Enums"]["clube_beneficio_tipo"]
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string | null
+          custo_pontos?: number | null
+          descricao?: string
+          id?: string
+          imagem_url?: string | null
+          nome: string
+          produto_id?: string | null
+          requer_aprovacao?: boolean
+          tipo: Database["public"]["Enums"]["clube_beneficio_tipo"]
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string | null
+          custo_pontos?: number | null
+          descricao?: string
+          id?: string
+          imagem_url?: string | null
+          nome?: string
+          produto_id?: string | null
+          requer_aprovacao?: boolean
+          tipo?: Database["public"]["Enums"]["clube_beneficio_tipo"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clube_beneficios_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_beneficios_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "clube_beneficios_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      clube_config: {
+        Row: {
+          chave: string
+          created_at: string | null
+          descricao: string
+          id: string
+          updated_at: string | null
+          valor: string
+        }
+        Insert: {
+          chave: string
+          created_at?: string | null
+          descricao?: string
+          id?: string
+          updated_at?: string | null
+          valor: string
+        }
+        Update: {
+          chave?: string
+          created_at?: string | null
+          descricao?: string
+          id?: string
+          updated_at?: string | null
+          valor?: string
+        }
+        Relationships: []
+      }
+      clube_pontos_transacoes: {
+        Row: {
+          cliente_id: string
+          created_at: string | null
+          descricao: string
+          expira_em: string | null
+          id: string
+          pedido_id: string | null
+          pontos: number
+          pontos_pendentes: boolean
+          tipo: Database["public"]["Enums"]["clube_transacao_tipo"]
+          updated_at: string | null
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string | null
+          descricao?: string
+          expira_em?: string | null
+          id?: string
+          pedido_id?: string | null
+          pontos: number
+          pontos_pendentes?: boolean
+          tipo: Database["public"]["Enums"]["clube_transacao_tipo"]
+          updated_at?: string | null
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string | null
+          descricao?: string
+          expira_em?: string | null
+          id?: string
+          pedido_id?: string | null
+          pontos?: number
+          pontos_pendentes?: boolean
+          tipo?: Database["public"]["Enums"]["clube_transacao_tipo"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clube_pontos_transacoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_pontos_transacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_pontos_transacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_pontos_transacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+        ]
+      }
+      clube_resgates: {
+        Row: {
+          beneficio_id: string
+          cliente_id: string
+          created_at: string | null
+          id: string
+          observacoes: string | null
+          pedido_bonificado_id: string | null
+          pontos_gastos: number
+          produto_resgatado_id: string | null
+          status: Database["public"]["Enums"]["clube_resgate_status"]
+          updated_at: string | null
+        }
+        Insert: {
+          beneficio_id: string
+          cliente_id: string
+          created_at?: string | null
+          id?: string
+          observacoes?: string | null
+          pedido_bonificado_id?: string | null
+          pontos_gastos: number
+          produto_resgatado_id?: string | null
+          status?: Database["public"]["Enums"]["clube_resgate_status"]
+          updated_at?: string | null
+        }
+        Update: {
+          beneficio_id?: string
+          cliente_id?: string
+          created_at?: string | null
+          id?: string
+          observacoes?: string | null
+          pedido_bonificado_id?: string | null
+          pontos_gastos?: number
+          produto_resgatado_id?: string | null
+          status?: Database["public"]["Enums"]["clube_resgate_status"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clube_resgates_beneficio_id_fkey"
+            columns: ["beneficio_id"]
+            isOneToOne: false
+            referencedRelation: "clube_beneficios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_pedido_bonificado_id_fkey"
+            columns: ["pedido_bonificado_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_pedido_bonificado_id_fkey"
+            columns: ["pedido_bonificado_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_pedido_bonificado_id_fkey"
+            columns: ["pedido_bonificado_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
+            columns: ["produto_resgatado_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
+            columns: ["produto_resgatado_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
+            columns: ["produto_resgatado_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      cobranca_whatsapp_envios: {
+        Row: {
+          canal: string
+          cliente_id: string
+          created_at: string
+          data_entrega_esperada: string
+          data_limite: string
+          erro: string | null
+          id: string
+          mensagem: string | null
+          status: string
+          tipo_disparo: string
+          triggered_by: string | null
+          usuario_id: string | null
+          usuario_telefone: string | null
+          zapi_message_id: string | null
+        }
+        Insert: {
+          canal?: string
+          cliente_id: string
+          created_at?: string
+          data_entrega_esperada: string
+          data_limite: string
+          erro?: string | null
+          id?: string
+          mensagem?: string | null
+          status?: string
+          tipo_disparo?: string
+          triggered_by?: string | null
+          usuario_id?: string | null
+          usuario_telefone?: string | null
+          zapi_message_id?: string | null
+        }
+        Update: {
+          canal?: string
+          cliente_id?: string
+          created_at?: string
+          data_entrega_esperada?: string
+          data_limite?: string
+          erro?: string | null
+          id?: string
+          mensagem?: string | null
+          status?: string
+          tipo_disparo?: string
+          triggered_by?: string | null
+          usuario_id?: string | null
+          usuario_telefone?: string | null
+          zapi_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_whatsapp_envios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_whatsapp_envios_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobranca_whatsapp_envios_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      distribuidor_precos_revenda: {
+        Row: {
+          created_at: string
+          distribuidor_id: string
+          id: string
+          preco_revenda: number
+          produto_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          distribuidor_id: string
+          id?: string
+          preco_revenda: number
+          produto_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          distribuidor_id?: string
+          id?: string
+          preco_revenda?: number
+          produto_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distribuidor_precos_revenda_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
           },
         ]
       }
@@ -259,6 +817,7 @@ export type Database = {
           app_key: string
           app_secret: string
           ativo: boolean
+          cnpj: string | null
           codigo_conta_corrente_erp: string | null
           codigo_conta_corrente_s_boleto_erp: string | null
           created_at: string | null
@@ -266,12 +825,14 @@ export type Database = {
           estado: string | null
           id: string
           nome: string
+          razao_social: string | null
           updated_at: string | null
         }
         Insert: {
           app_key: string
           app_secret: string
           ativo?: boolean
+          cnpj?: string | null
           codigo_conta_corrente_erp?: string | null
           codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
@@ -279,12 +840,14 @@ export type Database = {
           estado?: string | null
           id?: string
           nome: string
+          razao_social?: string | null
           updated_at?: string | null
         }
         Update: {
           app_key?: string
           app_secret?: string
           ativo?: boolean
+          cnpj?: string | null
           codigo_conta_corrente_erp?: string | null
           codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
@@ -292,18 +855,21 @@ export type Database = {
           estado?: string | null
           id?: string
           nome?: string
+          razao_social?: string | null
           updated_at?: string | null
         }
         Relationships: []
       }
       enderecos_entrega: {
         Row: {
+          bairro: string | null
           cep: string | null
           cidade: string | null
           cliente_id: string
           complemento: string | null
           created_at: string | null
           estado: string | null
+          horarios_recebimento: string | null
           id: string
           is_padrao: boolean
           is_retirada_fabrica: boolean
@@ -313,12 +879,14 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cliente_id: string
           complemento?: string | null
           created_at?: string | null
           estado?: string | null
+          horarios_recebimento?: string | null
           id?: string
           is_padrao?: boolean
           is_retirada_fabrica?: boolean
@@ -328,12 +896,14 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cliente_id?: string
           complemento?: string | null
           created_at?: string | null
           estado?: string | null
+          horarios_recebimento?: string | null
           id?: string
           is_padrao?: boolean
           is_retirada_fabrica?: boolean
@@ -348,6 +918,60 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fechamentos: {
+        Row: {
+          cliente_id: string
+          codigo_erp: number | null
+          created_at: string
+          criado_por: string
+          data_fim: string
+          data_inicio: string
+          id: string
+          observacoes: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          cliente_id: string
+          codigo_erp?: number | null
+          created_at?: string
+          criado_por: string
+          data_fim: string
+          data_inicio: string
+          id?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          cliente_id?: string
+          codigo_erp?: number | null
+          created_at?: string
+          criado_por?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fechamentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -522,6 +1146,13 @@ export type Database = {
             foreignKeyName: "ordens_producao_pedido_id_fkey"
             columns: ["pedido_id"]
             isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
             referencedRelation: "vw_dashboard_producao"
             referencedColumns: ["pedido_id"]
           },
@@ -545,6 +1176,47 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      parceiros_indicadores: {
+        Row: {
+          ativo: boolean
+          codigo: string
+          comissao_percentual: number
+          created_at: string | null
+          id: string
+          nome: string
+          updated_at: string | null
+          usuario_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          codigo: string
+          comissao_percentual?: number
+          created_at?: string | null
+          id?: string
+          nome: string
+          updated_at?: string | null
+          usuario_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string
+          comissao_percentual?: number
+          created_at?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string | null
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parceiros_indicadores_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -630,6 +1302,7 @@ export type Database = {
           pedido_id: string
           produto_id: string
           quantidade: number
+          quantidade_confirmada: number
           updated_at: string | null
         }
         Insert: {
@@ -638,6 +1311,7 @@ export type Database = {
           pedido_id: string
           produto_id: string
           quantidade: number
+          quantidade_confirmada?: number
           updated_at?: string | null
         }
         Update: {
@@ -646,6 +1320,7 @@ export type Database = {
           pedido_id?: string
           produto_id?: string
           quantidade?: number
+          quantidade_confirmada?: number
           updated_at?: string | null
         }
         Relationships: [
@@ -654,6 +1329,13 @@ export type Database = {
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_itens_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
           },
           {
@@ -686,18 +1368,70 @@ export type Database = {
           },
         ]
       }
+      pedido_itens_lotes: {
+        Row: {
+          created_at: string
+          criado_por: string
+          id: string
+          imagem_url: string | null
+          observacao: string | null
+          pedido_item_id: string
+          quantidade: number
+        }
+        Insert: {
+          created_at?: string
+          criado_por: string
+          id?: string
+          imagem_url?: string | null
+          observacao?: string | null
+          pedido_item_id: string
+          quantidade: number
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string
+          id?: string
+          imagem_url?: string | null
+          observacao?: string | null
+          pedido_item_id?: string
+          quantidade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedido_itens_lotes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_itens_lotes_pedido_item_id_fkey"
+            columns: ["pedido_item_id"]
+            isOneToOne: false
+            referencedRelation: "pedido_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedidos: {
         Row: {
           atualizado_por: string
           cliente_id: string
           codigo_erp: number | null
+          comissao_distribuidor_valor: number
           created_at: string | null
           criado_por: string
           data_entrega: string
+          data_entrega_distribuidor: string | null
+          desconto_percentual: number | null
+          distribuidor_entrega_id: string | null
           endereco_entrega_id: string | null
+          fechamento_id: string | null
           id: string
           is_bonificacao: boolean
           observacoes: string | null
+          prazo_aprovacao: string | null
+          prioridade: string
           status: string
           tipo_pedido: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at: string | null
@@ -706,13 +1440,20 @@ export type Database = {
           atualizado_por: string
           cliente_id: string
           codigo_erp?: number | null
+          comissao_distribuidor_valor?: number
           created_at?: string | null
           criado_por: string
           data_entrega: string
+          data_entrega_distribuidor?: string | null
+          desconto_percentual?: number | null
+          distribuidor_entrega_id?: string | null
           endereco_entrega_id?: string | null
+          fechamento_id?: string | null
           id?: string
           is_bonificacao?: boolean
           observacoes?: string | null
+          prazo_aprovacao?: string | null
+          prioridade?: string
           status?: string
           tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
@@ -721,13 +1462,20 @@ export type Database = {
           atualizado_por?: string
           cliente_id?: string
           codigo_erp?: number | null
+          comissao_distribuidor_valor?: number
           created_at?: string | null
           criado_por?: string
           data_entrega?: string
+          data_entrega_distribuidor?: string | null
+          desconto_percentual?: number | null
+          distribuidor_entrega_id?: string | null
           endereco_entrega_id?: string | null
+          fechamento_id?: string | null
           id?: string
           is_bonificacao?: boolean
           observacoes?: string | null
+          prazo_aprovacao?: string | null
+          prioridade?: string
           status?: string
           tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
@@ -755,10 +1503,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pedidos_distribuidor_entrega_id_fkey"
+            columns: ["distribuidor_entrega_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "pedidos_endereco_entrega_id_fkey"
             columns: ["endereco_entrega_id"]
             isOneToOne: false
             referencedRelation: "enderecos_entrega"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos"
             referencedColumns: ["id"]
           },
         ]
@@ -771,10 +1533,17 @@ export type Database = {
           fotos: string[] | null
           id: string
           inicio: string | null
+          masseira_id: string | null
           ordem_producao_id: string
           perda_qtd: number | null
           qtd_entrada: number | null
           qtd_saida: number | null
+          receita_id: string | null
+          receitas_batidas: number | null
+          temperatura_final: number | null
+          tempo_lenta: number | null
+          tempo_rapida: number | null
+          textura: string | null
           usuario_id: string | null
         }
         Insert: {
@@ -784,10 +1553,17 @@ export type Database = {
           fotos?: string[] | null
           id?: string
           inicio?: string | null
+          masseira_id?: string | null
           ordem_producao_id: string
           perda_qtd?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
+          receita_id?: string | null
+          receitas_batidas?: number | null
+          temperatura_final?: number | null
+          tempo_lenta?: number | null
+          tempo_rapida?: number | null
+          textura?: string | null
           usuario_id?: string | null
         }
         Update: {
@@ -797,13 +1573,27 @@ export type Database = {
           fotos?: string[] | null
           id?: string
           inicio?: string | null
+          masseira_id?: string | null
           ordem_producao_id?: string
           perda_qtd?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
+          receita_id?: string | null
+          receitas_batidas?: number | null
+          temperatura_final?: number | null
+          tempo_lenta?: number | null
+          tempo_rapida?: number | null
+          textura?: string | null
           usuario_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "producao_etapas_log_masseira_id_fkey"
+            columns: ["masseira_id"]
+            isOneToOne: false
+            referencedRelation: "masseiras"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "producao_etapas_log_ordem_producao_id_fkey"
             columns: ["ordem_producao_id"]
@@ -819,6 +1609,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "producao_etapas_log_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "producao_etapas_log_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["receita_id"]
+          },
+          {
             foreignKeyName: "producao_etapas_log_usuario_id_fkey"
             columns: ["usuario_id"]
             isOneToOne: false
@@ -832,7 +1636,7 @@ export type Database = {
           created_at: string | null
           id: string
           insumo_id: string | null
-          producao_massa_lote_id: string
+          producao_etapas_log_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -841,7 +1645,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_massa_lote_id: string
+          producao_etapas_log_id: string
           quantidade_padrao: number
           quantidade_usada: number
           unidade: string
@@ -850,7 +1654,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           insumo_id?: string | null
-          producao_massa_lote_id?: string
+          producao_etapas_log_id?: string
           quantidade_padrao?: number
           quantidade_usada?: number
           unidade?: string
@@ -864,91 +1668,106 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "producao_massa_ingredientes_producao_massa_lote_id_fkey"
-            columns: ["producao_massa_lote_id"]
-            isOneToOne: false
-            referencedRelation: "producao_massa_lotes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      producao_massa_lotes: {
-        Row: {
-          created_at: string | null
-          id: string
-          masseira_id: string | null
-          producao_etapas_log_id: string
-          receita_id: string
-          receitas_batidas: number
-          temperatura_final: number | null
-          tempo_lenta: number | null
-          tempo_rapida: number | null
-          textura: string | null
-          usuario_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          masseira_id?: string | null
-          producao_etapas_log_id: string
-          receita_id: string
-          receitas_batidas: number
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
-          usuario_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          masseira_id?: string | null
-          producao_etapas_log_id?: string
-          receita_id?: string
-          receitas_batidas?: number
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
-          usuario_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "producao_massa_lotes_masseira_id_fkey"
-            columns: ["masseira_id"]
-            isOneToOne: false
-            referencedRelation: "masseiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_massa_lotes_producao_etapas_log_id_fkey"
+            foreignKeyName: "producao_massa_ingredientes_producao_etapas_log_id_fkey"
             columns: ["producao_etapas_log_id"]
             isOneToOne: false
             referencedRelation: "producao_etapas_log"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      produto_familia_tag_associacoes: {
+        Row: {
+          created_at: string
+          id: string
+          produto_familia_id: string
+          tag_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          produto_familia_id: string
+          tag_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          produto_familia_id?: string
+          tag_id?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "producao_massa_lotes_receita_id_fkey"
-            columns: ["receita_id"]
+            foreignKeyName: "produto_familia_tag_associacoes_produto_familia_id_fkey"
+            columns: ["produto_familia_id"]
             isOneToOne: false
-            referencedRelation: "receitas"
+            referencedRelation: "produto_familias"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "producao_massa_lotes_receita_id_fkey"
-            columns: ["receita_id"]
+            foreignKeyName: "produto_familia_tag_associacoes_tag_id_fkey"
+            columns: ["tag_id"]
             isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["receita_id"]
-          },
-          {
-            foreignKeyName: "producao_massa_lotes_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
+            referencedRelation: "produto_familia_tags"
             referencedColumns: ["id"]
           },
         ]
+      }
+      produto_familia_tags: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          nome: string
+          ordem: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          ordem?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          ordem?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      produto_familias: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          imagem_url: string | null
+          nome_exibicao: string
+          ordem: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          imagem_url?: string | null
+          nome_exibicao: string
+          ordem?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          imagem_url?: string | null
+          nome_exibicao?: string
+          ordem?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       produto_receitas: {
         Row: {
@@ -1111,7 +1930,9 @@ export type Database = {
           created_at: string
           id: string
           nome: string
+          ordem_na_familia: number | null
           package_units: number | null
+          produto_familia_id: string | null
           unidade: string
           unidade_descricao: string | null
           unidade_padrao_id: string | null
@@ -1128,7 +1949,9 @@ export type Database = {
           created_at?: string
           id?: string
           nome: string
+          ordem_na_familia?: number | null
           package_units?: number | null
+          produto_familia_id?: string | null
           unidade: string
           unidade_descricao?: string | null
           unidade_padrao_id?: string | null
@@ -1145,7 +1968,9 @@ export type Database = {
           created_at?: string
           id?: string
           nome?: string
+          ordem_na_familia?: number | null
           package_units?: number | null
+          produto_familia_id?: string | null
           unidade?: string
           unidade_descricao?: string | null
           unidade_padrao_id?: string | null
@@ -1160,6 +1985,13 @@ export type Database = {
             columns: ["categoria_id"]
             isOneToOne: false
             referencedRelation: "categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produtos_produto_familia_id_fkey"
+            columns: ["produto_familia_id"]
+            isOneToOne: false
+            referencedRelation: "produto_familias"
             referencedColumns: ["id"]
           },
           {
@@ -1343,6 +2175,13 @@ export type Database = {
             foreignKeyName: "sugestoes_envio_logs_pedido_origem_id_fkey"
             columns: ["pedido_origem_id"]
             isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sugestoes_envio_logs_pedido_origem_id_fkey"
+            columns: ["pedido_origem_id"]
+            isOneToOne: false
             referencedRelation: "vw_dashboard_producao"
             referencedColumns: ["pedido_id"]
           },
@@ -1351,6 +2190,13 @@ export type Database = {
             columns: ["pedido_rascunho_id"]
             isOneToOne: false
             referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sugestoes_envio_logs_pedido_rascunho_id_fkey"
+            columns: ["pedido_rascunho_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
           },
           {
@@ -1514,6 +2360,33 @@ export type Database = {
           },
         ]
       }
+      vendedores: {
+        Row: {
+          ativo: boolean
+          comissao_percentual: number
+          created_at: string | null
+          id: string
+          nome: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          comissao_percentual?: number
+          created_at?: string | null
+          id?: string
+          nome: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          comissao_percentual?: number
+          created_at?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       verification_tokens: {
         Row: {
           created_at: string | null
@@ -1535,8 +2408,74 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_pedido_sessao: {
+        Row: {
+          created_at: string | null
+          id: string
+          payload: Json | null
+          step: string
+          telefone: string
+          updated_at: string | null
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          payload?: Json | null
+          step?: string
+          telefone: string
+          updated_at?: string | null
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          payload?: Json | null
+          step?: string
+          telefone?: string
+          updated_at?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_pedido_sessao_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
+      relatorio_producao_estimativas_v: {
+        Row: {
+          cliente: string | null
+          d14: number | null
+          d21: number | null
+          d7: number | null
+          endereco: string | null
+          id: string | null
+          media_quantidade: number | null
+          min_quantidade: number | null
+          produto: string | null
+          projecao_entrega: string | null
+        }
+        Relationships: []
+      }
+      relatorio_producao_pedidos_v: {
+        Row: {
+          cliente: string | null
+          data_entrega: string | null
+          id: string | null
+          nome: string | null
+          produto: string | null
+          quantidade_a_produzir: number | null
+          quantidade_total: number | null
+          status: string | null
+        }
+        Relationships: []
+      }
       vw_dashboard_producao: {
         Row: {
           box_units: number | null
@@ -1597,6 +2536,27 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
+      clube_beneficio_tipo:
+        | "bonificacao_produto"
+        | "kit_degustacao"
+        | "marketing_gravacao"
+        | "marketing_fotos"
+        | "visita_fabrica"
+      clube_resgate_status:
+        | "solicitado"
+        | "em_analise"
+        | "aprovado"
+        | "agendado"
+        | "concluido"
+        | "cancelado"
+      clube_transacao_tipo:
+        | "ganho"
+        | "bonus_primeiro_pedido"
+        | "bonus_missao"
+        | "resgate"
+        | "expiracao"
+        | "ajuste_manual"
+      frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
       tipo_pedido_enum: "valepan" | "hamburgueria"
       tipo_receita:
@@ -1606,6 +2566,13 @@ export type Database = {
         | "embalagem"
         | "caixa"
         | "antimofo"
+      tipo_status_cadastro_enum:
+        | "pendente"
+        | "aprovado"
+        | "rejeitado"
+        | "cadastro_realizado"
+        | "em_analise_valepan"
+        | "em_analise_distribuidor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1733,6 +2700,30 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      clube_beneficio_tipo: [
+        "bonificacao_produto",
+        "kit_degustacao",
+        "marketing_gravacao",
+        "marketing_fotos",
+        "visita_fabrica",
+      ],
+      clube_resgate_status: [
+        "solicitado",
+        "em_analise",
+        "aprovado",
+        "agendado",
+        "concluido",
+        "cancelado",
+      ],
+      clube_transacao_tipo: [
+        "ganho",
+        "bonus_primeiro_pedido",
+        "bonus_missao",
+        "resgate",
+        "expiracao",
+        "ajuste_manual",
+      ],
+      frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
       tipo_pedido_enum: ["valepan", "hamburgueria"],
       tipo_receita: [
@@ -1742,6 +2733,14 @@ export const Constants = {
         "embalagem",
         "caixa",
         "antimofo",
+      ],
+      tipo_status_cadastro_enum: [
+        "pendente",
+        "aprovado",
+        "rejeitado",
+        "cadastro_realizado",
+        "em_analise_valepan",
+        "em_analise_distribuidor",
       ],
     },
   },
