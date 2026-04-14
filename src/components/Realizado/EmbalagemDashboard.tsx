@@ -5,6 +5,10 @@ import {
   getBrazilHourFromIso,
   formatWeekdayDayMonthBr,
   formatWeekdayPassadaDayMonthBr,
+  getTodayISOInBrazilTimezone,
+  getBrazilHourMinuteNow,
+  hoursRemainingUntilClockTodayBr,
+  getBrazilCalendarDateTimeFromInstant,
 } from '@/lib/utils/date-utils';
 
 export type EmbalagemDashboardItem = {
@@ -51,6 +55,28 @@ function formatIntervaloHoraBr(hour: number): string {
   if (hour < 0 || hour > 23) return `${hour}h`;
   if (hour === 23) return '23h–24h';
   return `${hour}h–${hour + 1}h`;
+}
+
+/** Média de caixas/hora no dia anterior, das faixas da hora atual até 23h (inclui faixas com 0). */
+function mediaCaixasHoraRestanteDiaAnterior(
+  mapPrev: Map<number, number>,
+  currentHour: number,
+): number | null {
+  if (currentHour < 0 || currentHour > 23) return null;
+  const numSlots = 24 - currentHour;
+  if (numSlots <= 0) return null;
+  let sum = 0;
+  for (let h = currentHour; h <= 23; h++) {
+    sum += mapPrev.get(h) ?? 0;
+  }
+  const avg = sum / numSlots;
+  return avg > 0 ? avg : null;
+}
+
+function formatCxPorHora(n: number | null): string {
+  if (n === null || !Number.isFinite(n) || n <= 0) return '—';
+  const r = Math.round(n * 10) / 10;
+  return r % 1 === 0 ? `${r} cx/h` : `${r.toFixed(1)} cx/h`;
 }
 
 type EmbalagemDashboardProps = {
@@ -121,6 +147,81 @@ export default function EmbalagemDashboard({
     : null;
   const tituloColD7 = formatWeekdayPassadaDayMonthBr(comparisonWeek.date);
 
+  const previsaoFinalizacao = useMemo(() => {
+    const hoje = getTodayISOInBrazilTimezone();
+    if (selectedDate !== hoje) {
+      return { visivel: false as const };
+    }
+    const falta = totais.faltaEmbalarCx;
+    const { hour: curH } = getBrazilHourMinuteNow();
+    const hAte20 = hoursRemainingUntilClockTodayBr(20, 0);
+    const hAte22 = hoursRemainingUntilClockTodayBr(22, 0);
+
+    if (falta <= 0) {
+      return {
+        visivel: true as const,
+        falta,
+        taxa20: null as number | null,
+        taxa22: null as number | null,
+        hAte20,
+        hAte22,
+        ritmoAnterior: null as number | null,
+        ritmo: { kind: 'no_prev' as const },
+        passouLimite20: hAte20 <= 0,
+        passouLimite22: hAte22 <= 0,
+      };
+    }
+
+    const taxaPara = (h: number) => (h > 0 && falta > 0 ? falta / h : null);
+
+    const ritmoAnterior =
+      comparisonPrev !== null ? mediaCaixasHoraRestanteDiaAnterior(mapPrev, curH) : null;
+
+    type Ritmo =
+      | { kind: 'no_prev' }
+      | { kind: 'no_media' }
+      | { kind: 'termina'; hour: number; minute: number }
+      | { kind: 'passa_22'; embAte22: number; resto: number };
+
+    let ritmo: Ritmo = { kind: 'no_prev' };
+    if (!comparisonPrev) {
+      ritmo = { kind: 'no_prev' };
+    } else if (ritmoAnterior === null) {
+      ritmo = { kind: 'no_media' };
+    } else {
+      const finishMs = Date.now() + (falta / ritmoAnterior) * 3600000;
+      const fin = getBrazilCalendarDateTimeFromInstant(new Date(finishMs));
+      const terminaAte22Hoje =
+        fin.dateISO === hoje &&
+        (fin.hour < 22 || (fin.hour === 22 && fin.minute === 0));
+
+      if (terminaAte22Hoje) {
+        ritmo = { kind: 'termina', hour: fin.hour, minute: fin.minute };
+      } else {
+        const embAte22 = Math.min(falta, ritmoAnterior * hAte22);
+        const resto = Math.max(0, Math.round(falta - embAte22));
+        ritmo = {
+          kind: 'passa_22',
+          embAte22: Math.round(embAte22),
+          resto,
+        };
+      }
+    }
+
+    return {
+      visivel: true as const,
+      falta,
+      taxa20: taxaPara(hAte20),
+      taxa22: taxaPara(hAte22),
+      hAte20,
+      hAte22,
+      ritmoAnterior,
+      ritmo,
+      passouLimite20: hAte20 <= 0,
+      passouLimite22: hAte22 <= 0,
+    };
+  }, [selectedDate, totais.faltaEmbalarCx, comparisonPrev, mapPrev]);
+
   return (
     <aside
       className="min-w-0 rounded-xl border border-gray-700/80 bg-gray-800/40 p-4 shadow-inner lg:sticky lg:top-4 space-y-6"
@@ -158,6 +259,87 @@ export default function EmbalagemDashboard({
           />
         </div>
       </section>
+
+      {previsaoFinalizacao.visivel && (
+        <section className="rounded-lg border border-gray-700/80 bg-gray-900/30 p-4 space-y-3">
+          <h2 className="text-lg font-semibold text-white">Previsão de finalização</h2>
+          <p className="text-xs text-gray-500">
+            Apenas caixas. Ritmo do dia anterior = média das caixas por faixa (hora atual até 23h) naquele dia.
+          </p>
+
+          {previsaoFinalizacao.falta <= 0 ? (
+            <p className="text-sm text-emerald-300/95">Meta em caixas já atingida — nada a projetar.</p>
+          ) : (
+            <ul className="space-y-2 text-sm text-gray-200">
+              <li>
+                <span className="text-gray-400">Para zerar até 20h: </span>
+                {previsaoFinalizacao.passouLimite20 ? (
+                  <span className="text-amber-200/90">horário das 20h já passou hoje.</span>
+                ) : (
+                  <strong className="text-amber-200/95 tabular-nums">
+                    {formatCxPorHora(previsaoFinalizacao.taxa20)}
+                  </strong>
+                )}
+              </li>
+              <li>
+                <span className="text-gray-400">Para zerar até 22h: </span>
+                {previsaoFinalizacao.passouLimite22 ? (
+                  <span className="text-amber-200/90">horário das 22h já passou hoje.</span>
+                ) : (
+                  <strong className="text-amber-200/95 tabular-nums">
+                    {formatCxPorHora(previsaoFinalizacao.taxa22)}
+                  </strong>
+                )}
+              </li>
+              <li className="pt-1 border-t border-gray-700/60">
+                {previsaoFinalizacao.ritmo.kind === 'no_prev' && (
+                  <span className="text-gray-400">
+                    Não há dia anterior com dados para comparar o ritmo.
+                  </span>
+                )}
+                {previsaoFinalizacao.ritmo.kind === 'no_media' && (
+                  <span className="text-gray-400">
+                    No dia anterior não há caixas nas faixas restantes (da hora atual até 23h) para calcular a média.
+                  </span>
+                )}
+                {previsaoFinalizacao.ritmo.kind === 'termina' && previsaoFinalizacao.ritmoAnterior !== null && (
+                  <span>
+                    No ritmo médio do dia anterior ({formatCxPorHora(previsaoFinalizacao.ritmoAnterior)} nas horas
+                    restantes), a meta em caixas seria atingida por volta das{' '}
+                    <strong className="text-white">
+                      {previsaoFinalizacao.ritmo.hour}h
+                      {String(previsaoFinalizacao.ritmo.minute).padStart(2, '0')}
+                    </strong>
+                    .
+                  </span>
+                )}
+                {previsaoFinalizacao.ritmo.kind === 'passa_22' && previsaoFinalizacao.ritmoAnterior !== null && (
+                  <span>
+                    Se mantiver a média do dia anterior ({formatCxPorHora(previsaoFinalizacao.ritmoAnterior)} nas horas
+                    restantes), até às 22h embala mais{' '}
+                    <strong className="text-white tabular-nums">{previsaoFinalizacao.ritmo.embAte22} caixas</strong>
+                    {previsaoFinalizacao.passouLimite22 ? (
+                      <>
+                        {' '}
+                        (sem horas úteis até 22h hoje) e ficam{' '}
+                        <strong className="text-white tabular-nums">{previsaoFinalizacao.falta} caixas</strong> para o dia
+                        seguinte.
+                      </>
+                    ) : (
+                      <>
+                        {' '}
+                        e ficam{' '}
+                        <strong className="text-white tabular-nums">{previsaoFinalizacao.ritmo.resto} caixas</strong> para
+                        o dia seguinte.
+                      </>
+                    )}
+                  </span>
+                )}
+              </li>
+            </ul>
+          )}
+        </section>
+      )}
 
       <section>
         <h2 className="text-lg font-semibold text-white mb-3">Caixas por hora</h2>

@@ -143,3 +143,52 @@ export function formatWeekdayPassadaDayMonthBr(isoDate: string): string {
   return `${wd} passada ${dd}/${mm}`;
 }
 
+/** Hora e minuto atuais em America/Sao_Paulo. */
+export function getBrazilHourMinuteNow(): { hour: number; minute: number } {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  return { hour, minute };
+}
+
+/**
+ * Horas (fração) até o horário-alvo no mesmo dia civil em Brasília.
+ * Se já passou do horário hoje, retorna 0.
+ */
+export function hoursRemainingUntilClockTodayBr(endHour: number, endMinute: number): number {
+  const { hour, minute } = getBrazilHourMinuteNow();
+  const cur = hour * 60 + minute;
+  const end = endHour * 60 + endMinute;
+  if (cur >= end) return 0;
+  return (end - cur) / 60;
+}
+
+/** Data civil (YYYY-MM-DD) + hora no fuso BR para um instante UTC. */
+export function getBrazilCalendarDateTimeFromInstant(d: Date): {
+  dateISO: string;
+  hour: number;
+  minute: number;
+} {
+  const dateISO = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  return { dateISO, hour, minute };
+}
+
