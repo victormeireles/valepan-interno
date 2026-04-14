@@ -69,7 +69,6 @@ export default function EmbalagemDashboard({
     return {
       produzido: formatQuantidade(totalCaixasProduzido, totalPacotesProduzido),
       meta: formatQuantidade(totalCaixasMeta, totalPacotesMeta),
-      totalCaixasMeta,
       progressoCaixasPct,
       faltaEmbalarCx,
     };
@@ -147,19 +146,11 @@ export default function EmbalagemDashboard({
               <span className="text-gray-300">{totais.meta}</span>
             </p>
           </div>
-          <div className="text-right space-y-2">
-            <div>
-              <p className="text-xs text-gray-400">Falta embalar</p>
-              <p className="text-xl font-semibold text-amber-300 tabular-nums">
-                {totais.faltaEmbalarCx} cx
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400">Total em caixas</p>
-              <p className="text-lg font-semibold text-gray-200 tabular-nums">
-                {totais.totalCaixasMeta} cx
-              </p>
-            </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Falta embalar</p>
+            <p className="text-xl font-semibold text-amber-300 tabular-nums">
+              {totais.faltaEmbalarCx} cx
+            </p>
           </div>
         </div>
         <div
