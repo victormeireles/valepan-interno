@@ -1,16 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { getBrazilHourFromIso } from '@/lib/utils/date-utils';
+import { getBrazilHourFromIso, formatISODateBr } from '@/lib/utils/date-utils';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 
 export type EmbalagemDashboardItem = {
@@ -35,11 +26,36 @@ function formatQuantidade(caixas: number, pacotes: number): string {
   return parts.length > 0 ? parts.join(' + ') : '0';
 }
 
+/** Soma caixas (coluna M) por hora de Brasília em `producaoUpdatedAt`. */
+function hourlyCaixasMap(items: EmbalagemDashboardItem[]): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const it of items) {
+    const cx = it.caixas ?? 0;
+    if (cx <= 0) continue;
+    const h = getBrazilHourFromIso(it.producaoUpdatedAt);
+    if (h === null) continue;
+    m.set(h, (m.get(h) ?? 0) + cx);
+  }
+  return m;
+}
+
+function getCaixasForHour(map: Map<number, number>, hour: number): number {
+  return map.get(hour) ?? 0;
+}
+
 type EmbalagemDashboardProps = {
+  selectedDate: string;
   items: EmbalagemDashboardItem[];
+  comparisonPrev: { date: string; items: EmbalagemDashboardItem[] } | null;
+  comparisonWeek: { date: string; items: EmbalagemDashboardItem[] };
 };
 
-export default function EmbalagemDashboard({ items }: EmbalagemDashboardProps) {
+export default function EmbalagemDashboard({
+  selectedDate,
+  items,
+  comparisonPrev,
+  comparisonWeek,
+}: EmbalagemDashboardProps) {
   const totais = useMemo(() => {
     const totalCaixasProduzido = items.reduce((sum, item) => sum + (item.caixas || 0), 0);
     const totalPacotesProduzido = items.reduce((sum, item) => sum + (item.pacotes || 0), 0);
@@ -82,36 +98,41 @@ export default function EmbalagemDashboard({ items }: EmbalagemDashboardProps) {
     return n;
   }, [items]);
 
-  const chartData = useMemo(() => {
-    const buckets = Array.from({ length: 24 }, (_, hour) => ({
-      hour,
-      label: `${hour}h`,
-      linhas: 0,
-    }));
-    let semRegistro = 0;
-    for (const item of items) {
-      const h = getBrazilHourFromIso(item.producaoUpdatedAt);
-      if (h === null) {
-        semRegistro += 1;
-        continue;
-      }
-      buckets[h].linhas += 1;
+  const mapD = useMemo(() => hourlyCaixasMap(items), [items]);
+  const mapPrev = useMemo(
+    () => (comparisonPrev ? hourlyCaixasMap(comparisonPrev.items) : new Map<number, number>()),
+    [comparisonPrev],
+  );
+  const mapWeek = useMemo(() => hourlyCaixasMap(comparisonWeek.items), [comparisonWeek.items]);
+
+  const hoursFiltered = useMemo(() => {
+    const hs = [...mapD.entries()]
+      .filter(([, cx]) => cx > 0)
+      .map(([h]) => h)
+      .sort((a, b) => a - b);
+    return hs;
+  }, [mapD]);
+
+  const caixasSemHorario = useMemo(() => {
+    let n = 0;
+    for (const it of items) {
+      const cx = it.caixas ?? 0;
+      if (cx <= 0) continue;
+      if (getBrazilHourFromIso(it.producaoUpdatedAt) === null) n += cx;
     }
-    return { buckets, semRegistro };
+    return n;
   }, [items]);
 
   const topProdutos = useMemo(() => {
     return [...items]
-      .sort((a, b) => b.produzido - a.produzido)
-      .slice(0, 3)
-      .filter((i) => i.produzido > 0);
+      .filter((i) => (i.caixas ?? 0) > 0)
+      .sort((a, b) => (b.caixas ?? 0) - (a.caixas ?? 0))
+      .slice(0, 3);
   }, [items]);
 
-  const chartSummary = useMemo(() => {
-    const max = chartData.buckets.reduce((m, b) => Math.max(m, b.linhas), 0);
-    const peak = chartData.buckets.find((b) => b.linhas === max && max > 0);
-    return peak ? `Pico às ${peak.hour}h (${peak.linhas} linhas).` : 'Sem linhas com horário registrado no gráfico.';
-  }, [chartData.buckets]);
+  const labelDiaFiltro = formatISODateBr(selectedDate);
+  const labelPrev = comparisonPrev ? formatISODateBr(comparisonPrev.date) : null;
+  const labelWeek = formatISODateBr(comparisonWeek.date);
 
   return (
     <aside
@@ -150,48 +171,69 @@ export default function EmbalagemDashboard({ items }: EmbalagemDashboardProps) {
           />
         </div>
         <p className="mt-2 text-xs text-gray-500">
-          Barras: caixas e pacotes somados como na lista; percentual = média do avanço por linha.
+          Caixas e pacotes como na lista; percentual = média do avanço por linha.
         </p>
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-white mb-1">Atividade por hora</h2>
-        <p className="text-xs text-gray-400 mb-2">
-          Linhas por hora da última atualização (horário de Brasília). Não indica volume em caixas por hora.
+        <h2 className="text-lg font-semibold text-white mb-1">Caixas por hora</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Cada valor soma as <strong className="text-gray-300">caixas (col. M)</strong> cuja última
+          gravação caiu naquela hora (Brasília). Comparativo: dia filtrado, último dia com pedidos
+          antes dele, e mesmo calendário D-7.
         </p>
-        <p className="sr-only" id="embalagem-chart-summary">
-          {chartSummary} {chartData.semRegistro > 0
-            ? `${chartData.semRegistro} linhas sem registro de horário.`
-            : ''}
-        </p>
-        <div className="h-56 w-full min-h-[14rem]" aria-describedby="embalagem-chart-summary">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData.buckets} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis
-                dataKey="hour"
-                tick={{ fill: '#9ca3af', fontSize: 10 }}
-                tickFormatter={(v) => `${v}h`}
-                interval={2}
-              />
-              <YAxis allowDecimals={false} tick={{ fill: '#9ca3af', fontSize: 11 }} width={28} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1f2937',
-                  border: '1px solid #4b5563',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: '#e5e7eb' }}
-                formatter={(value: number) => [`${value} linhas`, 'Linhas']}
-                labelFormatter={(label) => `Hora ${label}h`}
-              />
-              <Bar dataKey="linhas" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Linhas" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        {chartData.semRegistro > 0 && (
-          <p className="mt-2 text-xs text-amber-200/90">
-            Sem registro de horário: {chartData.semRegistro} linha(s) — não entram no gráfico.
+        {hoursFiltered.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Nenhuma caixa com horário de registro no dia filtrado — nada a listar.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-700/80">
+            <table className="w-full min-w-[320px] text-sm text-left">
+              <thead>
+                <tr className="border-b border-gray-700 bg-gray-900/50">
+                  <th scope="col" className="px-3 py-2 font-medium text-gray-300">
+                    Hora
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium text-amber-200/95">
+                    {labelDiaFiltro}
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium text-gray-300">
+                    {labelPrev ? `Antes (${labelPrev})` : 'Dia anterior c/ dados'}
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium text-gray-300">
+                    D-7 ({labelWeek})
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {hoursFiltered.map((hour) => (
+                  <tr key={hour} className="border-b border-gray-700/60 last:border-0">
+                    <th scope="row" className="px-3 py-2 tabular-nums text-gray-200 font-medium">
+                      {hour}h
+                    </th>
+                    <td className="px-3 py-2 tabular-nums text-amber-200/95">
+                      {getCaixasForHour(mapD, hour)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-300">
+                      {comparisonPrev ? getCaixasForHour(mapPrev, hour) : '—'}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-300">
+                      {getCaixasForHour(mapWeek, hour)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!comparisonPrev && hoursFiltered.length > 0 && (
+          <p className="mt-2 text-xs text-gray-500">
+            Não foi encontrado dia anterior com pedidos (até 14 dias atrás).
+          </p>
+        )}
+        {caixasSemHorario > 0 && (
+          <p className="mt-2 text-xs text-amber-200/80">
+            {caixasSemHorario} caixa(s) no dia filtrado sem horário em col. Q — não entram na tabela.
           </p>
         )}
       </section>
@@ -212,9 +254,9 @@ export default function EmbalagemDashboard({ items }: EmbalagemDashboardProps) {
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-gray-300 mb-2">Top produtos (produzido)</h2>
+        <h2 className="text-sm font-semibold text-gray-300 mb-2">Top produtos (caixas)</h2>
         {topProdutos.length === 0 ? (
-          <p className="text-xs text-gray-500">Nenhum volume registrado ainda.</p>
+          <p className="text-xs text-gray-500">Nenhuma caixa registrada ainda.</p>
         ) : (
           <ul className="space-y-2">
             {topProdutos.map((p, i) => (
@@ -225,7 +267,7 @@ export default function EmbalagemDashboard({ items }: EmbalagemDashboardProps) {
                 <span className="text-gray-200 truncate" title={p.produto}>
                   {i + 1}. {p.produto}
                 </span>
-                <span className="text-amber-200/90 tabular-nums shrink-0">{p.produzido}</span>
+                <span className="text-amber-200/90 tabular-nums shrink-0">{p.caixas ?? 0} cx</span>
               </li>
             ))}
           </ul>

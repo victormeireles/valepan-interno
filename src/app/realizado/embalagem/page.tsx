@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import {
   RealizadoHeader,
@@ -14,6 +14,7 @@ import { ProducaoData } from '@/domain/types';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
+import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 
 type PainelItem = RealizadoItemEmbalagem & {
   pacoteFotoId?: string;
@@ -58,33 +59,70 @@ export default function ProducaoEmbalagemPage() {
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [photoDropdownOpen, setPhotoDropdownOpen] = useState<string | null>(null);
+  const [itemsComparisonPrev, setItemsComparisonPrev] = useState<PainelItem[]>([]);
+  const [itemsComparisonWeek, setItemsComparisonWeek] = useState<PainelItem[]>([]);
+  const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
 
   // Atualizar selectedDate quando latestDate é carregado
   useEffect(() => {
     setSelectedDate(latestDate);
   }, [latestDate]);
 
-  useEffect(() => {
-    const load = async () => {
+  const loadEmbalagemFull = useCallback(
+    async (showSpinner: boolean) => {
+      if (showSpinner) setLoading(true);
       try {
-        setLoading(true);
-        const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        setItems((data.items || []) as PainelItem[]);
+        const dateWeek = addCalendarDaysISO(selectedDate, -7);
+
+        const [resMain, resWeek] = await Promise.all([
+          fetch(`/api/painel/embalagem?date=${selectedDate}`),
+          fetch(`/api/painel/embalagem?date=${dateWeek}`),
+        ]);
+        const dataMain = await resMain.json();
+        const dataWeek = await resWeek.json();
+        if (!resMain.ok) throw new Error(dataMain.error || 'Falha ao carregar painel');
+        if (!resWeek.ok) throw new Error(dataWeek.error || 'Falha ao carregar painel (semana)');
+
+        setItems((dataMain.items || []) as PainelItem[]);
+        setItemsComparisonWeek((dataWeek.items || []) as PainelItem[]);
+
+        let foundPrev: PainelItem[] = [];
+        let foundPrevDate: string | null = null;
+        for (let i = 1; i <= 14; i++) {
+          const d = addCalendarDaysISO(selectedDate, -i);
+          const res = await fetch(`/api/painel/embalagem?date=${d}`);
+          const data = await res.json();
+          if (!res.ok) continue;
+          const arr = (data.items || []) as PainelItem[];
+          if (arr.length > 0) {
+            foundPrev = arr;
+            foundPrevDate = d;
+            break;
+          }
+        }
+        setItemsComparisonPrev(foundPrev);
+        setDateComparisonPrev(foundPrevDate);
       } catch (err) {
-        setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
+        if (showSpinner) {
+          setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
+        } else {
+          console.error('Erro ao recarregar dados do painel:', err);
+        }
       } finally {
-        setLoading(false);
+        if (showSpinner) setLoading(false);
       }
-    };
-    load();
-    
+    },
+    [selectedDate],
+  );
+
+  useEffect(() => {
+    void loadEmbalagemFull(true);
+
     if (!producaoModalOpen) {
-      const interval = setInterval(load, 60_000);
+      const interval = setInterval(() => void loadEmbalagemFull(false), 60_000);
       return () => clearInterval(interval);
     }
-  }, [selectedDate, producaoModalOpen]);
+  }, [selectedDate, producaoModalOpen, loadEmbalagemFull]);
 
   const handleEditProducao = async (item: PainelItem) => {
     if (!item.rowId) {
@@ -130,15 +168,7 @@ export default function ProducaoEmbalagemPage() {
   };
 
   const refreshPainelData = async () => {
-    try {
-      const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
-      const painelData = await painelRes.json();
-      if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
-      }
-    } catch (err) {
-      console.error('Erro ao recarregar dados do painel:', err);
-    }
+    await loadEmbalagemFull(false);
   };
 
   const handleSaveProducao = async (producaoData: ProducaoData) => {
@@ -514,7 +544,19 @@ export default function ProducaoEmbalagemPage() {
             )}
               </div>
 
-              <EmbalagemDashboard items={items} />
+              <EmbalagemDashboard
+                selectedDate={selectedDate}
+                items={items}
+                comparisonPrev={
+                  dateComparisonPrev
+                    ? { date: dateComparisonPrev, items: itemsComparisonPrev }
+                    : null
+                }
+                comparisonWeek={{
+                  date: addCalendarDaysISO(selectedDate, -7),
+                  items: itemsComparisonWeek,
+                }}
+              />
             </div>
 
             <footer className="mt-6 text-center text-gray-400 text-sm">

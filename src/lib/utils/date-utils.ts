@@ -84,3 +84,20 @@ export function getBrazilHourFromIso(iso: string | undefined | null): number | n
   return parseInt(h, 10);
 }
 
+/** Soma dias em uma data ISO (YYYY-MM-DD), em calendário UTC (adequado para datas de pedido sem hora). */
+export function addCalendarDaysISO(isoDate: string, deltaDays: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const utc = Date.UTC(y, m - 1, d);
+  const moved = new Date(utc + deltaDays * 86400000);
+  const yy = moved.getUTCFullYear();
+  const mm = String(moved.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(moved.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+export function formatISODateBr(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-');
+  if (!y || !m || !d) return isoDate;
+  return `${d}/${m}/${y}`;
+}
+
