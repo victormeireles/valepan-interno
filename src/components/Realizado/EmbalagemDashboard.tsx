@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { getBrazilHourFromIso, formatISODateBr } from '@/lib/utils/date-utils';
+import { getBrazilHourFromIso, formatISODateBrNoYear } from '@/lib/utils/date-utils';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 
 export type EmbalagemDashboardItem = {
@@ -41,6 +41,13 @@ function hourlyCaixasMap(items: EmbalagemDashboardItem[]): Map<number, number> {
 
 function getCaixasForHour(map: Map<number, number>, hour: number): number {
   return map.get(hour) ?? 0;
+}
+
+/** Faixa horária no fuso BR: hora 7 → "7h–8h"; 23 → "23h–24h". */
+function formatIntervaloHoraBr(hour: number): string {
+  if (hour < 0 || hour > 23) return `${hour}h`;
+  if (hour === 23) return '23h–24h';
+  return `${hour}h–${hour + 1}h`;
 }
 
 type EmbalagemDashboardProps = {
@@ -101,13 +108,19 @@ export default function EmbalagemDashboard({
   );
   const mapWeek = useMemo(() => hourlyCaixasMap(comparisonWeek.items), [comparisonWeek.items]);
 
-  const hoursFiltered = useMemo(() => {
-    const hs = [...mapD.entries()]
-      .filter(([, cx]) => cx > 0)
-      .map(([h]) => h)
-      .sort((a, b) => a - b);
-    return hs;
-  }, [mapD]);
+  /** Horas em que pelo menos um dos três dias (filtro, dia anterior, D-7) teve caixas > 0. */
+  const hoursUnion = useMemo(() => {
+    const s = new Set<number>();
+    const collect = (m: Map<number, number>) => {
+      for (const [h, cx] of m) {
+        if (cx > 0) s.add(h);
+      }
+    };
+    collect(mapD);
+    collect(mapPrev);
+    collect(mapWeek);
+    return [...s].sort((a, b) => a - b);
+  }, [mapD, mapPrev, mapWeek]);
 
   const caixasSemHorario = useMemo(() => {
     let n = 0;
@@ -126,9 +139,9 @@ export default function EmbalagemDashboard({
       .slice(0, 3);
   }, [items]);
 
-  const labelDiaFiltro = formatISODateBr(selectedDate);
-  const labelPrev = comparisonPrev ? formatISODateBr(comparisonPrev.date) : null;
-  const labelWeek = formatISODateBr(comparisonWeek.date);
+  const labelDiaFiltro = formatISODateBrNoYear(selectedDate);
+  const labelPrev = comparisonPrev ? formatISODateBrNoYear(comparisonPrev.date) : null;
+  const labelWeek = formatISODateBrNoYear(comparisonWeek.date);
 
   return (
     <aside
@@ -169,15 +182,10 @@ export default function EmbalagemDashboard({
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-white mb-1">Caixas por hora</h2>
-        <p className="text-xs text-gray-400 mb-3">
-          Cada valor soma as <strong className="text-gray-300">caixas (col. M)</strong> cuja última
-          gravação caiu naquela hora (Brasília). Comparativo: dia filtrado, último dia com pedidos
-          antes dele, e mesmo calendário D-7.
-        </p>
-        {hoursFiltered.length === 0 ? (
+        <h2 className="text-lg font-semibold text-white mb-3">Caixas por hora</h2>
+        {hoursUnion.length === 0 ? (
           <p className="text-sm text-gray-500">
-            Nenhuma caixa com horário de registro no dia filtrado — nada a listar.
+            Nenhuma caixa com horário de registro nos dias comparados — nada a listar.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-700/80">
@@ -185,13 +193,13 @@ export default function EmbalagemDashboard({
               <thead>
                 <tr className="border-b border-gray-700 bg-gray-900/50">
                   <th scope="col" className="px-3 py-2 font-medium text-gray-300">
-                    Hora
+                    Intervalo
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-amber-200/95">
                     {labelDiaFiltro}
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-gray-300">
-                    {labelPrev ? `Antes (${labelPrev})` : 'Dia anterior c/ dados'}
+                    {labelPrev ? `Dia anterior (${labelPrev})` : 'Dia anterior (sem dados)'}
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-gray-300">
                     D-7 ({labelWeek})
@@ -199,10 +207,10 @@ export default function EmbalagemDashboard({
                 </tr>
               </thead>
               <tbody>
-                {hoursFiltered.map((hour) => (
+                {hoursUnion.map((hour) => (
                   <tr key={hour} className="border-b border-gray-700/60 last:border-0">
                     <th scope="row" className="px-3 py-2 tabular-nums text-gray-200 font-medium">
-                      {hour}h
+                      {formatIntervaloHoraBr(hour)}
                     </th>
                     <td className="px-3 py-2 tabular-nums text-amber-200/95">
                       {getCaixasForHour(mapD, hour)}
@@ -219,7 +227,7 @@ export default function EmbalagemDashboard({
             </table>
           </div>
         )}
-        {!comparisonPrev && hoursFiltered.length > 0 && (
+        {!comparisonPrev && hoursUnion.length > 0 && (
           <p className="mt-2 text-xs text-gray-500">
             Não foi encontrado dia anterior com pedidos (até 14 dias atrás).
           </p>

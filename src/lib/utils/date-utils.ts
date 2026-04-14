@@ -101,3 +101,11 @@ export function formatISODateBr(isoDate: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** dd/mm sem ano (para títulos compactos). */
+export function formatISODateBrNoYear(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length < 3) return isoDate;
+  const [, m, d] = parts;
+  return `${d}/${m}`;
+}
+
