@@ -6,7 +6,6 @@ import {
   formatWeekdayDayMonthBr,
   formatWeekdayPassadaDayMonthBr,
 } from '@/lib/utils/date-utils';
-import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 
 export type EmbalagemDashboardItem = {
   cliente: string;
@@ -85,26 +84,6 @@ export default function EmbalagemDashboard({
     };
   }, [items]);
 
-  const pendentesFinalizados = useMemo(() => {
-    let finalizados = 0;
-    let pendentes = 0;
-    for (const item of items) {
-      const pct = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
-      if (pct >= 90) finalizados += 1;
-      else pendentes += 1;
-    }
-    return { finalizados, pendentes };
-  }, [items]);
-
-  const fotosAlerta = useMemo(() => {
-    let n = 0;
-    for (const item of items) {
-      const s = getEmbalagemPhotoStatus(item);
-      if (s.hasPhoto && (s.color === 'yellow' || s.color === 'red')) n += 1;
-    }
-    return n;
-  }, [items]);
-
   const mapD = useMemo(() => hourlyCaixasMap(items), [items]);
   const mapPrev = useMemo(
     () => (comparisonPrev ? hourlyCaixasMap(comparisonPrev.items) : new Map<number, number>()),
@@ -134,13 +113,6 @@ export default function EmbalagemDashboard({
       if (getBrazilHourFromIso(it.producaoUpdatedAt) === null) n += cx;
     }
     return n;
-  }, [items]);
-
-  const topProdutos = useMemo(() => {
-    return [...items]
-      .filter((i) => (i.caixas ?? 0) > 0)
-      .sort((a, b) => (b.caixas ?? 0) - (a.caixas ?? 0))
-      .slice(0, 3);
   }, [items]);
 
   const tituloColFiltro = formatWeekdayDayMonthBr(selectedDate);
@@ -242,42 +214,6 @@ export default function EmbalagemDashboard({
           <p className="mt-2 text-xs text-amber-200/80">
             {caixasSemHorario} caixa(s) no dia filtrado sem horário em col. Q — não entram na tabela.
           </p>
-        )}
-      </section>
-
-      <section className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-lg bg-gray-900/60 border border-gray-700 p-3">
-          <p className="text-gray-400 text-xs">Pendentes (&lt;90%)</p>
-          <p className="text-xl font-semibold text-white tabular-nums">{pendentesFinalizados.pendentes}</p>
-        </div>
-        <div className="rounded-lg bg-gray-900/60 border border-gray-700 p-3">
-          <p className="text-gray-400 text-xs">Finalizados (≥90%)</p>
-          <p className="text-xl font-semibold text-emerald-300 tabular-nums">{pendentesFinalizados.finalizados}</p>
-        </div>
-        <div className="rounded-lg bg-gray-900/60 border border-gray-700 p-3 col-span-2">
-          <p className="text-gray-400 text-xs">Linhas com foto incompleta ou ausente (com produção)</p>
-          <p className="text-xl font-semibold text-amber-200 tabular-nums">{fotosAlerta}</p>
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-gray-300 mb-2">Top produtos (caixas)</h2>
-        {topProdutos.length === 0 ? (
-          <p className="text-xs text-gray-500">Nenhuma caixa registrada ainda.</p>
-        ) : (
-          <ul className="space-y-2">
-            {topProdutos.map((p, i) => (
-              <li
-                key={`${p.produto}-${p.cliente}-${i}`}
-                className="flex justify-between gap-2 text-sm border-b border-gray-700/80 pb-2 last:border-0"
-              >
-                <span className="text-gray-200 truncate" title={p.produto}>
-                  {i + 1}. {p.produto}
-                </span>
-                <span className="text-amber-200/90 tabular-nums shrink-0">{p.caixas ?? 0} cx</span>
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </aside>
