@@ -61,21 +61,18 @@ export default function EmbalagemDashboard({
     const totalPacotesProduzido = items.reduce((sum, item) => sum + (item.pacotes || 0), 0);
     const totalCaixasMeta = items.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
     const totalPacotesMeta = items.reduce((sum, item) => sum + (item.pedidoPacotes || 0), 0);
+    const progressoCaixasPct =
+      totalCaixasMeta > 0
+        ? Math.min(100, (totalCaixasProduzido / totalCaixasMeta) * 100)
+        : 0;
+    const faltaEmbalarCx = Math.max(0, totalCaixasMeta - totalCaixasProduzido);
     return {
       produzido: formatQuantidade(totalCaixasProduzido, totalPacotesProduzido),
       meta: formatQuantidade(totalCaixasMeta, totalPacotesMeta),
+      totalCaixasMeta,
+      progressoCaixasPct,
+      faltaEmbalarCx,
     };
-  }, [items]);
-
-  const mediaLinhasPct = useMemo(() => {
-    const comMeta = items.filter((i) => i.aProduzir > 0);
-    if (comMeta.length === 0) return 0;
-    return (
-      comMeta.reduce(
-        (acc, i) => acc + Math.min(100, (i.produzido / i.aProduzir) * 100),
-        0,
-      ) / comMeta.length
-    );
   }, [items]);
 
   const pendentesFinalizados = useMemo(() => {
@@ -150,29 +147,34 @@ export default function EmbalagemDashboard({
               <span className="text-gray-300">{totais.meta}</span>
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-gray-400">Média das linhas</p>
-            <p className="text-xl font-semibold text-amber-300 tabular-nums">
-              {mediaLinhasPct.toFixed(0)}%
-            </p>
+          <div className="text-right space-y-2">
+            <div>
+              <p className="text-xs text-gray-400">Falta embalar</p>
+              <p className="text-xl font-semibold text-amber-300 tabular-nums">
+                {totais.faltaEmbalarCx} cx
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Total em caixas</p>
+              <p className="text-lg font-semibold text-gray-200 tabular-nums">
+                {totais.totalCaixasMeta} cx
+              </p>
+            </div>
           </div>
         </div>
         <div
           className="mt-3 h-2.5 w-full rounded-full bg-gray-700 overflow-hidden"
           role="progressbar"
-          aria-valuenow={Math.round(mediaLinhasPct)}
+          aria-valuenow={Math.round(totais.progressoCaixasPct)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Progresso médio das linhas em relação à meta"
+          aria-label="Embalado em caixas em relação à meta em caixas"
         >
           <div
             className="h-full rounded-full bg-amber-500 transition-[width] duration-300 ease-out"
-            style={{ width: `${Math.min(100, mediaLinhasPct)}%` }}
+            style={{ width: `${Math.min(100, totais.progressoCaixasPct)}%` }}
           />
         </div>
-        <p className="mt-2 text-xs text-gray-500">
-          Caixas e pacotes como na lista; percentual = média do avanço por linha.
-        </p>
       </section>
 
       <section>
