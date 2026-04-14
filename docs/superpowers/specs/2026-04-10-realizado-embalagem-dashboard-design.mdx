@@ -1,0 +1,69 @@
+# Realizado: Embalagem — Dashboard lateral (desktop) e fila
+
+**Data:** 2026-04-10  
+**Status:** Aprovado para implementação  
+**Rota:** `/realizado/embalagem`
+
+## Objetivo
+
+Na **versão desktop**, dividir a tela em **duas colunas (~50/50)**: à **esquerda**, a fila atual de embalagem (comportamento e estilo preservados, conteúdo restrito à metade esquerda); à **direita**, um **dashboard** de métricas do dia. Na **versão mobile**, manter **uma coluna**: **fila no topo** e **dashboard abaixo** (recomendação confirmada pelo produto).
+
+## Definição da métrica “por hora”
+
+- Usar **`producaoUpdatedAt`** (coluna **Q** na planilha de destino de pedidos de embalagem) como instante da **última atividade registrada na linha**.
+- O gráfico “por hora” representa a **distribuição da última atualização**: para cada **hora 0–23** (fuso **América/São_Paulo**), contar **quantas linhas (itens)** têm `producaoUpdatedAt` caindo naquela hora.
+- **Não** interpretar como “caixas embaladas naquela hora” (isso exigiria log de eventos).
+- Itens sem timestamp válido: excluir do histograma e exibir contador auxiliar **“Sem registro de horário: N”** (ou equivalente claro).
+
+## Layout
+
+### Desktop (breakpoint a definir na implementação, ex. `lg` ou `xl`)
+
+- **Header** (`RealizadoHeader`): largura total, inalterado em princípio.
+- **Corpo:** `grid` de **2 colunas iguais** (`1fr 1fr`), gap alinhado ao sistema de espaçamento existente.
+- **Coluna esquerda:** todo o fluxo atual (alertas, seções não finalizados / finalizados, modais). Ajuste: **`ThreeColumnLayout` com `columnCount={1}`** nessa vista para a fila ocupar **uma coluna de cards** dentro da metade esquerda (evita “mini-grid” competindo com o split 50/50).
+- **Coluna direita:** painel em cartão(s) com tema escuro consistente (borda sutil, cantos arredondados, texto claro, acentos amarelos como na fila).
+
+### Mobile (&lt; breakpoint desktop)
+
+- **Uma coluna**, ordem: **fila primeiro**, **dashboard depois** (embaixo).
+
+## Conteúdo do dashboard (direita / abaixo no mobile)
+
+1. **Resumo do dia — total a embalar vs total embalado**  
+   - Reutilizar agregações já usadas na página (equivalente ao rodapé `totais`: somas de pedido vs produção nas unidades relevantes).  
+   - UI: números destacados + barra de progresso do percentual coerente com a unidade principal ou com a mesma regra já exibida ao usuário.
+
+2. **Atividade por hora (gráfico)**  
+   - **Recharts** (dependência existente).  
+   - Eixo X: horas 0–23 (SP). Eixo Y: **número de linhas** por hora conforme regra acima.  
+   - Título/legenda explícitos, p.ex. *“Linhas por hora da última atualização”*.
+
+3. **KPIs adicionais (mesmos dados do painel)**  
+   - Contagem **pendentes vs finalizados** (alinhado ao critério ~90% já usado para separar grupos).  
+   - **Fotos** pendentes ou em alerta (reaproveitar regras de `getPhotoStatus` / contagem).  
+   - **Top produtos** (ex. top 3 por volume produzido na unidade do item) — lista compacta.
+
+## Dados e API
+
+- **`GET /api/painel/embalagem`:** incluir campo **`producaoUpdatedAt`** por item, lendo a coluna **Q** da planilha (range já `A:AC`; índice de array: **Q = índice 16** em linha baseada em A=0).
+- **Front:** derivar histograma e KPIs com `useMemo` a partir de `items` — **novo endpoint opcional não é obrigatório** na v1.
+
+## Fora de escopo (v1)
+
+- Painel redimensionável por drag entre colunas.  
+- Log de eventos para produtividade real em caixas/hora.  
+- Alteração do intervalo de polling (60s) salvo necessidade futura.
+
+## Acessibilidade (mínimo)
+
+- Gráfico com resumo textual ou `aria-label` com a ideia principal.  
+- Contraste adequado no tema escuro; KPIs não devem depender só de cor.
+
+## Critérios de aceite
+
+- Desktop largo: duas colunas visíveis; fila apenas na esquerda; dashboard na direita.  
+- Mobile: fila acima, dashboard abaixo.  
+- Totais do resumo batem com a mesma base de dados que o rodapé / agregações atuais (salvo bug pré-existente).  
+- Histograma reflete a contagem por hora de `producaoUpdatedAt` conforme definido.  
+- Campo `producaoUpdatedAt` presente na resposta do painel e tipado no cliente.
