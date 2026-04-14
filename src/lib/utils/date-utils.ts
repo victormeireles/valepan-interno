@@ -66,3 +66,21 @@ export function normalizeToISODate(value?: unknown): string {
   return getTodayISOInBrazilTimezone();
 }
 
+/**
+ * Extrai a hora (0–23) de um instante ISO no fuso America/Sao_Paulo.
+ * Retorna null se a string for inválida ou vazia.
+ */
+export function getBrazilHourFromIso(iso: string | undefined | null): number | null {
+  if (!iso?.trim()) return null;
+  const d = new Date(iso.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const h = parts.find((p) => p.type === 'hour')?.value;
+  if (h === undefined) return null;
+  return parseInt(h, 10);
+}
+

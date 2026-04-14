@@ -2,11 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
-import { RealizadoHeader, ProductCompactCard, ClientGroup, ThreeColumnLayout } from '@/components/Realizado';
+import {
+  RealizadoHeader,
+  ProductCompactCard,
+  ClientGroup,
+  ThreeColumnLayout,
+  EmbalagemDashboard,
+} from '@/components/Realizado';
 import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
-import { isSpecialPhotoClient } from '@/config/photoRules';
+import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 
 type PainelItem = RealizadoItemEmbalagem & {
@@ -21,38 +27,12 @@ type PainelItem = RealizadoItemEmbalagem & {
   pedidoUnidades?: number;
   pedidoKg?: number;
   obsEmbalagem?: string;
+  producaoUpdatedAt?: string;
 };
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
   const message = error instanceof Error ? error.message : fallback;
   return /fail(?:ed)? to fetch/i.test(message) ? null : message;
-}
-
-function getPhotoStatus(item: PainelItem): { hasPhoto: boolean; color: 'white' | 'yellow' | 'red' } {
-  const hasPacote = Boolean(item.pacoteFotoUrl);
-  const hasEtiqueta = Boolean(item.etiquetaFotoUrl);
-  const hasPallet = Boolean(item.palletFotoUrl);
-  const isSpecial = isSpecialPhotoClient(item.cliente);
-  
-  // Se não tem produção, não mostra ícone
-  if (item.produzido === 0) {
-    return { hasPhoto: false, color: 'white' };
-  }
-  
-  // Se tem produção mas não tem fotos
-  if (!hasPacote && !hasEtiqueta && !hasPallet) {
-    return { hasPhoto: true, color: 'red' };
-  }
-  
-  // Verificar se tem todas as fotos necessárias
-  const hasAllPhotos = isSpecial 
-    ? hasPacote && hasPallet 
-    : hasPacote && hasEtiqueta && hasPallet;
-  
-  return {
-    hasPhoto: true,
-    color: hasAllPhotos ? 'white' : 'yellow',
-  };
 }
 
 // Função helper para formatar quantidades no formato "X cx + Y pct"
@@ -318,10 +298,13 @@ export default function ProducaoEmbalagemPage() {
           <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
         ) : (
           <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
+              <div className="min-w-0 space-y-8">
             {/* Seção de Cards Não Finalizados */}
             {gruposNaoFinalizados.length > 0 && (
               <div className="mb-8">
                 <ThreeColumnLayout
+                  columnCount={1}
                   groups={gruposNaoFinalizados}
                   renderGroup={(group) => {
                     const embalagemGroup = group as RealizadoGroup & {
@@ -341,7 +324,7 @@ export default function ProducaoEmbalagemPage() {
                           const embalagemItem = item as PainelItem;
                           const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
                           const isItemLoading = loadingCardId === itemKey;
-                          const photoStatus = getPhotoStatus(embalagemItem);
+                          const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
                           const produzidoDetalhes = QuantityBreakdown.buildEntries([
                             { quantidade: embalagemItem.caixas, unidade: 'cx' },
                             { quantidade: embalagemItem.pacotes, unidade: 'pct' },
@@ -428,6 +411,7 @@ export default function ProducaoEmbalagemPage() {
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
                 <ThreeColumnLayout
+                  columnCount={1}
                   groups={gruposFinalizados}
                   renderGroup={(group) => {
                     const embalagemGroup = group as RealizadoGroup & {
@@ -447,7 +431,7 @@ export default function ProducaoEmbalagemPage() {
                           const embalagemItem = item as PainelItem;
                           const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
                           const isItemLoading = loadingCardId === itemKey;
-                          const photoStatus = getPhotoStatus(embalagemItem);
+                          const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
                           const produzidoDetalhes = QuantityBreakdown.buildEntries([
                             { quantidade: embalagemItem.caixas, unidade: 'cx' },
                             { quantidade: embalagemItem.pacotes, unidade: 'pct' },
@@ -528,12 +512,16 @@ export default function ProducaoEmbalagemPage() {
                 />
               </div>
             )}
+              </div>
+
+              <EmbalagemDashboard items={items} />
+            </div>
+
+            <footer className="mt-6 text-center text-gray-400 text-sm">
+              {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
+            </footer>
           </>
         )}
-
-        <footer className="mt-6 text-center text-gray-400 text-sm">
-          {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
-        </footer>
       </div>
 
       {/* Fechar dropdowns ao clicar fora */}

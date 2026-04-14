@@ -48,6 +48,8 @@ type PainelItem = {
   palletFotoUploadedAt?: string;
   // Observação de embalagem
   obsEmbalagem?: string;
+  /** Última atualização da produção (coluna Q, ISO) */
+  producaoUpdatedAt?: string;
 };
 
 export async function GET(request: Request) {
@@ -98,12 +100,13 @@ export async function GET(request: Request) {
       const unidades = Number(r[8] || 0);
       const kg = Number(r[9] || 0);
 
-      // Dados de produção (colunas M, N, O, P)
+      // Dados de produção (colunas M, N, O, P, Q)
       const producaoCaixas = Number(r[12] || 0);  // M
       const producaoPacotes = Number(r[13] || 0); // N
       const producaoUnidades = Number(r[14] || 0); // O
       const producaoKg = Number(r[15] || 0);      // P
-      
+      const producaoUpdatedAt = (r[16] || '').toString().trim(); // Q
+
       // Dados de fotos (colunas R, S, T, U, V, W, X, Y, Z)
       const pacoteFotoUrl = (r[17] || '').toString().trim();        // R
       const pacoteFotoId = (r[18] || '').toString().trim();         // S
@@ -180,6 +183,7 @@ export async function GET(request: Request) {
         palletFotoId: palletFotoId || undefined,
         palletFotoUploadedAt: palletFotoUploadedAt || undefined,
         obsEmbalagem: obsEmbalagem || undefined,
+        producaoUpdatedAt: producaoUpdatedAt || undefined,
       });
     }
 
