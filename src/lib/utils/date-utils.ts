@@ -109,3 +109,37 @@ export function formatISODateBrNoYear(isoDate: string): string {
   return `${d}/${m}`;
 }
 
+function weekdayNameShortPt(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const long = new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    timeZone: 'America/Sao_Paulo',
+  }).format(date);
+  if (long.includes('-feira')) {
+    return long.replace('-feira', '').toLowerCase();
+  }
+  return long.toLowerCase();
+}
+
+/** Cabeçalho tipo "terça 14/04" (dia da semana + dd/mm, fuso BR). */
+export function formatWeekdayDayMonthBr(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (!y || !m || !d) return isoDate;
+  const wd = weekdayNameShortPt(isoDate);
+  const dd = String(d).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return `${wd} ${dd}/${mm}`;
+}
+
+/** Coluna D-7: "terça passada 07/04". */
+export function formatWeekdayPassadaDayMonthBr(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (!y || !m || !d) return isoDate;
+  const wd = weekdayNameShortPt(isoDate);
+  const dd = String(d).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return `${wd} passada ${dd}/${mm}`;
+}
+

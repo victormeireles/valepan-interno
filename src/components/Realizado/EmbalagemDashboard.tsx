@@ -1,7 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
-import { getBrazilHourFromIso, formatISODateBrNoYear } from '@/lib/utils/date-utils';
+import {
+  getBrazilHourFromIso,
+  formatWeekdayDayMonthBr,
+  formatWeekdayPassadaDayMonthBr,
+} from '@/lib/utils/date-utils';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 
 export type EmbalagemDashboardItem = {
@@ -139,9 +143,11 @@ export default function EmbalagemDashboard({
       .slice(0, 3);
   }, [items]);
 
-  const labelDiaFiltro = formatISODateBrNoYear(selectedDate);
-  const labelPrev = comparisonPrev ? formatISODateBrNoYear(comparisonPrev.date) : null;
-  const labelWeek = formatISODateBrNoYear(comparisonWeek.date);
+  const tituloColFiltro = formatWeekdayDayMonthBr(selectedDate);
+  const tituloColPrev = comparisonPrev
+    ? formatWeekdayDayMonthBr(comparisonPrev.date)
+    : null;
+  const tituloColD7 = formatWeekdayPassadaDayMonthBr(comparisonWeek.date);
 
   return (
     <aside
@@ -196,13 +202,13 @@ export default function EmbalagemDashboard({
                     Intervalo
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-amber-200/95">
-                    {labelDiaFiltro}
+                    {tituloColFiltro}
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-gray-300">
-                    {labelPrev ? `Dia anterior (${labelPrev})` : 'Dia anterior (sem dados)'}
+                    {tituloColPrev ?? 'Dia anterior (sem dados)'}
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium text-gray-300">
-                    D-7 ({labelWeek})
+                    {tituloColD7}
                   </th>
                 </tr>
               </thead>
