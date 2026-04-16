@@ -362,23 +362,15 @@ export default function EmbalagemDashboard({
               {showRitmoPrevisao && previsaoFinalizacao.ritmoAnterior !== null && (
                 <PrevisaoMetricCard
                   icon={<IconTrend className="h-5 w-5" />}
-                  title="Ontem"
+                  title={`COM ${Math.round(previsaoFinalizacao.ritmoAnterior)} cx/h`}
                 >
                   {previsaoFinalizacao.ritmo.kind === 'termina' ? (
-                    <div className="space-y-0.5 leading-tight">
-                      <p className="font-semibold tabular-nums text-gray-200">
-                        COM {Math.round(previsaoFinalizacao.ritmoAnterior)} cx/h
-                      </p>
-                      <p className="font-semibold tabular-nums text-amber-200/95">
-                        acaba {previsaoFinalizacao.ritmo.hour}h
-                        {String(previsaoFinalizacao.ritmo.minute).padStart(2, '0')}
-                      </p>
-                    </div>
+                    <p className="font-semibold tabular-nums text-amber-200/95 leading-tight">
+                      acaba {previsaoFinalizacao.ritmo.hour}h
+                      {String(previsaoFinalizacao.ritmo.minute).padStart(2, '0')}
+                    </p>
                   ) : previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
                     <div className="space-y-0.5 leading-tight" role="status">
-                      <p className="font-semibold tabular-nums text-gray-200">
-                        COM {Math.round(previsaoFinalizacao.ritmoAnterior)} cx/h
-                      </p>
                       <p className="font-semibold tabular-nums text-gray-200">
                         {previsaoFinalizacao.ritmo.embAte22} cx
                       </p>
