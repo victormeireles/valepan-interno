@@ -64,11 +64,13 @@ export default function ProducaoModal({
   const [confirmModalMessage, setConfirmModalMessage] = useState('');
   const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
 
+  // Sincronizar só ao abrir o modal ou trocar a linha. Não listar `initialData` nas deps:
+  // o pai recria o objeto a cada render e reaplicaria valores antigos por cima do que o usuário digitou.
   useEffect(() => {
-    if (initialData) {
-      setFormData(initialData);
-    }
-  }, [initialData]);
+    if (!isOpen || !initialData || rowId == null) return;
+    setFormData(initialData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
+  }, [isOpen, rowId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,6 +280,19 @@ export default function ProducaoModal({
 
   const executeSavePartial = async () => {
     if (!rowId) return;
+
+    const totalQty =
+      (formData.caixas || 0) +
+      (formData.pacotes || 0) +
+      (formData.unidades || 0) +
+      (formData.kg || 0);
+    if (totalQty <= 0) {
+      setMessage({
+        type: 'error',
+        text: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).',
+      });
+      return;
+    }
     
     try {
       setIsSubmitting(true);

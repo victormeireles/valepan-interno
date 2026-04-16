@@ -36,8 +36,20 @@ export async function POST(
     } = body;
 
     // Validar dados
-    if (caixas < 0 || pacotes < 0 || unidades < 0 || kg < 0) {
+    const c = Number(caixas) || 0;
+    const p = Number(pacotes) || 0;
+    const u = Number(unidades) || 0;
+    const k = Number(kg) || 0;
+
+    if (c < 0 || p < 0 || u < 0 || k < 0) {
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
+    }
+
+    if (c + p + u + k <= 0) {
+      return NextResponse.json(
+        { error: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).' },
+        { status: 400 },
+      );
     }
 
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
@@ -72,10 +84,10 @@ export async function POST(
 
     // 2. Validar que produção é menor que pedido em pelo menos um campo
     const isPartial = (
-      (pedidoCaixas > 0 && caixas < pedidoCaixas) ||
-      (pedidoPacotes > 0 && pacotes < pedidoPacotes) ||
-      (pedidoUnidades > 0 && unidades < pedidoUnidades) ||
-      (pedidoKg > 0 && kg < pedidoKg)
+      (pedidoCaixas > 0 && c < pedidoCaixas) ||
+      (pedidoPacotes > 0 && p < pedidoPacotes) ||
+      (pedidoUnidades > 0 && u < pedidoUnidades) ||
+      (pedidoKg > 0 && k < pedidoKg)
     );
 
     if (!isPartial) {
@@ -85,10 +97,10 @@ export async function POST(
     }
 
     // 3. Calcular novo valor do pedido da linha original (descontar o produzido)
-    const novoPedidoCaixas = Math.max(0, pedidoCaixas - caixas);
-    const novoPedidoPacotes = Math.max(0, pedidoPacotes - pacotes);
-    const novoPedidoUnidades = Math.max(0, pedidoUnidades - unidades);
-    const novoPedidoKg = Math.max(0, pedidoKg - kg);
+    const novoPedidoCaixas = Math.max(0, pedidoCaixas - c);
+    const novoPedidoPacotes = Math.max(0, pedidoPacotes - p);
+    const novoPedidoUnidades = Math.max(0, pedidoUnidades - u);
+    const novoPedidoKg = Math.max(0, pedidoKg - k);
 
     // 4. Atualizar APENAS colunas G-J da linha original (pedido) - NÃO TOCAR na produção (M-Q)
     const rangePedido = `${tabName}!G${rowNumber}:J${rowNumber}`;
@@ -117,17 +129,17 @@ export async function POST(
       observacao,           // D - observacao (copiado)
       produto,              // E - produto (copiado)
       congelado,            // F - congelado (copiado)
-      caixas || 0,          // G - caixas pedido = produzido
-      pacotes || 0,         // H - pacotes pedido = produzido
-      unidades || 0,        // I - unidades pedido = produzido
-      kg || 0,              // J - kg pedido = produzido
+      c,                    // G - caixas pedido = produzido
+      p,                    // H - pacotes pedido = produzido
+      u,                    // I - unidades pedido = produzido
+      k,                    // J - kg pedido = produzido
       now,                  // K - created_at (novo)
       now,                  // L - updated_at (novo)
       // M-Q produção (valores preenchidos pelo usuário)
-      caixas || 0,          // M - producao_caixas
-      pacotes || 0,         // N - producao_pacotes
-      unidades || 0,        // O - producao_unidades
-      kg || 0,              // P - producao_kg
+      c,                    // M - producao_caixas
+      p,                    // N - producao_pacotes
+      u,                    // O - producao_unidades
+      k,                    // P - producao_kg
       now,                  // Q - producao_updated_at
       // R-Z fotos (dados das fotos)
       pacoteFotoUrl || '',         // R - pacote_foto_url
@@ -162,10 +174,10 @@ export async function POST(
     const novaLinhaRowId = match ? parseInt(match[1]) : null;
 
     // Calcular meta original (soma dos valores originais + valores salvos)
-    const metaOriginalCaixas = pedidoCaixas + (caixas || 0);
-    const metaOriginalPacotes = pedidoPacotes + (pacotes || 0);
-    const metaOriginalUnidades = pedidoUnidades + (unidades || 0);
-    const metaOriginalKg = pedidoKg + (kg || 0);
+    const metaOriginalCaixas = pedidoCaixas + c;
+    const metaOriginalPacotes = pedidoPacotes + p;
+    const metaOriginalUnidades = pedidoUnidades + u;
+    const metaOriginalKg = pedidoKg + k;
 
     // Obter tipo de estoque do cliente
     const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
@@ -175,10 +187,10 @@ export async function POST(
       cliente: clienteEstoque,
       produto,
       delta: {
-        caixas: caixas || 0,
-        pacotes: pacotes || 0,
-        unidades: unidades || 0,
-        kg: kg || 0,
+        caixas: c,
+        pacotes: p,
+        unidades: u,
+        kg: k,
       },
     });
 
@@ -191,10 +203,10 @@ export async function POST(
         produto,
         cliente,
         quantidadeEmbalada: {
-          caixas: caixas || 0,
-          pacotes: pacotes || 0,
-          unidades: unidades || 0,
-          kg: kg || 0,
+          caixas: c,
+          pacotes: p,
+          unidades: u,
+          kg: k,
         },
         metaOriginal: {
           caixas: metaOriginalCaixas,
@@ -226,8 +238,8 @@ export async function POST(
         }
       },
       novaLinha: {
-        pedido: { caixas, pacotes, unidades, kg },
-        producao: { caixas, pacotes, unidades, kg },
+        pedido: { caixas: c, pacotes: p, unidades: u, kg: k },
+        producao: { caixas: c, pacotes: p, unidades: u, kg: k },
       }
     });
   } catch (error) {

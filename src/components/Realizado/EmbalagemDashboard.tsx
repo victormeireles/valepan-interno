@@ -362,25 +362,28 @@ export default function EmbalagemDashboard({
               {showRitmoPrevisao && previsaoFinalizacao.ritmoAnterior !== null && (
                 <PrevisaoMetricCard
                   icon={<IconTrend className="h-5 w-5" />}
-                  title={`${formatCxPorHora(previsaoFinalizacao.ritmoAnterior)} dia anterior`}
+                  title="Ontem"
                 >
                   {previsaoFinalizacao.ritmo.kind === 'termina' ? (
-                    <p className="font-semibold tabular-nums text-gray-200">
-                      acaba {previsaoFinalizacao.ritmo.hour}h
-                      {String(previsaoFinalizacao.ritmo.minute).padStart(2, '0')}
-                    </p>
-                  ) : previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
-                    <div className="space-y-1">
-                      <p className="text-sm leading-snug text-gray-200">
-                        embala mais{' '}
-                        <span className="font-semibold tabular-nums text-gray-100">
-                          {previsaoFinalizacao.ritmo.embAte22} cx
-                        </span>{' '}
-                        e
+                    <div className="space-y-0.5 leading-tight">
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        COM {Math.round(previsaoFinalizacao.ritmoAnterior)} cx/h
                       </p>
-                      <p className="text-sm font-semibold leading-snug text-red-400" role="status">
-                        <span className="tabular-nums">{previsaoFinalizacao.ritmo.resto} cx</span>
-                        <span className="font-medium text-red-400/90"> para dia seguinte</span>
+                      <p className="font-semibold tabular-nums text-amber-200/95">
+                        acaba {previsaoFinalizacao.ritmo.hour}h
+                        {String(previsaoFinalizacao.ritmo.minute).padStart(2, '0')}
+                      </p>
+                    </div>
+                  ) : previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
+                    <div className="space-y-0.5 leading-tight" role="status">
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        COM {Math.round(previsaoFinalizacao.ritmoAnterior)} cx/h
+                      </p>
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        {previsaoFinalizacao.ritmo.embAte22} cx
+                      </p>
+                      <p className="font-semibold tabular-nums text-red-400">
+                        {previsaoFinalizacao.ritmo.resto} cx p/ amanhã
                       </p>
                     </div>
                   ) : null}
