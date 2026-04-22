@@ -1,12 +1,13 @@
 'use server';
 
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { isVinculoReceitaMassaAtiva } from '@/lib/utils/receita-massa-eligibility';
 import { revalidatePath } from 'next/cache';
 import { ProductionStepRepository } from '@/data/production/ProductionStepRepository';
 import { ProductionOrderRepository } from '@/data/production/ProductionOrderRepository';
-import { ProductionMassaLoteRepository } from '@/data/production/ProductionMassaLoteRepository';
 import { ProductionStepLogManager } from '@/domain/production/ProductionStepLogManager';
 import { ProductionProgressCalculator } from '@/domain/production/ProductionProgressCalculator';
+import { sumReceitasBatidasFromMassaLogs } from '@/lib/utils/sum-receitas-massa-logs';
 import {
   CreateProductionStepLogInput,
   UpdateProductionStepLogInput,
@@ -14,8 +15,23 @@ import {
   MassaQualityData,
   FermentacaoQualityData,
   FornoQualityData,
+  SaidaFornoQualityData,
   EmbalagemQualityData,
+  SaidaEmbalagemQualityData,
+  QualityData,
 } from '@/domain/types/producao-etapas';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
+import { validateCompleteProductionStepQuality } from '@/lib/production/production-step-complete-validation';
+import {
+  assertCarrinhoFermentacaoUnicoNaOrdem,
+  normalizeNumeroCarrinhoFermentacao,
+} from '@/lib/production/fermentacao-carrinho-uniqueness';
+import { assertNovaEntradaFornoSemDuplicata } from '@/lib/production/entrada-forno-start-validation';
+import {
+  latasSaidaFornoDoLog,
+  sumLatasEntradaEmbalagemPorSaidaFornoLogId,
+} from '@/lib/utils/entrada-embalagem-saida';
 
 /**
  * Inicia uma nova etapa de produção
@@ -26,7 +42,13 @@ export async function startProductionStep(input: {
   usuario_id?: string;
   qtd_saida: number;
   perda_qtd?: number;
-  dados_qualidade?: MassaQualityData | FermentacaoQualityData | FornoQualityData | EmbalagemQualityData;
+  dados_qualidade?:
+    | MassaQualityData
+    | FermentacaoQualityData
+    | FornoQualityData
+    | SaidaFornoQualityData
+    | EmbalagemQualityData
+    | SaidaEmbalagemQualityData;
   fotos?: string[];
 }) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -35,6 +57,15 @@ export async function startProductionStep(input: {
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
+    if (input.etapa === 'entrada_forno') {
+      const dqForno = input.dados_qualidade as FornoQualityData | undefined;
+      const ordemLogs = await stepRepository.findByOrderId(input.ordem_producao_id);
+      const dup = assertNovaEntradaFornoSemDuplicata(ordemLogs, dqForno?.fermentacao_log_id);
+      if (!dup.ok) {
+        return { success: false, error: dup.error };
+      }
+    }
+
     const createInput: CreateProductionStepLogInput = {
       ordem_producao_id: input.ordem_producao_id,
       etapa: input.etapa,
@@ -49,6 +80,9 @@ export async function startProductionStep(input: {
 
     revalidatePath('/producao/fila');
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    if (input.etapa === 'entrada_forno') {
+      revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-forno`);
+    }
 
     return { success: true, data: log };
   } catch (error) {
@@ -67,7 +101,13 @@ export async function completeProductionStep(input: {
   log_id: string;
   qtd_saida?: number;
   perda_qtd?: number;
-  dados_qualidade?: MassaQualityData | FermentacaoQualityData | FornoQualityData | EmbalagemQualityData;
+  dados_qualidade?:
+    | MassaQualityData
+    | FermentacaoQualityData
+    | FornoQualityData
+    | SaidaFornoQualityData
+    | EmbalagemQualityData
+    | SaidaEmbalagemQualityData;
   fotos?: string[];
 }) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -76,6 +116,37 @@ export async function completeProductionStep(input: {
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
+    const existing = await stepRepository.findById(input.log_id);
+    if (!existing) {
+      return { success: false, error: 'Log de etapa não encontrado.' };
+    }
+
+    const dadosParaValidar =
+      input.dados_qualidade != null ? input.dados_qualidade : existing.dados_qualidade;
+    const validation = validateCompleteProductionStepQuality(existing.etapa, dadosParaValidar);
+    if (!validation.ok) {
+      return { success: false, error: validation.error };
+    }
+
+    if (existing.etapa === 'fermentacao') {
+      const fdq = dadosParaValidar as FermentacaoQualityData;
+      const norm = normalizeNumeroCarrinhoFermentacao(fdq.numero_carrinho);
+      const exibir =
+        typeof fdq.numero_carrinho === 'string'
+          ? fdq.numero_carrinho.trim()
+          : String(fdq.numero_carrinho ?? '').trim();
+      if (norm) {
+        const ordemLogs = await stepRepository.findByOrderId(existing.ordem_producao_id);
+        const dup = assertCarrinhoFermentacaoUnicoNaOrdem(
+          ordemLogs,
+          input.log_id,
+          norm,
+          exibir,
+        );
+        if (!dup.ok) return { success: false, error: dup.error };
+      }
+    }
+
     const updateInput: UpdateProductionStepLogInput = {
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd,
@@ -85,12 +156,8 @@ export async function completeProductionStep(input: {
 
     const log = await stepManager.completeStep(input.log_id, updateInput);
 
-    // Buscar ordem_producao_id para revalidar
-    const logData = await stepRepository.findById(input.log_id);
-    if (logData) {
-      revalidatePath('/producao/fila');
-      revalidatePath(`/producao/etapas/${logData.ordem_producao_id}`);
-    }
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${existing.ordem_producao_id}`);
 
     return { success: true, data: log };
   } catch (error) {
@@ -122,6 +189,453 @@ export async function getProductionStepLogs(ordemProducaoId: string) {
 }
 
 /**
+ * Soma latas (LT) registradas na entrada do forno com início no dia indicado (timezone Brasil).
+ * Sem argumento, usa o dia corrente no Brasil.
+ */
+export async function getTotalLatasEntradaFornoHoje(diaReferenciaIso?: string): Promise<number> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const day =
+    typeof diaReferenciaIso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(diaReferenciaIso.trim())
+      ? diaReferenciaIso.trim()
+      : getTodayISOInBrazilTimezone();
+  const startIso = `${day}T03:00:00.000Z`;
+  const endBoundary = new Date(startIso);
+  endBoundary.setUTCDate(endBoundary.getUTCDate() + 1);
+  const endIso = endBoundary.toISOString();
+
+  try {
+    const { data: logs, error } = await supabase
+      .from('producao_etapas_log')
+      .select('ordem_producao_id, qtd_saida, dados_qualidade')
+      .eq('etapa', 'entrada_forno')
+      .gte('inicio', startIso)
+      .lt('inicio', endIso);
+
+    if (error) {
+      console.error('getTotalLatasEntradaFornoHoje:', error);
+      return 0;
+    }
+    if (!logs?.length) return 0;
+
+    const orderIds = [...new Set(logs.map((l) => l.ordem_producao_id as string))];
+    const { data: ordens, error: errOrdens } = await supabase
+      .from('ordens_producao')
+      .select('id, produtos!ordens_producao_produto_id_fkey ( unidades_assadeira )')
+      .in('id', orderIds);
+
+    if (errOrdens) {
+      console.error('getTotalLatasEntradaFornoHoje ordens:', errOrdens);
+      return 0;
+    }
+
+    const uaByOrder = new Map<string, number | null>();
+    for (const o of ordens ?? []) {
+      const row = o as {
+        id: string;
+        produtos?: { unidades_assadeira?: number | null } | null;
+      };
+      const ua = row.produtos?.unidades_assadeira;
+      const uaOk = ua != null && Number(ua) > 0 ? Number(ua) : null;
+      uaByOrder.set(row.id, uaOk);
+    }
+
+    let total = 0;
+    for (const log of logs) {
+      const oid = log.ordem_producao_id as string;
+      const ua = uaByOrder.get(oid) ?? null;
+      total += sumLatasFromFornoLogRows(
+        [
+          {
+            qtd_saida: log.qtd_saida as number | null,
+            dados_qualidade: log.dados_qualidade,
+          },
+        ],
+        ua,
+      );
+    }
+    return total;
+  } catch (e) {
+    console.error('getTotalLatasEntradaFornoHoje:', e);
+    return 0;
+  }
+}
+
+/**
+ * Atualiza um log de etapa ainda em andamento (ex.: corrigir latas na entrada do forno).
+ */
+export async function updateInProgressProductionStepLog(input: {
+  log_id: string;
+  qtd_saida?: number;
+  dados_qualidade?:
+    | MassaQualityData
+    | FermentacaoQualityData
+    | FornoQualityData
+    | SaidaFornoQualityData
+    | EmbalagemQualityData
+    | SaidaEmbalagemQualityData;
+  fotos?: string[];
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log) {
+      return { success: false, error: 'Log de etapa não encontrado.' };
+    }
+    if (log.fim !== null) {
+      return {
+        success: false,
+        error: 'Só é possível editar etapas em andamento. Entradas já finalizadas não podem ser alteradas aqui.',
+      };
+    }
+
+    const prevDq = log.dados_qualidade;
+    const patch: UpdateProductionStepLogInput = {};
+
+    if (input.dados_qualidade != null) {
+      patch.dados_qualidade = {
+        ...(prevDq != null && typeof prevDq === 'object' ? prevDq : {}),
+        ...input.dados_qualidade,
+      } as QualityData;
+    }
+    if (input.qtd_saida !== undefined) patch.qtd_saida = input.qtd_saida;
+    if (input.fotos !== undefined) patch.fotos = input.fotos;
+
+    if (Object.keys(patch).length === 0) {
+      return { success: false, error: 'Nenhum dado para atualizar.' };
+    }
+
+    if (log.etapa === 'fermentacao' && patch.dados_qualidade != null) {
+      const dq = patch.dados_qualidade as FermentacaoQualityData;
+      const norm = normalizeNumeroCarrinhoFermentacao(dq.numero_carrinho);
+      const exibir =
+        typeof dq.numero_carrinho === 'string'
+          ? dq.numero_carrinho.trim()
+          : String(dq.numero_carrinho ?? '').trim();
+      if (norm) {
+        const ordemLogs = await stepRepository.findByOrderId(log.ordem_producao_id);
+        const dup = assertCarrinhoFermentacaoUnicoNaOrdem(
+          ordemLogs,
+          input.log_id,
+          norm,
+          exibir,
+        );
+        if (!dup.ok) return { success: false, error: dup.error };
+      }
+    }
+
+    const updated = await stepRepository.update(input.log_id, patch);
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}/entrada-forno`);
+
+    return { success: true, data: updated };
+  } catch (error) {
+    console.error('Erro ao atualizar log em andamento:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar registro',
+    };
+  }
+}
+
+/**
+ * Remove um registro de entrada no forno (ex.: duplicado). Não altera logs de fermentação nem saída do forno.
+ */
+export async function deleteEntradaFornoProductionStepLog(input: {
+  log_id: string;
+  ordem_producao_id: string;
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log) {
+      return { success: false, error: 'Registro não encontrado.' };
+    }
+    if (log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false, error: 'Registro não pertence a esta ordem de produção.' };
+    }
+    if (log.etapa !== 'entrada_forno') {
+      return { success: false, error: 'Só é possível excluir registros de entrada no forno.' };
+    }
+
+    await stepRepository.deleteById(input.log_id);
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-forno`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao excluir entrada no forno:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao excluir registro',
+    };
+  }
+}
+
+/**
+ * Anexa foto ao log da etapa `saida_embalagem` da ordem.
+ * Se não houver log aberto, cria um novo log em andamento com qtd=0.
+ */
+export async function appendFotoToSaidaEmbalagemStepLog(input: {
+  ordem_producao_id: string;
+  photoUrl: string;
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
+
+  try {
+    const photoUrl = input.photoUrl.trim();
+    if (!photoUrl) {
+      return { success: false as const, error: 'URL da foto inválida.' };
+    }
+
+    const lastSaidaEmb = await stepRepository.findLastByOrderAndStep(
+      input.ordem_producao_id,
+      'saida_embalagem',
+    );
+
+    if (!lastSaidaEmb || lastSaidaEmb.fim != null) {
+      const created = await stepManager.startStep({
+        ordem_producao_id: input.ordem_producao_id,
+        etapa: 'saida_embalagem',
+        qtd_saida: 0,
+        fotos: [photoUrl],
+        dados_qualidade: {},
+      });
+
+      revalidatePath('/producao/fila');
+      revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+      revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-embalagem`);
+      return { success: true as const, data: created };
+    }
+
+    const prevFotos = lastSaidaEmb.fotos ?? [];
+    const merged = prevFotos.includes(photoUrl) ? prevFotos : [...prevFotos, photoUrl];
+    const updated = await stepRepository.update(lastSaidaEmb.id, { fotos: merged });
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-embalagem`);
+    return { success: true as const, data: updated };
+  } catch (error) {
+    console.error('appendFotoToSaidaEmbalagemStepLog:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao anexar foto da saída da embalagem.',
+    };
+  }
+}
+
+/**
+ * Registra quantas caixas saíram / foram conferidas na saída da embalagem.
+ * Reutiliza o log em aberto ou cria um novo (mesma política da foto).
+ */
+export async function upsertSaidaEmbalagemCaixasRecebidas(input: {
+  ordem_producao_id: string;
+  caixas_recebidas: number;
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
+
+  const caixas = Math.round(Number(input.caixas_recebidas));
+  if (!Number.isFinite(caixas) || caixas < 0) {
+    return { success: false as const, error: 'Informe um número inteiro de caixas (0 ou mais).' };
+  }
+
+  try {
+    const lastSaidaEmb = await stepRepository.findLastByOrderAndStep(
+      input.ordem_producao_id,
+      'saida_embalagem',
+    );
+
+    const dqPatch: SaidaEmbalagemQualityData = { caixas_recebidas: caixas };
+
+    if (!lastSaidaEmb || lastSaidaEmb.fim != null) {
+      await stepManager.startStep({
+        ordem_producao_id: input.ordem_producao_id,
+        etapa: 'saida_embalagem',
+        qtd_saida: 0,
+        dados_qualidade: dqPatch,
+        fotos: [],
+      });
+    } else {
+      const prev = lastSaidaEmb.dados_qualidade;
+      const merged = {
+        ...(prev != null && typeof prev === 'object' ? prev : {}),
+        ...dqPatch,
+      } as QualityData;
+      await stepRepository.update(lastSaidaEmb.id, { dados_qualidade: merged });
+    }
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-embalagem`);
+
+    return { success: true as const };
+  } catch (error) {
+    console.error('upsertSaidaEmbalagemCaixasRecebidas:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao salvar contagem de caixas.',
+    };
+  }
+}
+
+const MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO = 20;
+
+export type CarrinhoSaidaFornoParaEmbalagemVM = {
+  saida_forno_log_id: string;
+  numero_carrinho: string;
+  latas_saida: number;
+  latas_disponiveis: number;
+  saida_fim: string;
+};
+
+/**
+ * Carrinhos registrados na saída do forno para esta ordem, ainda com latas disponíveis para embalagem.
+ */
+export async function getSaidaFornoCarrinhosParaEmbalagem(ordemProducaoId: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const logs = await stepRepository.findByOrderId(ordemProducaoId);
+    const saidaLogs = logs
+      .filter((l) => l.etapa === 'saida_forno' && l.fim != null)
+      .sort((a, b) => new Date(b.fim!).getTime() - new Date(a.fim!).getTime());
+
+    const data: CarrinhoSaidaFornoParaEmbalagemVM[] = [];
+    for (const s of saidaLogs) {
+      const dq = s.dados_qualidade as SaidaFornoQualityData | null;
+      const latasSaida = latasSaidaFornoDoLog(dq);
+      if (latasSaida < 1) continue;
+      const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, s.id);
+      const disp = latasSaida - consumido;
+      if (disp <= 0) continue;
+      const num = String(dq?.numero_carrinho ?? '').trim();
+      data.push({
+        saida_forno_log_id: s.id,
+        numero_carrinho: num || '—',
+        latas_saida: latasSaida,
+        latas_disponiveis: disp,
+        saida_fim: s.fim as string,
+      });
+    }
+
+    return { success: true as const, data };
+  } catch (error) {
+    console.error('getSaidaFornoCarrinhosParaEmbalagem:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao listar carrinhos da saída do forno.',
+    };
+  }
+}
+
+/**
+ * Registra uma chegada na embalagem (vinculada a um log de saída do forno) e já conclui o log.
+ */
+export async function registerEntradaEmbalagemCarrinhoELatas(input: {
+  ordem_producao_id: string;
+  saida_forno_log_id: string;
+  latas: number;
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
+
+  const latas = Math.round(Number(input.latas));
+  if (!input.saida_forno_log_id?.trim()) {
+    return { success: false as const, error: 'Selecione um carrinho da saída do forno.' };
+  }
+  if (!Number.isFinite(latas) || latas < 1) {
+    return { success: false as const, error: 'Informe um número inteiro de latas (mínimo 1).' };
+  }
+  if (latas > MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO) {
+    return {
+      success: false as const,
+      error: `Máximo de ${MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO} latas por registro.`,
+    };
+  }
+
+  try {
+    const saidaLog = await stepRepository.findById(input.saida_forno_log_id);
+    if (!saidaLog || saidaLog.etapa !== 'saida_forno' || saidaLog.fim == null) {
+      return {
+        success: false as const,
+        error: 'Registro de saída do forno não encontrado ou ainda não concluído.',
+      };
+    }
+    if (saidaLog.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false as const, error: 'Este registro não pertence a esta ordem de produção.' };
+    }
+
+    const logs = await stepRepository.findByOrderId(input.ordem_producao_id);
+    const dqS = saidaLog.dados_qualidade as SaidaFornoQualityData | null;
+    const latasSaida = latasSaidaFornoDoLog(dqS);
+    const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, saidaLog.id);
+    const disponivel = latasSaida - consumido;
+    if (disponivel < 1) {
+      return { success: false as const, error: 'Não há latas disponíveis neste carrinho.' };
+    }
+    if (latas > disponivel) {
+      return {
+        success: false as const,
+        error: `No máximo ${disponivel} lata(s) disponível(is) para este carrinho.`,
+      };
+    }
+
+    const carrinho = String(dqS?.numero_carrinho ?? '').trim();
+    if (!carrinho) {
+      return { success: false as const, error: 'Saída do forno sem número de carrinho.' };
+    }
+
+    const dqPatch: EmbalagemQualityData = {
+      numero_carrinho: carrinho,
+      assadeiras: latas,
+      saida_forno_log_id: saidaLog.id,
+    };
+
+    const started = await stepManager.startStep({
+      ordem_producao_id: input.ordem_producao_id,
+      etapa: 'entrada_embalagem',
+      qtd_saida: latas,
+      dados_qualidade: dqPatch,
+      fotos: [],
+    });
+
+    await stepManager.completeStep(started.id, {
+      qtd_saida: latas,
+      dados_qualidade: dqPatch,
+    });
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-embalagem`);
+
+    return { success: true as const };
+  } catch (error) {
+    console.error('registerEntradaEmbalagemCarrinhoELatas:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao salvar entrada da embalagem.',
+    };
+  }
+}
+
+/**
  * Busca progresso de uma ordem de produção
  */
 export async function getProductionProgress(
@@ -139,12 +653,7 @@ export async function getProductionProgress(
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const stepRepository = new ProductionStepRepository(supabase);
   const orderRepository = new ProductionOrderRepository(supabase);
-  const massaLoteRepository = new ProductionMassaLoteRepository(supabase);
-  const progressCalculator = new ProductionProgressCalculator(
-    stepRepository,
-    orderRepository,
-    massaLoteRepository,
-  );
+  const progressCalculator = new ProductionProgressCalculator(stepRepository, orderRepository);
 
   try {
     const progress = await progressCalculator.calculateProgress(ordemProducaoId, productInfo);
@@ -184,18 +693,11 @@ export async function getInProgressStep(ordemProducaoId: string) {
 export async function getReceitasProduzidas(ordemProducaoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const stepRepository = new ProductionStepRepository(supabase);
-  const massaLoteRepository = new ProductionMassaLoteRepository(supabase);
 
   try {
     const logs = await stepRepository.findByOrderId(ordemProducaoId);
 
-    // Buscar receitas de massa (soma dos lotes)
-    let receitasMassa = 0;
-    const massaLog = logs.find((log) => log.etapa === 'massa');
-    if (massaLog) {
-      const lotes = await massaLoteRepository.findByEtapasLogId(massaLog.id);
-      receitasMassa = lotes.reduce((sum, lote) => sum + lote.receitas_batidas, 0);
-    }
+    const receitasMassa = sumReceitasBatidasFromMassaLogs(logs);
 
     // Buscar receitas de fermentação (converter qtd_saida para receitas)
     let receitasFermentacao = 0;
@@ -205,16 +707,24 @@ export async function getReceitasProduzidas(ordemProducaoId: string) {
       const orderRepository = new ProductionOrderRepository(supabase);
       const order = await orderRepository.findById(ordemProducaoId);
       if (order) {
-        const { data: produtoReceita } = await supabase
+        const { data: produtoReceitasRows } = await supabase
           .from('produto_receitas')
-          .select('quantidade_por_produto, receitas(tipo)')
+          .select(
+            'quantidade_por_produto, receitas!produto_receitas_receita_id_fkey(tipo, ativo)',
+          )
           .eq('produto_id', order.produto_id)
-          .eq('ativo', true)
-          .maybeSingle();
+          .eq('ativo', true);
 
-        type ReceitaTipo = { tipo?: string };
-        if (produtoReceita && (produtoReceita.receitas as ReceitaTipo | null)?.tipo === 'massa') {
-          const quantidadePorProduto = produtoReceita.quantidade_por_produto;
+        type PRMassa = {
+          quantidade_por_produto: number;
+          tipo?: string | null;
+          receitas?: { tipo?: string; ativo?: boolean | null } | null;
+        };
+        const produtoReceita = produtoReceitasRows?.find((row) =>
+          isVinculoReceitaMassaAtiva(row as PRMassa),
+        );
+        if (produtoReceita) {
+          const quantidadePorProduto = (produtoReceita as PRMassa).quantidade_por_produto;
           if (quantidadePorProduto > 0) {
             // Converter unidades para receitas
             receitasFermentacao = fermentacaoLog.qtd_saida / quantidadePorProduto;
@@ -254,11 +764,12 @@ export async function getReceitasMassaByProduto(produtoId: string) {
       .from('produto_receitas')
       .select(
         `
-        receitas (
+        receitas!produto_receitas_receita_id_fkey (
           id,
           nome,
           codigo,
-          tipo
+          tipo,
+          ativo
         )
       `,
       )
@@ -270,15 +781,22 @@ export async function getReceitasMassaByProduto(produtoId: string) {
     }
 
     type ProdutoReceitaWithReceita = {
+      tipo?: string | null;
       receitas?: {
         id: string;
         nome: string;
         codigo: string | null;
         tipo: string;
+        ativo?: boolean | null;
       } | null;
     };
     const receitasMassa = (produtoReceitas || [])
-      .filter((pr: ProdutoReceitaWithReceita) => pr.receitas?.tipo === 'massa')
+      .filter((pr: ProdutoReceitaWithReceita) =>
+        isVinculoReceitaMassaAtiva({
+          tipo: pr.tipo,
+          receitas: pr.receitas ?? null,
+        }),
+      )
       .map((pr: ProdutoReceitaWithReceita) => pr.receitas)
       .filter(Boolean);
 
@@ -352,7 +870,7 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
       .from('produto_receitas')
       .select(`
         quantidade_por_produto,
-        receitas (
+        receitas!produto_receitas_receita_id_fkey (
           tipo,
           ativo
         )
@@ -364,21 +882,20 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
       console.error('Erro ao buscar receitas vinculadas:', receitasError);
     }
 
-    // Filtrar apenas receitas tipo massa e ativas (mesma lógica da fila)
     let receitaMassa = null;
     if (produtoReceitas && produtoReceitas.length > 0) {
       type ProdutoReceitaItem = {
+        quantidade_por_produto: number;
+        tipo?: string | null;
         receitas?: {
           tipo?: string;
           ativo?: boolean;
         } | null;
       };
-      // @ts-expect-error - Supabase typing limitations
-      const receitaMassaData = produtoReceitas.find((pr: ProdutoReceitaItem) => {
-        const receita = pr.receitas;
-        return receita?.tipo === 'massa' && receita?.ativo !== false;
-      });
-      
+      const receitaMassaData = (produtoReceitas as ProdutoReceitaItem[]).find((pr) =>
+        isVinculoReceitaMassaAtiva(pr),
+      );
+
       if (receitaMassaData) {
         receitaMassa = {
           quantidade_por_produto: receitaMassaData.quantidade_por_produto,
@@ -404,6 +921,76 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro ao buscar ordem de produção',
+    };
+  }
+}
+
+/**
+ * Registra saída do forno (carrinho + bandejas) em um único passo: log concluído.
+ * Bandejas são tratadas como LT na comparação com a entrada no forno.
+ */
+export async function registerSaidaForno(input: {
+  ordem_producao_id: string;
+  numero_carrinho: string;
+  bandejas: number;
+}) {
+  const MAX_LATAS_POR_CARRINHO_SAIDA_FORNO = 20;
+  const carrinho = input.numero_carrinho.trim();
+  const bandejas = Math.round(Number(input.bandejas));
+  if (!carrinho) {
+    return { success: false, error: 'Informe o número do carrinho.' };
+  }
+  if (!Number.isFinite(bandejas) || bandejas < 1) {
+    return { success: false, error: 'Informe um número inteiro de bandejas (mínimo 1).' };
+  }
+  if (bandejas > MAX_LATAS_POR_CARRINHO_SAIDA_FORNO) {
+    return {
+      success: false,
+      error: `Máximo de ${MAX_LATAS_POR_CARRINHO_SAIDA_FORNO} latas por carrinho na saída do forno.`,
+    };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
+
+  const ordRes = await getProductionOrderWithProduct(input.ordem_producao_id);
+  if (!ordRes.success || !ordRes.data) {
+    return { success: false, error: ordRes.error || 'Ordem não encontrada' };
+  }
+
+  const ua = ordRes.data.produto.unidades_assadeira;
+  const uaNum = ua != null && Number(ua) > 0 ? Number(ua) : null;
+  const qtdSaida = uaNum != null ? bandejas * uaNum : bandejas;
+
+  const dq: SaidaFornoQualityData = { numero_carrinho: carrinho, bandejas };
+
+  try {
+    const started = await stepManager.startStep({
+      ordem_producao_id: input.ordem_producao_id,
+      etapa: 'saida_forno',
+      qtd_saida: 0,
+      dados_qualidade: dq,
+      fotos: [],
+    });
+    const completed = await stepManager.completeStep(started.id, {
+      qtd_saida: qtdSaida,
+      dados_qualidade: dq,
+      fotos: [],
+    });
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-forno`);
+    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-forno`);
+
+    return { success: true, data: completed };
+  } catch (error) {
+    console.error('Erro ao registrar saída do forno:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao registrar saída do forno',
     };
   }
 }

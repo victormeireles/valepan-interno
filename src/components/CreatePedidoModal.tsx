@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import DateInput from '@/components/FormControls/DateInput';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import NumberInput from '@/components/FormControls/NumberInput';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
 import TextInput from '@/components/FormControls/TextInput';
@@ -59,18 +60,9 @@ export default function CreatePedidoModal({
   visibleFields,
   labelsOverride
 }: CreatePedidoModalProps) {
-  // Função para obter data de hoje no formato YYYY-MM-DD
-  const getTodayISO = () => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
   const [formData, setFormData] = useState<CreatePedidoData>({
-    dataPedido: getTodayISO(),
-    dataFabricacao: getTodayISO(),
+    dataPedido: getTodayISOInBrazilTimezone(),
+    dataFabricacao: getTodayISOInBrazilTimezone(),
     cliente: '',
     observacao: '',
     itens: [{
@@ -93,8 +85,8 @@ export default function CreatePedidoModal({
     if (isOpen) {
       // Resetar formulário quando abrir com data de hoje
       setFormData({
-        dataPedido: getTodayISO(),
-        dataFabricacao: getTodayISO(),
+        dataPedido: getTodayISOInBrazilTimezone(),
+        dataFabricacao: getTodayISOInBrazilTimezone(),
         cliente: '',
         observacao: '',
         itens: [{

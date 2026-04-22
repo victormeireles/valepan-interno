@@ -1,19 +1,22 @@
 'use client';
 
+import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
+
 interface ProductionProgressBarProps {
   receitasOP: number;
   receitasMassa: number;
   receitasFermentacao?: number;
 }
 
-// Formatar número de receitas: se for inteiro, mostrar sem decimais; senão, mostrar com 1 casa decimal
 function formatarReceita(valor: number): string {
   const parteDecimal = Math.abs(valor % 1);
   if (parteDecimal < 0.001) {
-    return Math.round(valor).toString();
+    return Math.round(valor).toLocaleString('pt-BR');
   }
-  return valor.toFixed(1);
+  return formatReceitasBatidasDisplay(valor);
 }
+
+const EPS = 1e-9;
 
 export default function ProductionProgressBar({
   receitasOP,
@@ -28,16 +31,21 @@ export default function ProductionProgressBar({
   const percentualMassaLimitado = Math.min(100, percentualMassa);
   const percentualFermentacaoLimitado = Math.min(100, percentualFermentacao);
 
+  const massaPronta =
+    receitasOP > 0 && receitasMassa + EPS >= receitasOP;
+
   return (
-    <div className="space-y-3">
-      {/* Barra de progresso principal (massa) */}
-      <div className="relative h-6 bg-gray-100 rounded-full overflow-hidden">
+    <div className="space-y-2 sm:space-y-3">
+      {/* Barra de progresso principal (massa): cor do preenchimento muda quando a meta é atingida */}
+      <div className="relative h-5 overflow-hidden rounded-full bg-gray-100 sm:h-6">
         <div
-          className="absolute top-0 left-0 h-full bg-blue-500 transition-all duration-300 ease-out"
+          className={`absolute top-0 left-0 h-full transition-all duration-300 ease-out ${
+            massaPronta ? 'bg-emerald-500' : 'bg-blue-500'
+          }`}
           style={{ width: `${percentualMassaLimitado}%` }}
         />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-semibold text-gray-700 z-10">
+        <div className="absolute inset-0 flex items-center justify-center px-1">
+          <span className="z-10 max-w-[calc(100%-0.5rem)] truncate rounded-full bg-white/95 px-1.5 py-px text-center text-[10px] font-semibold text-slate-900 shadow-sm ring-1 ring-slate-900/10 sm:px-2 sm:py-0.5 sm:text-xs">
             {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} receitas
           </span>
         </div>
@@ -45,13 +53,13 @@ export default function ProductionProgressBar({
 
       {/* Barra de progresso secundária (fermentação) */}
       {receitasFermentacao > 0 && (
-        <div className="relative h-4 bg-gray-50 rounded-full overflow-hidden">
+        <div className="relative h-4 overflow-hidden rounded-full bg-gray-50 sm:h-5">
           <div
             className="absolute top-0 left-0 h-full bg-green-500 transition-all duration-300 ease-out"
             style={{ width: `${percentualFermentacaoLimitado}%` }}
           />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-medium text-gray-600 z-10">
+          <div className="absolute inset-0 flex items-center justify-center px-1">
+            <span className="z-10 max-w-[calc(100%-0.5rem)] truncate rounded-full bg-white/95 px-1.5 py-px text-center text-[9px] font-semibold text-slate-900 shadow-sm ring-1 ring-slate-900/10 sm:px-2 sm:py-0.5 sm:text-[10px] md:text-xs">
               Fermentação: {percentualFermentacaoLimitado.toFixed(0)}%
             </span>
           </div>

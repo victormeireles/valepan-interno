@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      assadeiras: {
+        Row: {
+          ativo: boolean
+          codigo: string | null
+          created_at: string
+          descricao: string | null
+          diametro_buracos_mm: number | null
+          id: string
+          nome: string
+          numero_buracos: number
+          ordem: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string
+          descricao?: string | null
+          diametro_buracos_mm?: number | null
+          id?: string
+          nome: string
+          numero_buracos?: number
+          ordem?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string
+          descricao?: string | null
+          diametro_buracos_mm?: number | null
+          id?: string
+          nome?: string
+          numero_buracos?: number
+          ordem?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      produto_assadeiras: {
+        Row: {
+          assadeira_id: string
+          created_at: string
+          id: string
+          produto_id: string
+          unidades_por_assadeira: number
+          updated_at: string
+        }
+        Insert: {
+          assadeira_id: string
+          created_at?: string
+          id?: string
+          produto_id: string
+          unidades_por_assadeira: number
+          updated_at?: string
+        }
+        Update: {
+          assadeira_id?: string
+          created_at?: string
+          id?: string
+          produto_id?: string
+          unidades_por_assadeira?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produto_assadeiras_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_assadeiras_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       caminhoes: {
         Row: {
           ativo: boolean
@@ -38,6 +119,45 @@ export type Database = {
           id?: string
           nome?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      carrinhos: {
+        Row: {
+          ativo: boolean
+          bandejas: number
+          created_at: string
+          em_uso: boolean
+          id: string
+          latas_ocupadas: number
+          numero: number
+          precisa_reparos: boolean
+          quantidade_latas: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          bandejas?: number
+          created_at?: string
+          em_uso?: boolean
+          id?: string
+          latas_ocupadas?: number
+          numero: number
+          precisa_reparos?: boolean
+          quantidade_latas?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          bandejas?: number
+          created_at?: string
+          em_uso?: boolean
+          id?: string
+          latas_ocupadas?: number
+          numero?: number
+          precisa_reparos?: boolean
+          quantidade_latas?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -179,6 +299,7 @@ export type Database = {
           nome_fantasia: string
           parcela_padrao_id: string | null
           razao_social: string
+          somente_lata_antiga: boolean
           tem_texto_indicando_congelado_na_etiqueta: boolean
           tem_validade_congelado_na_etiqueta: boolean
           tipo_cliente: Database["public"]["Enums"]["tipo_cliente_enum"]
@@ -201,6 +322,7 @@ export type Database = {
           nome_fantasia: string
           parcela_padrao_id?: string | null
           razao_social: string
+          somente_lata_antiga?: boolean
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
           tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
@@ -223,6 +345,7 @@ export type Database = {
           nome_fantasia?: string
           parcela_padrao_id?: string | null
           razao_social?: string
+          somente_lata_antiga?: boolean
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
           tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
@@ -482,6 +605,7 @@ export type Database = {
           data_producao: string | null
           id: string
           lote_codigo: string
+          ordem_planejamento: number | null
           pedido_id: string | null
           prioridade: number | null
           produto_id: string
@@ -493,6 +617,7 @@ export type Database = {
           data_producao?: string | null
           id?: string
           lote_codigo: string
+          ordem_planejamento?: number | null
           pedido_id?: string | null
           prioridade?: number | null
           produto_id: string
@@ -504,6 +629,7 @@ export type Database = {
           data_producao?: string | null
           id?: string
           lote_codigo?: string
+          ordem_planejamento?: number | null
           pedido_id?: string | null
           prioridade?: number | null
           produto_id?: string
@@ -958,6 +1084,7 @@ export type Database = {
           produto_id: string
           quantidade_por_produto: number
           receita_id: string
+          tipo: Database["public"]["Enums"]["tipo_receita"]
           updated_at: string | null
         }
         Insert: {
@@ -967,6 +1094,7 @@ export type Database = {
           produto_id: string
           quantidade_por_produto: number
           receita_id: string
+          tipo: Database["public"]["Enums"]["tipo_receita"]
           updated_at?: string | null
         }
         Update: {
@@ -976,6 +1104,7 @@ export type Database = {
           produto_id?: string
           quantidade_por_produto?: number
           receita_id?: string
+          tipo?: Database["public"]["Enums"]["tipo_receita"]
           updated_at?: string | null
         }
         Relationships: [
@@ -1116,6 +1245,11 @@ export type Database = {
           unidade_descricao: string | null
           unidade_padrao_id: string | null
           unidades_assadeira: number | null
+          unidades_lata_antiga: number | null
+          unidades_lata_nova: number | null
+          latas_cadastro_conferido: boolean
+          permite_lata_antiga: boolean
+          permite_lata_nova: boolean
           unit_barcode: string | null
           unit_weight: number | null
           updated_at: string
@@ -1127,12 +1261,17 @@ export type Database = {
           codigo: string
           created_at?: string
           id?: string
+          latas_cadastro_conferido?: boolean
           nome: string
           package_units?: number | null
+          permite_lata_antiga?: boolean
+          permite_lata_nova?: boolean
           unidade: string
           unidade_descricao?: string | null
           unidade_padrao_id?: string | null
           unidades_assadeira?: number | null
+          unidades_lata_antiga?: number | null
+          unidades_lata_nova?: number | null
           unit_barcode?: string | null
           unit_weight?: number | null
           updated_at?: string
@@ -1144,12 +1283,17 @@ export type Database = {
           codigo?: string
           created_at?: string
           id?: string
+          latas_cadastro_conferido?: boolean
           nome?: string
           package_units?: number | null
+          permite_lata_antiga?: boolean
+          permite_lata_nova?: boolean
           unidade?: string
           unidade_descricao?: string | null
           unidade_padrao_id?: string | null
           unidades_assadeira?: number | null
+          unidades_lata_antiga?: number | null
+          unidades_lata_nova?: number | null
           unit_barcode?: string | null
           unit_weight?: number | null
           updated_at?: string

@@ -2,6 +2,19 @@
 
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
+import { isVinculoReceitaMassaAtiva } from '@/lib/utils/receita-massa-eligibility';
+import { listCarrinhosDisponiveisForOrdemFromSnapshots } from '@/lib/utils/forno-carrinhos-disponiveis';
+import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
+import { estoqueService } from '@/lib/services/estoque-service';
+import type { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
+import {
+  quantidadePlanejadaParaUnidadesConsumo,
+  unidadesConsumoParaQuantidadePlanejada,
+  quantidadeEstoqueParaUnidadesConsumo,
+  type ProductConversionInfo,
+} from '@/lib/utils/production-conversions';
+import { formatIntegerWithThousands, formatNumberWithThousands } from '@/lib/utils/number-utils';
+import { isGoogleServiceAccountConfigured } from '@/lib/googleSheets';
 
 interface CreateProductionOrderParams {
   produtoId: string;
@@ -52,6 +65,21 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
       ? new Date(params.dataProducao).toISOString()
       : new Date().toISOString();
 
+    const { data: maxOrdRow } = await supabase
+      .from('ordens_producao')
+      .select('ordem_planejamento')
+      .eq('status', 'planejado')
+      .not('ordem_planejamento', 'is', null)
+      .order('ordem_planejamento', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextOrdemPlanejamento =
+      maxOrdRow?.ordem_planejamento != null &&
+      !Number.isNaN(Number(maxOrdRow.ordem_planejamento))
+        ? Number(maxOrdRow.ordem_planejamento) + 1
+        : 1;
+
     const { data, error } = await supabase
       .from('ordens_producao')
       .insert({
@@ -62,6 +90,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
         lote_codigo: loteCodigo,
         status: 'planejado',
         data_producao: dataProducao,
+        ordem_planejamento: nextOrdemPlanejamento,
       })
       .select()
       .single();
@@ -107,34 +136,207 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
   }
 }
 
+function messageForCancelOrderFailure(error: unknown): string {
+  const e = error as { code?: string; message?: string; details?: string };
+  const combined = `${e?.message ?? ''} ${e?.details ?? ''}`;
+
+  if (
+    e?.code === '23514' ||
+    /violates check constraint|check constraint/i.test(combined)
+  ) {
+    return (
+      'A base de dados não aceita o status «cancelado» nesta tabela. ' +
+      'Inclua «cancelado» na constraint CHECK de ordens_producao.status ' +
+      '(no Supabase: SQL Editor — ver ficheiro FIX_ORDENS_PRODUCAO_STATUS_CANCELADO.sql no projeto).'
+    );
+  }
+
+  if (typeof e?.message === 'string' && e.message.length > 0 && e.message.length < 240) {
+    return `Não foi possível excluir a ordem: ${e.message}`;
+  }
+
+  return 'Não foi possível excluir a ordem. Tente novamente.';
+}
+
+/**
+ * Remove a ordem da fila (planejamento): marca como cancelada.
+ * Só permitido enquanto o status for `planejado` (nada iniciado na produção).
+ */
+export async function cancelProductionOrder(ordemId: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  try {
+    const { data: row, error: fetchError } = await supabase
+      .from('ordens_producao')
+      .select('id, status')
+      .eq('id', ordemId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!row) {
+      return { success: false as const, error: 'Ordem não encontrada.' };
+    }
+
+    const st = row.status ?? 'planejado';
+    if (st !== 'planejado') {
+      return {
+        success: false as const,
+        error:
+          'Só é possível excluir ordens ainda em planejamento (sem produção iniciada).',
+      };
+    }
+
+    const statusIsNull = row.status == null;
+    const updateQuery = supabase
+      .from('ordens_producao')
+      .update({ status: 'cancelado' })
+      .eq('id', ordemId)
+      .select('id');
+
+    const { data: updatedRows, error: updateError } = statusIsNull
+      ? await updateQuery.is('status', null)
+      : await updateQuery.eq('status', 'planejado');
+
+    if (updateError) throw updateError;
+    if (!updatedRows?.length) {
+      return {
+        success: false as const,
+        error:
+          'Esta ordem já não está em planejamento ou foi alterada por outro usuário.',
+      };
+    }
+
+    revalidatePath('/producao/fila');
+    return { success: true as const };
+  } catch (error) {
+    console.error('Erro ao cancelar OP:', serializeSupabaseError(error));
+    return {
+      success: false as const,
+      error: messageForCancelOrderFailure(error),
+    };
+  }
+}
+
+/** Persiste a sequência do planejamento (1 = primeiro a produzir). Só ordens `planejado`. */
+export async function reorderProductionPlanningOrders(orderedIds: string[]) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  if (!orderedIds.length) {
+    return { success: true as const };
+  }
+
+  try {
+    const { data: rows, error: selErr } = await supabase
+      .from('ordens_producao')
+      .select('id, status')
+      .in('id', orderedIds);
+
+    if (selErr) throw selErr;
+    if (!rows || rows.length !== orderedIds.length) {
+      return {
+        success: false as const,
+        error: 'Algumas ordens não foram encontradas. Recarregue a página.',
+      };
+    }
+
+    for (const r of rows) {
+      const st = r.status ?? 'planejado';
+      if (st !== 'planejado') {
+        return {
+          success: false as const,
+          error: 'Só é possível reordenar ordens ainda em planejamento.',
+        };
+      }
+    }
+
+    const updates = orderedIds.map((id, index) =>
+      supabase
+        .from('ordens_producao')
+        .update({ ordem_planejamento: index + 1 })
+        .eq('id', id),
+    );
+
+    const results = await Promise.all(updates);
+    for (const res of results) {
+      if (res.error) throw res.error;
+    }
+
+    revalidatePath('/producao/fila');
+    return { success: true as const };
+  } catch (error) {
+    console.error('Erro ao reordenar planejamento:', error);
+    return {
+      success: false as const,
+      error: 'Não foi possível salvar a ordem de produção. Tente novamente.',
+    };
+  }
+}
+
+function serializeSupabaseError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    const anyErr = err as Error & {
+      code?: string;
+      details?: string;
+      hint?: string;
+    };
+    return {
+      name: err.name,
+      message: err.message,
+      code: anyErr.code,
+      details: anyErr.details,
+      hint: anyErr.hint,
+    };
+  }
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    return {
+      message: e.message,
+      code: e.code,
+      details: e.details,
+      hint: e.hint,
+      status: e.status,
+    };
+  }
+  return { raw: String(err) };
+}
+
+function formatEstoquePlanilhaResumo(q: Quantidade): string {
+  const parts: string[] = [];
+  if (q.caixas) parts.push(`${formatIntegerWithThousands(q.caixas)} cx`);
+  if (q.pacotes) parts.push(`${formatIntegerWithThousands(q.pacotes)} pct`);
+  if (q.unidades) parts.push(`${formatIntegerWithThousands(q.unidades)} un`);
+  if (q.kg) parts.push(`${formatNumberWithThousands(q.kg, { decimals: 2 })} kg`);
+  return parts.length > 0 ? parts.join(' · ') : '0';
+}
+
 export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
+  // Hints de FK explícitos: views (ex.: vw_dashboard_producao) podem gerar ambiguidade no PostgREST
+  // e retornar erro sem mensagem útil no cliente — ver postgrest#2277 / resource embedding disambiguation.
   const { data, error } = await supabase
     .from('ordens_producao')
     .select(`
       *,
-      produtos (
+      produtos!ordens_producao_produto_id_fkey (
         id,
         nome,
         unidade_padrao_id,
         package_units,
         box_units,
         unidades_assadeira,
-        unidades (nome_resumido)
+        unidades!produtos_unidade_padrao_id_fkey (nome_resumido)
       ),
-      pedidos (
+      pedidos!ordens_producao_pedido_id_fkey (
         cliente_id,
-        clientes (
-          nome_fantasia
-        )
+        clientes!pedidos_cliente_id_fkey (nome_fantasia)
       )
     `)
     .neq('status', 'concluido')
     .neq('status', 'cancelado');
 
   if (error) {
-    console.error('Erro ao buscar fila:', error);
+    console.error('Erro ao buscar fila:', serializeSupabaseError(error));
     return [];
   }
 
@@ -151,37 +353,46 @@ export async function getProductionQueue() {
     [key: string]: unknown;
   };
   const produtoIds = [...new Set(data.map((item: OrdemProducaoItem) => item.produto_id))];
-  
-  const { data: receitasVinculadas, error: receitasError } = await supabase
-    .from('produto_receitas')
-    .select(`
-      produto_id,
-      quantidade_por_produto,
-      receitas (
-        tipo,
-        ativo
-      )
-    `)
-    .in('produto_id', produtoIds)
-    .eq('ativo', true);
 
-  if (receitasError) {
-    console.error('Erro ao buscar receitas vinculadas:', receitasError);
-  }
-
-  // Criar mapa de produto_id -> receita_massa (filtrar apenas tipo massa e receita ativa)
   type ProdutoReceitaItem = {
     produto_id: string;
     quantidade_por_produto: number;
+    tipo?: string | null;
     receitas?: {
       tipo?: string;
       ativo?: boolean | null;
     } | null;
   };
+
+  let receitasVinculadas: ProdutoReceitaItem[] | null = null;
+  if (produtoIds.length > 0) {
+    // Hint explícito: evita ambiguidade com view vw_produtos_com_receitas (mesmo padrão da fila principal).
+    // Não selecionar produto_receitas.tipo: em bases sem migração multitipo a coluna não existe;
+    // isVinculoReceitaMassaAtiva usa receitas.tipo quando tipo do vínculo está ausente.
+    const { data: receitasData, error: receitasError } = await supabase
+      .from('produto_receitas')
+      .select(`
+        produto_id,
+        quantidade_por_produto,
+        receitas!produto_receitas_receita_id_fkey (
+          tipo,
+          ativo
+        )
+      `)
+      .in('produto_id', produtoIds)
+      .eq('ativo', true);
+
+    if (receitasError) {
+      console.error('Erro ao buscar receitas vinculadas:', serializeSupabaseError(receitasError));
+    } else {
+      receitasVinculadas = receitasData as unknown as ProdutoReceitaItem[];
+    }
+  }
+
+  // Criar mapa de produto_id -> receita_massa (filtrar apenas tipo massa e receita ativa)
   const receitasMap = new Map<string, { quantidade_por_produto: number }>();
   receitasVinculadas?.forEach((pr: ProdutoReceitaItem) => {
-    const receita = pr.receitas;
-    if (receita?.tipo === 'massa' && receita?.ativo !== false) {
+    if (isVinculoReceitaMassaAtiva(pr)) {
       receitasMap.set(pr.produto_id, {
         quantidade_por_produto: pr.quantidade_por_produto,
       });
@@ -215,67 +426,10 @@ export async function getProductionQueue() {
     });
   }
 
-  // Buscar logs de massa finalizados para calcular quantidade finalizada (qtd_saida)
-  // qtd_saida na etapa massa representa receitas batidas finalizadas
-  const { data: massaLogsFinalizados } = await supabase
-    .from('producao_etapas_log')
-    .select(`
-      id,
-      ordem_producao_id,
-      qtd_saida
-    `)
-    .eq('etapa', 'massa')
-    .not('fim', 'is', null) // Apenas logs finalizados
-    .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
+  // Massa "disponível para fermentação": soma das receitas batidas em todos os lotes (logs etapa massa).
+  // Não exige log de massa com fim preenchido — na prática os lotes são gravados com a etapa ainda aberta.
+  // Usa o mesmo agregado que receitasBatidasMap (abaixo na transformação).
 
-  // Criar mapa de ordem_producao_id -> quantidade finalizada de massa (em receitas)
-  type MassaLogFinalizadoItem = {
-    ordem_producao_id: string;
-    qtd_saida: number | null;
-  };
-  const qtdMassaFinalizadaMap = new Map<string, number>();
-  if (massaLogsFinalizados && Array.isArray(massaLogsFinalizados)) {
-    (massaLogsFinalizados as unknown as MassaLogFinalizadoItem[]).forEach((log) => {
-      // Agrupa por ordem_producao_id e soma qtd_saida (receitas finalizadas)
-      const currentTotal = qtdMassaFinalizadaMap.get(log.ordem_producao_id) || 0;
-      const qtdSaida = log.qtd_saida || 0;
-      qtdMassaFinalizadaMap.set(log.ordem_producao_id, currentTotal + qtdSaida);
-    });
-  }
-
-  // Buscar logs de fermentação para calcular receitas de fermentação executadas
-  const { data: fermentacaoLogs } = await supabase
-    .from('producao_etapas_log')
-    .select(`
-      id,
-      ordem_producao_id,
-      qtd_saida
-    `)
-    .eq('etapa', 'fermentacao')
-    .not('fim', 'is', null) // Apenas logs concluídos
-    .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
-
-  // Criar mapa de ordem_producao_id -> receitas de fermentação executadas
-  type FermentacaoLogItem = {
-    ordem_producao_id: string;
-    qtd_saida: number | null;
-  };
-  const receitasFermentacaoMap = new Map<string, number>();
-  fermentacaoLogs?.forEach((log: FermentacaoLogItem) => {
-    if (log.qtd_saida) {
-      // Buscar quantidade_por_produto do produto para converter unidades em receitas
-      const item = data.find((i: OrdemProducaoItem) => i.id === log.ordem_producao_id);
-      if (item) {
-        const receitaMassa = receitasMap.get(item.produto_id);
-        if (receitaMassa && receitaMassa.quantidade_por_produto > 0) {
-          const receitasFermentacao = log.qtd_saida / receitaMassa.quantidade_por_produto;
-          receitasFermentacaoMap.set(log.ordem_producao_id, receitasFermentacao);
-        }
-      }
-    }
-  });
-
-  // Transformar os dados para incluir receita_massa, receitas_batidas e receitas_fermentacao no formato esperado
   type OrdemProducaoWithProduto = OrdemProducaoItem & {
     produtos?: {
       nome?: string;
@@ -285,58 +439,469 @@ export async function getProductionQueue() {
       unidades?: { nome_resumido?: string } | null;
       [key: string]: unknown;
     } | null;
+    pedidos?: {
+      clientes?: { nome_fantasia?: string | null } | null;
+    } | null;
   };
+
+  const orderIds = data.map((item: OrdemProducaoItem) => item.id);
+
+  const { data: fermentacaoLogsAll } = await supabase
+    .from('producao_etapas_log')
+    .select('id, ordem_producao_id, qtd_saida, dados_qualidade, fim, inicio')
+    .eq('etapa', 'fermentacao')
+    .in('ordem_producao_id', orderIds);
+
+  const { data: fornoLogsComQualidade } = await supabase
+    .from('producao_etapas_log')
+    .select('ordem_producao_id, dados_qualidade')
+    .eq('etapa', 'entrada_forno')
+    .in('ordem_producao_id', orderIds);
+
+  type FornoEntradaRow = {
+    ordem_producao_id: string;
+    dados_qualidade: unknown;
+    qtd_saida: number | null;
+  };
+  const { data: fornoLogsTodasEntradas } = await supabase
+    .from('producao_etapas_log')
+    .select('ordem_producao_id, dados_qualidade, qtd_saida')
+    .eq('etapa', 'entrada_forno')
+    .in('ordem_producao_id', orderIds);
+
+  const fornoLogsByOrdem = new Map<string, FornoEntradaRow[]>();
+  for (const row of (fornoLogsTodasEntradas ?? []) as FornoEntradaRow[]) {
+    const list = fornoLogsByOrdem.get(row.ordem_producao_id) ?? [];
+    list.push(row);
+    fornoLogsByOrdem.set(row.ordem_producao_id, list);
+  }
+
+  const { data: saidaFornoLogsConcluidos } = await supabase
+    .from('producao_etapas_log')
+    .select('ordem_producao_id, dados_qualidade')
+    .eq('etapa', 'saida_forno')
+    .not('fim', 'is', null)
+    .in('ordem_producao_id', orderIds);
+
+  const saidaBandejasByOrdem = new Map<string, number>();
+  for (const row of saidaFornoLogsConcluidos ?? []) {
+    const dq = row.dados_qualidade as { bandejas?: number } | null;
+    const b = dq?.bandejas;
+    if (b != null && !Number.isNaN(Number(b))) {
+      const oid = row.ordem_producao_id as string;
+      saidaBandejasByOrdem.set(oid, (saidaBandejasByOrdem.get(oid) || 0) + Number(b));
+    }
+  }
+
+  const { data: entradaEmbalagemLogsConcluidos } = await supabase
+    .from('producao_etapas_log')
+    .select('ordem_producao_id, qtd_saida, dados_qualidade')
+    .eq('etapa', 'entrada_embalagem')
+    .not('fim', 'is', null)
+    .in('ordem_producao_id', orderIds);
+
+  const entradaEmbalagemLatasByOrdem = new Map<string, number>();
+  for (const row of entradaEmbalagemLogsConcluidos ?? []) {
+    const dq = row.dados_qualidade as { assadeiras?: number } | null;
+    let latas = 0;
+    if (row.qtd_saida != null && !Number.isNaN(Number(row.qtd_saida))) {
+      latas = Number(row.qtd_saida);
+    } else if (dq?.assadeiras != null && !Number.isNaN(Number(dq.assadeiras))) {
+      latas = Number(dq.assadeiras);
+    }
+    if (latas <= 0) continue;
+    const oid = row.ordem_producao_id as string;
+    entradaEmbalagemLatasByOrdem.set(oid, (entradaEmbalagemLatasByOrdem.get(oid) || 0) + latas);
+  }
+
+  // Buscar logs de fermentação concluídos (soma de todos os lotes por OP)
+  const { data: fermentacaoLogs } = await supabase
+    .from('producao_etapas_log')
+    .select('id, ordem_producao_id, qtd_saida, dados_qualidade')
+    .eq('etapa', 'fermentacao')
+    .not('fim', 'is', null)
+    .in('ordem_producao_id', orderIds);
+
+  type FermentacaoLogRow = {
+    id: string;
+    ordem_producao_id: string;
+    qtd_saida: number | null;
+    dados_qualidade: unknown;
+  };
+
+  /** Volume concluído na fermentação: LT se houver unidades_assadeira (+ assadeiras_lt preferencial); senão unidades (qtd_saida). */
+  const fermentacaoVolumeMap = new Map<string, number>();
+  const receitasFermentacaoMap = new Map<string, number>();
+  type CarrinhoFerm = { log_id: string; carrinho: string; latas: number };
+  const fermentacaoCarrinhosMap = new Map<string, CarrinhoFerm[]>();
+  fermentacaoLogs?.forEach((log: FermentacaoLogRow) => {
+    const ordemId = log.ordem_producao_id;
+    const row = data.find((i: OrdemProducaoItem) => i.id === ordemId) as OrdemProducaoWithProduto | undefined;
+    const ua = row?.produtos?.unidades_assadeira;
+    const uaNum = ua != null && Number(ua) > 0 ? Number(ua) : null;
+    const dq = log.dados_qualidade as { assadeiras_lt?: number; numero_carrinho?: string } | null | undefined;
+
+    let volume = 0;
+    if (uaNum != null) {
+      const lt = dq?.assadeiras_lt;
+      if (lt != null && !Number.isNaN(Number(lt))) {
+        volume = Number(lt);
+      } else if (log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
+        volume = Number(log.qtd_saida) / uaNum;
+      }
+    } else if (log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
+      volume = Number(log.qtd_saida);
+    }
+
+    fermentacaoVolumeMap.set(ordemId, (fermentacaoVolumeMap.get(ordemId) || 0) + volume);
+
+    const carrinho = dq?.numero_carrinho?.trim() || '—';
+    const entry: CarrinhoFerm = { log_id: log.id, carrinho, latas: volume };
+    const lista = fermentacaoCarrinhosMap.get(ordemId) || [];
+    lista.push(entry);
+    fermentacaoCarrinhosMap.set(ordemId, lista);
+
+    if (row && log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
+      const receitaMassa = receitasMap.get(row.produto_id);
+      if (receitaMassa && receitaMassa.quantidade_por_produto > 0) {
+        const rec = Number(log.qtd_saida) / receitaMassa.quantidade_por_produto;
+        receitasFermentacaoMap.set(ordemId, (receitasFermentacaoMap.get(ordemId) || 0) + rec);
+      }
+    }
+  });
+
+  const { data: fornoLogs } = await supabase
+    .from('producao_etapas_log')
+    .select('ordem_producao_id, qtd_saida')
+    .eq('etapa', 'entrada_forno')
+    .not('fim', 'is', null)
+    .in('ordem_producao_id', orderIds);
+
+  const fornoVolumeMap = new Map<string, number>();
+  fornoLogs?.forEach(
+    (log: { ordem_producao_id: string; qtd_saida: number | null }) => {
+      const ordemId = log.ordem_producao_id;
+      const row = data.find((i: OrdemProducaoItem) => i.id === ordemId) as OrdemProducaoWithProduto | undefined;
+      const uaNum =
+        row?.produtos?.unidades_assadeira != null && Number(row.produtos.unidades_assadeira) > 0
+          ? Number(row.produtos.unidades_assadeira)
+          : null;
+      let volume = 0;
+      if (uaNum != null && log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
+        volume = Number(log.qtd_saida) / uaNum;
+      } else if (log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
+        volume = Number(log.qtd_saida);
+      }
+      fornoVolumeMap.set(ordemId, (fornoVolumeMap.get(ordemId) || 0) + volume);
+    },
+  );
+
+  const estoquePorClienteProduto = new Map<string, EstoqueRecord>();
+  if (isGoogleServiceAccountConfigured()) {
+    try {
+      const todosEstoques = await estoqueService.obterTodosEstoques();
+      for (const r of todosEstoques) {
+        const k = `${String(r.cliente).trim().toLowerCase()}|${String(r.produto).trim().toLowerCase()}`;
+        estoquePorClienteProduto.set(k, r);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(serializeSupabaseError(e));
+      console.error('Estoque (planilha) indisponível ao montar a fila:', msg);
+    }
+  }
+
+  // Transformar os dados para incluir receita_massa, receitas_batidas e receitas_fermentacao no formato esperado
   const transformedData = (data as OrdemProducaoWithProduto[]).map((item) => {
     const produto = item.produtos;
     const receitaMassa = receitasMap.get(item.produto_id) || null;
     const receitasBatidas = receitasBatidasMap.get(item.id) || 0;
     const receitasFermentacao = receitasFermentacaoMap.get(item.id) || 0;
-    const qtdMassaFinalizada = qtdMassaFinalizadaMap.get(item.id) || null;
+    const fermentacao_volume_concluido = fermentacaoVolumeMap.get(item.id) || 0;
+    const forno_volume_concluido = fornoVolumeMap.get(item.id) || 0;
+    const fermentacao_carrinhos = fermentacaoCarrinhosMap.get(item.id) || [];
+    const qtdMassaFinalizada = receitasBatidas > 0 ? receitasBatidas : null;
 
     // Extrair nome_resumido do join com unidades
     const unidades = produto?.unidades as { nome_resumido?: string } | null;
     const unidadeNomeResumido = unidades?.nome_resumido || null;
 
+    const produtoJoinFaltando = produto == null;
+
+    const uaAntiga =
+      produto != null && typeof produto.unidades_lata_antiga === 'number'
+        ? produto.unidades_lata_antiga
+        : null;
+    const uaNova =
+      produto != null && typeof produto.unidades_lata_nova === 'number'
+        ? produto.unidades_lata_nova
+        : null;
+    const uaAssadeira =
+      produto != null && typeof produto.unidades_assadeira === 'number'
+        ? produto.unidades_assadeira
+        : null;
+
+    const productInfo: ProductConversionInfo = {
+      unidadeNomeResumido,
+      package_units: produto?.package_units ?? null,
+      box_units: produto?.box_units ?? null,
+      unidades_assadeira: uaAssadeira,
+      unidades_lata_antiga: uaAntiga ?? uaAssadeira,
+      unidades_lata_nova: uaNova,
+      receita_massa: receitaMassa ?? undefined,
+    };
+
+    const clienteNome =
+      item.pedidos?.clientes?.nome_fantasia?.trim() ?? '';
+    const nomeProduto = produto?.nome?.trim() ?? '';
+
+    let estoque_resumo: string | null = null;
+    let estoque_unidades_consumo = 0;
+
+    if (clienteNome && nomeProduto && !produtoJoinFaltando) {
+      const chaveEstoque = `${clienteNome.toLowerCase()}|${nomeProduto.toLowerCase()}`;
+      const est = estoquePorClienteProduto.get(chaveEstoque);
+      if (est) {
+        estoque_unidades_consumo = quantidadeEstoqueParaUnidadesConsumo(est.quantidade, productInfo);
+        estoque_resumo = formatEstoquePlanilhaResumo(est.quantidade);
+      }
+    }
+
+    const necessidadeConsumo = quantidadePlanejadaParaUnidadesConsumo(item.qtd_planejada, productInfo);
+    const aProduzirConsumo = Math.max(0, necessidadeConsumo - estoque_unidades_consumo);
+    const qtd_a_produzir_planejada = unidadesConsumoParaQuantidadePlanejada(
+      aProduzirConsumo,
+      productInfo,
+    );
+
+    const uaForDisp =
+      produto?.unidades_assadeira != null && Number(produto.unidades_assadeira) > 0
+        ? Number(produto.unidades_assadeira)
+        : null;
+
+    const carrinhos_disponiveis_forno = listCarrinhosDisponiveisForOrdemFromSnapshots(
+      item.id,
+      uaForDisp,
+      fermentacaoLogsAll ?? [],
+      fornoLogsComQualidade ?? [],
+    );
+
+    const forno_entrada_latas_total = sumLatasFromFornoLogRows(
+      fornoLogsByOrdem.get(item.id) ?? [],
+      uaForDisp,
+    );
+    const saida_forno_bandejas_total = saidaBandejasByOrdem.get(item.id) || 0;
+    const entrada_embalagem_latas_total = entradaEmbalagemLatasByOrdem.get(item.id) || 0;
+
     return {
       ...item,
+      produtoJoinFaltando,
       produtos: {
         ...produto,
-        nome: produto?.nome || 'Produto sem nome',
+        nome: produto?.nome || (produtoJoinFaltando ? 'Produto não encontrado' : 'Produto sem nome'),
         unidadeNomeResumido,
         receita_massa: receitaMassa,
       },
       receitas_batidas: receitasBatidas,
       receitas_fermentacao: receitasFermentacao,
+      fermentacao_volume_concluido,
+      forno_volume_concluido,
+      fermentacao_carrinhos,
+      carrinhos_disponiveis_forno,
+      forno_entrada_latas_total,
+      saida_forno_bandejas_total,
+      entrada_embalagem_latas_total,
       qtd_massa_finalizada: qtdMassaFinalizada,
+      estoque_resumo,
+      estoque_unidades_consumo,
+      qtd_a_produzir_planejada,
     };
   });
 
-  // Ordenação: data_producao (crescente, nulos por último) > prioridade (descendente) > created_at (crescente)
+  // Ordenação: ordem_planejamento (crescente, sem número por último) > data_producao > created_at
   type OrdemProducaoCompleta = OrdemProducaoWithProduto & {
     data_producao?: string | null;
-    prioridade?: number | null;
     created_at?: string | null;
+    ordem_planejamento?: number | null;
   };
   const sortedData = (transformedData as OrdemProducaoCompleta[]).sort((a, b) => {
-    // 1. Comparar data_producao (nulos vão para o final)
+    const oa = a.ordem_planejamento;
+    const ob = b.ordem_planejamento;
+    const na = oa == null || Number.isNaN(Number(oa)) ? Number.MAX_SAFE_INTEGER : Number(oa);
+    const nb = ob == null || Number.isNaN(Number(ob)) ? Number.MAX_SAFE_INTEGER : Number(ob);
+    if (na !== nb) return na - nb;
+
     const dataA = a.data_producao ? new Date(a.data_producao).getTime() : Number.MAX_SAFE_INTEGER;
     const dataB = b.data_producao ? new Date(b.data_producao).getTime() : Number.MAX_SAFE_INTEGER;
     if (dataA !== dataB) {
       return dataA - dataB;
     }
 
-    // 2. Comparar prioridade (urgentes primeiro - descendente)
-    const prioridadeA = a.prioridade ?? 0;
-    const prioridadeB = b.prioridade ?? 0;
-    if (prioridadeA !== prioridadeB) {
-      return prioridadeB - prioridadeA;
-    }
-
-    // 3. Comparar created_at (mais antigas primeiro - ascendente)
     const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
     const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
     return createdA - createdB;
   });
 
   return sortedData;
+}
+
+/** Opção devolvida ao autocomplete remoto (nova ordem / planejamento). */
+export type ProdutoAutocompleteOption = {
+  id: string;
+  label: string;
+  meta: Record<string, unknown>;
+};
+
+type ProdutoRowForAutocomplete = {
+  id: string;
+  nome: string;
+  codigo: string;
+  unidade_padrao_id: string | null;
+  package_units: number | null;
+  box_units: number | null;
+  unidades_assadeira: number | null;
+  unidades_lata_antiga: number | null;
+  unidades_lata_nova: number | null;
+  unidades: { nome_resumido: string } | null;
+};
+
+function sanitizeIlikeQuery(raw: string): string {
+  return raw.replace(/[%_\\,]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Valor entre aspas duplas para uso em `.or()` do PostgREST (vírgulas no texto). */
+function postgrestQuotedValue(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '""')}"`;
+}
+
+async function receitasMassaMapForProdutoIds(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  produtoIds: string[],
+): Promise<Map<string, { quantidade_por_produto: number }>> {
+  const map = new Map<string, { quantidade_por_produto: number }>();
+  if (produtoIds.length === 0) return map;
+
+  type ProdutoReceitaItem = {
+    produto_id: string;
+    quantidade_por_produto: number;
+    tipo?: string | null;
+    receitas?: { tipo?: string; ativo?: boolean | null } | null;
+  };
+
+  const { data: receitasData, error: receitasError } = await supabase
+    .from('produto_receitas')
+    .select(
+      `
+        produto_id,
+        quantidade_por_produto,
+        receitas!produto_receitas_receita_id_fkey (
+          tipo,
+          ativo
+        )
+      `,
+    )
+    .in('produto_id', produtoIds)
+    .eq('ativo', true);
+
+  if (receitasError) {
+    console.error('Erro ao buscar receitas (autocomplete produto):', serializeSupabaseError(receitasError));
+    return map;
+  }
+
+  (receitasData as unknown as ProdutoReceitaItem[] | null)?.forEach((pr) => {
+    if (!isVinculoReceitaMassaAtiva(pr)) return;
+    if (!map.has(pr.produto_id)) {
+      map.set(pr.produto_id, { quantidade_por_produto: pr.quantidade_por_produto });
+    }
+  });
+
+  return map;
+}
+
+function rowToAutocompleteOption(
+  row: ProdutoRowForAutocomplete,
+  receitasMap: Map<string, { quantidade_por_produto: number }>,
+): ProdutoAutocompleteOption {
+  const nomeResumido = row.unidades?.nome_resumido?.trim() ?? '';
+  const receita = receitasMap.get(row.id);
+  return {
+    id: row.id,
+    label: row.codigo ? `${row.nome} (${row.codigo})` : row.nome,
+    meta: {
+      unidadeNomeResumido: nomeResumido,
+      unidade_padrao_id: row.unidade_padrao_id,
+      package_units: row.package_units,
+      box_units: row.box_units,
+      unidades_assadeira: row.unidades_assadeira,
+      unidades_lata_antiga: row.unidades_lata_antiga,
+      unidades_lata_nova: row.unidades_lata_nova,
+      receita_massa: receita ?? null,
+    },
+  };
+}
+
+const PRODUTO_AUTOCOMPLETE_SELECT = `
+  id,
+  nome,
+  codigo,
+  unidade_padrao_id,
+  package_units,
+  box_units,
+  unidades_assadeira,
+  unidades_lata_antiga,
+  unidades_lata_nova,
+  unidades!produtos_unidade_padrao_id_fkey (nome_resumido)
+`;
+
+export async function searchProdutosParaAutocomplete(query: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const q = sanitizeIlikeQuery(query);
+  if (q.length < 1) {
+    return { success: true as const, options: [] as ProdutoAutocompleteOption[] };
+  }
+
+  const pattern = postgrestQuotedValue(`%${q}%`);
+  const { data, error } = await supabase
+    .from('produtos')
+    .select(PRODUTO_AUTOCOMPLETE_SELECT)
+    .eq('ativo', true)
+    .or(`nome.ilike.${pattern},codigo.ilike.${pattern}`)
+    .order('nome', { ascending: true })
+    .limit(25);
+
+  if (error) {
+    console.error('searchProdutosParaAutocomplete:', serializeSupabaseError(error));
+    return { success: false as const, options: [] as ProdutoAutocompleteOption[], error: 'Erro ao buscar produtos.' };
+  }
+
+  const rows = (data ?? []) as unknown as ProdutoRowForAutocomplete[];
+  const ids = rows.map((r) => r.id);
+  const receitasMap = await receitasMassaMapForProdutoIds(supabase, ids);
+  const options = rows.map((r) => rowToAutocompleteOption(r, receitasMap));
+  return { success: true as const, options };
+}
+
+export async function getProdutoAutocompleteOptionById(id: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  if (!id?.trim()) {
+    return { success: true as const, option: null as ProdutoAutocompleteOption | null };
+  }
+
+  const { data, error } = await supabase
+    .from('produtos')
+    .select(PRODUTO_AUTOCOMPLETE_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('getProdutoAutocompleteOptionById:', serializeSupabaseError(error));
+    return { success: false as const, option: null as ProdutoAutocompleteOption | null, error: 'Erro ao carregar produto.' };
+  }
+
+  if (!data) {
+    return { success: true as const, option: null as ProdutoAutocompleteOption | null };
+  }
+
+  const row = data as unknown as ProdutoRowForAutocomplete;
+  const receitasMap = await receitasMassaMapForProdutoIds(supabase, [row.id]);
+  return { success: true as const, option: rowToAutocompleteOption(row, receitasMap) };
 }

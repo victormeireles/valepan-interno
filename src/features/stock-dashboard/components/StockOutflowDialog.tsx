@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { Quantidade } from '@/domain/types/inventario';
 import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
 import PhotoUploader from '@/components/PhotoUploader';
+import DateInput from '@/components/FormControls/DateInput';
 import { getClientsForStockLocationAction } from '@/app/actions/stock-actions';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 interface StockOutflowDialogProps {
   isOpen: boolean;
@@ -29,14 +31,6 @@ type FormState = {
   quantidade: Quantidade;
 };
 
-const getTodayISO = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 const emptyQuantidade: Quantidade = {
   caixas: 0,
   pacotes: 0,
@@ -54,7 +48,7 @@ export function StockOutflowDialog({
   onSubmit,
 }: StockOutflowDialogProps) {
   const [formState, setFormState] = useState<FormState>({
-    data: getTodayISO(),
+    data: getTodayISOInBrazilTimezone(),
     clienteDestino: '',
     observacao: '',
     quantidade: emptyQuantidade,
@@ -87,7 +81,7 @@ export function StockOutflowDialog({
   useEffect(() => {
     if (isOpen) {
       setFormState({
-        data: getTodayISO(),
+        data: getTodayISOInBrazilTimezone(),
         clienteDestino: '',
         observacao: '',
         quantidade: emptyQuantidade,
@@ -276,21 +270,20 @@ export function StockOutflowDialog({
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="text-sm font-medium text-gray-700 space-y-2">
-                <span>Data da saída</span>
-                <input
-                  type="date"
+              <div className="space-y-2">
+                <DateInput
+                  label="Data da saída"
                   value={formState.data}
-                  onChange={(event) =>
+                  onChange={(v) =>
                     setFormState((prev) => ({
                       ...prev,
-                      data: event.target.value,
+                      data: v,
                     }))
                   }
-                  className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   required
+                  className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
-              </label>
+              </div>
 
               <label className="text-sm font-medium text-gray-700 space-y-2">
                 <span>Cliente destino</span>

@@ -1,7 +1,7 @@
-import { google } from 'googleapis';
+﻿import { google } from 'googleapis';
 import { Readable } from 'stream';
 
-// Configuração do Google Drive
+// ConfiguraÃ§Ã£o do Google Drive
 const GOOGLE_DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
 export interface PhotoUploadResult {
@@ -51,11 +51,11 @@ function generateFolderPath(): string {
 }
 
 /**
- * Cria ou obtém a pasta do dia atual
+ * Cria ou obtÃ©m a pasta do dia atual
  */
 async function ensureDateFolder(): Promise<string> {
   if (!GOOGLE_DRIVE_FOLDER_ID) {
-    throw new Error('GOOGLE_DRIVE_FOLDER_ID não configurado no .env.local');
+    throw new Error('GOOGLE_DRIVE_FOLDER_ID nÃ£o configurado no .env.local');
   }
   
   const drive = await getGoogleDriveClient();
@@ -64,7 +64,7 @@ async function ensureDateFolder(): Promise<string> {
   
   let currentFolderId = GOOGLE_DRIVE_FOLDER_ID;
   
-  // Navegar/criar cada nível da pasta
+  // Navegar/criar cada nÃ­vel da pasta
   for (const folderName of pathParts) {
     try {
       // Buscar pasta existente
@@ -78,7 +78,7 @@ async function ensureDateFolder(): Promise<string> {
       if (response.data.files && response.data.files.length > 0) {
         currentFolderId = response.data.files[0].id!;
       } else {
-        // Criar pasta se não existir
+        // Criar pasta se nÃ£o existir
         const folderResponse = await drive.files.create({
           requestBody: {
             name: folderName,
@@ -100,14 +100,14 @@ async function ensureDateFolder(): Promise<string> {
 }
 
 /**
- * Obtém cliente de autenticação do Google Drive
+ * ObtÃ©m cliente de autenticaÃ§Ã£o do Google Drive
  */
 async function getGoogleDriveAuth() {
   const clientEmail = process.env.GOOGLE_SA_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_SA_PRIVATE_KEY;
   
   if (!clientEmail || !privateKey) {
-    throw new Error('Credenciais da Service Account não configuradas');
+    throw new Error('Credenciais da Service Account nÃ£o configuradas');
   }
 
   const authClient = new google.auth.GoogleAuth({
@@ -125,7 +125,7 @@ async function getGoogleDriveAuth() {
 }
 
 /**
- * Obtém cliente do Google Drive
+ * ObtÃ©m cliente do Google Drive
  */
 export async function getGoogleDriveClient() {
   const auth = await getGoogleDriveAuth();
@@ -170,11 +170,11 @@ export async function uploadPhotoToDrive(
     });
     
     if (!response.data.id) {
-      throw new Error('Falha ao obter ID do arquivo após upload');
+      throw new Error('Falha ao obter ID do arquivo apÃ³s upload');
     }
     
-    // Não precisamos definir permissões públicas se a pasta pai já permite acesso
-    // O arquivo herdará as permissões da pasta pai (Shared Drive)
+    // NÃ£o precisamos definir permissÃµes pÃºblicas se a pasta pai jÃ¡ permite acesso
+    // O arquivo herdarÃ¡ as permissÃµes da pasta pai (Shared Drive)
     
     // Gerar URL no formato solicitado: https://drive.google.com/file/d/[ID_DO_ARQUIVO]/view
     const photoUrl = `https://drive.google.com/file/d/${response.data.id}/view`;
@@ -184,8 +184,9 @@ export async function uploadPhotoToDrive(
       photoId: response.data.id,
       fileName: finalFileName,
     };
-  } catch {
-    throw new Error('Falha ao fazer upload da foto para o Google Drive');
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Falha ao fazer upload da foto para o Google Drive: ${msg}`);
   }
 }
 
@@ -200,13 +201,14 @@ export async function deletePhotoFromDrive(photoId: string): Promise<void> {
       fileId: photoId,
       supportsAllDrives: true,
     });
-  } catch {
-    throw new Error('Falha ao deletar foto do Google Drive');
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Falha ao deletar foto do Google Drive: ${msg}`);
   }
 }
 
 /**
- * Obtém informações de uma foto
+ * ObtÃ©m informaÃ§Ãµes de uma foto
  */
 export async function getPhotoInfo(photoId: string): Promise<PhotoInfo | null> {
   try {
@@ -236,17 +238,17 @@ export async function getPhotoInfo(photoId: string): Promise<PhotoInfo | null> {
 }
 
 /**
- * Lista fotos de um período específico (para limpeza)
+ * Lista fotos de um perÃ­odo especÃ­fico (para limpeza)
  */
 export async function listPhotosInPeriod(startDate: Date, endDate: Date): Promise<PhotoInfo[]> {
   try {
     if (!GOOGLE_DRIVE_FOLDER_ID) {
-      throw new Error('GOOGLE_DRIVE_FOLDER_ID não configurado no .env.local');
+      throw new Error('GOOGLE_DRIVE_FOLDER_ID nÃ£o configurado no .env.local');
     }
     
     const drive = await getGoogleDriveClient();
     
-    // Buscar todas as pastas de data no período
+    // Buscar todas as pastas de data no perÃ­odo
     const yearMonth = `${startDate.getFullYear()}${String(startDate.getMonth() + 1).padStart(2, '0')}`;
     
     const response = await drive.files.list({
@@ -262,7 +264,7 @@ export async function listPhotosInPeriod(startDate: Date, endDate: Date): Promis
     
     const monthFolderId = response.data.files[0].id!;
     
-    // Buscar pastas de dias no mês
+    // Buscar pastas de dias no mÃªs
     const dayFoldersResponse = await drive.files.list({
       q: `'${monthFolderId}' in parents and mimeType='application/vnd.google-apps.folder'`,
       fields: 'files(id, name)',
@@ -299,3 +301,4 @@ export async function listPhotosInPeriod(startDate: Date, endDate: Date): Promis
     return [];
   }
 }
+

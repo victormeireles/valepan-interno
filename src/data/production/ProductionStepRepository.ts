@@ -34,6 +34,7 @@ type ProductionStepLogRow = {
   tempo_lenta: number | null;
   tempo_rapida: number | null;
   textura: string | null;
+  ph_massa: number | null;
 };
 
 type ProductionStepLogInsert = {
@@ -55,6 +56,7 @@ type ProductionStepLogInsert = {
   tempo_lenta?: number | null;
   tempo_rapida?: number | null;
   textura?: string | null;
+  ph_massa?: number | null;
 };
 
 type ProductionStepLogUpdate = {
@@ -72,6 +74,7 @@ type ProductionStepLogUpdate = {
   tempo_lenta?: number | null;
   tempo_rapida?: number | null;
   textura?: string | null;
+  ph_massa?: number | null;
 };
 
 export class ProductionStepRepository {
@@ -81,22 +84,6 @@ export class ProductionStepRepository {
    * Cria um novo log de etapa de produção
    */
   async create(input: CreateProductionStepLogInput): Promise<ProductionStepLog> {
-    console.log('[ProductionStepRepository.create] 🆕 CRIANDO NOVO REGISTRO em producao_etapas_log:', {
-      ordem_producao_id: input.ordem_producao_id,
-      etapa: input.etapa,
-      qtd_saida: input.qtd_saida,
-      usuario_id: input.usuario_id,
-      // Campos de massa (podem ser NULL na criação inicial)
-      receita_id: input.receita_id,
-      masseira_id: input.masseira_id,
-      receitas_batidas: input.receitas_batidas,
-      temperatura_final: input.temperatura_final,
-      tempo_lenta: input.tempo_lenta,
-      tempo_rapida: input.tempo_rapida,
-      textura: input.textura,
-      stack: new Error().stack?.split('\n').slice(1, 8).join('\n'), // Stack trace para identificar origem
-    });
-
     // Nota: Campos de massa são opcionais na criação do log de etapa.
     // Eles serão preenchidos quando um lote de massa for criado através do ProductionMassaManager.createLote.
     // A validação dos campos de massa acontece na camada de domínio quando o lote é criado/atualizado.
@@ -118,20 +105,8 @@ export class ProductionStepRepository {
       tempo_lenta: input.tempo_lenta !== undefined ? input.tempo_lenta : null,
       tempo_rapida: input.tempo_rapida !== undefined ? input.tempo_rapida : null,
       textura: input.textura || null,
+      ph_massa: input.ph_massa !== undefined ? input.ph_massa : null,
     };
-
-    console.log('[ProductionStepRepository.create] 📦 Dados que serão inseridos:', {
-      insertData: JSON.stringify(insertData, null, 2),
-      campos_massa: {
-        receita_id: insertData.receita_id,
-        masseira_id: insertData.masseira_id,
-        receitas_batidas: insertData.receitas_batidas,
-        temperatura_final: insertData.temperatura_final,
-        tempo_lenta: insertData.tempo_lenta,
-        tempo_rapida: insertData.tempo_rapida,
-        textura: insertData.textura,
-      },
-    });
 
     const { data, error } = await this.supabase
       .from('producao_etapas_log')
@@ -150,13 +125,6 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao criar log de etapa: ${error.message}`);
     }
 
-    console.log('[ProductionStepRepository.create] ✅ Registro criado com sucesso:', {
-      id: data.id,
-      ordem_producao_id: data.ordem_producao_id,
-      etapa: data.etapa,
-      qtd_saida: data.qtd_saida,
-    });
-
     return this.mapRowToDomain(data as unknown as ProductionStepLogRow);
   }
 
@@ -167,12 +135,6 @@ export class ProductionStepRepository {
     id: string,
     input: UpdateProductionStepLogInput,
   ): Promise<ProductionStepLog> {
-    console.log('[ProductionStepRepository.update] 🔄 ATUALIZANDO registro em producao_etapas_log:', {
-      id,
-      qtd_saida: input.qtd_saida,
-      stack: new Error().stack?.split('\n').slice(1, 5).join('\n'), // Stack trace para identificar origem
-    });
-
     const updateData: ProductionStepLogUpdate = {
       qtd_saida: input.qtd_saida,
       perda_qtd: input.perda_qtd,
@@ -187,6 +149,7 @@ export class ProductionStepRepository {
       tempo_lenta: input.tempo_lenta,
       tempo_rapida: input.tempo_rapida,
       textura: input.textura,
+      ph_massa: input.ph_massa,
     };
 
     // Remove campos undefined
@@ -208,11 +171,6 @@ export class ProductionStepRepository {
       throw new Error(`Erro ao atualizar log de etapa: ${error.message}`);
     }
 
-    console.log('[ProductionStepRepository.update] ✅ Registro atualizado com sucesso:', {
-      id: data.id,
-      qtd_saida: data.qtd_saida,
-    });
-
     return this.mapRowToDomain(data as unknown as ProductionStepLogRow);
   }
 
@@ -220,8 +178,6 @@ export class ProductionStepRepository {
    * Busca um log por ID
    */
   async findById(id: string): Promise<ProductionStepLog | null> {
-    console.log('[ProductionStepRepository] Buscando log de etapa:', { id });
-    
     try {
       const { data, error } = await this.supabase
         .from('producao_etapas_log')
@@ -240,7 +196,6 @@ export class ProductionStepRepository {
         throw new Error(`Erro ao buscar log: ${error.message}`);
       }
 
-      console.log('[ProductionStepRepository] Log encontrado:', { id, found: !!data });
       return data ? this.mapRowToDomain(data as unknown as ProductionStepLogRow) : null;
     } catch (err) {
       console.error('[ProductionStepRepository] Erro ao buscar log:', {
@@ -313,6 +268,16 @@ export class ProductionStepRepository {
   }
 
   /**
+   * Remove um log de etapa (ex.: exclusão de lote de massa após remover ingredientes)
+   */
+  async deleteById(id: string): Promise<void> {
+    const { error } = await this.supabase.from('producao_etapas_log').delete().eq('id', id);
+    if (error) {
+      throw new Error(`Erro ao excluir log de etapa: ${error.message}`);
+    }
+  }
+
+  /**
    * Busca a última etapa concluída de uma ordem
    */
   async findLastCompletedByOrderId(
@@ -358,6 +323,8 @@ export class ProductionStepRepository {
       tempo_lenta: row.tempo_lenta !== null && row.tempo_lenta !== undefined ? Number(row.tempo_lenta) : null,
       tempo_rapida: row.tempo_rapida !== null && row.tempo_rapida !== undefined ? Number(row.tempo_rapida) : null,
       textura: (row.textura === 'ok' || row.textura === 'rasga') ? row.textura : null,
+      ph_massa:
+        row.ph_massa !== null && row.ph_massa !== undefined ? Number(row.ph_massa) : null,
     };
   }
 }

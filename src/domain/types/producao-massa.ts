@@ -18,8 +18,11 @@ export interface MassaLote {
   textura: 'ok' | 'rasga' | null;
   tempo_lenta: number | null;
   tempo_rapida: number | null;
+  ph_massa?: number | null;
   usuario_id: string | null;
   created_at: string;
+  /** URLs de fotos anexadas ao log deste lote (Drive / produção). */
+  fotos?: string[];
   ingredientes?: MassaIngrediente[];
 }
 
@@ -48,6 +51,7 @@ export interface CreateMassaLoteInput {
   textura: 'ok' | 'rasga';
   tempo_lenta: number;
   tempo_rapida: number;
+  ph_massa?: number | null;
   usuario_id?: string;
   ingredientes: Array<{
     insumo_id: string;
@@ -66,6 +70,7 @@ export interface UpdateMassaLoteInput {
   textura?: 'ok' | 'rasga';
   tempo_lenta?: number;
   tempo_rapida?: number;
+  ph_massa?: number | null;
   ingredientes?: Array<{
     insumo_id: string;
     quantidade_padrao: number;

@@ -66,3 +66,62 @@ export function normalizeToISODate(value?: unknown): string {
   return getTodayISOInBrazilTimezone();
 }
 
+/**
+ * Formata data para exibição DD/MM/AAAA (aceita ISO date, datetime ou dd/mm/aaaa).
+ */
+export function formatIsoDateToDDMMYYYY(iso: string | null | undefined): string {
+  if (iso == null || String(iso).trim() === '') {
+    return '';
+  }
+  const str = String(iso).trim();
+  const head = str.slice(0, 10);
+  const isoMatch = head.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brMatch) {
+    return `${brMatch[1]}/${brMatch[2]}/${brMatch[3]}`;
+  }
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(parsed);
+  }
+  return '';
+}
+
+/**
+ * Interpreta texto digitado (dd/mm/aaaa ou yyyy-mm-dd) como ISO yyyy-mm-dd.
+ */
+export function parseDateInputToIsoBR(raw: string): string | null {
+  const str = raw.trim();
+  if (!str) {
+    return null;
+  }
+  const br = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) {
+    const dd = parseInt(br[1], 10);
+    const mm = parseInt(br[2], 10);
+    const yyyy = parseInt(br[3], 10);
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) {
+      return null;
+    }
+    const dt = new Date(yyyy, mm - 1, dd);
+    if (dt.getFullYear() !== yyyy || dt.getMonth() !== mm - 1 || dt.getDate() !== dd) {
+      return null;
+    }
+    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  }
+  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return iso[0];
+  }
+  return null;
+}
+

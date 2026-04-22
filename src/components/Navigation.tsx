@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import {
+  currentFilaStation,
+  filaUrlForProductionStep,
+  filaUrlForStation,
+  parseFilaDataQuery,
+} from '@/lib/production/production-station-routes';
 
 interface NavigationProps {
   hideHeader?: boolean;
@@ -15,6 +21,13 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
+
+  /** Na fila, `/producao/fila` sem query usa estação planejamento (igual a `page.tsx`). */
+  const filaStation = currentFilaStation(searchParams);
+  const filaDataPreserve = parseFilaDataQuery(searchParams.get('data'));
+  const filaOpts = filaDataPreserve ? { data: filaDataPreserve } : undefined;
+  const isFilaPlanejamentoActive =
+    pathname?.startsWith('/producao/fila') && filaStation === 'planejamento';
 
   // Listener para evento de toggle vindo de RealizadoHeader
   useEffect(() => {
@@ -330,6 +343,30 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   <span className="material-icons text-xl mr-3">category</span>
                   Receitas x Produto
                 </Link>
+                <Link
+                  href="/produtos/latas"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/produtos/latas')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">bakery_dining</span>
+                  Latas
+                </Link>
+                <Link
+                  href="/carrinhos"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname === '/carrinhos'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">shopping_cart</span>
+                  Carrinhos
+                </Link>
               </div>
 
               {/* Separador */}
@@ -341,10 +378,10 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   🏭 Fila de Produção
                 </h3>
                 <Link
-                  href="/producao/fila?station=planejamento"
+                  href={filaUrlForStation('planejamento', filaOpts)}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'planejamento'
+                    isFilaPlanejamentoActive
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
@@ -353,10 +390,10 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Planejamento
                 </Link>
                 <Link
-                  href="/producao/fila?station=massa"
+                  href={filaUrlForProductionStep('massa', filaOpts)}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'massa'
+                    pathname?.startsWith('/producao/fila') && filaStation === 'massa'
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
@@ -365,10 +402,10 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Massa
                 </Link>
                 <Link
-                  href="/producao/fila?station=fermentacao"
+                  href={filaUrlForProductionStep('fermentacao', filaOpts)}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'fermentacao'
+                    pathname?.startsWith('/producao/fila') && filaStation === 'fermentacao'
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
@@ -377,28 +414,52 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Fermentação
                 </Link>
                 <Link
-                  href="/producao/fila?station=forno"
+                  href={filaUrlForProductionStep('entrada_forno', filaOpts)}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'forno'
+                    pathname?.startsWith('/producao/fila') && filaStation === 'entrada_forno'
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
                   <span className="material-icons text-xl mr-3">local_fire_department</span>
-                  Forno
+                  Entrada do Forno
                 </Link>
                 <Link
-                  href="/producao/fila?station=embalagem"
+                  href={filaUrlForProductionStep('saida_forno', filaOpts)}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    pathname?.startsWith('/producao/fila') && searchParams?.get('station') === 'embalagem'
+                    pathname?.startsWith('/producao/fila') && filaStation === 'saida_forno'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">outbox</span>
+                  Saída do Forno
+                </Link>
+                <Link
+                  href={filaUrlForProductionStep('entrada_embalagem', filaOpts)}
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && filaStation === 'entrada_embalagem'
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
                   <span className="material-icons text-xl mr-3">inventory_2</span>
-                  Embalagem
+                  Entrada da Embalagem
+                </Link>
+                <Link
+                  href={filaUrlForProductionStep('saida_embalagem', filaOpts)}
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/fila') && filaStation === 'saida_embalagem'
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">local_shipping</span>
+                  Saída da Embalagem
                 </Link>
               </div>
             </div>

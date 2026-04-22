@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
 import EtiquetaModal from '@/components/EtiquetaModal';
+import DateInput from '@/components/FormControls/DateInput';
+import { formatIsoDateToDDMMYYYY, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 type PainelItem = {
   cliente: string;
@@ -69,50 +71,11 @@ function formatUnidade(u: PainelItem['unidade']): string {
 }
 
 
-function formatDateManual(dateString: string): string {
-  // Extrair dia e mês diretamente da string para evitar problemas de timezone
-  // Formato esperado: YYYY-MM-DD
-  const parts = dateString.split('-');
-  if (parts.length === 3) {
-    const [, month, day] = parts;
-    return `${day}/${month}`;
-  }
-  
-  // Fallback para outros formatos
-  const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `${day}/${month}`;
-}
-
-function formatDateFull(dateString: string): string {
-  // Extrair dia, mês e ano diretamente da string para evitar problemas de timezone
-  // Formato esperado: YYYY-MM-DD
-  const parts = dateString.split('-');
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${day}/${month}/${year}`;
-  }
-  
-  // Fallback para outros formatos
-  const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
-}
-
 export default function PedidoEmbalagemPage() {
   const [items, setItems] = useState<PainelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getTodayISOInBrazilTimezone());
   
   // Estados para edição
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -413,13 +376,15 @@ export default function PedidoEmbalagemPage() {
                 <label htmlFor="date-filter" className="text-gray-300 text-sm font-medium whitespace-nowrap">
                   Data:
                 </label>
-                <input
-                  id="date-filter"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="flex-1 sm:flex-none px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                />
+                <div id="date-filter" className="flex-1 sm:flex-none min-w-[9rem]">
+                  <DateInput
+                    hideLabel
+                    value={selectedDate}
+                    onChange={setSelectedDate}
+                    required
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500"
+                  />
+                </div>
               </div>
               
               <div className="text-gray-300 text-sm hidden sm:block">Atualiza automaticamente</div>
@@ -455,7 +420,7 @@ export default function PedidoEmbalagemPage() {
                     <div className="flex flex-wrap items-center gap-3 text-sm">
                       {dataDiferente && (
                         <div className="text-yellow-300">
-                          <span className="font-medium">Etiqueta:</span> {formatDateManual(dataFab)}
+                          <span className="font-medium">Etiqueta:</span> {formatIsoDateToDDMMYYYY(dataFab)}
                         </div>
                       )}
                       {observacao && (
@@ -562,7 +527,7 @@ export default function PedidoEmbalagemPage() {
         )}
 
         <footer className="mt-6 text-center text-gray-400 text-sm">
-          {Object.keys(groupedItems).length} grupos • {items.length} itens • {formatDateFull(selectedDate)}
+          {Object.keys(groupedItems).length} grupos • {items.length} itens • {formatIsoDateToDDMMYYYY(selectedDate)}
         </footer>
       </div>
 

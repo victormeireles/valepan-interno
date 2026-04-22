@@ -1,21 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  startProductionStep,
-  completeProductionStep,
-  getProductionStepLogs,
-  getInProgressStep,
-  getReceitasProduzidas,
-} from '@/app/actions/producao-etapas-actions';
+import { completeProductionStep, getProductionStepLogs, getReceitasProduzidas } from '@/app/actions/producao-etapas-actions';
+import { fermentacaoIniciarEFinalizar } from '@/lib/production/fermentacao-iniciar-e-finalizar';
 import { getQuantityByStation } from '@/lib/utils/production-conversions';
+import { sumQuantidadeFermentacaoConcluida } from '@/lib/utils/fermentacao-progresso';
+import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
 import { FermentacaoQualityData, ProductionStepLog } from '@/domain/types/producao-etapas';
+import FermentacaoProgressoBar from '@/components/Producao/FermentacaoProgressoBar';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
 import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
-import PhotoUploader from '@/components/PhotoUploader';
-import NumberDecimalInput from '@/components/FormControls/NumberDecimalInput';
+import NumberDecimalInput from '@/components/Producao/NumberDecimalInput';
+
+/** Padrão e teto para assadeiras na finalização da fermentação */
+const ASSADEIRAS_PRODUZIDAS_PADRAO = 20;
+const ASSADEIRAS_PRODUZIDAS_MAX = 20;
 
 interface FermentacaoStepClientProps {
   ordemProducao: {
@@ -42,47 +43,63 @@ export default function FermentacaoStepClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logEmAndamento, setLogEmAndamento] = useState<ProductionStepLog | null>(null);
-  const [assadeirasProduzidas, setAssadeirasProduzidas] = useState<number>(0);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [assadeirasProduzidas, setAssadeirasProduzidas] = useState<number>(
+    ASSADEIRAS_PRODUZIDAS_PADRAO,
+  );
   const [receitasMassa, setReceitasMassa] = useState<number>(0);
   const [receitasOP, setReceitasOP] = useState<number>(0);
+  const [numeroCarrinho, setNumeroCarrinho] = useState('');
+  const [stepLogs, setStepLogs] = useState<ProductionStepLog[]>([]);
 
-  // Carregar logs e verificar se há etapa fermentação em andamento
-  useEffect(() => {
-    const loadData = async () => {
-      const logsResult = await getProductionStepLogs(ordemProducao.id);
-      if (logsResult.success && logsResult.data) {
-        // Verificar se há log de fermentação em andamento
-        const inProgressResult = await getInProgressStep(ordemProducao.id);
-        if (inProgressResult.success && inProgressResult.data) {
-          const logData: ProductionStepLog = inProgressResult.data;
-          setLogEmAndamento(logData);
-          // Input sempre inicia vazio (zero)
-          setAssadeirasProduzidas(0);
+  const loadData = useCallback(async () => {
+    const logsResult = await getProductionStepLogs(ordemProducao.id);
+    if (logsResult.success && logsResult.data) {
+      const data = logsResult.data;
+      setStepLogs(data);
+      const fermAberto = data.find((l) => l.fim === null && l.etapa === 'fermentacao');
+      if (fermAberto) {
+        setLogEmAndamento(fermAberto);
+        setAssadeirasProduzidas(ASSADEIRAS_PRODUZIDAS_PADRAO);
+        const dq = fermAberto.dados_qualidade;
+        if (dq && typeof dq === 'object' && 'numero_carrinho' in dq) {
+          const nc = (dq as FermentacaoQualityData).numero_carrinho;
+          if (nc != null && String(nc).trim() !== '') {
+            setNumeroCarrinho(String(nc).trim());
+          } else {
+            setNumeroCarrinho('');
+          }
         } else {
-          setLogEmAndamento(null);
-          setAssadeirasProduzidas(0);
+          setNumeroCarrinho('');
         }
+      } else {
+        setLogEmAndamento(null);
+        setAssadeirasProduzidas(ASSADEIRAS_PRODUZIDAS_PADRAO);
+        setNumeroCarrinho('');
       }
+    } else {
+      setStepLogs([]);
+      setLogEmAndamento(null);
+      setAssadeirasProduzidas(ASSADEIRAS_PRODUZIDAS_PADRAO);
+      setNumeroCarrinho('');
+    }
 
-      // Buscar receitas produzidas
-      const receitasResult = await getReceitasProduzidas(ordemProducao.id);
-      if (receitasResult.success && receitasResult.data) {
-        setReceitasMassa(receitasResult.data.receitasMassa);
-      }
+    const receitasResult = await getReceitasProduzidas(ordemProducao.id);
+    if (receitasResult.success && receitasResult.data) {
+      setReceitasMassa(receitasResult.data.receitasMassa);
+    }
 
-      // Calcular receitas necessárias da OP
-      const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
-        unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
-        unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
-        box_units: ordemProducao.produto.box_units || null,
-        receita_massa: ordemProducao.produto.receita_massa,
-      });
-      setReceitasOP(quantityInfo.receitas?.value || 0);
-    };
-
-    loadData();
+    const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
+      unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
+      unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
+      box_units: ordemProducao.produto.box_units || null,
+      receita_massa: ordemProducao.produto.receita_massa,
+    });
+    setReceitasOP(quantityInfo.receitas?.value || 0);
   }, [ordemProducao.id, ordemProducao.qtd_planejada, ordemProducao.produto]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // Calcular quantidade de saída em unidades (a partir das assadeiras produzidas)
   const calcularQtdSaidaUnidades = () => {
@@ -112,49 +129,30 @@ export default function FermentacaoStepClient({
     return assadeiras;
   };
 
-  // Formatar número de receitas: se for inteiro, mostrar sem decimais; senão, mostrar com 1 casa decimal
   const formatarReceita = (valor: number): string => {
-    // Verificar se a parte decimal é significativa (não é .0)
     const parteDecimal = Math.abs(valor % 1);
     if (parteDecimal < 0.001) {
-      // É efetivamente um inteiro, mostrar sem decimais
-      return Math.round(valor).toString();
+      return Math.round(valor).toLocaleString('pt-BR');
     }
-    // Tem parte decimal significativa, mostrar com 1 casa decimal
-    return valor.toFixed(1);
+    return formatReceitasBatidasDisplay(valor);
   };
 
-  const handleStart = async () => {
+  const handleIniciarEFinalizar = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
-      // Iniciar etapa de fermentação
-      const result = await startProductionStep({
-        ordem_producao_id: ordemProducao.id,
-        etapa: 'fermentacao',
-        qtd_saida: 0, // Será atualizado quando finalizar
-        dados_qualidade: {},
+      const r = await fermentacaoIniciarEFinalizar({
+        ordemProducaoId: ordemProducao.id,
+        numeroCarrinho,
+        assadeirasProduzidas: assadeirasProduzidas,
+        unidadesAssadeira: ordemProducao.produto.unidades_assadeira,
       });
-
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Erro ao iniciar fermentação');
+      if (!r.success) {
+        setError(r.error);
+        return;
       }
-
-      // Recarregar dados após iniciar
-      const logsResult = await getProductionStepLogs(ordemProducao.id);
-      if (logsResult.success && logsResult.data) {
-        const inProgressResult = await getInProgressStep(ordemProducao.id);
-        if (inProgressResult.success && inProgressResult.data) {
-          setLogEmAndamento(inProgressResult.data);
-        } else {
-          setLogEmAndamento(result.data);
-        }
-      } else {
-        setLogEmAndamento(result.data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao iniciar fermentação');
+      router.refresh();
     } finally {
       setLoading(false);
     }
@@ -170,46 +168,28 @@ export default function FermentacaoStepClient({
         throw new Error('Log de fermentação não encontrado');
       }
 
-      // Upload de foto (obrigatória)
-      if (!photoFile) {
-        throw new Error('Foto é obrigatória para finalizar a fermentação');
+      const carrinhoTrim = numeroCarrinho.trim();
+      if (!carrinhoTrim) {
+        throw new Error('Informe o número do carrinho.');
       }
 
-      const formData = new FormData();
-      formData.append('photo', photoFile);
-      formData.append('etapa', 'fermentacao');
-      formData.append('ordemProducaoId', ordemProducao.id);
-
-      const uploadRes = await fetch('/api/upload/producao-photo', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error('Erro ao fazer upload da foto');
-      }
-
-      const uploadData = await uploadRes.json();
-      const photoUrl = uploadData.photoUrl;
-
-      // Preparar dados de qualidade
       const dadosQualidade: FermentacaoQualityData = {
         observacoes: '',
+        numero_carrinho: carrinhoTrim,
+        assadeiras_lt: assadeirasProduzidas,
       };
 
-      // Finalizar etapa
       const result = await completeProductionStep({
         log_id: logEmAndamento.id,
         qtd_saida: calcularQtdSaidaUnidades(),
         dados_qualidade: dadosQualidade,
-        fotos: [photoUrl],
+        fotos: [],
       });
 
       if (!result.success) {
         throw new Error(result.error || 'Erro ao finalizar fermentação');
       }
 
-      router.push('/producao/fila?station=fermentacao');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar fermentação');
@@ -219,147 +199,153 @@ export default function FermentacaoStepClient({
   };
 
   const demandaAssadeiras = calcularDemandaAssadeiras();
-  const unidadesAssadeira = ordemProducao.produto.unidades_assadeira || 1;
+  const unidadesPorLt =
+    ordemProducao.produto.unidades_assadeira != null &&
+    ordemProducao.produto.unidades_assadeira > 0
+      ? ordemProducao.produto.unidades_assadeira
+      : null;
+  const unidadeOpLabel = ordemProducao.produto.unidadeNomeResumido?.trim() || 'un';
   const assadeirasDeReceitas = calcularAssadeirasDeReceitas();
 
-  // Se não há log em andamento, mostrar botão para iniciar
-  if (!logEmAndamento) {
-    return (
-      <ProductionStepLayout
-        etapaNome="Fermentação"
-        loteCodigo={ordemProducao.lote_codigo}
-        produtoNome={ordemProducao.produto.nome}
-      >
-        {/* Informação da demanda total */}
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-          <div>
-            <p className="text-sm font-semibold text-blue-900 mb-1">
-              Demanda Total da OP:
-            </p>
+  const qtdPorReceita = ordemProducao.produto.receita_massa?.quantidade_por_produto ?? 0;
+  const massaQuantidade =
+    unidadesPorLt != null && qtdPorReceita > 0
+      ? (receitasMassa * qtdPorReceita) / unidadesPorLt
+      : qtdPorReceita > 0
+        ? receitasMassa * qtdPorReceita
+        : 0;
+  const fermentacaoQuantidade = sumQuantidadeFermentacaoConcluida(stepLogs, unidadesPorLt);
+  const metaQuantidade = demandaAssadeiras;
+
+  const barraProgresso = (
+    <FermentacaoProgressoBar
+      meta={metaQuantidade}
+      massa={massaQuantidade}
+      fermentacao={fermentacaoQuantidade}
+      unidadeCurta={unidadesPorLt != null ? 'LT' : 'un'}
+      unidadesPorAssadeira={unidadesPorLt}
+    />
+  );
+
+  const painelDemandaFermentacao = (
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+      {receitasMassa > 0 && receitasOP > 0 && (
+        <div className="pb-2 border-b border-blue-200 space-y-1">
+          <p className="text-sm font-semibold text-blue-900">A partir da massa (o que já foi batido)</p>
+          <p className="text-sm text-blue-800">
+            {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} receitas
+            {ordemProducao.produto.receita_massa?.quantidade_por_produto ? (
+              <>
+                {' '}
+                — aprox.{' '}
+                <strong>
+                  {unidadesPorLt != null
+                    ? `${assadeirasDeReceitas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ ${unidadesPorLt}`
+                    : `${Math.round(receitasMassa * ordemProducao.produto.receita_massa.quantidade_por_produto).toLocaleString('pt-BR')} un`}
+                </strong>
+              </>
+            ) : null}
+          </p>
+        </div>
+      )}
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-blue-900">Demanda total da ordem</p>
+        <p className="text-xs text-blue-800/90 leading-relaxed">
+          Usa a <strong>quantidade planejada da OP inteira</strong> (
+          {ordemProducao.qtd_planejada.toLocaleString('pt-BR')} {unidadeOpLabel}), não o volume do último lote
+          de massa. Por isso esse número pode ser muito maior que as receitas que você acabou de bater.
+        </p>
+        {unidadesPorLt != null ? (
+          <p className="text-lg font-bold text-blue-900">
+            {demandaAssadeiras.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ {unidadesPorLt}
+          </p>
+        ) : (
+          <>
             <p className="text-lg font-bold text-blue-900">
-              {demandaAssadeiras.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ {unidadesAssadeira}
+              {Math.round(demandaAssadeiras).toLocaleString('pt-BR')} un
             </p>
-          </div>
-          {receitasMassa > 0 && receitasOP > 0 && (
-            <div className="pt-2 border-t border-blue-200">
-              <p className="text-sm font-semibold text-blue-900 mb-1">
-                Receitas já produzidas:
-              </p>
-              <p className="text-sm text-blue-800">
-                {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} - aprox.{' '}
-                <strong>{Math.round(assadeirasDeReceitas).toLocaleString('pt-BR')} LT c/ {unidadesAssadeira}</strong>
-              </p>
-            </div>
-          )}
-        </div>
+            <p className="text-xs text-blue-800 leading-relaxed">
+              Sem &quot;unidades por assadeira&quot; no cadastro do produto, o sistema mostra a demanda em unidades.
+              O valor acima são unidades (não são latas).
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
-        <ProductionErrorAlert error={error} />
+  const onSubmitForm = logEmAndamento ? handleComplete : handleIniciarEFinalizar;
 
-        <div className="pt-4">
-          <button
-            type="button"
-            onClick={handleStart}
-            className="w-full px-6 py-3.5 text-white bg-gray-900 rounded-xl font-semibold shadow-lg shadow-gray-900/20 hover:bg-black hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-2"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Iniciando...</span>
-              </>
-            ) : (
-              <>
-                <span>Iniciar Fermentação</span>
-                <span className="material-icons text-sm">play_arrow</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="pt-4">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="w-full px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-200 transition-all"
-          >
-            Voltar
-          </button>
-        </div>
-      </ProductionStepLayout>
-    );
-  }
-
-  // Se há log em andamento, mostrar formulário para finalizar
   return (
     <ProductionStepLayout
       etapaNome="Fermentação"
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
     >
-      {/* Informação da demanda total */}
-      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-        <div>
-          <p className="text-sm font-semibold text-blue-900 mb-1">
-            Demanda Total da OP:
-          </p>
-          <p className="text-lg font-bold text-blue-900">
-            {demandaAssadeiras.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ {unidadesAssadeira}
-          </p>
-        </div>
-        {receitasMassa > 0 && receitasOP > 0 && (
-          <div className="pt-2 border-t border-blue-200">
-            <p className="text-sm font-semibold text-blue-900 mb-1">
-              Receitas já produzidas:
-            </p>
-            <p className="text-sm text-blue-800">
-              {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} - aprox.{' '}
-              <strong>{Math.round(assadeirasDeReceitas).toLocaleString('pt-BR')} LT c/ {unidadesAssadeira}</strong>
-            </p>
-          </div>
-        )}
+      <div className="space-y-4">
+        {barraProgresso}
+        {painelDemandaFermentacao}
       </div>
 
-      <form onSubmit={handleComplete} className="space-y-6">
+      <form onSubmit={onSubmitForm} className="space-y-6">
         <ProductionErrorAlert error={error} />
 
-        {/* Quantidade de Assadeiras Produzidas */}
         <div className="space-y-1.5">
-          <NumberDecimalInput
-            label="Quantidade de Assadeiras Produzidas"
-            value={assadeirasProduzidas}
-            onChange={(value) => setAssadeirasProduzidas(Math.round(value))}
-            min={0}
-            step={1}
-            placeholder="0"
+          <label className="text-sm font-semibold text-gray-700 ml-1" htmlFor="numero-carrinho-fermentacao">
+            Número do carrinho *
+          </label>
+          <input
+            id="numero-carrinho-fermentacao"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={numeroCarrinho}
+            onChange={(e) => setNumeroCarrinho(e.target.value)}
+            placeholder="ex.: 12"
             required
+            className="w-full max-w-xs px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
           />
+          <p className="text-xs text-gray-500 ml-1">Carrinho onde a massa está fermentando.</p>
         </div>
 
-        {/* Foto Obrigatória */}
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-gray-700 ml-1">
-            Foto da Assadeira (Obrigatória) *
-          </label>
-          <PhotoUploader
-            onPhotoSelect={setPhotoFile}
-            onPhotoRemove={() => setPhotoFile(null)}
-            loading={loading}
+          <NumberDecimalInput
+            label="Quantidade de assadeiras produzidas"
+            value={assadeirasProduzidas}
+            onChange={(value) => {
+              const v = Math.round(value);
+              setAssadeirasProduzidas(
+                Math.min(ASSADEIRAS_PRODUZIDAS_MAX, Math.max(0, v)),
+              );
+            }}
+            min={0}
+            max={ASSADEIRAS_PRODUZIDAS_MAX}
+            step={1}
+            placeholder={String(ASSADEIRAS_PRODUZIDAS_PADRAO)}
+            required
           />
-          {!photoFile && (
-            <p className="text-sm text-amber-600 ml-1 flex items-center gap-1">
-              <span className="material-icons text-sm">warning</span>
-              Foto é obrigatória para controle de qualidade
-            </p>
-          )}
+          <p className="text-xs text-gray-500 ml-1">
+            Padrão {ASSADEIRAS_PRODUZIDAS_PADRAO} assadeiras; máximo {ASSADEIRAS_PRODUZIDAS_MAX}.
+            {!logEmAndamento && (
+              <span className="block mt-1 text-gray-600">
+                Regista de uma vez o carrinho e as assadeiras (início e conclusão do lote).
+              </span>
+            )}
+          </p>
         </div>
 
         <ProductionFormActions
           onCancel={() => router.back()}
-          submitLabel="Finalizar Fermentação"
+          submitLabel={logEmAndamento ? 'Finalizar fermentação' : 'Registar fermentação'}
           cancelLabel="Voltar"
           loading={loading}
-          disabled={!photoFile || assadeirasProduzidas <= 0}
+          disabled={assadeirasProduzidas <= 0 || !numeroCarrinho.trim()}
         />
+        {!loading && (!numeroCarrinho.trim() || assadeirasProduzidas <= 0) && (
+          <p className="text-xs text-gray-500 text-center">
+            Preencha o número do carrinho e a quantidade de assadeiras para continuar.
+          </p>
+        )}
       </form>
     </ProductionStepLayout>
   );

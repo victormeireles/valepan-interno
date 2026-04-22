@@ -53,6 +53,7 @@ export class ProductionMassaManager {
       tempo_lenta: input.tempo_lenta,
       tempo_rapida: input.tempo_rapida,
       textura: input.textura,
+      ph_massa: input.ph_massa ?? null,
     });
 
     console.log('[ProductionMassaManager.createLote] ✅ Lote atualizado no log:', { log_id: updatedLog.id });
@@ -97,6 +98,7 @@ export class ProductionMassaManager {
       tempo_lenta: input.tempo_lenta,
       tempo_rapida: input.tempo_rapida,
       textura: input.textura,
+      ph_massa: input.ph_massa ?? null,
     };
 
     const updatedLog = await this.stepRepository.update(etapasLogId, updateData);
@@ -131,18 +133,22 @@ export class ProductionMassaManager {
     
     // Busca todos os logs de etapa massa (não apenas o último)
     const logs = await this.stepRepository.findByOrderId(ordemProducaoId);
-    const logsMassa = logs.filter(log => log.etapa === 'massa');
-    
-    console.log('[ProductionMassaManager] Logs de massa encontrados:', logsMassa.length);
-    
-    if (logsMassa.length === 0) {
+    const logsMassa = logs.filter((log) => log.etapa === 'massa');
+    /** Logs de massa já gravados como lote (createMassaLote define receita_id). Ignora stubs sem receita. */
+    const logsMassaComLote = logsMassa.filter(
+      (log) => log.receita_id != null && String(log.receita_id).trim() !== '',
+    );
+
+    console.log('[ProductionMassaManager] Logs de massa encontrados:', logsMassaComLote.length);
+
+    if (logsMassaComLote.length === 0) {
       console.log('[ProductionMassaManager] Nenhum log de massa encontrado');
       return [];
     }
 
     // Busca ingredientes para cada log de massa e converte para MassaLote
     const todosLotes: MassaLote[] = [];
-    for (const log of logsMassa) {
+    for (const log of logsMassaComLote) {
       console.log('[ProductionMassaManager] Buscando ingredientes para log:', log.id);
       const ingredientes = await this.ingredienteRepository.findByLoteId(log.id);
       console.log('[ProductionMassaManager] Ingredientes encontrados para log', log.id, ':', ingredientes.length);
@@ -168,23 +174,8 @@ export class ProductionMassaManager {
       throw new Error('Log de etapa deve ser do tipo massa');
     }
 
-    // Deleta ingredientes (cascade já faz isso, mas garantimos)
     await this.ingredienteRepository.deleteByLoteId(etapasLogId);
-
-    // Deleta o log de etapa (que agora é o "lote")
-    // Nota: Pode ser necessário apenas limpar os campos de massa ao invés de deletar
-    // Por enquanto, vamos apenas limpar os campos de massa
-    await this.stepRepository.update(etapasLogId, {
-      receita_id: null,
-      masseira_id: null,
-      receitas_batidas: null,
-      temperatura_final: null,
-      tempo_lenta: null,
-      tempo_rapida: null,
-      textura: null,
-    });
-
-    // Atualiza qtd_saida do log de etapa
+    await this.stepRepository.deleteById(etapasLogId);
     await this.updateEtapaLogQuantidade(log.ordem_producao_id);
   }
 
@@ -219,25 +210,28 @@ export class ProductionMassaManager {
     
     // Busca todos os logs de etapa massa
     const logs = await this.stepRepository.findByOrderId(ordemProducaoId);
-    const logsMassa = logs.filter(log => log.etapa === 'massa');
-    
-    if (logsMassa.length === 0) {
+    const logsMassa = logs.filter((log) => log.etapa === 'massa');
+    const logsMassaComLote = logsMassa.filter(
+      (log) => log.receita_id != null && String(log.receita_id).trim() !== '',
+    );
+
+    if (logsMassaComLote.length === 0) {
       console.log('[ProductionMassaManager.updateEtapaLogQuantidade] ⚠️ Nenhum log de massa encontrado');
       return;
     }
 
     // Soma receitas batidas de todos os logs de massa
-    const totalReceitas = logsMassa.reduce((sum, log) => {
+    const totalReceitas = logsMassaComLote.reduce((sum, log) => {
       return sum + (log.receitas_batidas || 0);
     }, 0);
 
     console.log('[ProductionMassaManager.updateEtapaLogQuantidade] 📊 Calculando total:', {
-      total_logs: logsMassa.length,
+      total_logs: logsMassaComLote.length,
       total_receitas: totalReceitas,
     });
 
     // Atualiza o último log de massa com o total
-    const ultimoLog = logsMassa[logsMassa.length - 1];
+    const ultimoLog = logsMassaComLote[logsMassaComLote.length - 1];
     console.log('[ProductionMassaManager.updateEtapaLogQuantidade] 🔄 Chamando stepRepository.update...');
     await this.stepRepository.update(ultimoLog.id, {
       qtd_saida: totalReceitas,
@@ -259,8 +253,10 @@ export class ProductionMassaManager {
       textura: log.textura || null,
       tempo_lenta: log.tempo_lenta || null,
       tempo_rapida: log.tempo_rapida || null,
+      ph_massa: log.ph_massa ?? null,
       usuario_id: log.usuario_id,
       created_at: log.inicio,
+      fotos: log.fotos ?? [],
       ingredientes,
     };
   }

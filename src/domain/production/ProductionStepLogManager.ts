@@ -6,6 +6,7 @@
 import { ProductionStepRepository } from '@/data/production/ProductionStepRepository';
 import { ProductionOrderRepository } from '@/data/production/ProductionOrderRepository';
 import {
+  ProductionStep,
   ProductionStepLog,
   CreateProductionStepLogInput,
   UpdateProductionStepLogInput,
@@ -27,15 +28,10 @@ export class ProductionStepLogManager {
       throw new Error('Ordem de produção não encontrada');
     }
 
-    // Verifica se já existe uma etapa em andamento
     const logs = await this.stepRepository.findByOrderId(input.ordem_producao_id);
-    const etapaEmAndamento = logs.find((log) => log.fim === null);
-    
-    if (etapaEmAndamento) {
-      throw new Error(
-        `Já existe uma etapa em andamento: ${etapaEmAndamento.etapa}. Finalize a etapa atual antes de iniciar uma nova.`,
-      );
-    }
+    const emAndamento = logs.filter((log) => log.fim === null);
+
+    this.assertCanStartStep(input.etapa, emAndamento);
 
     // Cria o log de etapa
     const log = await this.stepRepository.create(input);
@@ -70,5 +66,20 @@ export class ProductionStepLogManager {
     const updatedLog = await this.stepRepository.update(logId, updateData);
 
     return updatedLog;
+  }
+
+  /**
+   * Concorrência entre etapas da mesma ordem.
+   *
+   * O fluxo é orientado a **quantidades** (receitas de massa, latas, bandejas, etc.):
+   * é normal ter massa ainda “em aberto” (ex.: 5 de 10 receitas usadas) enquanto parte
+   * do produto já segue em fermentação ou forno. Por isso **não** bloqueamos o início
+   * de uma etapa só porque existe outro log sem `fim`.
+   *
+   * Coerência (teto de latas na fermentação vs entrada no forno, etc.) continua sendo
+   * garantida nas validações específicas de cada etapa (telas, actions, utilitários).
+   */
+  private assertCanStartStep(_etapa: ProductionStep, _emAndamento: ProductionStepLog[]): void {
+    /* política: não serializar etapas; ver docstring da classe acima */
   }
 }

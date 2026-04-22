@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -23,6 +28,29 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/*
+  Campos de formulário: o texto não pode herdar --foreground em dark mode (claro)
+  sobre o fundo claro padrão do navegador — fica quase ilegível ao digitar.
+*/
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="color"]),
+textarea,
+select {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="color"])::placeholder,
+textarea::placeholder {
+  color: #64748b;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="color"]):disabled,
+textarea:disabled,
+select:disabled {
+  color: #475569;
+  background-color: #f1f5f9;
 }
 
 svg {

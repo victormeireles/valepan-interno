@@ -13,11 +13,18 @@ export class AccessDeniedError extends Error {
   }
 }
 
+/** Evita chamar a API do Google quando as variáveis de ambiente não estão definidas (ex.: dev local). */
+export function isGoogleServiceAccountConfigured(): boolean {
+  const clientEmail = process.env.GOOGLE_SA_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.GOOGLE_SA_PRIVATE_KEY?.trim();
+  return !!(clientEmail && privateKey);
+}
+
 // Função para autenticar com Google Sheets usando Service Account
 export async function getGoogleSheetsClient() {
   const clientEmail = process.env.GOOGLE_SA_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_SA_PRIVATE_KEY;
-  
+
   if (!clientEmail || !privateKey) {
     throw new Error('Credenciais da Service Account não configuradas');
   }

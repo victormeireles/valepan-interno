@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { SaidaQuantidade } from '@/domain/types/saidas';
 import PhotoUploader from '@/components/PhotoUploader';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
+import DateInput from '@/components/FormControls/DateInput';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 interface NovaSaidaModalProps {
   isOpen: boolean;
@@ -33,16 +35,8 @@ type PhotoState = {
   file: File | null;
 };
 
-function getTodayISO(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 const DEFAULT_STATE: FormState = {
-  data: getTodayISO(),
+  data: getTodayISOInBrazilTimezone(),
   cliente: '',
   produto: '',
   observacao: '',
@@ -90,7 +84,7 @@ export default function NovaSaidaModal({
       setAnimating(true);
       setFormState({
         ...DEFAULT_STATE,
-        data: getTodayISO(),
+        data: getTodayISOInBrazilTimezone(),
       });
       setPhotoState(DEFAULT_PHOTO);
       setMessage(null);
@@ -270,15 +264,12 @@ export default function NovaSaidaModal({
 
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700 ml-1">Data da Saída</label>
-                  <input
-                    type="date"
+                  <DateInput
+                    label="Data da Saída"
                     value={formState.data}
-                    onChange={(event) =>
-                      setFormState((prev) => ({ ...prev, data: event.target.value }))
-                    }
-                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                    onChange={(v) => setFormState((prev) => ({ ...prev, data: v }))}
                     required
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-base"
                   />
                 </div>
 

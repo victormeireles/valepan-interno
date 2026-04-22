@@ -1,10 +1,12 @@
 import { getProductionQueue } from '@/app/actions/producao-actions';
+import { getTotalLatasEntradaFornoHoje } from '@/app/actions/producao-etapas-actions';
+import { parseFilaDataQuery } from '@/lib/production/production-station-routes';
 import ProductionQueueClient from './ProductionQueueClient';
 
 export const dynamic = 'force-dynamic';
 
 interface FilaPageProps {
-  searchParams: Promise<{ station?: string }>;
+  searchParams: Promise<{ station?: string; data?: string }>;
 }
 
 interface QueueItem {
@@ -16,9 +18,26 @@ interface QueueItem {
   prioridade?: number | null;
   created_at?: string | null;
   data_producao?: string | null;
+  ordem_planejamento?: number | null;
   receitas_batidas?: number;
   receitas_fermentacao?: number;
+  fermentacao_volume_concluido?: number;
+  forno_volume_concluido?: number;
+  /** Soma de LT registradas na entrada do forno (abertas + concluídas). */
+  forno_entrada_latas_total?: number;
+  /** Bandejas já registradas na saída do forno (1 bandeja = 1 LT na fila). */
+  saida_forno_bandejas_total?: number;
+  entrada_embalagem_latas_total?: number;
+  fermentacao_carrinhos?: Array<{ log_id: string; carrinho: string; latas: number }>;
+  carrinhos_disponiveis_forno?: Array<{
+    log_id: string;
+    carrinho: string;
+    em_fermentacao: boolean;
+    latas_registradas: number;
+  }>;
   qtd_massa_finalizada?: number | null;
+  /** True quando o join com `produtos` falhou (ex.: produto apagado ou FK inválida). */
+  produtoJoinFaltando?: boolean;
   produtos: {
     nome: string;
     unidadeNomeResumido: string | null;
@@ -41,9 +60,17 @@ export default async function FilaPage({ searchParams }: FilaPageProps) {
   const params = await searchParams;
   const queue = await getProductionQueue();
   const station = params?.station || 'planejamento';
+  const filterDateIso = parseFilaDataQuery(params?.data ?? null);
+  const totalLatasEntradaFornoHoje = await getTotalLatasEntradaFornoHoje(
+    filterDateIso ?? undefined,
+  );
 
-  // Filtrar itens que não têm produtos e fazer type assertion
-  const filteredQueue = queue.filter((item) => item.produtos != null) as unknown as QueueItem[];
-
-  return <ProductionQueueClient initialQueue={filteredQueue} station={station} />;
+  return (
+    <ProductionQueueClient
+      initialQueue={queue as unknown as QueueItem[]}
+      station={station}
+      totalLatasEntradaFornoHoje={totalLatasEntradaFornoHoje}
+      filterDateIso={filterDateIso}
+    />
+  );
 }

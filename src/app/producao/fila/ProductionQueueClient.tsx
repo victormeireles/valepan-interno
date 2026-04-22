@@ -1,410 +1,612 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { filaUrlForStation } from '@/lib/production/production-station-routes';
+import {
+  formatIsoDateToDDMMYYYY,
+  getTodayISOInBrazilTimezone,
+  normalizeToISODate,
+  parseDateInputToIsoBR,
+} from '@/lib/utils/date-utils';
 import NovaOrdemModal from '@/components/Producao/NovaOrdemModal';
 import DashboardHeader from '@/components/DashboardHeader';
-import ProductionProgressBar from '@/components/Producao/ProductionProgressBar';
+import FilaEntradaFornoHeader from '@/components/Producao/FilaEntradaFornoHeader';
+import FilaEntradaEmbalagemHeader from '@/components/Producao/FilaEntradaEmbalagemHeader';
+import SaidaFornoProgressHeader from '@/components/Producao/SaidaFornoProgressHeader';
 import MassaLotesModal from '@/components/Producao/MassaLotesModal';
-import { getQuantityByStation, Station } from '@/lib/utils/production-conversions';
+import PlanningQueueTable from '@/components/Producao/PlanningQueueTable';
+import FilaModalEntradaForno from '@/components/Producao/queue/FilaModalEntradaForno';
+import FilaModalSaidaForno from '@/components/Producao/queue/FilaModalSaidaForno';
+import FilaModalEntradaEmbalagem, {
+  type CarrinhoEmbalagemFilaRow,
+} from '@/components/Producao/queue/FilaModalEntradaEmbalagem';
+import FilaModalIniciarFermentacao from '@/components/Producao/queue/FilaModalIniciarFermentacao';
+import ProductionQueueFornoGroups from '@/components/Producao/queue/ProductionQueueFornoGroups';
+import ProductionQueueGenericCards from '@/components/Producao/queue/ProductionQueueGenericCards';
+import ProductionQueueSaidaFornoGroups from '@/components/Producao/queue/ProductionQueueSaidaFornoGroups';
+import type { CarrinhoFilaForno, ProductionQueueClientProps, ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
+import {
+  getStationInfo,
+  parseLatasInputFilaForno,
+} from '@/components/Producao/queue/production-queue-metrics';
+import {
+  startProductionStep,
+  registerSaidaForno,
+  getSaidaFornoCarrinhosParaEmbalagem,
+  registerEntradaEmbalagemCarrinhoELatas,
+} from '@/app/actions/producao-etapas-actions';
+import { useProductionQueueDerived } from '@/hooks/useProductionQueueDerived';
+import { useProductionQueueStation } from '@/hooks/useProductionQueueStation';
+import { DEFAULT_BANDEJAS_SAIDA, MAX_BANDEJAS_SAIDA } from '@/components/Producao/BandejasStepper';
+import { filaEtapaTituloSecaoProntos } from '@/components/Producao/queue/production-queue-metrics';
 
-interface QueueItem {
-  id: string;
-  lote_codigo: string;
-  produto_id: string;
-  qtd_planejada: number;
-  status?: string | null;
-  prioridade?: number | null;
-  created_at?: string | null;
-  data_producao?: string | null;
-  receitas_batidas?: number;
-  receitas_fermentacao?: number;
-  qtd_massa_finalizada?: number | null;
-  produtos: {
-    nome: string;
-    unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
-    package_units?: number | null;
-    box_units?: number | null;
-    unidades_assadeira?: number | null;
-    receita_massa?: {
-      quantidade_por_produto: number;
-    } | null;
-  };
-  pedidos?: {
-    cliente_id: string;
-    clientes?: {
-      nome_fantasia: string;
-    };
-  } | null;
-}
-
-interface ProductionQueueClientProps {
-  initialQueue: QueueItem[];
-  station?: string;
-}
+const MAX_LATAS_POR_CARRINHO = 20;
 
 export default function ProductionQueueClient({
   initialQueue,
   station = 'planejamento',
+  totalLatasEntradaFornoHoje = 0,
+  filterDateIso = null,
 }: ProductionQueueClientProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingOrder, setEditingOrder] = useState<QueueItem | undefined>(undefined);
+  const [editingOrder, setEditingOrder] = useState<ProductionQueueItem | undefined>(undefined);
   const [isMassaLotesModalOpen, setIsMassaLotesModalOpen] = useState(false);
-  const [selectedMassaOrder, setSelectedMassaOrder] = useState<QueueItem | undefined>(undefined);
+  const [selectedMassaOrder, setSelectedMassaOrder] = useState<ProductionQueueItem | undefined>(undefined);
+  const [fermentacaoModalItem, setFermentacaoModalItem] = useState<ProductionQueueItem | null>(null);
+  const [expandedFornoProdutoId, setExpandedFornoProdutoId] = useState<string | null>(null);
+  const [modalFornoCarrinhosAberto, setModalFornoCarrinhosAberto] = useState(false);
+  const [buscaFornoCarrinho, setBuscaFornoCarrinho] = useState('');
+  const [carrinhoFornoSelecionado, setCarrinhoFornoSelecionado] = useState<CarrinhoFilaForno | null>(null);
+  const [latasFornoField, setLatasFornoField] = useState('');
+  const [fornoActionLoading, setFornoActionLoading] = useState(false);
+  const [fornoActionError, setFornoActionError] = useState<string | null>(null);
+  const [modalSaidaFornoAberto, setModalSaidaFornoAberto] = useState(false);
+  const [saidaOrdemId, setSaidaOrdemId] = useState('');
+  const [saidaCarrinhoField, setSaidaCarrinhoField] = useState('');
+  const [saidaBandejasField, setSaidaBandejasField] = useState(String(DEFAULT_BANDEJAS_SAIDA));
+  const [saidaActionLoading, setSaidaActionLoading] = useState(false);
+  const [saidaActionError, setSaidaActionError] = useState<string | null>(null);
+  const [saidaPosConfirm, setSaidaPosConfirm] = useState<'form' | 'nextChoice'>('form');
+  const [saidaLastProdutoId, setSaidaLastProdutoId] = useState<string | null>(null);
+  const [saidaLastProdutoNome, setSaidaLastProdutoNome] = useState('');
+  const [expandedSaidaFornoProdutoId, setExpandedSaidaFornoProdutoId] = useState<string | null>(null);
 
-  const effectiveStation = useMemo<Station>(() => {
-    const allowed: Station[] = ['planejamento', 'massa', 'fermentacao', 'forno', 'embalagem'];
-    return allowed.includes(station as Station) ? (station as Station) : 'planejamento';
-  }, [station]);
+  const [modalEmbalagemAberto, setModalEmbalagemAberto] = useState(false);
+  const [embalagemBusca, setEmbalagemBusca] = useState('');
+  const [embalagemCarrinhos, setEmbalagemCarrinhos] = useState<CarrinhoEmbalagemFilaRow[]>([]);
+  const [embalagemLoading, setEmbalagemLoading] = useState(false);
+  const [embalagemSelecionado, setEmbalagemSelecionado] = useState<CarrinhoEmbalagemFilaRow | null>(null);
+  const [embalagemLatas, setEmbalagemLatas] = useState(String(DEFAULT_BANDEJAS_SAIDA));
+  const [embalagemSaving, setEmbalagemSaving] = useState(false);
+  const [embalagemActionError, setEmbalagemActionError] = useState<string | null>(null);
 
-  const isPlanning = effectiveStation === 'planejamento';
-  const isMassa = effectiveStation === 'massa';
-  const isFermentacao = effectiveStation === 'fermentacao';
+  const { effectiveStation } = useProductionQueueStation(station);
 
-  // Função para obter título e ícone da estação
-  const getStationInfo = (station: Station) => {
-    const stationMap: Record<Station, { nome: string; icon: string }> = {
-      planejamento: { nome: 'Planejamento', icon: 'schedule' },
-      massa: { nome: 'Massa', icon: 'blender' },
-      fermentacao: { nome: 'Fermentação', icon: 'eco' },
-      forno: { nome: 'Forno', icon: 'local_fire_department' },
-      embalagem: { nome: 'Embalagem', icon: 'inventory_2' },
-    };
-    return stationMap[station];
+  const queueFilteredByDataProducao = useMemo(() => {
+    if (!filterDateIso) return initialQueue;
+    return initialQueue.filter((item) => {
+      const raw = item.data_producao;
+      if (raw == null || String(raw).trim() === '') return false;
+      return normalizeToISODate(raw) === filterDateIso;
+    });
+  }, [initialQueue, filterDateIso]);
+
+  const {
+    flags,
+    ordensComProdutoFaltando,
+    filteredQueue,
+    queueForCardsActive,
+    queueForCardsProntos,
+    fornoGroupsActive,
+    fornoGroupsProntos,
+    fornoFilaGlobal,
+    fornoUaHomogenea,
+    carrinhosParaModalForno,
+    saidaFilaGlobal,
+    saidaUaHomogenea,
+    saidaFornoGroupsActive,
+    saidaFornoGroupsProntos,
+    embalagemEntradaFilaGlobal,
+    embalagemEntradaUaHomogenea,
+  } = useProductionQueueDerived(queueFilteredByDataProducao, effectiveStation);
+
+  const tituloSecaoProntosFila = filaEtapaTituloSecaoProntos(effectiveStation);
+
+  const totalEntradaFornoDiaRotulo = useMemo(() => {
+    if (!filterDateIso) return 'hoje';
+    return filterDateIso === getTodayISOInBrazilTimezone()
+      ? 'hoje'
+      : `em ${formatIsoDateToDDMMYYYY(filterDateIso)}`;
+  }, [filterDateIso]);
+
+  const setFilaDateQuery = (iso: string | null) => {
+    const url = filaUrlForStation(effectiveStation, iso ? { data: iso } : undefined);
+    router.replace(url);
   };
+
+  const [filaDataTexto, setFilaDataTexto] = useState(() =>
+    filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '',
+  );
+
+  useEffect(() => {
+    setFilaDataTexto(filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '');
+  }, [filterDateIso]);
+
+  const aplicarDataDigitada = () => {
+    const raw = filaDataTexto.trim();
+    if (!raw) {
+      setFilaDateQuery(null);
+      return;
+    }
+    const iso = parseDateInputToIsoBR(raw);
+    if (iso) {
+      setFilaDateQuery(iso);
+      setFilaDataTexto(formatIsoDateToDDMMYYYY(iso));
+      return;
+    }
+    setFilaDataTexto(filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '');
+  };
+
+  const {
+    isPlanning,
+    isFermentacao,
+    isEntradaForno,
+    isSaidaForno,
+    isEntradaEmbalagem,
+    isSaidaEmbalagem,
+  } = flags;
 
   const stationInfo = getStationInfo(effectiveStation);
 
-  // Filtrar fila para fermentação: mostrar apenas itens com massa finalizada > 0
-  const filteredQueue = useMemo(() => {
-    if (isFermentacao) {
-      return initialQueue.filter((item) => {
-        const qtdMassaFinalizada = item.qtd_massa_finalizada ?? 0;
-        return qtdMassaFinalizada > 0;
-      });
+  const carrinhosFiltradosModalForno = useMemo(() => {
+    const q = buscaFornoCarrinho.trim().toLowerCase();
+    const norm = (s: string) => s.replace(/\s/g, '').toLowerCase();
+    const qn = norm(q);
+    if (!q) return carrinhosParaModalForno;
+    return carrinhosParaModalForno.filter(
+      (c) =>
+        norm(c.carrinho).includes(qn) ||
+        c.carrinho.toLowerCase().includes(q) ||
+        c.lote_codigo.toLowerCase().includes(q) ||
+        c.produto_nome.toLowerCase().includes(q),
+    );
+  }, [carrinhosParaModalForno, buscaFornoCarrinho]);
+
+  const ordensParaSelectSaida = useMemo(() => {
+    if (!isSaidaForno) return [];
+    let list = filteredQueue.filter((i) => !i.produtoJoinFaltando);
+    if (modalSaidaFornoAberto && saidaLastProdutoId) {
+      list = list.filter((i) => i.produto_id === saidaLastProdutoId);
     }
-    return initialQueue;
-  }, [initialQueue, isFermentacao]);
+    return [...list].sort((a, b) => {
+      const n = a.produtos.nome.localeCompare(b.produtos.nome, 'pt-BR');
+      if (n !== 0) return n;
+      return a.lote_codigo.localeCompare(b.lote_codigo, 'pt-BR');
+    });
+  }, [isSaidaForno, filteredQueue, modalSaidaFornoAberto, saidaLastProdutoId]);
 
-  // Stats Calculation
-  const totalOrders = filteredQueue.length;
-  const urgentOrders = filteredQueue.filter(i => i.prioridade === 2).length;
-  const plannedOrders = filteredQueue.filter(i => i.status === 'planejado').length;
-
-  const getPriorityStyles = (p: number) => {
-    if (p === 2) return {
-      bg: 'bg-rose-50',
-      text: 'text-rose-700',
-      border: 'border-rose-200',
-      dot: 'bg-rose-500',
-      label: 'URGENTE'
-    };
-    if (p === 1) return {
-      bg: 'bg-amber-50',
-      text: 'text-amber-700',
-      border: 'border-amber-200',
-      dot: 'bg-amber-500',
-      label: 'ALTA'
-    };
-    return {
-      bg: 'bg-slate-50',
-      text: 'text-slate-600',
-      border: 'border-slate-200',
-      dot: 'bg-slate-400',
-      label: 'NORMAL'
-    };
+  const closeModalForno = () => {
+    setModalFornoCarrinhosAberto(false);
+    setCarrinhoFornoSelecionado(null);
+    setLatasFornoField('');
+    setFornoActionError(null);
   };
 
+  const closeModalSaidaFull = () => {
+    setModalSaidaFornoAberto(false);
+    setSaidaPosConfirm('form');
+    setSaidaLastProdutoId(null);
+    setSaidaLastProdutoNome('');
+    setSaidaOrdemId('');
+    setSaidaCarrinhoField('');
+    setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
+    setSaidaActionError(null);
+  };
 
-  const formatDay = (dateString?: string | null) => {
-    if (!dateString) return null;
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-    }).format(date);
+  const closeModalEmbalagem = () => {
+    setModalEmbalagemAberto(false);
+    setEmbalagemBusca('');
+    setEmbalagemCarrinhos([]);
+    setEmbalagemSelecionado(null);
+    setEmbalagemLatas(String(DEFAULT_BANDEJAS_SAIDA));
+    setEmbalagemActionError(null);
+    setEmbalagemSaving(false);
+    setEmbalagemLoading(false);
+  };
+
+  const carrinhosFiltradosEmbalagem = useMemo(() => {
+    const q = embalagemBusca.trim().toLowerCase();
+    const norm = (s: string) => s.replace(/\s/g, '').toLowerCase();
+    const qn = norm(q);
+    if (!q) return embalagemCarrinhos;
+    return embalagemCarrinhos.filter(
+      (row) =>
+        norm(row.numero_carrinho).includes(qn) ||
+        row.numero_carrinho.toLowerCase().includes(q) ||
+        row.lote_codigo.toLowerCase().includes(q) ||
+        row.produto_nome.toLowerCase().includes(q),
+    );
+  }, [embalagemCarrinhos, embalagemBusca]);
+
+  useEffect(() => {
+    if (!modalEmbalagemAberto) return;
+    const ok = filteredQueue.filter((i) => !i.produtoJoinFaltando);
+    let cancelled = false;
+    setEmbalagemLoading(true);
+    setEmbalagemActionError(null);
+    void Promise.all(
+      ok.map(async (item) => {
+        const r = await getSaidaFornoCarrinhosParaEmbalagem(item.id);
+        if (!r.success) return [] as CarrinhoEmbalagemFilaRow[];
+        return r.data.map((d) => ({
+          ...d,
+          ordem_producao_id: item.id,
+          lote_codigo: item.lote_codigo,
+          produto_nome: item.produtos.nome,
+        }));
+      }),
+    )
+      .then((chunks) => {
+        if (cancelled) return;
+        const flat = chunks.flat();
+        flat.sort((a, b) => new Date(b.saida_fim).getTime() - new Date(a.saida_fim).getTime());
+        setEmbalagemCarrinhos(flat);
+        setEmbalagemLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEmbalagemLoading(false);
+          setEmbalagemActionError('Erro ao carregar carrinhos.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalEmbalagemAberto, filteredQueue]);
+
+  const handleConfirmEntradaForno = async () => {
+    const c = carrinhoFornoSelecionado;
+    if (!c) return;
+    const latas = parseLatasInputFilaForno(latasFornoField);
+    if (!Number.isFinite(latas) || latas <= 0) {
+      setFornoActionError('Informe um número de latas maior que zero.');
+      return;
+    }
+    if (latas > MAX_LATAS_POR_CARRINHO) {
+      setFornoActionError(`Máximo de ${MAX_LATAS_POR_CARRINHO} latas por carrinho.`);
+      return;
+    }
+    if (c.latas_registradas > 0 && latas > c.latas_registradas + 1e-9) {
+      setFornoActionError(
+        `No máximo ${c.latas_registradas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT (fermentação).`,
+      );
+      return;
+    }
+    setFornoActionError(null);
+    setFornoActionLoading(true);
+    try {
+      const r = await startProductionStep({
+        ordem_producao_id: c.ordem_producao_id,
+        etapa: 'entrada_forno',
+        qtd_saida: 0,
+        dados_qualidade: {
+          fermentacao_log_id: c.log_id,
+          assadeiras_lt: latas,
+        },
+      });
+      if (!r.success || !r.data) {
+        throw new Error(r.error || 'Não foi possível registrar a entrada.');
+      }
+      closeModalForno();
+      router.refresh();
+    } catch (e) {
+      setFornoActionError(e instanceof Error ? e.message : 'Erro ao registrar.');
+    } finally {
+      setFornoActionLoading(false);
+    }
+  };
+
+  const handleConfirmSaidaForno = async () => {
+    if (!saidaOrdemId) {
+      setSaidaActionError('Selecione produto e ordem (lote).');
+      return;
+    }
+    const carrinho = saidaCarrinhoField.trim();
+    const bandejas = Math.round(
+      Number((saidaBandejasField.trim() || String(DEFAULT_BANDEJAS_SAIDA)).replace(',', '.')),
+    );
+    if (!carrinho) {
+      setSaidaActionError('Informe o número do carrinho.');
+      return;
+    }
+    if (!Number.isFinite(bandejas) || bandejas < 1 || bandejas > MAX_BANDEJAS_SAIDA) {
+      setSaidaActionError(`Informe um número inteiro de bandejas/latas entre 1 e ${MAX_BANDEJAS_SAIDA}.`);
+      return;
+    }
+    setSaidaActionError(null);
+    setSaidaActionLoading(true);
+    try {
+      const r = await registerSaidaForno({
+        ordem_producao_id: saidaOrdemId,
+        numero_carrinho: carrinho,
+        bandejas,
+      });
+      if (!r.success) {
+        throw new Error(r.error || 'Erro ao registrar');
+      }
+      const ord = filteredQueue.find((o) => o.id === saidaOrdemId);
+      setSaidaLastProdutoId(ord?.produto_id ?? null);
+      setSaidaLastProdutoNome(ord?.produtos.nome ?? '');
+      setSaidaPosConfirm('nextChoice');
+      router.refresh();
+    } catch (e) {
+      setSaidaActionError(e instanceof Error ? e.message : 'Erro ao registrar.');
+    } finally {
+      setSaidaActionLoading(false);
+    }
+  };
+
+  const handleConfirmEmbalagem = async () => {
+    const row = embalagemSelecionado;
+    if (!row) return;
+    const latasNum = Math.round(Number(String(embalagemLatas).replace(',', '.')));
+    if (!Number.isFinite(latasNum) || latasNum < 1) {
+      setEmbalagemActionError('Informe um número inteiro de latas (mínimo 1).');
+      return;
+    }
+    const cap = Math.min(MAX_BANDEJAS_SAIDA, row.latas_disponiveis);
+    if (latasNum > cap) {
+      setEmbalagemActionError(`No máximo ${cap} lata(s) para este carrinho.`);
+      return;
+    }
+    setEmbalagemSaving(true);
+    setEmbalagemActionError(null);
+    try {
+      const r = await registerEntradaEmbalagemCarrinhoELatas({
+        ordem_producao_id: row.ordem_producao_id,
+        saida_forno_log_id: row.saida_forno_log_id,
+        latas: latasNum,
+      });
+      if (!r.success) {
+        throw new Error(r.error || 'Erro ao registrar');
+      }
+      closeModalEmbalagem();
+      router.refresh();
+    } catch (e) {
+      setEmbalagemActionError(e instanceof Error ? e.message : 'Erro ao registrar.');
+    } finally {
+      setEmbalagemSaving(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      <DashboardHeader 
-        title={`Produção - ${stationInfo.nome}`}
-        icon={stationInfo.icon}
-      />
+      <DashboardHeader title={`Produção - ${stationInfo.nome}`} icon={stationInfo.icon} />
 
-      <div className="p-6 md:p-10 max-w-6xl mx-auto space-y-8">
-        
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-stretch">
-          <div className="grid grid-cols-3 gap-4 flex-1 w-full order-1">
-            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Total</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900">{totalOrders}</p>
-            </div>
-            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-xs font-medium text-rose-600 uppercase tracking-wide mb-1">Urgentes</p>
-              <p className="text-2xl md:text-3xl font-bold text-rose-600">{urgentOrders}</p>
-            </div>
-            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
-              <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide mb-1">Planejados</p>
-              <p className="text-2xl md:text-3xl font-bold text-emerald-600">{plannedOrders}</p>
-            </div>
-          </div>
-
-          {isPlanning && (
-            <div className="w-full md:w-auto order-2">
-              <button
-                onClick={() => {
-                  setEditingOrder(undefined);
-                  setIsModalOpen(true);
-                }}
-                className="w-full md:w-auto group relative inline-flex items-center justify-center px-6 py-4 text-sm font-medium text-white transition-all duration-200 bg-gray-900 rounded-2xl shadow-lg hover:bg-gray-800 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 h-full"
-              >
-                <span className="mr-2 text-lg leading-none">+</span> Nova Ordem
-                <div className="absolute inset-0 rounded-2xl ring-2 ring-white/20 group-hover:ring-white/40 transition-all pointer-events-none" />
-              </button>
-            </div>
-          )}
+      <div
+        className={`mx-auto space-y-4 px-3 py-4 sm:space-y-8 sm:p-6 md:p-10 ${isPlanning ? 'max-w-[min(100rem,calc(100vw-2rem))]' : 'max-w-6xl'}`}
+      >
+        <div className="flex flex-wrap items-center gap-2 pb-2">
+          <input
+            type="checkbox"
+            checked={filterDateIso == null}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setFilaDateQuery(null);
+              } else {
+                const iso = parseDateInputToIsoBR(filaDataTexto) ?? getTodayISOInBrazilTimezone();
+                setFilaDateQuery(iso);
+              }
+            }}
+            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300/80 text-slate-500 focus:ring-1 focus:ring-slate-300/60"
+            title="Ver todos os pedidos (sem filtrar por data de produção)"
+            aria-label="Ver todos os pedidos ao mesmo tempo, sem filtro por data de produção"
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="DD/MM/AAAA"
+            value={filaDataTexto}
+            onChange={(e) => setFilaDataTexto(e.target.value)}
+            onBlur={aplicarDataDigitada}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                aplicarDataDigitada();
+              }
+            }}
+            className="min-w-[8.5rem] max-w-[9rem] rounded border border-slate-200/60 bg-slate-50/80 px-1.5 py-1 text-center text-[10px] leading-tight tabular-nums text-slate-500 placeholder:text-slate-400/90 focus:border-slate-300/80 focus:bg-white focus:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-200/60 sm:text-[11px]"
+            aria-label="Data de produção (DD/MM/AAAA). Marque a caixa ao lado ou apague o campo para ver todos os pedidos."
+          />
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 gap-4">
-          {filteredQueue.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
-              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                <span className="material-icons text-3xl text-gray-300">inbox</span>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900">Fila vazia</h3>
-              <p className="text-gray-500 max-w-sm text-center mt-1">
-                {isFermentacao 
-                  ? 'Não há ordens de produção com massa finalizada no momento.'
-                  : 'Não há ordens de produção pendentes no momento. Crie uma nova ordem para começar.'}
+        {isPlanning && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingOrder(undefined);
+                setIsModalOpen(true);
+              }}
+              className="group relative inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-gray-800 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 sm:w-auto sm:rounded-2xl sm:px-6 sm:py-4 sm:text-sm"
+            >
+              <span className="mr-1.5 text-base leading-none sm:mr-2 sm:text-lg">+</span> Nova Ordem
+              <div className="absolute inset-0 rounded-2xl ring-2 ring-white/20 group-hover:ring-white/40 transition-all pointer-events-none" />
+            </button>
+          </div>
+        )}
+
+        {ordensComProdutoFaltando > 0 && (
+          <div
+            className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-rose-900 shadow-sm sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
+            role="alert"
+          >
+            <span className="material-icons shrink-0 text-lg text-rose-600 sm:text-xl">error_outline</span>
+            <div className="min-w-0 text-xs leading-snug sm:text-sm">
+              <p className="font-semibold text-rose-950">
+                {ordensComProdutoFaltando === 1
+                  ? '1 ordem está sem cadastro de produto válido.'
+                  : `${ordensComProdutoFaltando} ordens estão sem cadastro de produto válido.`}
+              </p>
+              <p className="mt-1 text-rose-800/90">
+                O vínculo entre a ordem e o produto no banco está quebrado (produto pode ter sido excluído). Corrija o
+                cadastro ou edite a ordem e selecione um produto existente.
               </p>
             </div>
-          ) : (
-            filteredQueue.map((item) => {
-              console.log(`\n🔍 [FILA] Processando item:`, {
-                produto: item.produtos.nome,
-                lote: item.lote_codigo,
-                qtd_planejada: item.qtd_planejada,
-                qtd_massa_finalizada: item.qtd_massa_finalizada,
-                estacao: effectiveStation,
-                produto_dados: {
-                  unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-                  box_units: item.produtos.box_units,
-                  package_units: item.produtos.package_units,
-                  unidades_assadeira: item.produtos.unidades_assadeira,
-                  receita_massa: item.produtos.receita_massa,
-                },
-              });
-              
-              const priorityStyle = getPriorityStyles(item.prioridade ?? 0);
-              
-              // Para fermentação, usar quantidade finalizada de massa convertida para unidades
-              let quantidadeParaCalculo = item.qtd_planejada;
-              if (isFermentacao && item.qtd_massa_finalizada && item.qtd_massa_finalizada > 0) {
-                // Converter receitas finalizadas de massa para unidades
-                const receitasMassaFinalizadas = item.qtd_massa_finalizada;
-                const quantidadePorProduto = item.produtos.receita_massa?.quantidade_por_produto;
-                if (quantidadePorProduto && quantidadePorProduto > 0) {
-                  // Receitas × quantidade_por_produto = unidades
-                  const unidadesConvertidas = receitasMassaFinalizadas * quantidadePorProduto;
-                  quantidadeParaCalculo = unidadesConvertidas;
-                }
-              }
-              
-              const quantityInfo = getQuantityByStation(effectiveStation, quantidadeParaCalculo, item.produtos);
-              const productionDate = formatDay(item.data_producao);
-              const disableMassaAction = isMassa && quantityInfo.hasWarning;
-              
-              // Calcular progresso de receitas (apenas para estação massa)
-              const receitasNecessarias = quantityInfo.receitas?.value || 0;
-              const receitasBatidas = item.receitas_batidas || 0;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const progressoReceitas = receitasNecessarias > 0 
-                ? Math.min(100, (receitasBatidas / receitasNecessarias) * 100) 
-                : 0;
-              
-              console.log(`✅ [FILA] Resultado para ${item.produtos.nome}:`, quantityInfo);
+          </div>
+        )}
 
-              return (
-                <div
-                  key={item.id}
-                  className="group bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all duration-200 relative overflow-hidden"
-                >
-                  <div
-                    className={`absolute left-0 top-0 bottom-0 w-1.5 ${priorityStyle.bg.replace('bg-', 'bg-').replace('50', '500')}`}
+        {isEntradaForno && filteredQueue.length > 0 && fornoFilaGlobal && (
+          <FilaEntradaFornoHeader
+            meta={fornoFilaGlobal.meta}
+            fermentacao={fornoFilaGlobal.fermentacao}
+            forno={fornoFilaGlobal.forno}
+            totalHoje={totalLatasEntradaFornoHoje}
+            totalEntradaDiaRotulo={totalEntradaFornoDiaRotulo}
+            unidadesPorAssadeiraHomogenea={fornoUaHomogenea}
+            onFireClick={() => {
+              setModalFornoCarrinhosAberto(true);
+              setBuscaFornoCarrinho('');
+              setCarrinhoFornoSelecionado(null);
+              setLatasFornoField('');
+              setFornoActionError(null);
+            }}
+          />
+        )}
+
+        {isSaidaForno && filteredQueue.length > 0 && saidaFilaGlobal && (
+          <SaidaFornoProgressHeader
+            variant="fila"
+            uiDensity="compact"
+            meta={saidaFilaGlobal.meta}
+            entradaForno={saidaFilaGlobal.entradaForno}
+            saidaForno={saidaFilaGlobal.saidaForno}
+            unidadesPorAssadeiraHomogenea={saidaUaHomogenea}
+            onNovoCarrinho={() => {
+              const okList = filteredQueue.filter((i) => !i.produtoJoinFaltando);
+              setModalSaidaFornoAberto(true);
+              setSaidaPosConfirm('form');
+              setSaidaOrdemId(okList.length === 1 ? okList[0].id : '');
+              setSaidaCarrinhoField('');
+              setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
+              setSaidaActionError(null);
+              setSaidaLastProdutoId(null);
+              setSaidaLastProdutoNome('');
+            }}
+          />
+        )}
+
+        {isEntradaEmbalagem && filteredQueue.length > 0 && embalagemEntradaFilaGlobal && (
+          <FilaEntradaEmbalagemHeader
+            meta={embalagemEntradaFilaGlobal.meta}
+            saidaForno={embalagemEntradaFilaGlobal.saidaForno}
+            entradaEmbalagem={embalagemEntradaFilaGlobal.entradaEmbalagem}
+            unidadesPorAssadeiraHomogenea={embalagemEntradaUaHomogenea}
+            onIniciar={() => {
+              setModalEmbalagemAberto(true);
+              setEmbalagemBusca('');
+              setEmbalagemSelecionado(null);
+              setEmbalagemLatas(String(DEFAULT_BANDEJAS_SAIDA));
+              setEmbalagemActionError(null);
+            }}
+          />
+        )}
+
+        <div className="grid grid-cols-1 gap-2.5 sm:gap-4">
+          {filteredQueue.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white py-12 sm:rounded-3xl sm:py-20">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 sm:mb-4 sm:h-16 sm:w-16">
+                <span className="material-icons text-2xl text-gray-300 sm:text-3xl">inbox</span>
+              </div>
+              <h3 className="text-sm font-medium text-gray-900 sm:text-lg">Fila vazia</h3>
+              <p className="mt-1 max-w-sm px-2 text-center text-xs text-gray-500 sm:text-base">
+                {filterDateIso && initialQueue.length > 0 && queueFilteredByDataProducao.length === 0
+                  ? `Nenhuma ordem com data de produção em ${formatIsoDateToDDMMYYYY(filterDateIso)}. Tente outra data ou use o botão Todas.`
+                  : isFermentacao
+                    ? 'Não há ordens com lotes de massa registrados no momento. Produza massa na etapa anterior para aparecer aqui.'
+                    : isEntradaForno
+                      ? 'Não há ordens com fermentação registrada no momento.'
+                      : isSaidaForno
+                        ? 'Não há ordens com entrada no forno registrada. Use a etapa Entrada do Forno antes.'
+                        : isEntradaEmbalagem || isSaidaEmbalagem
+                          ? 'Não há ordens com saída do forno registrada. Conclua a saída do forno antes da embalagem.'
+                          : 'Não há ordens de produção pendentes no momento. Crie uma nova ordem para começar.'}
+              </p>
+            </div>
+          ) : isPlanning ? (
+            <PlanningQueueTable
+              items={filteredQueue}
+              onEdit={(item) => {
+                setEditingOrder(item as ProductionQueueItem);
+                setIsModalOpen(true);
+              }}
+            />
+          ) : isEntradaForno ? (
+            <>
+              {fornoGroupsActive.length > 0 && (
+                <ProductionQueueFornoGroups
+                  fornoGroups={fornoGroupsActive}
+                  expandedFornoProdutoId={expandedFornoProdutoId}
+                  setExpandedFornoProdutoId={setExpandedFornoProdutoId}
+                  router={router}
+                />
+              )}
+              {fornoGroupsProntos.length > 0 && (
+                <div className="mt-4 space-y-2 border-t border-slate-200/90 pt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                    {tituloSecaoProntosFila}
+                  </p>
+                  <ProductionQueueFornoGroups
+                    fornoGroups={fornoGroupsProntos}
+                    expandedFornoProdutoId={expandedFornoProdutoId}
+                    setExpandedFornoProdutoId={setExpandedFornoProdutoId}
+                    router={router}
                   />
-
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pl-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide">
-                          <span className="font-mono text-gray-400">{item.lote_codigo}</span>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold border ${priorityStyle.bg} ${priorityStyle.text} ${priorityStyle.border}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${priorityStyle.dot}`} />
-                            {priorityStyle.label}
-                          </span>
-                          {productionDate && (
-                            <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-medium">
-                              {productionDate}
-                            </span>
-                          )}
-                        </div>
-                        {isMassa && (
-                          <button
-                            onClick={() => {
-                              setSelectedMassaOrder(item);
-                              setIsMassaLotesModalOpen(true);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium shadow-sm flex items-center gap-1.5 whitespace-nowrap transition-all ${
-                              disableMassaAction
-                                ? 'bg-gray-50 border border-gray-200 text-gray-400 cursor-not-allowed'
-                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 active:scale-95'
-                            }`}
-                            disabled={disableMassaAction}
-                          >
-                            <span className="material-icons text-base">play_circle</span>
-                            <span>Iniciar</span>
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                            {item.produtos.nome}
-                          </h3>
-                          <span className="text-gray-300 hidden sm:inline">•</span>
-                          <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                            {isPlanning ? (
-                              // Modo planejamento: mostra caixas / receitas / assadeiras
-                              <>
-                                <span className="font-semibold text-gray-900">{quantityInfo.readable}</span>
-                                {quantityInfo.receitas && (
-                                  <>
-                                    <span className="text-gray-300">/</span>
-                                    <span className={`font-semibold ${quantityInfo.receitas.hasWarning ? 'text-amber-600' : 'text-blue-600'}`}>
-                                      {quantityInfo.receitas.readable}
-                                    </span>
-                                  </>
-                                )}
-                                {quantityInfo.assadeiras && (
-                                  <>
-                                    <span className="text-gray-300">/</span>
-                                    <span className="font-semibold text-emerald-600">{quantityInfo.assadeiras.readable}</span>
-                                  </>
-                                )}
-                              </>
-                            ) : isMassa ? (
-                              // Modo massa: mostra receitas / assadeiras / unidades
-                              <>
-                                {quantityInfo.receitas && (
-                                  <span className={`font-semibold ${quantityInfo.receitas.hasWarning ? 'text-amber-600' : 'text-blue-600'}`}>
-                                    {quantityInfo.receitas.readable}
-                                  </span>
-                                )}
-                                {quantityInfo.assadeiras && (
-                                  <>
-                                    <span className="text-gray-300">/</span>
-                                    <span className="font-semibold text-emerald-600">{quantityInfo.assadeiras.readable}</span>
-                                  </>
-                                )}
-                                {quantityInfo.unidades && (
-                                  <>
-                                    <span className="text-gray-300">/</span>
-                                    <span className="font-semibold text-gray-700">{quantityInfo.unidades.readable}</span>
-                                  </>
-                                )}
-                              </>
-                            ) : (
-                              // Outras estações: mostra apenas a quantidade principal
-                              <span className="font-semibold text-gray-900">{quantityInfo.readable}</span>
-                            )}
-                            {item.pedidos?.clientes?.nome_fantasia && (
-                              <>
-                                <span className="text-gray-300">•</span>
-                                <span className="flex items-center gap-1 text-gray-500 bg-gray-50 px-2 py-0.5 rounded-md">
-                                  <span className="material-icons text-xs">person</span>
-                                  {item.pedidos.clientes.nome_fantasia}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Barra de progresso de receitas (para estação massa e fermentação) */}
-                        {(isMassa || isFermentacao) && receitasNecessarias > 0 && (
-                          <div className="w-full">
-                            <ProductionProgressBar
-                              receitasOP={receitasNecessarias}
-                              receitasMassa={receitasBatidas}
-                              receitasFermentacao={isFermentacao ? (item.receitas_fermentacao || 0) : undefined}
-                            />
-                          </div>
-                        )}
-
-                        {/* Avisos gerais (para massa e planejamento) */}
-                        {quantityInfo.hasWarning && (
-                          <div className="w-full flex items-start gap-2 text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl">
-                            <span className="material-icons text-base">warning</span>
-                            <span className="text-sm leading-snug">
-                              {quantityInfo.warningMessage || 'Receita obrigatória não configurada para este produto.'}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Avisos específicos do planejamento */}
-                        {isPlanning && quantityInfo.receitas?.hasWarning && (
-                          <div className="w-full flex items-start gap-2 text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl">
-                            <span className="material-icons text-base">info</span>
-                            <span className="text-sm leading-snug">
-                              Este produto não possui receita de massa vinculada.
-                            </span>
-                          </div>
-                        )}
-
-                        {isPlanning && (
-                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                            <button
-                              onClick={() => {
-                                setEditingOrder(item);
-                                setIsModalOpen(true);
-                              }}
-                              className="flex-1 sm:flex-none px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-medium shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-95 flex items-center justify-center gap-2"
-                            >
-                              <span className="material-icons text-gray-400">edit</span>
-                              <span className="sm:hidden">Editar</span>
-                            </button>
-                          </div>
-                        )}
-                        {isFermentacao && (
-                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                            <button
-                              onClick={() => router.push(`/producao/etapas/${item.id}/fermentacao`)}
-                              className="flex-1 sm:flex-none px-4 py-2 rounded-xl font-medium shadow-sm flex items-center justify-center gap-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 transition-all active:scale-95"
-                            >
-                              <span className="material-icons text-base">play_circle</span>
-                              <span>Iniciar</span>
-                            </button>
-                          </div>
-                        )}
-                        {!isPlanning && !isMassa && !isFermentacao && (
-                          <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                            <button className="flex-1 sm:flex-none px-4 py-2 bg-white border border-gray-100 text-gray-600 rounded-xl font-medium shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                              <span className="material-icons text-gray-400">visibility</span>
-                              Detalhes
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              );
-            })
+              )}
+            </>
+          ) : isSaidaForno ? (
+            <>
+              {saidaFornoGroupsActive.length > 0 && (
+                <ProductionQueueSaidaFornoGroups
+                  saidaFornoGroups={saidaFornoGroupsActive}
+                  expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
+                  setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
+                  router={router}
+                />
+              )}
+              {saidaFornoGroupsProntos.length > 0 && (
+                <div className="mt-4 space-y-2 border-t border-slate-200/90 pt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                    {tituloSecaoProntosFila}
+                  </p>
+                  <ProductionQueueSaidaFornoGroups
+                    saidaFornoGroups={saidaFornoGroupsProntos}
+                    expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
+                    setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
+                    router={router}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <ProductionQueueGenericCards
+              queueForCardsActive={queueForCardsActive}
+              queueForCardsProntos={queueForCardsProntos}
+              tituloSecaoProntos={tituloSecaoProntosFila}
+              queueForPlanningOrder={filteredQueue}
+              effectiveStation={effectiveStation}
+              flags={flags}
+              router={router}
+              onOpenMassaLotes={(item) => {
+                setSelectedMassaOrder(item);
+                setIsMassaLotesModalOpen(true);
+              }}
+              onOpenFermentacaoModal={(item) => setFermentacaoModalItem(item)}
+            />
           )}
         </div>
       </div>
@@ -423,6 +625,13 @@ export default function ProductionQueueClient({
         }}
       />
 
+      <FilaModalIniciarFermentacao
+        open={fermentacaoModalItem != null}
+        item={fermentacaoModalItem}
+        onClose={() => setFermentacaoModalItem(null)}
+        onSuccess={() => router.refresh()}
+      />
+
       {selectedMassaOrder && (
         <MassaLotesModal
           isOpen={isMassaLotesModalOpen}
@@ -435,6 +644,90 @@ export default function ProductionQueueClient({
           loteCodigo={selectedMassaOrder.lote_codigo}
         />
       )}
+
+      <FilaModalEntradaForno
+        open={modalFornoCarrinhosAberto}
+        onClose={closeModalForno}
+        buscaFornoCarrinho={buscaFornoCarrinho}
+        onBuscaChange={(v) => {
+          setBuscaFornoCarrinho(v);
+          setCarrinhoFornoSelecionado(null);
+          setLatasFornoField('');
+          setFornoActionError(null);
+        }}
+        carrinhosParaModalForno={carrinhosParaModalForno}
+        carrinhosFiltradosModalForno={carrinhosFiltradosModalForno}
+        carrinhoFornoSelecionado={carrinhoFornoSelecionado}
+        onSelectCarrinho={(c) => {
+          setCarrinhoFornoSelecionado(c);
+          const capped = c.latas_registradas > 0 ? Math.min(MAX_LATAS_POR_CARRINHO, c.latas_registradas) : 0;
+          const def = capped > 0 ? String(capped).replace('.', ',') : '';
+          setLatasFornoField(def);
+          setFornoActionError(null);
+        }}
+        latasFornoField={latasFornoField}
+        onLatasChange={setLatasFornoField}
+        fornoActionLoading={fornoActionLoading}
+        fornoActionError={fornoActionError}
+        onConfirm={handleConfirmEntradaForno}
+      />
+
+      <FilaModalSaidaForno
+        open={modalSaidaFornoAberto}
+        onClose={closeModalSaidaFull}
+        saidaPosConfirm={saidaPosConfirm}
+        saidaLastProdutoNome={saidaLastProdutoNome}
+        ordensParaSelectSaida={ordensParaSelectSaida}
+        saidaOrdemId={saidaOrdemId}
+        onSaidaOrdemIdChange={setSaidaOrdemId}
+        saidaCarrinhoField={saidaCarrinhoField}
+        onSaidaCarrinhoChange={setSaidaCarrinhoField}
+        saidaBandejasField={saidaBandejasField}
+        onSaidaBandejasChange={setSaidaBandejasField}
+        saidaActionLoading={saidaActionLoading}
+        saidaActionError={saidaActionError}
+        onConfirmRegister={handleConfirmSaidaForno}
+        onNextChoiceSim={() => {
+          setSaidaPosConfirm('form');
+          setSaidaCarrinhoField('');
+          setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
+          setSaidaActionError(null);
+          const first = ordensParaSelectSaida[0];
+          setSaidaOrdemId(first?.id ?? '');
+        }}
+        onNextChoiceNao={() => {
+          closeModalSaidaFull();
+          router.refresh();
+        }}
+      />
+
+      <FilaModalEntradaEmbalagem
+        open={modalEmbalagemAberto}
+        onClose={() => !embalagemSaving && closeModalEmbalagem()}
+        loadingLista={embalagemLoading}
+        busca={embalagemBusca}
+        onBuscaChange={(v) => {
+          setEmbalagemBusca(v);
+          setEmbalagemSelecionado(null);
+          setEmbalagemLatas(String(DEFAULT_BANDEJAS_SAIDA));
+          setEmbalagemActionError(null);
+        }}
+        carrinhos={embalagemCarrinhos}
+        carrinhosFiltrados={carrinhosFiltradosEmbalagem}
+        selecionado={embalagemSelecionado}
+        onSelect={(row) => {
+          setEmbalagemSelecionado(row);
+          const cap = Math.min(MAX_BANDEJAS_SAIDA, row.latas_disponiveis);
+          const sug = Math.min(DEFAULT_BANDEJAS_SAIDA, cap);
+          setEmbalagemLatas(String(Math.max(1, sug)));
+          setEmbalagemActionError(null);
+        }}
+        latasField={embalagemLatas}
+        onLatasChange={setEmbalagemLatas}
+        saving={embalagemSaving}
+        actionError={embalagemActionError}
+        onConfirm={handleConfirmEmbalagem}
+      />
     </div>
   );
 }

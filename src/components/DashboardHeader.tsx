@@ -20,7 +20,7 @@ export default function DashboardHeader({
   return (
     <header className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-30">
       <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex h-14 items-center justify-between sm:h-16">
           {/* Logo */}
           <div className="flex items-center">
             <Image
@@ -37,11 +37,11 @@ export default function DashboardHeader({
           <div className="flex items-center gap-2">
             {/* Renderizar como Material Icon se não for emoji, caso contrário renderizar como texto */}
             {icon.match(/[\u{1F300}-\u{1F9FF}]/u) ? (
-              <span className="text-2xl">{icon}</span>
+              <span className="text-xl sm:text-2xl">{icon}</span>
             ) : (
-              <span className="material-icons text-2xl text-gray-700">{icon}</span>
+              <span className="material-icons text-xl text-gray-700 sm:text-2xl">{icon}</span>
             )}
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">
+            <h1 className="max-w-[min(100%,12rem)] truncate text-sm font-bold text-gray-900 sm:max-w-none sm:text-xl">
               {title}
             </h1>
           </div>

@@ -1,12 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   createProductionOrder,
   updateProductionOrder,
 } from '@/app/actions/producao-actions';
-import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import SelectRemoteAutocomplete from '@/components/Producao/SelectRemoteAutocomplete';
 import DateInput from '@/components/FormControls/DateInput';
+import type { ProductConversionInfo } from '@/lib/utils/production-conversions';
+import {
+  PlanningQuantityInputConverter,
+  type PlanningQuantityInputKind,
+  productInfoFromPlanningMeta,
+  quantidadePlanejadaParaUnidadesConsumo,
+} from '@/lib/utils/planning-quantity-input';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 interface NovaOrdemModalProps {
   isOpen: boolean;
@@ -16,67 +24,129 @@ interface NovaOrdemModalProps {
     produto_id: string;
     produtos?: {
       nome: string;
-      unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
+      unidadeNomeResumido: string | null;
+      package_units?: number | null;
+      box_units?: number | null;
+      unidades_assadeira?: number | null;
+      unidades_lata_antiga?: number | null;
+      unidades_lata_nova?: number | null;
       receita_massa?: {
         quantidade_por_produto: number;
       } | null;
     };
     qtd_planejada: number;
-    prioridade?: number | null;
     data_producao?: string | null;
   };
   onSaved?: () => void;
-  station?: string; // Para adaptar exibição quando estiver na estação massa
 }
 
-type ProductMeta = {
-  unidadeNomeResumido?: string | null; // nome_resumido da tabela unidades
-};
+type ProductMeta = ProductConversionInfo;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => getTodayISOInBrazilTimezone();
 
-export default function NovaOrdemModal({
-  isOpen,
-  onClose,
-  order,
-  onSaved,
-}: NovaOrdemModalProps) {
+function productInfoFromOrderProdutos(
+  p: NonNullable<NovaOrdemModalProps['order']>['produtos'],
+): ProductConversionInfo | null {
+  if (!p) {
+    return null;
+  }
+  return {
+    unidadeNomeResumido: p.unidadeNomeResumido,
+    package_units: p.package_units ?? null,
+    box_units: p.box_units ?? null,
+    unidades_assadeira: p.unidades_assadeira ?? null,
+    unidades_lata_antiga: p.unidades_lata_antiga ?? p.unidades_assadeira ?? null,
+    unidades_lata_nova: p.unidades_lata_nova ?? null,
+    receita_massa: p.receita_massa ?? null,
+  };
+}
+
+export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: NovaOrdemModalProps) {
   const [produtoId, setProdutoId] = useState('');
-  const [qtdPlanejada, setQtdPlanejada] = useState(1);
-  const [prioridade, setPrioridade] = useState(0);
+  const [inputKind, setInputKind] = useState<PlanningQuantityInputKind>('unidades');
+  const [rawQty, setRawQty] = useState<number | ''>('');
   const [dataProducao, setDataProducao] = useState(today());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [animating, setAnimating] = useState(false);
   const [produtoMeta, setProdutoMeta] = useState<ProductMeta | null>(null);
+  const productInfo = produtoMeta;
 
+  const wasModalOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
-      setAnimating(true);
-      if (order) {
-        setProdutoId(order.produto_id);
-        setQtdPlanejada(order.qtd_planejada);
-        setPrioridade(order.prioridade ?? 0);
-        setDataProducao(order.data_producao ?? today());
-        if (order.produtos) {
-          setProdutoMeta({
-            unidadeNomeResumido: order.produtos.unidadeNomeResumido,
-          });
-        }
-      } else {
-        setProdutoId('');
-        setQtdPlanejada(1);
-        setPrioridade(0);
-        setDataProducao(today());
-        setProdutoMeta(null);
-      }
-    } else {
+    if (!isOpen) {
+      wasModalOpenRef.current = false;
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
     }
+
+    setAnimating(true);
+    const justOpened = !wasModalOpenRef.current;
+    wasModalOpenRef.current = true;
+
+    if (!justOpened) {
+      return;
+    }
+
+    if (order) {
+      setProdutoId(order.produto_id);
+      setDataProducao(order.data_producao ?? today());
+      const pi = productInfoFromOrderProdutos(order.produtos);
+      if (pi) {
+        setProdutoMeta(pi);
+        const uc = quantidadePlanejadaParaUnidadesConsumo(order.qtd_planejada, pi);
+        setInputKind('unidades');
+        setRawQty(PlanningQuantityInputConverter.displayRawForMode(uc, 'unidades', pi));
+      } else {
+        setProdutoMeta(null);
+        setInputKind('unidades');
+        setRawQty(order.qtd_planejada);
+      }
+    } else {
+      setProdutoId('');
+      setInputKind('unidades');
+      setRawQty('');
+      setDataProducao(today());
+      setProdutoMeta(null);
+    }
   }, [isOpen, order]);
 
-  if (!isOpen && !animating) return null;
+  const handleKindChange = useCallback(
+    (next: PlanningQuantityInputKind) => {
+      if (!productInfo) {
+        setInputKind(next);
+        return;
+      }
+      const n = typeof rawQty === 'number' ? rawQty : parseFloat(String(rawQty).replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0) {
+        setInputKind(next);
+        return;
+      }
+      const cur = PlanningQuantityInputConverter.unidadesConsumoFromInput(inputKind, n, productInfo);
+      if (!cur.ok) {
+        setInputKind(next);
+        return;
+      }
+      const nextRaw = PlanningQuantityInputConverter.displayRawForMode(cur.value, next, productInfo);
+      setInputKind(next);
+      setRawQty(nextRaw);
+    },
+    [productInfo, inputKind, rawQty],
+  );
+
+  const handleClose = () => {
+    onClose();
+    setTimeout(() => {
+      if (!order) {
+        setProdutoId('');
+        setInputKind('unidades');
+        setRawQty('');
+        setDataProducao(today());
+        setProdutoMeta(null);
+      }
+      setError('');
+    }, 200);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,11 +157,25 @@ export default function NovaOrdemModal({
       if (!produtoId) {
         throw new Error('Selecione um produto');
       }
+      if (!productInfo) {
+        throw new Error('Aguarde o carregamento da unidade do produto ou selecione novamente.');
+      }
+
+      const rawNum =
+        typeof rawQty === 'number' ? rawQty : parseFloat(String(rawQty).replace(',', '.'));
+      if (rawQty === '' || !Number.isFinite(rawNum) || rawNum <= 0) {
+        throw new Error('Informe a quantidade.');
+      }
+
+      const computed = PlanningQuantityInputConverter.computeQtdPlanejada(inputKind, rawNum, productInfo);
+      if (!computed.ok) {
+        throw new Error(computed.message);
+      }
 
       const payload = {
         produtoId,
-        qtdPlanejada,
-        prioridade,
+        qtdPlanejada: computed.qtdPlanejada,
+        prioridade: 0,
         dataProducao,
       };
 
@@ -113,21 +197,36 @@ export default function NovaOrdemModal({
     }
   };
 
-  const handleClose = () => {
-    onClose();
-    setTimeout(() => {
-      if (!order) {
-        setProdutoId('');
-        setQtdPlanejada(1);
-        setPrioridade(0);
-        setDataProducao(today());
-        setProdutoMeta(null);
-      }
-      setError('');
-    }, 200);
-  };
+  const unitLower = productInfo?.unidadeNomeResumido?.toLowerCase().trim() || '';
+  const lataLike =
+    unitLower === 'lt' || unitLower.includes('lata') || unitLower.includes('bandeja');
+  const podeCaixa = Boolean(productInfo?.box_units && productInfo.box_units > 0);
+  const podeLatas = lataLike || Boolean(productInfo?.unidades_assadeira && productInfo.unidades_assadeira > 0);
+  const refLataAntiga =
+    productInfo?.unidades_lata_antiga ?? productInfo?.unidades_assadeira ?? null;
+  const refLataNova = productInfo?.unidades_lata_nova ?? null;
 
-  const quantityUnit = produtoMeta?.unidadeNomeResumido || 'un';
+  const kindButton = (kind: PlanningQuantityInputKind, label: string, disabled: boolean) => (
+    <button
+      key={kind}
+      type="button"
+      disabled={disabled}
+      onClick={() => handleKindChange(kind)}
+      className={`flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+        inputKind === kind
+          ? 'bg-gray-900 text-white shadow-sm'
+          : disabled
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  if (!isOpen && !animating) {
+    return null;
+  }
 
   return (
     <div
@@ -174,11 +273,26 @@ export default function NovaOrdemModal({
                 stage="produtos"
                 label=""
                 placeholder="Busque o produto..."
-                extraFields={['unidade_padrao_id']}
+                extraFields={[
+                  'unidade_padrao_id',
+                  'box_units',
+                  'package_units',
+                  'unidades_assadeira',
+                ]}
                 onOptionSelected={(option) => {
-                  setProdutoMeta((option?.meta as ProductMeta) ?? null);
+                  const meta = productInfoFromPlanningMeta(option?.meta);
+                  setProdutoMeta(meta);
+                  setInputKind('unidades');
+                  setRawQty('');
                 }}
               />
+              {productInfo && produtoId && (
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-700">
+                  Antiga:{' '}
+                  {refLataAntiga != null && refLataAntiga > 0 ? `${refLataAntiga} un/lt` : '—'} · Nova:{' '}
+                  {refLataNova != null && refLataNova > 0 ? `${refLataNova} un/lt` : '—'}
+                </div>
+              )}
             </div>
 
             <DateInput
@@ -188,41 +302,44 @@ export default function NovaOrdemModal({
               required
             />
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700 ml-1">
-                  Quantidade ({quantityUnit})
-                </label>
-                <div className="relative group">
-                  <input
-                    type="number"
-                    min="1"
-                    value={qtdPlanejada}
-                    onChange={(e) => setQtdPlanejada(parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-3 pr-10 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">
-                    {quantityUnit}
-                  </span>
-                </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-gray-700 ml-1">Tipo de quantidade</label>
+              <div className="flex gap-2">
+                {kindButton('caixa', 'Caixa', !podeCaixa)}
+                {kindButton('latas', 'Latas (LT)', !podeLatas)}
+                {kindButton('unidades', 'Unidades', false)}
               </div>
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700 ml-1">Prioridade</label>
-                <div className="relative">
-                  <select
-                    value={prioridade}
-                    onChange={(e) => setPrioridade(parseInt(e.target.value))}
-                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all appearance-none cursor-pointer"
-                  >
-                    <option value={0}>Normal</option>
-                    <option value={1}>Alta</option>
-                    <option value={2}>Urgente</option>
-                  </select>
-                  <span className="material-icons absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                    expand_more
-                  </span>
-                </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-gray-700 ml-1">
+                Quantidade informada (
+                {inputKind === 'caixa'
+                  ? 'caixa'
+                  : inputKind === 'latas'
+                    ? lataLike
+                      ? 'LT'
+                      : 'latas'
+                    : 'un'}
+                )
+              </label>
+              <div className="relative group">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={rawQty === '' ? '' : rawQty}
+                  onChange={(e) => {
+                    const t = e.target.value.trim();
+                    if (t === '') {
+                      setRawQty('');
+                      return;
+                    }
+                    const v = parseFloat(t.replace(',', '.'));
+                    setRawQty(Number.isFinite(v) ? v : '');
+                  }}
+                  className="w-full px-4 py-3 pr-10 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                />
               </div>
             </div>
 

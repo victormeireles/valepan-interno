@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import DateInput from '@/components/FormControls/DateInput';
 
 interface RealizadoHeaderProps {
   title: string;
@@ -58,13 +59,15 @@ export default function RealizadoHeader({
               >
                 Data:
               </label>
-              <input
-                id="date-filter"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => onDateChange(e.target.value)}
-                className="px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
+              <div id="date-filter" className="min-w-[9rem]">
+                <DateInput
+                  hideLabel
+                  value={selectedDate}
+                  onChange={onDateChange}
+                  required
+                  className="w-full px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
+                />
+              </div>
             </div>
 
             {/* Botão hambúrguer */}

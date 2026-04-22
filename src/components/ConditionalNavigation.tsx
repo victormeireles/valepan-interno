@@ -6,13 +6,13 @@ import Navigation from './Navigation';
 export default function ConditionalNavigation() {
   const pathname = usePathname();
   
-  // Páginas que usam header customizado ao invés do Navigation header
+  // Páginas que usam header customizado (DashboardHeader / RealizadoHeader) — sem barra duplicada do Navigation
   const isRealizadoPage = pathname?.startsWith('/realizado/');
   const isDashboardPage = pathname?.startsWith('/painel/dashboard-estoque');
   const isProducaoPage = pathname?.startsWith('/producao/');
   const isInsumosPage = pathname?.startsWith('/insumos');
   const isReceitasPage = pathname?.startsWith('/receitas');
-  const isProdutoReceitasPage = pathname?.startsWith('/produtos/receitas');
+  const isProdutosPage = pathname?.startsWith('/produtos');
 
   if (
     isRealizadoPage ||
@@ -20,9 +20,8 @@ export default function ConditionalNavigation() {
     isProducaoPage ||
     isInsumosPage ||
     isReceitasPage ||
-    isProdutoReceitasPage
+    isProdutosPage
   ) {
-    // Nessas páginas, só renderizar o menu lateral (sem o header)
     return <Navigation hideHeader />;
   }
   

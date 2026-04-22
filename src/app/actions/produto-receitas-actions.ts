@@ -141,6 +141,7 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
           receita_id: payload.receitaId,
           quantidade_por_produto: payload.quantidade,
           ativo: true,
+          tipo: receita.tipo,
         })
         .eq('id', existing.id);
 
@@ -151,6 +152,7 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
         receita_id: payload.receitaId,
         quantidade_por_produto: payload.quantidade,
         ativo: true,
+        tipo: receita.tipo,
       });
 
       if (error) throw error;

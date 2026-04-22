@@ -5,19 +5,18 @@
 
 import { ProductionStepRepository } from '@/data/production/ProductionStepRepository';
 import { ProductionOrderRepository } from '@/data/production/ProductionOrderRepository';
-import { ProductionMassaLoteRepository } from '@/data/production/ProductionMassaLoteRepository';
 import {
   ProductionProgress,
   ProductionStep,
   ProductionStepLog,
 } from '@/domain/types/producao-etapas';
 import { getQuantityByStation, ProductConversionInfo } from '@/lib/utils/production-conversions';
+import { sumReceitasBatidasFromMassaLogs } from '@/lib/utils/sum-receitas-massa-logs';
 
 export class ProductionProgressCalculator {
   constructor(
     private readonly stepRepository: ProductionStepRepository,
     private readonly orderRepository: ProductionOrderRepository,
-    private readonly massaLoteRepository?: ProductionMassaLoteRepository,
   ) {}
 
   /**
@@ -38,7 +37,7 @@ export class ProductionProgressCalculator {
     const qtdProduzida = this.calculateQtdProduzida(logs);
 
     // Calcula receitas batidas (soma de todas as receitas da etapa massa)
-    const receitasBatidas = await this.calculateReceitasBatidas(logs, ordemProducaoId);
+    const receitasBatidas = this.calculateReceitasBatidas(logs);
 
     // Calcula receitas necessárias
     const receitasNecessarias = this.calculateReceitasNecessarias(
@@ -70,7 +69,14 @@ export class ProductionProgressCalculator {
    */
   private calculateQtdProduzida(logs: ProductionStepLog[]): number {
     // Ordena logs por ordem de etapas
-    const stepOrder: ProductionStep[] = ['massa', 'fermentacao', 'forno', 'embalagem'];
+    const stepOrder: ProductionStep[] = [
+      'massa',
+      'fermentacao',
+      'entrada_forno',
+      'saida_forno',
+      'entrada_embalagem',
+      'saida_embalagem',
+    ];
     const completedLogs = logs
       .filter((log) => log.fim !== null)
       .sort((a, b) => {
@@ -88,41 +94,10 @@ export class ProductionProgressCalculator {
   }
 
   /**
-   * Calcula total de receitas batidas na etapa massa
-   * Agora busca dos lotes de massa ao invés do JSONB
+   * Soma receitas batidas de todos os logs de massa (cada log = um lote em producao_etapas_log).
    */
-  private async calculateReceitasBatidas(
-    logs: ProductionStepLog[],
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    ordemProducaoId: string,
-  ): Promise<number> {
-    // Se temos o repositório de lotes, busca dos lotes
-    if (this.massaLoteRepository) {
-      const massaLog = logs.find((log) => log.etapa === 'massa');
-      if (massaLog) {
-        const lotes = await this.massaLoteRepository.findByEtapasLogId(massaLog.id);
-        return lotes.reduce((sum, lote) => sum + lote.receitas_batidas, 0);
-      }
-      return 0;
-    }
-
-    // Fallback: busca do JSONB (compatibilidade com dados antigos)
-    const massaLogs = logs.filter(
-      (log) => log.etapa === 'massa' && log.fim !== null,
-    );
-
-    let totalReceitas = 0;
-    massaLogs.forEach((log) => {
-      if (log.dados_qualidade && 'receitas_batidas' in log.dados_qualidade) {
-        type DadosQualidadeComReceitas = Record<string, unknown> & { receitas_batidas?: number };
-        const receitas = (log.dados_qualidade as unknown as DadosQualidadeComReceitas | null)?.receitas_batidas;
-        if (typeof receitas === 'number') {
-          totalReceitas += receitas;
-        }
-      }
-    });
-
-    return totalReceitas;
+  private calculateReceitasBatidas(logs: ProductionStepLog[]): number {
+    return sumReceitasBatidasFromMassaLogs(logs);
   }
 
   /**
@@ -143,14 +118,31 @@ export class ProductionProgressCalculator {
     logs: ProductionStepLog[],
     orderStatus: string,
   ): ProductionStep | null {
-    // Se há log em andamento, retorna essa etapa
-    const inProgress = logs.find((log) => log.fim === null);
-    if (inProgress) {
-      return inProgress.etapa;
+    const emAndamento = logs.filter((log) => log.fim === null);
+    if (emAndamento.length > 0) {
+      const etapas = new Set(emAndamento.map((l) => l.etapa));
+      if (etapas.size === 1) {
+        return emAndamento[0].etapa;
+      }
+      const prior = emAndamento.find(
+        (l) =>
+          l.etapa !== 'entrada_forno' &&
+          l.etapa !== 'saida_forno' &&
+          l.etapa !== 'entrada_embalagem' &&
+          l.etapa !== 'saida_embalagem',
+      );
+      return (prior ?? emAndamento[0]).etapa;
     }
 
     // Caso contrário, usa o status da ordem
-    const validSteps: ProductionStep[] = ['massa', 'fermentacao', 'forno', 'embalagem'];
+    const validSteps: ProductionStep[] = [
+      'massa',
+      'fermentacao',
+      'entrada_forno',
+      'saida_forno',
+      'entrada_embalagem',
+      'saida_embalagem',
+    ];
     if (validSteps.includes(orderStatus as ProductionStep)) {
       return orderStatus as ProductionStep;
     }
@@ -164,7 +156,14 @@ export class ProductionProgressCalculator {
   private getNextStep(etapa: ProductionStep | null): ProductionStep | null {
     if (!etapa) return 'massa';
 
-    const steps: ProductionStep[] = ['massa', 'fermentacao', 'forno', 'embalagem'];
+    const steps: ProductionStep[] = [
+      'massa',
+      'fermentacao',
+      'entrada_forno',
+      'saida_forno',
+      'entrada_embalagem',
+      'saida_embalagem',
+    ];
     const currentIndex = steps.indexOf(etapa);
     return currentIndex < steps.length - 1 ? steps[currentIndex + 1] : null;
   }

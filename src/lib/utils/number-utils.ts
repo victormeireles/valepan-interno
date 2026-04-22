@@ -65,6 +65,28 @@ export function formatDecimalWithThousands(value: number): string {
   return formatNumberWithThousands(value, { decimals: 2 });
 }
 
+/**
+ * Exibe quantidade de receitas (ex.: 0,5 ou 12) com vírgula decimal (pt-BR).
+ */
+export function formatReceitasBatidasDisplay(value: number): string {
+  if (value === 0 || Number.isNaN(value) || !isFinite(value)) {
+    return '';
+  }
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
+/**
+ * Interpreta texto digitado com vírgula ou ponto decimal → número.
+ * Aceita "1,5", "1.5", "0,5".
+ */
+export function parseReceitasBatidasInput(value: string): number | null {
+  const t = value.trim();
+  if (t === '') return null;
+  const normalized = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t.replace(',', '.');
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
 
 
 

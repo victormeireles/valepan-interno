@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
 import MassaStepClient from './MassaStepClient';
 import { getProductionOrderWithProduct } from '@/app/actions/producao-etapas-actions';
 
@@ -14,10 +15,15 @@ export default async function MassaStepPage({ params, searchParams }: PageProps)
   const result = await getProductionOrderWithProduct(ordemId);
   
   if (!result.success || !result.data) {
-    redirect('/producao/fila');
+    redirect(filaUrlForProductionStep('massa'));
   }
 
-  return <MassaStepClient ordemProducao={result.data} initialLoteId={loteId} />;
+  return (
+    <MassaStepClient
+      ordemProducao={result.data}
+      initialLoteId={loteId}
+    />
+  );
 }
 
 

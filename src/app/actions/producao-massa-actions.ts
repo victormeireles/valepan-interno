@@ -71,6 +71,38 @@ export async function createMassaLote(input: CreateMassaLoteInput) {
 }
 
 /**
+ * Anexa URL de foto ao log do lote de massa (após upload em `/api/upload/producao-photo`).
+ */
+export async function appendFotoToMassaStepLog(etapasLogId: string, photoUrl: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(etapasLogId);
+    if (!log) {
+      return { success: false as const, error: 'Log de etapa não encontrado.' };
+    }
+    if (log.etapa !== 'massa') {
+      return { success: false as const, error: 'Registro não é da etapa massa.' };
+    }
+    const prev = log.fotos ?? [];
+    const merged = prev.includes(photoUrl) ? [...prev] : [...prev, photoUrl];
+    await stepRepository.update(etapasLogId, { fotos: merged });
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}/massa`);
+
+    return { success: true as const };
+  } catch (error) {
+    console.error('[appendFotoToMassaStepLog]', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao anexar foto ao lote',
+    };
+  }
+}
+
+/**
  * Busca todos os lotes de uma ordem de produção
  */
 export async function getMassaLotesByOrder(ordemProducaoId: string) {
@@ -154,7 +186,6 @@ export async function deleteMassaLote(etapasLogId: string) {
       throw new Error('Log de etapa não encontrado');
     }
 
-    // Deleta o lote (agora limpa os campos de massa do log de etapa)
     await massaManager.deleteLote(etapasLogId);
 
     revalidatePath('/producao/fila');
@@ -243,6 +274,47 @@ export async function ensureMassaStepLog(ordemProducaoId: string, usuarioId?: st
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro ao garantir log de etapa massa',
+    };
+  }
+}
+
+/**
+ * Garante um log de etapa massa **novo** para registrar outro lote na mesma OP.
+ * Se o último log de massa em aberto já tiver lote salvo (`receita_id`), fecha esse log
+ * e cria um novo — evita sobrescrever o mesmo registro ao criar o 2º, 3º lote, etc.
+ */
+export async function ensureMassaStepLogForNewLote(ordemProducaoId: string, usuarioId?: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
+
+  try {
+    const lastMassa = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    if (lastMassa && !lastMassa.fim && lastMassa.receita_id) {
+      await stepRepository.update(lastMassa.id, {
+        fim: new Date().toISOString(),
+      });
+    }
+
+    const log = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    if (log && !log.fim) {
+      return { success: true as const, data: log };
+    }
+
+    const newLog = await stepManager.startStep({
+      ordem_producao_id: ordemProducaoId,
+      etapa: 'massa',
+      usuario_id: usuarioId,
+      qtd_saida: 0,
+    });
+
+    return { success: true as const, data: newLog };
+  } catch (error) {
+    console.error('[ensureMassaStepLogForNewLote] Erro:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao preparar novo lote de massa',
     };
   }
 }

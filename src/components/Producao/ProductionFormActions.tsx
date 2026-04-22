@@ -8,6 +8,8 @@ interface ProductionFormActionsProps {
   cancelLabel?: string;
   loading?: boolean;
   disabled?: boolean;
+  /** Botões mais baixos e texto menor (mobile / etapa massa) */
+  compact?: boolean;
 }
 
 export default function ProductionFormActions({
@@ -16,20 +18,31 @@ export default function ProductionFormActions({
   cancelLabel = 'Cancelar',
   loading = false,
   disabled = false,
+  compact = false,
 }: ProductionFormActionsProps) {
+  const btnBase = compact
+    ? 'rounded-lg px-4 py-2.5 text-sm sm:rounded-xl sm:px-6 sm:py-3.5 sm:text-base'
+    : 'rounded-xl px-6 py-3.5';
+
   return (
-    <div className="pt-4 flex gap-3">
+    <div
+      className={
+        compact
+          ? 'flex gap-2 pt-2 sm:gap-3 sm:pt-4'
+          : 'flex gap-3 pt-4'
+      }
+    >
       <button
         type="button"
         onClick={onCancel}
-        className="flex-1 px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-200 transition-all disabled:opacity-50"
+        className={`flex-1 font-semibold text-gray-700 bg-white border-2 border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-all disabled:opacity-50 ${btnBase}`}
         disabled={loading}
       >
         {cancelLabel}
       </button>
       <button
         type="submit"
-        className="flex-[2] px-6 py-3.5 text-white bg-gray-900 rounded-xl font-semibold shadow-lg shadow-gray-900/20 hover:bg-black hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-2"
+        className={`flex-[2] font-semibold text-white bg-gray-900 shadow-lg shadow-gray-900/20 hover:bg-black hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-2 ${btnBase}`}
         disabled={loading || disabled}
       >
         {loading ? (
