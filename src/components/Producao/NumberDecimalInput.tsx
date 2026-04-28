@@ -14,6 +14,8 @@ interface NumberDecimalInputProps {
   disabled?: boolean;
   className?: string;
   hideLabel?: boolean;
+  /** Tipografia e padding menores (etapas de produção compactas) */
+  compact?: boolean;
 }
 
 function parsePtDecimal(raw: string): number | null {
@@ -41,6 +43,7 @@ export default function NumberDecimalInput({
   disabled = false,
   className,
   hideLabel = false,
+  compact = false,
 }: NumberDecimalInputProps) {
   const [text, setText] = useState(() => formatDisplay(value, step));
 
@@ -63,12 +66,18 @@ export default function NumberDecimalInput({
 
   const inputClass =
     className ||
-    'w-full px-4 py-4 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xl font-medium bg-white text-gray-900';
+    (compact
+      ? 'w-full min-h-[40px] rounded-lg border-2 border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 focus:bg-white'
+      : 'w-full px-4 py-4 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xl font-medium bg-white text-gray-900');
+
+  const labelClass = compact
+    ? 'block text-sm font-semibold text-gray-900 mb-1.5 sm:text-base'
+    : 'block text-base font-semibold text-gray-800 mb-3';
 
   return (
     <div className="w-full">
       {!hideLabel && (
-        <label className="block text-base font-semibold text-gray-800 mb-3">
+        <label className={labelClass}>
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}

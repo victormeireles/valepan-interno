@@ -1,6 +1,7 @@
 'use client';
 
 import type { CarrinhoFilaForno } from '@/components/Producao/queue/production-queue-types';
+import { useState } from 'react';
 
 const MAX_LATAS_POR_CARRINHO = 20;
 
@@ -24,6 +25,7 @@ interface Props {
   fornoActionLoading: boolean;
   fornoActionError: string | null;
   onConfirm: () => void;
+  onMarcarPerdaTotal: () => void;
 }
 
 export default function FilaModalEntradaForno({
@@ -40,26 +42,25 @@ export default function FilaModalEntradaForno({
   fornoActionLoading,
   fornoActionError,
   onConfirm,
+  onMarcarPerdaTotal,
 }: Props) {
+  const [showPerdaOptions, setShowPerdaOptions] = useState(false);
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/40"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-forno-carrinhos-titulo"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200 flex flex-col max-h-[min(90vh,640px)]">
-        <div className="p-5 border-b border-slate-100 shrink-0">
+      <div className="flex h-[92dvh] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-xl max-h-[92dvh] sm:h-auto sm:max-h-[min(92vh,820px)] sm:max-w-3xl sm:rounded-2xl">
+        <div className="shrink-0 border-b border-slate-100 px-4 pb-3 pt-4 sm:px-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="modal-forno-carrinhos-titulo" className="text-lg font-bold text-slate-900">
                 Entrada no forno
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Busque pelo número do carrinho, selecione e informe quantas latas entram no forno.
-              </p>
             </div>
             <button
               type="button"
@@ -70,7 +71,7 @@ export default function FilaModalEntradaForno({
               <span className="material-icons">close</span>
             </button>
           </div>
-          <div className="mt-4 relative">
+          <div className="mt-3 relative">
             <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">
               search
             </span>
@@ -90,15 +91,16 @@ export default function FilaModalEntradaForno({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-3 min-h-[100px]">
+        <div className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2 sm:px-4">
+          <p className="mb-2 px-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Selecione o carrinho
+          </p>
           {carrinhosParaModalForno.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
-              Nenhum carrinho disponível na fila. Cadastre carrinhos na fermentação ou conclua a fermentação com latas.
-            </p>
+            <p className="py-6 text-center text-sm text-slate-500">Nenhum carrinho disponível.</p>
           ) : carrinhosFiltradosModalForno.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">Nenhum carrinho corresponde à busca.</p>
+            <p className="py-6 text-center text-sm text-slate-500">Nenhum carrinho corresponde à busca.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-1">
               {carrinhosFiltradosModalForno.map((c) => {
                 const sel = carrinhoFornoSelecionado?.log_id === c.log_id;
                 return (
@@ -106,47 +108,29 @@ export default function FilaModalEntradaForno({
                     <button
                       type="button"
                       disabled={fornoActionLoading || !c.pode_colocar_no_forno}
+                      title={
+                        !c.pode_colocar_no_forno
+                          ? 'Finalize a fermentação com latas para liberar este carrinho.'
+                          : undefined
+                      }
                       onClick={() => {
                         if (!c.pode_colocar_no_forno) return;
                         onSelectCarrinho(c);
                       }}
-                      className={`w-full text-left rounded-xl border-2 px-4 py-3 transition-colors ${
+                      className={`flex w-full min-h-[44px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
                         sel
-                          ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200'
-                          : 'border-slate-100 bg-slate-50/80 hover:border-slate-200 hover:bg-white'
-                      } disabled:opacity-45 disabled:cursor-not-allowed`}
+                          ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-200'
+                          : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
                     >
-                      <p className="font-bold text-slate-900 text-base">Carrinho {c.carrinho}</p>
-                      <p className="text-xs text-slate-600 mt-0.5">
-                        {c.produto_nome} · <span className="font-mono">{c.lote_codigo}</span>
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
-                        {c.em_fermentacao ? (
-                          <span className="rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 font-medium">
-                            Em fermentação
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-slate-200/80 text-slate-800 px-2 py-0.5 font-medium">
-                            Fermentação ok
-                          </span>
-                        )}
-                        {c.latas_registradas > 0 && (
-                          <span className="text-slate-600">
-                            Ref.:{' '}
-                            <strong>
-                              {c.latas_registradas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
-                            </strong>{' '}
-                            {c.unidades_assadeira != null && c.unidades_assadeira > 0
-                              ? `LT c/ ${c.unidades_assadeira}`
-                              : 'LT'}
-                          </span>
-                        )}
-                      </div>
-                      {c.em_fermentacao && c.latas_registradas <= 0 && (
-                        <p className="text-xs text-amber-800 mt-1">
-                          Informe as latas na fermentação para liberar a entrada no forno.
-                        </p>
-                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-slate-900">
+                          Carrinho {c.carrinho}
+                        </span>
+                        <span className="block truncate text-[11px] leading-tight text-slate-500 sm:text-xs">
+                          {c.produto_nome}
+                        </span>
+                      </span>
                     </button>
                   </li>
                 );
@@ -224,19 +208,6 @@ export default function FilaModalEntradaForno({
                   <span className="material-icons text-2xl">add</span>
                 </button>
               </div>
-              <p className="text-xs text-slate-500">Máximo por carrinho: 20 latas.</p>
-              {carrinhoFornoSelecionado.latas_registradas > 0 && (
-                <p className="text-xs text-slate-500">
-                  Máximo referência na fermentação:{' '}
-                  {carrinhoFornoSelecionado.latas_registradas.toLocaleString('pt-BR', {
-                    maximumFractionDigits: 1,
-                  })}{' '}
-                  {carrinhoFornoSelecionado.unidades_assadeira != null &&
-                  carrinhoFornoSelecionado.unidades_assadeira > 0
-                    ? `LT c/ ${carrinhoFornoSelecionado.unidades_assadeira}`
-                    : 'LT'}
-                </p>
-              )}
             </div>
             <div className="flex justify-end">
               <button
@@ -257,6 +228,27 @@ export default function FilaModalEntradaForno({
                   </>
                 )}
               </button>
+            </div>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPerdaOptions((v) => !v)}
+                className="text-[11px] font-medium text-slate-500 hover:text-slate-700 underline underline-offset-2"
+              >
+                {showPerdaOptions ? 'Ocultar opções avançadas' : 'Opções avançadas'}
+              </button>
+              {showPerdaOptions && (
+                <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50/70 p-2">
+                  <button
+                    type="button"
+                    disabled={fornoActionLoading}
+                    onClick={onMarcarPerdaTotal}
+                    className="text-xs font-semibold text-rose-700 hover:text-rose-800 disabled:opacity-60"
+                  >
+                    Marcar perda total deste carrinho
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

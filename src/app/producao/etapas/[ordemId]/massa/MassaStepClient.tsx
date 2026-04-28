@@ -29,6 +29,13 @@ import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
 import PhotoUploader from '@/components/PhotoUploader';
 import Accordion from '@/components/Accordion';
+import {
+  STEP_GRID_4_BTN,
+  FORM_SECTION_TITLE,
+  FORM_SECTION_SUB,
+  FORM_FIELD_LABEL,
+  PRODUCTION_STEP_DENSE_SHELL,
+} from '@/components/Producao/production-step-form-classes';
 
 interface MassaStepClientProps {
   ordemProducao: {
@@ -777,9 +784,10 @@ export default function MassaStepClient({
       etapaNome="Massa"
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
+      showLoteProdutoSubtitle={false}
+      backHref={filaUrlForProductionStep('massa')}
       denseHeader
-      outerClassName="max-w-2xl mx-auto px-2 py-2 sm:p-4"
-      contentClassName="p-3 space-y-3 sm:p-8 sm:space-y-6"
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
       {quantityInfo.receitas && receitasNecessarias > 0 && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 space-y-1.5 sm:rounded-xl sm:px-4 sm:py-3 sm:space-y-2">
@@ -831,8 +839,8 @@ export default function MassaStepClient({
 
       {/* Formulário para novo lote ou edição */}
       {showForm && (
-            <div className="border-t border-gray-200 pt-4 sm:pt-6">
-              <h3 className="mb-2 text-sm font-semibold leading-tight text-gray-900 sm:mb-4 sm:text-base md:text-lg">
+            <div className="border-t border-gray-200 pt-3 sm:pt-5">
+              <h3 className="mb-3 text-lg font-bold leading-tight text-gray-900 sm:mb-4 sm:text-xl">
                 {editingLoteId ? 'Editar Lote de Massa' : 'Novo Lote de Massa'}
               </h3>
 
@@ -840,43 +848,24 @@ export default function MassaStepClient({
                 <ProductionErrorAlert error={error} />
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-                {/* Quantidade de receitas batidas — botões ±0,5 e ±1 como na temperatura */}
-                <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:space-y-3 sm:rounded-2xl sm:p-4">
-                  <div className="space-y-0.5 sm:space-y-1">
-                    <label
-                      htmlFor="receitas-batidas"
-                      className="block text-xs font-semibold text-gray-900 sm:text-sm md:text-base"
-                    >
+              <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
+                {/* Quantidade de receitas batidas */}
+                <div className="space-y-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-xl sm:p-4">
+                  <div>
+                    <label htmlFor="receitas-batidas" className={FORM_SECTION_TITLE}>
                       Quantidade de receitas batidas
                     </label>
-                    <p id="receitas-batidas-hint" className="text-xs text-gray-600 sm:text-sm">
-                      Mín. <strong>{RECEITAS_BATIDAS_MIN.toLocaleString('pt-BR')}</strong> · ±
-                      {RECEITAS_BATIDAS_STEP_FINE} / ±{RECEITAS_BATIDAS_STEP_COARSE}
+                    <p className={FORM_SECTION_SUB} aria-hidden="true">
+                      (±{RECEITAS_BATIDAS_STEP_FINE.toLocaleString('pt-BR')} / ±
+                      {RECEITAS_BATIDAS_STEP_COARSE.toLocaleString('pt-BR')})
                     </p>
+                    <span id="receitas-batidas-hint" className="sr-only">
+                      Mínimo {RECEITAS_BATIDAS_MIN.toLocaleString('pt-BR')} receita. Ajuste em passos de{' '}
+                      {RECEITAS_BATIDAS_STEP_FINE.toLocaleString('pt-BR')} ou {RECEITAS_BATIDAS_STEP_COARSE.toLocaleString('pt-BR')} receita.
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                    <div className="flex justify-center gap-1.5 sm:justify-end sm:shrink-0">
-                      <button
-                        type="button"
-                        aria-label={`Diminuir ${RECEITAS_BATIDAS_STEP_COARSE.toLocaleString('pt-BR')} receita`}
-                        disabled={receitasBatidasValorAtual() <= 0}
-                        onClick={() => aplicarDeltaReceitasBatidas(-RECEITAS_BATIDAS_STEP_COARSE)}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −1
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Diminuir ${RECEITAS_BATIDAS_STEP_FINE.toLocaleString('pt-BR')} receita`}
-                        disabled={receitasBatidasValorAtual() <= 0}
-                        onClick={() => aplicarDeltaReceitasBatidas(-RECEITAS_BATIDAS_STEP_FINE)}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −0,5
-                      </button>
-                    </div>
-                    <div className="relative min-w-0 flex-1">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="relative min-w-0 w-full">
                       <input
                         id="receitas-batidas"
                         type="text"
@@ -902,18 +891,40 @@ export default function MassaStepClient({
                           setReceitasBatidasField(formatReceitasBatidasDisplay(receitasBatidas));
                         }}
                         placeholder="0,5"
-                        className="w-full min-h-[44px] rounded-xl border-2 border-gray-200 bg-gray-50 px-3 py-2 pr-[4.5rem] text-center text-base font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/15 touch-manipulation sm:min-h-[3.25rem] sm:px-4 sm:py-3.5 sm:pr-24 sm:text-lg md:text-xl"
+                        className="w-full min-h-[40px] rounded-lg border-2 border-gray-200 bg-gray-50 px-2.5 py-1.5 pr-14 text-center text-sm font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/15 touch-manipulation sm:min-h-10 sm:px-3 sm:py-2 sm:pr-20 sm:text-base"
                       />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 sm:right-4 sm:text-base">
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-500 sm:right-3 sm:text-xs">
                         receitas
                       </span>
                     </div>
-                    <div className="flex justify-center gap-1.5 sm:justify-start sm:shrink-0">
+                    <div
+                      className="grid w-full grid-cols-4 gap-1"
+                      role="group"
+                      aria-label="Ajustar receitas em passos de meia ou uma receita"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Diminuir ${RECEITAS_BATIDAS_STEP_COARSE.toLocaleString('pt-BR')} receita`}
+                        disabled={receitasBatidasValorAtual() <= 0}
+                        onClick={() => aplicarDeltaReceitasBatidas(-RECEITAS_BATIDAS_STEP_COARSE)}
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −1
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Diminuir ${RECEITAS_BATIDAS_STEP_FINE.toLocaleString('pt-BR')} receita`}
+                        disabled={receitasBatidasValorAtual() <= 0}
+                        onClick={() => aplicarDeltaReceitasBatidas(-RECEITAS_BATIDAS_STEP_FINE)}
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −0,5
+                      </button>
                       <button
                         type="button"
                         aria-label={`Aumentar ${RECEITAS_BATIDAS_STEP_FINE.toLocaleString('pt-BR')} receita`}
                         onClick={() => aplicarDeltaReceitasBatidas(RECEITAS_BATIDAS_STEP_FINE)}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +0,5
                       </button>
@@ -921,7 +932,7 @@ export default function MassaStepClient({
                         type="button"
                         aria-label={`Aumentar ${RECEITAS_BATIDAS_STEP_COARSE.toLocaleString('pt-BR')} receita`}
                         onClick={() => aplicarDeltaReceitasBatidas(RECEITAS_BATIDAS_STEP_COARSE)}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +1
                       </button>
@@ -936,16 +947,14 @@ export default function MassaStepClient({
 
                 {/* Seleção de Receita - apenas para novo lote */}
                 {!editingLoteId && (
-                  <div className="space-y-1 sm:space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-700 ml-1 sm:text-sm">
-                      Receita
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className={FORM_FIELD_LABEL}>Receita</label>
                     <div className="relative">
                       <select
                         value={receitaId}
                         onChange={(e) => setReceitaId(e.target.value)}
                         required
-                        className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-900 transition-all appearance-none cursor-pointer focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:px-4 sm:py-3 sm:text-sm md:text-base"
+                        className="w-full rounded-lg border-2 border-gray-100 bg-gray-50 px-2.5 py-2 text-xs font-medium text-gray-900 transition-all appearance-none cursor-pointer focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 sm:px-3 sm:py-2.5 sm:text-sm"
                       >
                         <option value="">Selecione uma receita</option>
                         {receitas.map((r) => (
@@ -1022,16 +1031,14 @@ export default function MassaStepClient({
 
                 {/* Seleção de Masseira - apenas para novo lote */}
                 {!editingLoteId && (
-                  <div className="space-y-1 sm:space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-700 ml-1 sm:text-sm">
-                      Masseira
-                    </label>
+                  <div className="space-y-1.5">
+                    <label className={FORM_FIELD_LABEL}>Masseira</label>
                     <div className="relative">
                       <select
                         value={masseiraId}
                         onChange={(e) => setMasseiraId(e.target.value)}
                         required
-                        className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-900 transition-all appearance-none cursor-pointer focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:px-4 sm:py-3 sm:text-sm md:text-base"
+                        className="w-full rounded-lg border-2 border-gray-100 bg-gray-50 px-2.5 py-2 text-xs font-medium text-gray-900 transition-all appearance-none cursor-pointer focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 sm:px-3 sm:py-2.5 sm:text-sm"
                       >
                         <option value="">Selecione uma masseira</option>
                         {masseiras.map((m) => (
@@ -1047,55 +1054,57 @@ export default function MassaStepClient({
                   </div>
                 )}
 
-                {/* Tempos de Mistura: sempre visíveis; em novo lote ficam ativos após escolher masseira */}
-                <div className="space-y-2 sm:space-y-4">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-semibold text-gray-700 ml-1 sm:text-sm">
-                      Tempos de mistura
-                    </p>
-                    {!editingLoteId && !masseiraId && (
-                      <p className="ml-1 flex items-start gap-1 text-xs text-amber-700 sm:text-sm">
-                        <span className="material-icons mt-0.5 shrink-0 text-sm">info</span>
-                        Escolha a masseira para sugerir os tempos.
-                      </p>
-                    )}
+                {/* Tempos de mistura — ativos após escolher masseira (novo lote) */}
+                <div className="space-y-2 sm:space-y-3">
+                  <div>
+                    <p className={FORM_SECTION_TITLE}>Tempos de mistura</p>
+                    <span className="sr-only">
+                      {!editingLoteId && !masseiraId
+                        ? 'Selecione a masseira para editar os tempos sugeridos.'
+                        : 'Em minutos.'}
+                    </span>
                   </div>
                   <div
-                    className={`grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-6 ${!editingLoteId && !masseiraId ? 'opacity-60 pointer-events-none' : ''}`}
+                    className={`grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 ${!editingLoteId && !masseiraId ? 'opacity-60 pointer-events-none' : ''}`}
                     aria-disabled={!editingLoteId && !masseiraId ? true : undefined}
+                    title={
+                      !editingLoteId && !masseiraId ? 'Selecione a masseira para editar os tempos' : undefined
+                    }
                   >
-                    <div className="space-y-1 sm:space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-700 ml-1 sm:text-sm">
+                    <div className="space-y-1.5">
+                      <label className={FORM_FIELD_LABEL} htmlFor="tempo-mistura-lenta">
                         Lenta (min)
                       </label>
                       <div className="relative group">
                         <input
+                          id="tempo-mistura-lenta"
                           type="number"
                           min="0"
                           step="1"
                           value={tempoLentaMin || ''}
                           onChange={(e) => setTempoLentaMin(parseInt(e.target.value, 10) || 0)}
                           disabled={!editingLoteId && !masseiraId}
-                          className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 py-2 pr-12 text-xs font-medium text-gray-900 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed sm:px-4 sm:py-3 sm:pr-14 sm:text-sm md:text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="w-full min-h-[40px] rounded-lg border-2 border-gray-100 bg-gray-50 px-2.5 py-1.5 pr-10 text-xs font-medium text-gray-900 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed sm:min-h-0 sm:px-3 sm:py-2 sm:pr-12 sm:text-sm [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-400 pointer-events-none sm:text-sm">
                           min
                         </span>
                       </div>
                     </div>
-                    <div className="space-y-1 sm:space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-700 ml-1 sm:text-sm">
+                    <div className="space-y-1.5">
+                      <label className={FORM_FIELD_LABEL} htmlFor="tempo-mistura-rapida">
                         Rápida (min)
                       </label>
                       <div className="relative group">
                         <input
+                          id="tempo-mistura-rapida"
                           type="number"
                           min="0"
                           step="1"
                           value={tempoRapidaMin || ''}
                           onChange={(e) => setTempoRapidaMin(parseInt(e.target.value, 10) || 0)}
                           disabled={!editingLoteId && !masseiraId}
-                          className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-3 py-2 pr-12 text-xs font-medium text-gray-900 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed sm:px-4 sm:py-3 sm:pr-14 sm:text-sm md:text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="w-full min-h-[40px] rounded-lg border-2 border-gray-100 bg-gray-50 px-2.5 py-1.5 pr-10 text-xs font-medium text-gray-900 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed sm:min-h-0 sm:px-3 sm:py-2 sm:pr-12 sm:text-sm [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-400 pointer-events-none sm:text-sm">
                           min
@@ -1105,55 +1114,24 @@ export default function MassaStepClient({
                   </div>
                 </div>
 
-                {/* Temperatura — otimizado para celular (várias leituras ao dia) */}
-                <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:space-y-3 sm:rounded-2xl sm:p-4">
-                  <div className="space-y-0.5">
-                    <label
-                      htmlFor="temperatura-massa"
-                      className="block text-xs font-semibold text-gray-900 sm:text-sm md:text-base"
-                    >
+                {/* Temperatura da massa */}
+                <div className="space-y-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-xl sm:p-4">
+                  <div>
+                    <label htmlFor="temperatura-massa" className={FORM_SECTION_TITLE}>
                       Temperatura da massa
                     </label>
-                    <p id="temperatura-massa-hint" className="text-xs text-gray-600 sm:text-sm">
-                      Saída da masseira · ideal <strong>26–28 °C</strong> · padrão{' '}
-                      <strong>{DEFAULT_TEMPERATURA_CAMPO}</strong> · ±{TEMPERATURA_STEP_FINE} / ±
-                      {TEMPERATURA_STEP_COARSE}
+                    <p className={FORM_SECTION_SUB} aria-hidden="true">
+                      (±{TEMPERATURA_STEP_FINE.toLocaleString('pt-BR')} / ±
+                      {TEMPERATURA_STEP_COARSE.toLocaleString('pt-BR')} °C)
                     </p>
+                    <span id="temperatura-massa-hint" className="sr-only">
+                      Saída da masseira em graus Celsius. Ideal entre 26 e 28. Padrão {DEFAULT_TEMPERATURA_CAMPO}{' '}
+                      graus. Ajuste em passos de {TEMPERATURA_STEP_FINE.toLocaleString('pt-BR')} ou{' '}
+                      {TEMPERATURA_STEP_COARSE.toLocaleString('pt-BR')} grau.
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                    <div className="flex justify-center gap-1.5 sm:justify-end sm:shrink-0">
-                      <button
-                        type="button"
-                        aria-label={`Diminuir temperatura ${TEMPERATURA_STEP_COARSE} °C`}
-                        disabled={
-                          (parseDecimalCampoPtBr(temperaturaInput) ?? DEFAULT_TEMPERATURA_NUM) <= 0
-                        }
-                        onClick={() =>
-                          setTemperaturaInput((p) =>
-                            bumpTemperaturaCampo(p, -TEMPERATURA_STEP_COARSE),
-                          )
-                        }
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −1
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Diminuir temperatura ${TEMPERATURA_STEP_FINE} °C`}
-                        disabled={
-                          (parseDecimalCampoPtBr(temperaturaInput) ?? DEFAULT_TEMPERATURA_NUM) <= 0
-                        }
-                        onClick={() =>
-                          setTemperaturaInput((p) =>
-                            bumpTemperaturaCampo(p, -TEMPERATURA_STEP_FINE),
-                          )
-                        }
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −0,1
-                      </button>
-                    </div>
-                    <div className="relative min-w-0 flex-1">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="relative min-w-0 w-full">
                       <input
                         id="temperatura-massa"
                         ref={temperaturaInputRef}
@@ -1169,13 +1147,47 @@ export default function MassaStepClient({
                         value={temperaturaInput}
                         onChange={(e) => setTemperaturaInput(sanitizeDecimalCampo(e.target.value, 1))}
                         placeholder="Ex.: 25,5"
-                        className="w-full min-h-[44px] rounded-xl border-2 border-gray-200 bg-gray-50 px-3 py-2 pr-12 text-center text-base font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/15 touch-manipulation sm:min-h-[3.25rem] sm:px-4 sm:py-3.5 sm:pr-14 sm:text-lg md:text-xl"
+                        className="w-full min-h-[40px] rounded-lg border-2 border-gray-200 bg-gray-50 px-2.5 py-1.5 pr-10 text-center text-sm font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/15 touch-manipulation sm:min-h-10 sm:px-3 sm:py-2 sm:pr-12 sm:text-base"
                       />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 sm:right-4 sm:text-base">
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-500 sm:right-3 sm:text-xs">
                         °C
                       </span>
                     </div>
-                    <div className="flex justify-center gap-1.5 sm:justify-start sm:shrink-0">
+                    <div
+                      className="grid w-full grid-cols-4 gap-1"
+                      role="group"
+                      aria-label="Ajustar temperatura em passos de 0,1 ou 1 °C"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Diminuir temperatura ${TEMPERATURA_STEP_COARSE} °C`}
+                        disabled={
+                          (parseDecimalCampoPtBr(temperaturaInput) ?? DEFAULT_TEMPERATURA_NUM) <= 0
+                        }
+                        onClick={() =>
+                          setTemperaturaInput((p) =>
+                            bumpTemperaturaCampo(p, -TEMPERATURA_STEP_COARSE),
+                          )
+                        }
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −1
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Diminuir temperatura ${TEMPERATURA_STEP_FINE} °C`}
+                        disabled={
+                          (parseDecimalCampoPtBr(temperaturaInput) ?? DEFAULT_TEMPERATURA_NUM) <= 0
+                        }
+                        onClick={() =>
+                          setTemperaturaInput((p) =>
+                            bumpTemperaturaCampo(p, -TEMPERATURA_STEP_FINE),
+                          )
+                        }
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −0,1
+                      </button>
                       <button
                         type="button"
                         aria-label={`Aumentar temperatura ${TEMPERATURA_STEP_FINE} °C`}
@@ -1185,7 +1197,7 @@ export default function MassaStepClient({
                         onClick={() =>
                           setTemperaturaInput((p) => bumpTemperaturaCampo(p, TEMPERATURA_STEP_FINE))
                         }
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +0,1
                       </button>
@@ -1200,7 +1212,7 @@ export default function MassaStepClient({
                             bumpTemperaturaCampo(p, TEMPERATURA_STEP_COARSE),
                           )
                         }
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +1
                       </button>
@@ -1209,49 +1221,29 @@ export default function MassaStepClient({
                   {temperaturaMedidaVisual != null &&
                     temperaturaMedidaVisual > 0 &&
                     (temperaturaMedidaVisual < 26 || temperaturaMedidaVisual > 28) && (
-                      <p className="flex items-center gap-1 text-xs text-amber-700 sm:text-sm">
+                      <p className="flex items-center gap-1 text-xs font-medium text-amber-800 sm:text-sm">
                         <span className="material-icons shrink-0 text-base">warning</span>
                         Fora de 26–28 °C
                       </p>
                     )}
                 </div>
 
-                {/* pH da massa (opcional) — mesmo padrão mobile */}
-                <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm sm:space-y-3 sm:rounded-2xl sm:p-4">
-                  <div className="space-y-0.5">
-                    <label
-                      htmlFor="ph-massa"
-                      className="block text-xs font-semibold text-gray-900 sm:text-sm md:text-base"
-                    >
-                      pH <span className="font-normal text-gray-500">(opc.)</span>
+                {/* pH (opcional) */}
+                <div className="space-y-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-xl sm:p-4">
+                  <div>
+                    <label htmlFor="ph-massa" className={FORM_SECTION_TITLE}>
+                      pH <span className="text-xs font-medium text-gray-500 sm:text-sm">(opcional)</span>
                     </label>
-                    <p id="ph-massa-hint" className="text-xs text-gray-600 sm:text-sm">
-                      Padrão <strong>{DEFAULT_PH_CAMPO}</strong> · ±{PH_CAMPO_STEP_FINE} / ±{PH_CAMPO_STEP_COARSE}{' '}
-                      · vazio se não medir
+                    <p className={FORM_SECTION_SUB} aria-hidden="true">
+                      (±{PH_CAMPO_STEP_FINE.toLocaleString('pt-BR')} / ±{PH_CAMPO_STEP_COARSE.toLocaleString('pt-BR')})
                     </p>
+                    <span id="ph-massa-hint" className="sr-only">
+                      Opcional. Padrão {DEFAULT_PH_CAMPO}. Ajuste em passos de {PH_CAMPO_STEP_FINE.toLocaleString('pt-BR')} ou{' '}
+                      {PH_CAMPO_STEP_COARSE.toLocaleString('pt-BR')}. Deixe vazio se não medir.
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-2">
-                    <div className="flex justify-center gap-1.5 sm:justify-end sm:shrink-0">
-                      <button
-                        type="button"
-                        aria-label={`Diminuir pH ${PH_CAMPO_STEP_COARSE}`}
-                        disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) <= 0}
-                        onClick={() => setPhMassa((p) => bumpPhCampo(p, -PH_CAMPO_STEP_COARSE))}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −1
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Diminuir pH ${PH_CAMPO_STEP_FINE}`}
-                        disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) <= 0}
-                        onClick={() => setPhMassa((p) => bumpPhCampo(p, -PH_CAMPO_STEP_FINE))}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      >
-                        −0,1
-                      </button>
-                    </div>
-                    <div className="relative min-w-0 flex-1">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="relative min-w-0 w-full">
                       <input
                         id="ph-massa"
                         ref={phMassaInputRef}
@@ -1266,19 +1258,41 @@ export default function MassaStepClient({
                         value={phMassa}
                         onChange={(e) => setPhMassa(sanitizeDecimalCampo(e.target.value, 2))}
                         placeholder="Ex.: 5,4"
-                        className="w-full min-h-[44px] rounded-xl border-2 border-gray-200 bg-gray-50 px-3 py-2 pr-12 text-center text-base font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/15 touch-manipulation sm:min-h-[3.25rem] sm:px-4 sm:py-3.5 sm:pr-14 sm:text-lg md:text-xl"
+                        className="w-full min-h-[40px] rounded-lg border-2 border-gray-200 bg-gray-50 px-2.5 py-1.5 pr-10 text-center text-sm font-semibold tabular-nums text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/15 touch-manipulation sm:min-h-10 sm:px-3 sm:py-2 sm:pr-12 sm:text-base"
                       />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 sm:right-4 sm:text-base">
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-500 sm:right-3 sm:text-xs">
                         pH
                       </span>
                     </div>
-                    <div className="flex justify-center gap-1.5 sm:justify-start sm:shrink-0">
+                    <div
+                      className="grid w-full grid-cols-4 gap-1"
+                      role="group"
+                      aria-label="Ajustar pH em passos de 0,1 ou 1"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Diminuir pH ${PH_CAMPO_STEP_COARSE}`}
+                        disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) <= 0}
+                        onClick={() => setPhMassa((p) => bumpPhCampo(p, -PH_CAMPO_STEP_COARSE))}
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −1
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Diminuir pH ${PH_CAMPO_STEP_FINE}`}
+                        disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) <= 0}
+                        onClick={() => setPhMassa((p) => bumpPhCampo(p, -PH_CAMPO_STEP_FINE))}
+                        className={STEP_GRID_4_BTN}
+                      >
+                        −0,1
+                      </button>
                       <button
                         type="button"
                         aria-label={`Aumentar pH ${PH_CAMPO_STEP_FINE}`}
                         disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) >= 14}
                         onClick={() => setPhMassa((p) => bumpPhCampo(p, PH_CAMPO_STEP_FINE))}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.5rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-1.5 text-sm font-bold tabular-nums leading-tight text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +0,1
                       </button>
@@ -1287,7 +1301,7 @@ export default function MassaStepClient({
                         aria-label={`Aumentar pH ${PH_CAMPO_STEP_COARSE}`}
                         disabled={(parseDecimalCampoPtBr(phMassa) ?? DEFAULT_PH_NUM) >= 14}
                         onClick={() => setPhMassa((p) => bumpPhCampo(p, PH_CAMPO_STEP_COARSE))}
-                        className="flex h-11 min-h-[44px] sm:h-[3.25rem] sm:min-h-[3.25rem] min-w-[3.25rem] touch-manipulation items-center justify-center rounded-xl border-2 border-gray-200 bg-gray-100 px-2 text-sm font-bold tabular-nums sm:text-base text-gray-800 hover:border-blue-400 hover:bg-white active:scale-[0.97] disabled:pointer-events-none disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        className={STEP_GRID_4_BTN}
                       >
                         +1
                       </button>
@@ -1296,37 +1310,28 @@ export default function MassaStepClient({
                 </div>
 
                 {/* Textura */}
-                <div className="space-y-1 sm:space-y-1.5">
-                  <label className="ml-1 text-xs font-semibold text-gray-700 sm:text-sm">Textura</label>
-                  <div className="rounded-lg border-2 border-gray-100 bg-gray-50 px-3 py-2 sm:rounded-xl sm:px-4 sm:py-3">
+                <div className="space-y-1.5">
+                  <p className={FORM_SECTION_TITLE}>Textura</p>
+                  <div className="rounded-lg border-2 border-gray-100 bg-gray-50 px-3 py-2 sm:px-4 sm:py-2.5">
                     <label className="flex cursor-pointer items-center gap-2 sm:gap-3">
                       <input
                         type="checkbox"
                         checked={texturaOk}
                         onChange={(e) => setTexturaOk(e.target.checked)}
                         required
+                        aria-label="Textura OK: mole, estica, não rasga"
                         className="h-5 w-5 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                       />
-                      <span className="text-sm font-medium text-gray-900 sm:text-base">
-                        OK — mole, estica, não rasga
-                      </span>
+                      <span className="text-sm font-semibold text-gray-900 sm:text-base">Macio</span>
                     </label>
-                    {!texturaOk && (
-                      <p className="ml-7 mt-1.5 flex items-center gap-1 text-xs text-gray-600 sm:ml-8 sm:text-sm">
-                        <span className="material-icons text-xs sm:text-sm">info</span>
-                        Só marque após testar
-                      </p>
-                    )}
                   </div>
                 </div>
 
-                <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50/80 p-3 sm:p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800 sm:text-sm">Foto (opc.)</p>
-                    <p className="mt-0.5 text-xs leading-snug text-gray-500">
-                      Câmera ou arquivo · envia ao salvar o lote.
-                    </p>
-                  </div>
+                <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:p-4">
+                  <p className={FORM_SECTION_TITLE}>
+                    Foto <span className="text-xs font-medium text-gray-500 sm:text-sm">(opcional)</span>
+                  </p>
+                  <span className="sr-only">Câmera ou arquivo. Enviada ao salvar o lote.</span>
                   <PhotoUploader
                     key={photoUploaderKey}
                     loading={loading}
@@ -1350,7 +1355,7 @@ export default function MassaStepClient({
 
       {/* Quando o formulário está fechado: novo lote (com cópia do último) ou voltar */}
       {!showForm && (
-        <div className="space-y-2 pt-2 sm:space-y-3 sm:pt-4">
+        <div className="space-y-1.5 pt-1.5 sm:space-y-2 sm:pt-3">
           {error && !perguntaOutroLoteAposCriar && (
             <div ref={errorAlertRef}>
               <ProductionErrorAlert error={error} />
@@ -1360,7 +1365,7 @@ export default function MassaStepClient({
             <button
               type="button"
               onClick={() => void startNewLoteFromList()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-gray-900/20 transition-all hover:bg-black sm:px-6 sm:py-3.5 sm:text-base"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-gray-900/20 transition-all hover:bg-black sm:px-5 sm:py-2.5 sm:text-sm"
             >
               <span className="material-icons text-base">add</span>
               Novo lote
@@ -1369,7 +1374,7 @@ export default function MassaStepClient({
           <button
             type="button"
             onClick={() => router.back()}
-            className="w-full rounded-xl border-2 border-gray-100 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-200 hover:bg-gray-50 sm:px-6 sm:py-3.5 sm:text-base"
+            className="w-full rounded-lg border-2 border-gray-100 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:border-gray-200 hover:bg-gray-50 sm:px-5 sm:py-2.5 sm:text-sm"
           >
             Voltar
           </button>

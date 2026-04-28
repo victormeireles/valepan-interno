@@ -21,14 +21,14 @@ export default function ProductionFormActions({
   compact = false,
 }: ProductionFormActionsProps) {
   const btnBase = compact
-    ? 'rounded-lg px-4 py-2.5 text-sm sm:rounded-xl sm:px-6 sm:py-3.5 sm:text-base'
+    ? 'rounded-lg px-3 py-2 text-xs sm:rounded-lg sm:px-5 sm:py-2.5 sm:text-sm'
     : 'rounded-xl px-6 py-3.5';
 
   return (
     <div
       className={
         compact
-          ? 'flex gap-2 pt-2 sm:gap-3 sm:pt-4'
+          ? 'flex gap-1.5 pt-1.5 sm:gap-2 sm:pt-3'
           : 'flex gap-3 pt-4'
       }
     >

@@ -4,6 +4,29 @@ import type {
   ProductionStepLog,
 } from '@/domain/types/producao-etapas';
 
+/**
+ * Milissegundos para ordenação FIFO: cadastro do carrinho na fermentação, senão `inicio` do log, senão `fim`.
+ * Menor valor = há mais tempo na fila (prioridade na entrada do forno).
+ */
+export function ordenacaoFermentacaoCarrinhoMs(
+  dq: FermentacaoQualityData | null | undefined,
+  inicio: string | null | undefined,
+  fim: string | null | undefined,
+): number {
+  const raw = dq?.carrinho_cadastrado_em?.trim() || inicio?.trim() || fim?.trim() || '';
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER;
+}
+
+function cmpCarrinhoFifo(
+  a: { ordenacao_fermentacao_ms: number; carrinho: string },
+  b: { ordenacao_fermentacao_ms: number; carrinho: string },
+): number {
+  const d = a.ordenacao_fermentacao_ms - b.ordenacao_fermentacao_ms;
+  if (d !== 0) return d;
+  return a.carrinho.localeCompare(b.carrinho, 'pt-BR', { numeric: true, sensitivity: 'base' });
+}
+
 /** Dados agregados na fila (JSON-friendly). */
 export type CarrinhoDisponivelFila = {
   log_id: string;
@@ -11,10 +34,12 @@ export type CarrinhoDisponivelFila = {
   em_fermentacao: boolean;
   /** Latas registradas na fermentação (referência; a entrada no forno pode ser menor por perdas). */
   latas_registradas: number;
+  ordenacao_fermentacao_ms: number;
 };
 
 export type CarrinhoDisponivelVM = CarrinhoDisponivelFila & {
   pode_colocar_no_forno: boolean;
+  /** Início do log de fermentação (referência; ordenação usa {@link ordenacaoFermentacaoCarrinhoMs}). */
   fermentacao_inicio: string;
 };
 
@@ -103,15 +128,11 @@ export function listCarrinhosDisponiveisForOrdemFromSnapshots(
       carrinho,
       em_fermentacao: emFerm,
       latas_registradas: total,
+      ordenacao_fermentacao_ms: ordenacaoFermentacaoCarrinhoMs(dq, f.inicio, f.fim),
     });
   }
 
-  const inicioById = new Map(fermsOrd.map((x) => [x.id, x.inicio ?? '']));
-  return out.sort(
-    (a, b) =>
-      new Date(inicioById.get(a.log_id) ?? 0).getTime() -
-      new Date(inicioById.get(b.log_id) ?? 0).getTime(),
-  );
+  return out.sort(cmpCarrinhoFifo);
 }
 
 /**
@@ -152,13 +173,11 @@ export function listCarrinhosDisponiveisForno(
       carrinho,
       em_fermentacao: emFerm,
       latas_registradas: total,
+      ordenacao_fermentacao_ms: ordenacaoFermentacaoCarrinhoMs(dq, f.inicio, f.fim),
       pode_colocar_no_forno: podeColocar,
-      fermentacao_inicio: f.inicio,
+      fermentacao_inicio: f.inicio ?? '',
     });
   }
 
-  return out.sort(
-    (a, b) =>
-      new Date(a.fermentacao_inicio).getTime() - new Date(b.fermentacao_inicio).getTime(),
-  );
+  return out.sort(cmpCarrinhoFifo);
 }

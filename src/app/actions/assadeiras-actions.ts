@@ -53,6 +53,7 @@ export async function createAssadeira(input: {
   codigo?: string | null;
   ordem?: number;
   numeroBuracos?: number;
+  quantidadeLatas: number;
   descricao?: string | null;
   diametroBuracosMm?: number | null;
 }): Promise<{ success: boolean; error?: string }> {
@@ -61,6 +62,10 @@ export async function createAssadeira(input: {
     return { success: false, error: 'Informe o nome da assadeira.' };
   }
 
+  if (!Number.isFinite(input.quantidadeLatas)) {
+    return { success: false, error: 'Informe a quantidade de latas.' };
+  }
+  const quantidadeLatas = parseNumeroBuracos(input.quantidadeLatas);
   const numeroBuracos = parseNumeroBuracos(input.numeroBuracos);
   const descricao =
     input.descricao != null && String(input.descricao).trim() !== ''
@@ -75,6 +80,7 @@ export async function createAssadeira(input: {
     codigo: input.codigo?.trim() || null,
     ordem: input.ordem ?? 0,
     numero_buracos: numeroBuracos,
+    quantidade_latas: quantidadeLatas,
     descricao,
     diametro_buracos_mm: diametroBuracosMm,
     ativo: true,
@@ -95,6 +101,7 @@ export async function updateAssadeira(input: {
   ordem: number;
   ativo: boolean;
   numeroBuracos?: number;
+  quantidadeLatas: number;
   descricao?: string | null;
   diametroBuracosMm?: number | null;
 }): Promise<{ success: boolean; error?: string }> {
@@ -103,6 +110,10 @@ export async function updateAssadeira(input: {
     return { success: false, error: 'Informe o nome.' };
   }
 
+  if (!Number.isFinite(input.quantidadeLatas)) {
+    return { success: false, error: 'Informe a quantidade de latas.' };
+  }
+  const quantidadeLatas = parseNumeroBuracos(input.quantidadeLatas);
   const numeroBuracos = parseNumeroBuracos(input.numeroBuracos);
   const descricao =
     input.descricao != null && String(input.descricao).trim() !== ''
@@ -119,6 +130,7 @@ export async function updateAssadeira(input: {
       codigo: input.codigo?.trim() || null,
       ordem: input.ordem,
       numero_buracos: numeroBuracos,
+      quantidade_latas: quantidadeLatas,
       descricao,
       diametro_buracos_mm: diametroBuracosMm,
       ativo: input.ativo,

@@ -14,6 +14,13 @@ import BandejasStepper, {
 import { getQuantityByStation } from '@/lib/utils/production-conversions';
 import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
 import { sumBandejasSaidaFornoConcluida } from '@/lib/utils/saida-forno-volume';
+import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
+import {
+  FORM_SECTION_TITLE,
+  FORM_FIELD_LABEL,
+  INPUT_COMPACT_LINE,
+  PRODUCTION_STEP_DENSE_SHELL,
+} from '@/components/Producao/production-step-form-classes';
 
 interface SaidaFornoStepClientProps {
   ordemProducao: {
@@ -167,8 +174,11 @@ export default function SaidaFornoStepClient({
         etapaNome="Saída do Forno"
         loteCodigo={ordemProducao.lote_codigo}
         produtoNome={ordemProducao.produto.nome}
+        backHref={filaUrlForProductionStep('saida_forno')}
+        denseHeader
+        {...PRODUCTION_STEP_DENSE_SHELL}
       >
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-12">
           <div className="w-10 h-10 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
         </div>
       </ProductionStepLayout>
@@ -180,8 +190,11 @@ export default function SaidaFornoStepClient({
       etapaNome="Saída do Forno"
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
+      backHref={filaUrlForProductionStep('saida_forno')}
+      denseHeader
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
-      <div className="space-y-4">
+      <div className="space-y-2">
         <SaidaFornoProgressHeader
           variant="ordem"
           meta={metaSaida}
@@ -196,29 +209,29 @@ export default function SaidaFornoStepClient({
         />
 
         {entradaLt <= 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
-            Ainda não há latas na entrada do forno para esta ordem. Use a etapa{' '}
-            <strong>Entrada do Forno</strong> antes.
+          <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-950 sm:text-sm">
+            Sem entrada no forno nesta ordem.
+            <span className="sr-only"> Use a etapa Entrada do Forno antes.</span>
           </div>
         )}
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Histórico de carrinhos</p>
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <p className={FORM_SECTION_TITLE}>Histórico</p>
           {registrosSaida.length === 0 ? (
-            <p className="text-sm text-slate-500">Nenhuma saída registrada ainda.</p>
+            <p className="text-xs text-slate-500 sm:text-sm">Nenhuma saída ainda.</p>
           ) : (
             <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 overflow-hidden">
               {registrosSaida.map((log) => {
                 const dq = log.dados_qualidade as SaidaFornoQualityData | null;
                 return (
-                  <li key={log.id} className="bg-white px-3 py-3 flex flex-col gap-1">
+                  <li key={log.id} className="flex flex-col gap-0.5 bg-white px-2.5 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-slate-800">
+                      <span className="text-xs font-medium text-slate-800 sm:text-sm">
                         Carrinho <strong>{dq?.numero_carrinho?.trim() || '—'}</strong>
                       </span>
-                      <span className="text-xs text-slate-500">{log.fim ? formatFim(log.fim) : ''}</span>
+                      <span className="text-[11px] text-slate-500 sm:text-xs">{log.fim ? formatFim(log.fim) : ''}</span>
                     </div>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-xs text-slate-600 sm:text-sm">
                       <strong>{dq?.bandejas != null ? Number(dq.bandejas).toLocaleString('pt-BR') : '—'}</strong>{' '}
                       bandeja(s) ({sufixoLt})
                     </p>
@@ -239,23 +252,22 @@ export default function SaidaFornoStepClient({
           aria-modal="true"
           aria-labelledby="modal-saida-forno-titulo"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-5 space-y-4">
+          <div className="w-full max-w-md space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
             {modalStep === 'nextChoice' ? (
               <>
-                <h2 id="modal-saida-forno-titulo" className="text-lg font-bold text-slate-900">
-                  Registrar outro carrinho?
+                <h2 id="modal-saida-forno-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
+                  Outro carrinho?
                 </h2>
-                <p className="text-sm text-slate-600">
-                  Deseja lançar <strong>outro carrinho</strong> de <strong>{ordemProducao.produto.nome}</strong> nesta
-                  ordem ({ordemProducao.lote_codigo})?
+                <p className="text-xs text-slate-600 sm:text-sm">
+                  <strong>{ordemProducao.produto.nome}</strong> · {ordemProducao.lote_codigo}
                 </p>
-                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
+                <div className="flex flex-col-reverse gap-1.5 pt-1 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={fecharModal}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:text-sm"
                   >
-                    Não, voltar
+                    Não
                   </button>
                   <button
                     type="button"
@@ -265,24 +277,20 @@ export default function SaidaFornoStepClient({
                       setBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
                       setError(null);
                     }}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 sm:text-sm"
                   >
-                    Sim, outro carrinho
+                    Sim
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <h2 id="modal-saida-forno-titulo" className="text-lg font-bold text-slate-900">
-                  Registrar saída do forno
+                <h2 id="modal-saida-forno-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
+                  Saída do forno
                 </h2>
-                <p className="text-sm text-slate-600">
-                  Produto: <strong>{ordemProducao.produto.nome}</strong> · Lote{' '}
-                  <span className="font-mono">{ordemProducao.lote_codigo}</span>
-                </p>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="input-carrinho-saida">
-                    Número do carrinho
+                <div className="space-y-1">
+                  <label className={FORM_FIELD_LABEL} htmlFor="input-carrinho-saida">
+                    Carrinho
                   </label>
                   <input
                     id="input-carrinho-saida"
@@ -290,17 +298,14 @@ export default function SaidaFornoStepClient({
                     autoComplete="off"
                     value={carrinhoField}
                     onChange={(e) => setCarrinhoField(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 font-medium"
+                    className={INPUT_COMPACT_LINE}
                     placeholder="ex.: 12"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="input-bandejas-saida">
-                    Bandejas (latas na saída)
+                <div className="space-y-1">
+                  <label className={FORM_FIELD_LABEL} htmlFor="input-bandejas-saida">
+                    Bandejas (LT)
                   </label>
-                  <p className="text-xs text-slate-500">
-                    Padrão 20 — use − / + para ajustar de 1 em 1 (máximo {MAX_BANDEJAS_SAIDA}).
-                  </p>
                   <BandejasStepper
                     id="input-bandejas-saida"
                     value={bandejasField}
@@ -308,12 +313,12 @@ export default function SaidaFornoStepClient({
                     disabled={loading}
                   />
                 </div>
-                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
+                <div className="flex flex-col-reverse gap-1.5 pt-1 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={fecharModal}
                     disabled={loading}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:text-sm"
                   >
                     Cancelar
                   </button>
@@ -322,7 +327,7 @@ export default function SaidaFornoStepClient({
                     onClick={() => void confirmarRegistro()}
                     disabled={loading || entradaLt <= 0}
                     title={entradaLt <= 0 ? 'Sem entrada no forno registrada' : undefined}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                    className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
                   >
                     {loading ? (
                       <>
@@ -340,15 +345,6 @@ export default function SaidaFornoStepClient({
         </div>
       )}
 
-      <div className="pt-6">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="w-full px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50"
-        >
-          Voltar
-        </button>
-      </div>
     </ProductionStepLayout>
   );
 }

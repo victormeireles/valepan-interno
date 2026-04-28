@@ -33,6 +33,8 @@ import {
 import {
   startProductionStep,
   registerSaidaForno,
+  getEntradaFornoCarrinhosParaSaida,
+  marcarPerdaTotalCarrinhoEntradaForno,
   getSaidaFornoCarrinhosParaEmbalagem,
   registerEntradaEmbalagemCarrinhoELatas,
 } from '@/app/actions/producao-etapas-actions';
@@ -63,9 +65,13 @@ export default function ProductionQueueClient({
   const [fornoActionLoading, setFornoActionLoading] = useState(false);
   const [fornoActionError, setFornoActionError] = useState<string | null>(null);
   const [modalSaidaFornoAberto, setModalSaidaFornoAberto] = useState(false);
+  const [saidaBuscaOrdem, setSaidaBuscaOrdem] = useState('');
   const [saidaOrdemId, setSaidaOrdemId] = useState('');
   const [saidaCarrinhoField, setSaidaCarrinhoField] = useState('');
   const [saidaBandejasField, setSaidaBandejasField] = useState(String(DEFAULT_BANDEJAS_SAIDA));
+  const [saidaCarrinhosDisponiveis, setSaidaCarrinhosDisponiveis] = useState<string[]>([]);
+  const [saidaCarrinhosLoading, setSaidaCarrinhosLoading] = useState(false);
+  const [saidaCarrinhosError, setSaidaCarrinhosError] = useState<string | null>(null);
   const [saidaActionLoading, setSaidaActionLoading] = useState(false);
   const [saidaActionError, setSaidaActionError] = useState<string | null>(null);
   const [saidaPosConfirm, setSaidaPosConfirm] = useState<'form' | 'nextChoice'>('form');
@@ -134,12 +140,15 @@ export default function ProductionQueueClient({
     setFilaDataTexto(filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '');
   }, [filterDateIso]);
 
-  const aplicarDataDigitada = () => {
+  const mostrarTodosFila = () => {
+    setFilaDateQuery(null);
+    setFilaDataTexto('');
+  };
+
+  /** Aplica filtro só ao clicar em «Filtrar» ou Enter no campo (campo vazio não altera a URL). */
+  const aplicarFiltrarData = () => {
     const raw = filaDataTexto.trim();
-    if (!raw) {
-      setFilaDateQuery(null);
-      return;
-    }
+    if (!raw) return;
     const iso = parseDateInputToIsoBR(raw);
     if (iso) {
       setFilaDateQuery(iso);
@@ -199,11 +208,53 @@ export default function ProductionQueueClient({
     setSaidaPosConfirm('form');
     setSaidaLastProdutoId(null);
     setSaidaLastProdutoNome('');
+    setSaidaBuscaOrdem('');
     setSaidaOrdemId('');
     setSaidaCarrinhoField('');
     setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
+    setSaidaCarrinhosDisponiveis([]);
+    setSaidaCarrinhosLoading(false);
+    setSaidaCarrinhosError(null);
     setSaidaActionError(null);
   };
+
+  useEffect(() => {
+    if (!modalSaidaFornoAberto || saidaPosConfirm !== 'form' || !saidaOrdemId) {
+      setSaidaCarrinhosDisponiveis([]);
+      setSaidaCarrinhosLoading(false);
+      setSaidaCarrinhosError(null);
+      return;
+    }
+    let cancelled = false;
+    setSaidaCarrinhosLoading(true);
+    setSaidaCarrinhosError(null);
+    void getEntradaFornoCarrinhosParaSaida(saidaOrdemId)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success) {
+          setSaidaCarrinhosDisponiveis([]);
+          setSaidaCarrinhosError(res.error || 'Erro ao carregar carrinhos.');
+          setSaidaCarrinhosLoading(false);
+          return;
+        }
+        const lista = res.data.map((row) => row.numero_carrinho);
+        setSaidaCarrinhosDisponiveis(lista);
+        setSaidaCarrinhosError(null);
+        setSaidaCarrinhosLoading(false);
+        if (lista.length > 0 && !lista.includes(saidaCarrinhoField.trim())) {
+          setSaidaCarrinhoField('');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSaidaCarrinhosDisponiveis([]);
+        setSaidaCarrinhosLoading(false);
+        setSaidaCarrinhosError('Erro ao carregar carrinhos.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalSaidaFornoAberto, saidaPosConfirm, saidaOrdemId, saidaCarrinhoField]);
 
   const closeModalEmbalagem = () => {
     setModalEmbalagemAberto(false);
@@ -251,7 +302,7 @@ export default function ProductionQueueClient({
       .then((chunks) => {
         if (cancelled) return;
         const flat = chunks.flat();
-        flat.sort((a, b) => new Date(b.saida_fim).getTime() - new Date(a.saida_fim).getTime());
+        flat.sort((a, b) => new Date(a.saida_fim).getTime() - new Date(b.saida_fim).getTime());
         setEmbalagemCarrinhos(flat);
         setEmbalagemLoading(false);
       })
@@ -303,6 +354,29 @@ export default function ProductionQueueClient({
       router.refresh();
     } catch (e) {
       setFornoActionError(e instanceof Error ? e.message : 'Erro ao registrar.');
+    } finally {
+      setFornoActionLoading(false);
+    }
+  };
+
+  const handleMarcarPerdaTotalEntradaForno = async () => {
+    const c = carrinhoFornoSelecionado;
+    if (!c) return;
+    const ok = window.confirm(
+      `Confirmar perda total do carrinho ${c.carrinho}? Ele será removido da fila de entrada do forno.`,
+    );
+    if (!ok) return;
+    setFornoActionError(null);
+    setFornoActionLoading(true);
+    try {
+      const r = await marcarPerdaTotalCarrinhoEntradaForno({ fermentacao_log_id: c.log_id });
+      if (!r.success) {
+        throw new Error(r.error || 'Não foi possível marcar perda total.');
+      }
+      closeModalForno();
+      router.refresh();
+    } catch (e) {
+      setFornoActionError(e instanceof Error ? e.message : 'Erro ao marcar perda total.');
     } finally {
       setFornoActionLoading(false);
     }
@@ -388,22 +462,7 @@ export default function ProductionQueueClient({
       <div
         className={`mx-auto space-y-4 px-3 py-4 sm:space-y-8 sm:p-6 md:p-10 ${isPlanning ? 'max-w-[min(100rem,calc(100vw-2rem))]' : 'max-w-6xl'}`}
       >
-        <div className="flex flex-wrap items-center gap-2 pb-2">
-          <input
-            type="checkbox"
-            checked={filterDateIso == null}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setFilaDateQuery(null);
-              } else {
-                const iso = parseDateInputToIsoBR(filaDataTexto) ?? getTodayISOInBrazilTimezone();
-                setFilaDateQuery(iso);
-              }
-            }}
-            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300/80 text-slate-500 focus:ring-1 focus:ring-slate-300/60"
-            title="Ver todos os pedidos (sem filtrar por data de produção)"
-            aria-label="Ver todos os pedidos ao mesmo tempo, sem filtro por data de produção"
-          />
+        <div className="flex flex-wrap items-center gap-1.5 pb-2 sm:gap-2">
           <input
             type="text"
             inputMode="numeric"
@@ -411,16 +470,29 @@ export default function ProductionQueueClient({
             placeholder="DD/MM/AAAA"
             value={filaDataTexto}
             onChange={(e) => setFilaDataTexto(e.target.value)}
-            onBlur={aplicarDataDigitada}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                aplicarDataDigitada();
+                aplicarFiltrarData();
               }
             }}
-            className="min-w-[8.5rem] max-w-[9rem] rounded border border-slate-200/60 bg-slate-50/80 px-1.5 py-1 text-center text-[10px] leading-tight tabular-nums text-slate-500 placeholder:text-slate-400/90 focus:border-slate-300/80 focus:bg-white focus:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-200/60 sm:text-[11px]"
-            aria-label="Data de produção (DD/MM/AAAA). Marque a caixa ao lado ou apague o campo para ver todos os pedidos."
+            className="min-w-[7.5rem] max-w-[8.5rem] rounded border border-slate-200/60 bg-slate-50/80 px-1.5 py-1.5 text-center text-xs leading-tight tabular-nums text-slate-700 placeholder:text-slate-400/90 focus:border-slate-300/80 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-200/60 sm:min-w-[8.25rem] sm:max-w-[9rem] sm:py-2"
+            aria-label="Data de produção (DD/MM/AAAA)"
           />
+          <button
+            type="button"
+            onClick={aplicarFiltrarData}
+            className="shrink-0 rounded-md border border-slate-300/90 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:scale-[0.99] sm:px-3 sm:py-2"
+          >
+            Filtrar
+          </button>
+          <button
+            type="button"
+            onClick={mostrarTodosFila}
+            className="shrink-0 rounded-md border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/80 active:scale-[0.99] sm:px-3 sm:py-2"
+          >
+            Mostrar todos
+          </button>
         </div>
 
         {isPlanning && (
@@ -489,6 +561,7 @@ export default function ProductionQueueClient({
               const okList = filteredQueue.filter((i) => !i.produtoJoinFaltando);
               setModalSaidaFornoAberto(true);
               setSaidaPosConfirm('form');
+              setSaidaBuscaOrdem('');
               setSaidaOrdemId(okList.length === 1 ? okList[0].id : '');
               setSaidaCarrinhoField('');
               setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
@@ -515,7 +588,7 @@ export default function ProductionQueueClient({
           />
         )}
 
-        <div className="grid grid-cols-1 gap-2.5 sm:gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4">
           {filteredQueue.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white py-12 sm:rounded-3xl sm:py-20">
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 sm:mb-4 sm:h-16 sm:w-16">
@@ -524,7 +597,7 @@ export default function ProductionQueueClient({
               <h3 className="text-sm font-medium text-gray-900 sm:text-lg">Fila vazia</h3>
               <p className="mt-1 max-w-sm px-2 text-center text-xs text-gray-500 sm:text-base">
                 {filterDateIso && initialQueue.length > 0 && queueFilteredByDataProducao.length === 0
-                  ? `Nenhuma ordem com data de produção em ${formatIsoDateToDDMMYYYY(filterDateIso)}. Tente outra data ou use o botão Todas.`
+                  ? `Nenhuma ordem com data de produção em ${formatIsoDateToDDMMYYYY(filterDateIso)}. Tente outra data ou use Mostrar todos.`
                   : isFermentacao
                     ? 'Não há ordens com lotes de massa registrados no momento. Produza massa na etapa anterior para aparecer aqui.'
                     : isEntradaForno
@@ -552,11 +625,12 @@ export default function ProductionQueueClient({
                   expandedFornoProdutoId={expandedFornoProdutoId}
                   setExpandedFornoProdutoId={setExpandedFornoProdutoId}
                   router={router}
+                  filaSecao="active"
                 />
               )}
               {fornoGroupsProntos.length > 0 && (
                 <div className="mt-4 space-y-2 border-t border-slate-200/90 pt-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {tituloSecaoProntosFila}
                   </p>
                   <ProductionQueueFornoGroups
@@ -564,6 +638,7 @@ export default function ProductionQueueClient({
                     expandedFornoProdutoId={expandedFornoProdutoId}
                     setExpandedFornoProdutoId={setExpandedFornoProdutoId}
                     router={router}
+                    filaSecao="prontos"
                   />
                 </div>
               )}
@@ -576,11 +651,12 @@ export default function ProductionQueueClient({
                   expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
                   setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
                   router={router}
+                  filaSecao="active"
                 />
               )}
               {saidaFornoGroupsProntos.length > 0 && (
                 <div className="mt-4 space-y-2 border-t border-slate-200/90 pt-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {tituloSecaoProntosFila}
                   </p>
                   <ProductionQueueSaidaFornoGroups
@@ -588,6 +664,7 @@ export default function ProductionQueueClient({
                     expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
                     setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
                     router={router}
+                    filaSecao="prontos"
                   />
                 </div>
               )}
@@ -670,6 +747,7 @@ export default function ProductionQueueClient({
         fornoActionLoading={fornoActionLoading}
         fornoActionError={fornoActionError}
         onConfirm={handleConfirmEntradaForno}
+        onMarcarPerdaTotal={handleMarcarPerdaTotalEntradaForno}
       />
 
       <FilaModalSaidaForno
@@ -678,10 +756,20 @@ export default function ProductionQueueClient({
         saidaPosConfirm={saidaPosConfirm}
         saidaLastProdutoNome={saidaLastProdutoNome}
         ordensParaSelectSaida={ordensParaSelectSaida}
+        saidaBuscaOrdem={saidaBuscaOrdem}
+        onSaidaBuscaOrdemChange={setSaidaBuscaOrdem}
         saidaOrdemId={saidaOrdemId}
-        onSaidaOrdemIdChange={setSaidaOrdemId}
+        onSaidaOrdemIdChange={(id) => {
+          setSaidaOrdemId(id);
+          setSaidaCarrinhoField('');
+          setSaidaCarrinhosError(null);
+          setSaidaActionError(null);
+        }}
         saidaCarrinhoField={saidaCarrinhoField}
         onSaidaCarrinhoChange={setSaidaCarrinhoField}
+        saidaCarrinhosDisponiveis={saidaCarrinhosDisponiveis}
+        saidaCarrinhosLoading={saidaCarrinhosLoading}
+        saidaCarrinhosError={saidaCarrinhosError}
         saidaBandejasField={saidaBandejasField}
         onSaidaBandejasChange={setSaidaBandejasField}
         saidaActionLoading={saidaActionLoading}

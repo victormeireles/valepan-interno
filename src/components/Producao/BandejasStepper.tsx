@@ -43,15 +43,15 @@ export default function BandejasStepper({
   };
 
   return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2">
+    <div className="flex items-center justify-center gap-1 sm:gap-1.5">
       <button
         type="button"
         disabled={disabled || n <= 1}
         onClick={() => setCount(n - 1)}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed sm:h-10 sm:w-10"
         aria-label="Diminuir uma bandeja"
       >
-        <span className="material-icons text-2xl">remove</span>
+        <span className="material-icons text-xl sm:text-2xl">remove</span>
       </button>
       <input
         id={id}
@@ -77,16 +77,16 @@ export default function BandejasStepper({
           }
           onChange(String(Math.min(effectiveMax, p)));
         }}
-        className="w-16 sm:w-20 shrink-0 rounded-xl border-2 border-slate-200 px-2 py-2.5 text-center text-lg font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-100"
+        className="w-14 sm:w-16 shrink-0 rounded-lg border-2 border-slate-200 px-1.5 py-1.5 text-center text-sm font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-100 sm:text-base"
       />
       <button
         type="button"
         disabled={disabled || n >= effectiveMax}
         onClick={() => setCount(n + 1)}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed sm:h-10 sm:w-10"
         aria-label="Aumentar uma bandeja"
       >
-        <span className="material-icons text-2xl">add</span>
+        <span className="material-icons text-xl sm:text-2xl">add</span>
       </button>
     </div>
   );

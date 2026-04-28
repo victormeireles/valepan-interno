@@ -203,6 +203,85 @@ function productInfoFromQueueItem(item: ProductionQueueItem) {
   };
 }
 
+/** Estado visual do card na fila (cor + selo), alinhado a `ordemProntaNaEtapaFila`. */
+export type FilaCardEstadoVisual = 'finalizada' | 'em_andamento' | 'proximo' | 'pendente';
+
+/** True se já houve trabalho registrado nesta etapa, mas a meta ainda não foi atingida. */
+export function filaItemTemProgressoParcialNaEtapa(item: ProductionQueueItem, station: Station): boolean {
+  if (item.produtoJoinFaltando) return false;
+  switch (station) {
+    case 'planejamento':
+      return Boolean(String(item.data_producao ?? '').trim()) || Number(item.qtd_planejada) > 0;
+    case 'massa':
+      return (item.receitas_batidas ?? 0) >= 0.5;
+    case 'fermentacao':
+      return (item.receitas_fermentacao ?? 0) > 0 || (item.fermentacao_volume_concluido ?? 0) > 0;
+    case 'entrada_forno':
+      return (item.forno_entrada_latas_total ?? 0) > 0 || (item.forno_volume_concluido ?? 0) > 0;
+    case 'saida_forno':
+      return (item.saida_forno_bandejas_total ?? 0) > 0;
+    case 'entrada_embalagem':
+      return (item.entrada_embalagem_latas_total ?? 0) > 0;
+    case 'saida_embalagem':
+      return false;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Card de ordem na fila: finalizada (meta da etapa), em andamento, próximo da fila (ainda sem registro) ou pendente.
+ */
+export function filaCardEstadoVisual(
+  item: ProductionQueueItem,
+  station: Station,
+  opts: { fromProntosSection: boolean; isFirstActiveInFila: boolean },
+): FilaCardEstadoVisual {
+  if (item.produtoJoinFaltando) return 'pendente';
+  if (opts.fromProntosSection || ordemProntaNaEtapaFila(item, station)) {
+    return 'finalizada';
+  }
+  if (filaItemTemProgressoParcialNaEtapa(item, station)) {
+    return 'em_andamento';
+  }
+  if (opts.isFirstActiveInFila) {
+    return 'proximo';
+  }
+  return 'pendente';
+}
+
+export type FilaGrupoProdutoEstadoVisual = 'finalizada' | 'em_andamento' | 'proximo' | 'pendente';
+
+/** Grupo por produto (entrada no forno): barra agregada + posição na lista ativa. */
+export function filaGrupoEntradaFornoEstadoVisual(
+  orders: ProductionQueueItem[],
+  opts: { fromProntosSection: boolean; isFirstActiveGroup: boolean },
+): FilaGrupoProdutoEstadoVisual {
+  if (orders.some((o) => o.produtoJoinFaltando)) return 'pendente';
+  if (opts.fromProntosSection || fornoProductGroupEtapaCompleta(orders)) {
+    return 'finalizada';
+  }
+  const g = fornoGroupProgressMetrics(orders);
+  if (g.forno > PRONTO_EPS) return 'em_andamento';
+  if (opts.isFirstActiveGroup) return 'proximo';
+  return 'pendente';
+}
+
+/** Grupo por produto (saída do forno). */
+export function filaGrupoSaidaFornoEstadoVisual(
+  orders: ProductionQueueItem[],
+  opts: { fromProntosSection: boolean; isFirstActiveGroup: boolean },
+): FilaGrupoProdutoEstadoVisual {
+  if (orders.some((o) => o.produtoJoinFaltando)) return 'pendente';
+  if (opts.fromProntosSection || saidaFornoProductGroupEtapaCompleta(orders)) {
+    return 'finalizada';
+  }
+  const g = saidaFornoGroupProgressMetrics(orders);
+  if (g.saidaForno > PRONTO_EPS) return 'em_andamento';
+  if (opts.isFirstActiveGroup) return 'proximo';
+  return 'pendente';
+}
+
 /**
  * Indica se a ordem já cumpriu o objetivo da etapa na fila (para separar "prontos" na UI).
  */

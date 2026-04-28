@@ -12,6 +12,7 @@ import {
   CreateProductionStepLogInput,
   UpdateProductionStepLogInput,
   ProductionStep,
+  ProductionStepLog,
   MassaQualityData,
   FermentacaoQualityData,
   FornoQualityData,
@@ -32,6 +33,100 @@ import {
   latasSaidaFornoDoLog,
   sumLatasEntradaEmbalagemPorSaidaFornoLogId,
 } from '@/lib/utils/entrada-embalagem-saida';
+
+async function assertCarrinhoDisponivelParaFermentacao(input: {
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
+  numeroNormalizado: string;
+  numeroParaExibir: string;
+  excludeLogId?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const numeroInt = Number.parseInt(input.numeroParaExibir, 10);
+  if (!Number.isFinite(numeroInt) || numeroInt <= 0) {
+    return { ok: false, error: 'Número de carrinho inválido.' };
+  }
+
+  const { data: carrinhoData, error: carrinhoErr } = await input.supabase
+    .from('carrinhos')
+    .select('id, numero')
+    .eq('numero', numeroInt)
+    .maybeSingle();
+  if (carrinhoErr) {
+    return { ok: false, error: carrinhoErr.message };
+  }
+  if (!carrinhoData) {
+    return {
+      ok: false,
+      error: `O carrinho "${input.numeroParaExibir}" não existe no cadastro de carrinhos.`,
+    };
+  }
+
+  const { data: fermAtivos, error: fermErr } = await input.supabase
+    .from('producao_etapas_log')
+    .select('id, dados_qualidade')
+    .eq('etapa', 'fermentacao')
+    .is('fim', null);
+  if (fermErr) {
+    return { ok: false, error: fermErr.message };
+  }
+  for (const row of (fermAtivos ?? []) as { id: string; dados_qualidade: unknown }[]) {
+    if (input.excludeLogId && row.id === input.excludeLogId) continue;
+    const n = normalizeNumeroCarrinhoFermentacao(
+      (row.dados_qualidade as FermentacaoQualityData | null)?.numero_carrinho,
+    );
+    if (n && n === input.numeroNormalizado) {
+      return {
+        ok: false,
+        error: `O carrinho "${input.numeroParaExibir}" já está em uso na fermentação.`,
+      };
+    }
+  }
+
+  const { data: fornoEmbLogs, error: fornoEmbErr } = await input.supabase
+    .from('producao_etapas_log')
+    .select('id, ordem_producao_id, etapa, fim, dados_qualidade')
+    .in('etapa', ['saida_forno', 'entrada_embalagem']);
+  if (fornoEmbErr) {
+    return { ok: false, error: fornoEmbErr.message };
+  }
+
+  const logs = (fornoEmbLogs ?? []) as Array<{
+    id: string;
+    ordem_producao_id: string;
+    etapa: string;
+    fim: string | null;
+    dados_qualidade: unknown;
+  }>;
+
+  const entradaByOrdem = new Map<string, Array<{ dados_qualidade: unknown }>>();
+  for (const row of logs) {
+    if (row.etapa !== 'entrada_embalagem') continue;
+    const arr = entradaByOrdem.get(row.ordem_producao_id) ?? [];
+    arr.push({ dados_qualidade: row.dados_qualidade });
+    entradaByOrdem.set(row.ordem_producao_id, arr);
+  }
+
+  for (const row of logs) {
+    if (row.etapa !== 'saida_forno' || row.fim == null) continue;
+    const dqSaida = row.dados_qualidade as SaidaFornoQualityData | null;
+    const n = normalizeNumeroCarrinhoFermentacao(dqSaida?.numero_carrinho);
+    if (!n || n !== input.numeroNormalizado) continue;
+    const latasSaida = latasSaidaFornoDoLog(dqSaida);
+    const ordemLogs = [
+      row as unknown as ProductionStepLog,
+      ...((entradaByOrdem.get(row.ordem_producao_id) ?? []) as unknown as ProductionStepLog[]),
+    ];
+    const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(ordemLogs, row.id);
+    const disponivel = latasSaida - consumido;
+    if (disponivel > 0) {
+      return {
+        ok: false,
+        error: `O carrinho "${input.numeroParaExibir}" ainda está em uso na saída do forno.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
 
 /**
  * Inicia uma nova etapa de produção
@@ -136,6 +231,14 @@ export async function completeProductionStep(input: {
           ? fdq.numero_carrinho.trim()
           : String(fdq.numero_carrinho ?? '').trim();
       if (norm) {
+        const disponibilidade = await assertCarrinhoDisponivelParaFermentacao({
+          supabase,
+          numeroNormalizado: norm,
+          numeroParaExibir: exibir || norm,
+          excludeLogId: input.log_id,
+        });
+        if (!disponibilidade.ok) return { success: false, error: disponibilidade.error };
+
         const ordemLogs = await stepRepository.findByOrderId(existing.ordem_producao_id);
         const dup = assertCarrinhoFermentacaoUnicoNaOrdem(
           ordemLogs,
@@ -314,6 +417,14 @@ export async function updateInProgressProductionStepLog(input: {
           ? dq.numero_carrinho.trim()
           : String(dq.numero_carrinho ?? '').trim();
       if (norm) {
+        const disponibilidade = await assertCarrinhoDisponivelParaFermentacao({
+          supabase,
+          numeroNormalizado: norm,
+          numeroParaExibir: exibir || norm,
+          excludeLogId: input.log_id,
+        });
+        if (!disponibilidade.ok) return { success: false, error: disponibilidade.error };
+
         const ordemLogs = await stepRepository.findByOrderId(log.ordem_producao_id);
         const dup = assertCarrinhoFermentacaoUnicoNaOrdem(
           ordemLogs,
@@ -337,6 +448,41 @@ export async function updateInProgressProductionStepLog(input: {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro ao atualizar registro',
+    };
+  }
+}
+
+/**
+ * Marca um carrinho da fermentação como perda total para não aparecer mais na entrada do forno.
+ */
+export async function marcarPerdaTotalCarrinhoEntradaForno(input: { fermentacao_log_id: string }) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(input.fermentacao_log_id);
+    if (!log || log.etapa !== 'fermentacao') {
+      return { success: false as const, error: 'Registro de fermentação não encontrado.' };
+    }
+
+    const prev = log.dados_qualidade;
+    const dadosAtualizados = {
+      ...(prev != null && typeof prev === 'object' ? prev : {}),
+      excluido_da_lista_forno: true,
+    } as QualityData;
+
+    await stepRepository.update(log.id, { dados_qualidade: dadosAtualizados });
+
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}/entrada-forno`);
+
+    return { success: true as const };
+  } catch (error) {
+    console.error('marcarPerdaTotalCarrinhoEntradaForno:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao marcar perda total do carrinho.',
     };
   }
 }
@@ -502,6 +648,67 @@ export type CarrinhoSaidaFornoParaEmbalagemVM = {
   saida_fim: string;
 };
 
+export type CarrinhoEntradaFornoParaSaidaVM = {
+  numero_carrinho: string;
+  entrada_forno_fim: string;
+};
+
+/**
+ * Carrinhos com entrada no forno concluída para a ordem, ainda não lançados na saída do forno.
+ */
+export async function getEntradaFornoCarrinhosParaSaida(ordemProducaoId: string) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const logs = await stepRepository.findByOrderId(ordemProducaoId);
+    const entradaLogs = logs
+      .filter((l) => l.etapa === 'entrada_forno' && l.fim != null)
+      .sort((a, b) => new Date(a.fim!).getTime() - new Date(b.fim!).getTime());
+    const fermentacaoById = new Map<string, ProductionStepLog>();
+    for (const log of logs) {
+      if (log.etapa !== 'fermentacao') continue;
+      fermentacaoById.set(log.id, log);
+    }
+    const saidaNumeros = new Set<string>();
+
+    for (const log of logs) {
+      if (log.etapa !== 'saida_forno' || log.fim == null) continue;
+      const dq = log.dados_qualidade as SaidaFornoQualityData | null;
+      const numero = String(dq?.numero_carrinho ?? '').trim();
+      const normalizado = normalizeNumeroCarrinhoFermentacao(numero);
+      if (!normalizado) continue;
+      saidaNumeros.add(normalizado);
+    }
+
+    const vistos = new Set<string>();
+    const data: CarrinhoEntradaFornoParaSaidaVM[] = [];
+
+    for (const log of entradaLogs) {
+      const dq = log.dados_qualidade as FornoQualityData | null;
+      const fermentacaoLogId = String(dq?.fermentacao_log_id ?? '').trim();
+      const fermentacaoLog = fermentacaoById.get(fermentacaoLogId);
+      const dqFermentacao = fermentacaoLog?.dados_qualidade as FermentacaoQualityData | null | undefined;
+      const numero = String(dqFermentacao?.numero_carrinho ?? '').trim();
+      const normalizado = normalizeNumeroCarrinhoFermentacao(numero);
+      if (!normalizado || saidaNumeros.has(normalizado) || vistos.has(normalizado)) continue;
+      vistos.add(normalizado);
+      data.push({
+        numero_carrinho: numero,
+        entrada_forno_fim: log.fim as string,
+      });
+    }
+
+    return { success: true as const, data };
+  } catch (error) {
+    console.error('getEntradaFornoCarrinhosParaSaida:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao listar carrinhos da entrada do forno.',
+    };
+  }
+}
+
 /**
  * Carrinhos registrados na saída do forno para esta ordem, ainda com latas disponíveis para embalagem.
  */
@@ -513,7 +720,7 @@ export async function getSaidaFornoCarrinhosParaEmbalagem(ordemProducaoId: strin
     const logs = await stepRepository.findByOrderId(ordemProducaoId);
     const saidaLogs = logs
       .filter((l) => l.etapa === 'saida_forno' && l.fim != null)
-      .sort((a, b) => new Date(b.fim!).getTime() - new Date(a.fim!).getTime());
+      .sort((a, b) => new Date(a.fim!).getTime() - new Date(b.fim!).getTime());
 
     const data: CarrinhoSaidaFornoParaEmbalagemVM[] = [];
     for (const s of saidaLogs) {
@@ -843,19 +1050,35 @@ export async function getMasseiras() {
 export async function getProductionOrderWithProduct(ordemProducaoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const orderRepository = new ProductionOrderRepository(supabase);
+  const withFetchRetry = async <T>(fn: () => Promise<T>, attempts = 2): Promise<T> => {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        const msg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase();
+        const isFetchFailure = msg.includes('fetch failed') || msg.includes('econnreset');
+        if (!isFetchFailure || i === attempts - 1) break;
+      }
+    }
+    throw lastErr;
+  };
 
   try {
-    const order = await orderRepository.findById(ordemProducaoId);
+    const order = await withFetchRetry(() => orderRepository.findById(ordemProducaoId));
     if (!order) {
       return { success: false, error: 'Ordem de produção não encontrada' };
     }
 
     // Buscar dados do produto com join em unidades
-    const { data: produto, error: produtoError } = await supabase
-      .from('produtos')
-      .select('*, unidades (nome_resumido)')
-      .eq('id', order.produto_id)
-      .single();
+    const { data: produto, error: produtoError } = await withFetchRetry(async () =>
+      await supabase
+        .from('produtos')
+        .select('*, unidades (nome_resumido)')
+        .eq('id', order.produto_id)
+        .single(),
+    );
 
     if (produtoError || !produto) {
       return { success: false, error: 'Produto não encontrado' };
@@ -866,17 +1089,19 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
     const unidadeNomeResumido = unidades?.nome_resumido || null;
 
     // Buscar receita de massa vinculada (usando a mesma lógica da fila de produção)
-    const { data: produtoReceitas, error: receitasError } = await supabase
-      .from('produto_receitas')
-      .select(`
+    const { data: produtoReceitas, error: receitasError } = await withFetchRetry(async () =>
+      await supabase
+        .from('produto_receitas')
+        .select(`
         quantidade_por_produto,
         receitas!produto_receitas_receita_id_fkey (
           tipo,
           ativo
         )
       `)
-      .eq('produto_id', order.produto_id)
-      .eq('ativo', true);
+        .eq('produto_id', order.produto_id)
+        .eq('ativo', true),
+    );
 
     if (receitasError) {
       console.error('Erro ao buscar receitas vinculadas:', receitasError);

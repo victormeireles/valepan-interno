@@ -25,6 +25,7 @@ export type Database = {
           nome: string
           numero_buracos: number
           ordem: number
+          quantidade_latas: number
           updated_at: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           nome: string
           numero_buracos?: number
           ordem?: number
+          quantidade_latas?: number
           updated_at?: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           nome?: string
           numero_buracos?: number
           ordem?: number
+          quantidade_latas?: number
           updated_at?: string
         }
         Relationships: []
@@ -220,6 +223,42 @@ export type Database = {
           },
           {
             foreignKeyName: "cliente_categorias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cliente_assadeira_bloqueios: {
+        Row: {
+          assadeira_id: string
+          cliente_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          assadeira_id: string
+          cliente_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          assadeira_id?: string
+          cliente_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_assadeira_bloqueios_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_assadeira_bloqueios_cliente_id_fkey"
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
@@ -601,6 +640,7 @@ export type Database = {
       }
       ordens_producao: {
         Row: {
+          assadeira_id: string | null
           created_at: string | null
           data_producao: string | null
           id: string
@@ -613,6 +653,7 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          assadeira_id?: string | null
           created_at?: string | null
           data_producao?: string | null
           id?: string
@@ -625,6 +666,7 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          assadeira_id?: string | null
           created_at?: string | null
           data_producao?: string | null
           id?: string
@@ -637,6 +679,13 @@ export type Database = {
           status?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ordens_producao_pedido_id_fkey"
             columns: ["pedido_id"]

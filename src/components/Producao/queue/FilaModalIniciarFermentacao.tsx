@@ -113,7 +113,6 @@ export default function FilaModalIniciarFermentacao({ open, item, onClose, onSuc
               disabled={loading}
               className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
             />
-            <p className="text-xs text-slate-500">Carrinho onde a massa está a fermentar.</p>
           </div>
 
           <NumberDecimalInput
@@ -130,9 +129,6 @@ export default function FilaModalIniciarFermentacao({ open, item, onClose, onSuc
             required
             disabled={loading}
           />
-          <p className="text-xs text-slate-500 -mt-2">
-            Padrão {ASSADEIRAS_PADRAO}; máximo {FERMENTACAO_ASSADEIRAS_MAX} assadeiras (igual à etapa na ordem).
-          </p>
 
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
             <button

@@ -448,7 +448,6 @@ export function getMetaCaixasSaidaEmbalagem(
     return {
       caixasEsperadas: Number.isFinite(v) ? v : null,
       resumo: `${formatNumber(v)} cx`,
-      subtexto: 'Quantidade planejada para este lote (unidade do produto: caixa).',
     };
   }
 

@@ -48,6 +48,11 @@ export interface MassaQualityData {
 export interface FermentacaoQualityData {
   tempo_decorrido?: number;
   observacoes?: string;
+  /**
+   * ISO 8601 — instante em que o carrinho foi associado a este lote de fermentação.
+   * Usado para ordenar FIFO na entrada do forno (mais tempo em fermentação / cadastrado primeiro).
+   */
+  carrinho_cadastrado_em?: string;
   /** Identificação do carrinho usado na fermentação */
   numero_carrinho?: string;
   /**

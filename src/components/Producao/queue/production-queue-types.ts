@@ -4,6 +4,8 @@ export interface CarrinhoFilaForno {
   carrinho: string;
   em_fermentacao: boolean;
   latas_registradas: number;
+  /** Menor = cadastrado há mais tempo na fermentação (FIFO na fila do forno). */
+  ordenacao_fermentacao_ms: number;
   ordem_producao_id: string;
   lote_codigo: string;
   produto_nome: string;
@@ -15,6 +17,8 @@ export interface ProductionQueueItem {
   id: string;
   lote_codigo: string;
   produto_id: string;
+  /** Assadeira escolhida no planejamento (null = inferir pelo cadastro de latas do produto). */
+  assadeira_id?: string | null;
   qtd_planejada: number;
   status?: string | null;
   prioridade?: number | null;
@@ -36,8 +40,14 @@ export interface ProductionQueueItem {
     carrinho: string;
     em_fermentacao: boolean;
     latas_registradas: number;
+    ordenacao_fermentacao_ms: number;
   }>;
   qtd_massa_finalizada?: number | null;
+  /**
+   * Nome da assadeira (tipo de lata) resolvido a partir do cadastro de latas do produto e do pedido/cliente.
+   * Preenchido na fila de produção para exibição na etapa massa.
+   */
+  lata_tipo_nome?: string | null;
   /** True quando o join com a tabela produtos falhou (ex.: produto removido). */
   produtoJoinFaltando?: boolean;
   produtos: {
@@ -56,6 +66,8 @@ export interface ProductionQueueItem {
     cliente_id: string;
     clientes?: {
       nome_fantasia: string;
+      /** Se true, o fluxo prioriza a lata “antiga” (unidades_lata_antiga) na resolução do tipo. */
+      somente_lata_antiga?: boolean | null;
     };
   } | null;
   /** Texto curto do estoque na planilha (cliente + produto), quando encontrado. */

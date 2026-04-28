@@ -10,11 +10,17 @@ import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
 import { FermentacaoQualityData, ProductionStepLog } from '@/domain/types/producao-etapas';
 import FermentacaoProgressoBar from '@/components/Producao/FermentacaoProgressoBar';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
+import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
 import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
 import NumberDecimalInput from '@/components/Producao/NumberDecimalInput';
+import {
+  FORM_SECTION_SUB,
+  FORM_FIELD_LABEL,
+  INPUT_COMPACT_LINE,
+  PRODUCTION_STEP_DENSE_SHELL,
+} from '@/components/Producao/production-step-form-classes';
 
-/** Padrão e teto para assadeiras na finalização da fermentação */
 const ASSADEIRAS_PRODUZIDAS_PADRAO = 20;
 const ASSADEIRAS_PRODUZIDAS_MAX = 20;
 
@@ -26,7 +32,7 @@ interface FermentacaoStepClientProps {
     produto: {
       id: string;
       nome: string;
-      unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
+      unidadeNomeResumido: string | null;
       unidades_assadeira?: number | null;
       box_units?: number | null;
       receita_massa?: {
@@ -36,16 +42,12 @@ interface FermentacaoStepClientProps {
   };
 }
 
-export default function FermentacaoStepClient({
-  ordemProducao,
-}: FermentacaoStepClientProps) {
+export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStepClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logEmAndamento, setLogEmAndamento] = useState<ProductionStepLog | null>(null);
-  const [assadeirasProduzidas, setAssadeirasProduzidas] = useState<number>(
-    ASSADEIRAS_PRODUZIDAS_PADRAO,
-  );
+  const [assadeirasProduzidas, setAssadeirasProduzidas] = useState<number>(ASSADEIRAS_PRODUZIDAS_PADRAO);
   const [receitasMassa, setReceitasMassa] = useState<number>(0);
   const [receitasOP, setReceitasOP] = useState<number>(0);
   const [numeroCarrinho, setNumeroCarrinho] = useState('');
@@ -101,13 +103,11 @@ export default function FermentacaoStepClient({
     void loadData();
   }, [loadData]);
 
-  // Calcular quantidade de saída em unidades (a partir das assadeiras produzidas)
   const calcularQtdSaidaUnidades = () => {
     if (!ordemProducao.produto.unidades_assadeira) return 0;
     return assadeirasProduzidas * ordemProducao.produto.unidades_assadeira;
   };
 
-  // Calcular demanda total de assadeiras da OP
   const calcularDemandaAssadeiras = () => {
     const quantityInfo = getQuantityByStation('fermentacao', ordemProducao.qtd_planejada, {
       unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
@@ -118,15 +118,11 @@ export default function FermentacaoStepClient({
     return quantityInfo.value || 0;
   };
 
-  // Converter receitas produzidas para assadeiras
   const calcularAssadeirasDeReceitas = () => {
     if (!ordemProducao.produto.receita_massa?.quantidade_por_produto || receitasMassa === 0) return 0;
     if (!ordemProducao.produto.unidades_assadeira) return 0;
-    
-    // Receitas → Unidades → Assadeiras
     const unidades = receitasMassa * ordemProducao.produto.receita_massa.quantidade_por_produto;
-    const assadeiras = unidades / ordemProducao.produto.unidades_assadeira;
-    return assadeiras;
+    return unidades / ordemProducao.produto.unidades_assadeira;
   };
 
   const formatarReceita = (valor: number): string => {
@@ -175,6 +171,8 @@ export default function FermentacaoStepClient({
 
       const dadosQualidade: FermentacaoQualityData = {
         observacoes: '',
+        carrinho_cadastrado_em:
+          logEmAndamento.inicio?.trim() || new Date().toISOString(),
         numero_carrinho: carrinhoTrim,
         assadeiras_lt: assadeirasProduzidas,
       };
@@ -200,8 +198,7 @@ export default function FermentacaoStepClient({
 
   const demandaAssadeiras = calcularDemandaAssadeiras();
   const unidadesPorLt =
-    ordemProducao.produto.unidades_assadeira != null &&
-    ordemProducao.produto.unidades_assadeira > 0
+    ordemProducao.produto.unidades_assadeira != null && ordemProducao.produto.unidades_assadeira > 0
       ? ordemProducao.produto.unidades_assadeira
       : null;
   const unidadeOpLabel = ordemProducao.produto.unidadeNomeResumido?.trim() || 'un';
@@ -224,53 +221,44 @@ export default function FermentacaoStepClient({
       fermentacao={fermentacaoQuantidade}
       unidadeCurta={unidadesPorLt != null ? 'LT' : 'un'}
       unidadesPorAssadeira={unidadesPorLt}
+      variant="compact"
     />
   );
 
-  const painelDemandaFermentacao = (
-    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+  const painelResumo = (
+    <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/90 p-3 sm:p-4">
+      <p className={`${FORM_FIELD_LABEL} text-blue-950`}>Resumo</p>
       {receitasMassa > 0 && receitasOP > 0 && (
-        <div className="pb-2 border-b border-blue-200 space-y-1">
-          <p className="text-sm font-semibold text-blue-900">A partir da massa (o que já foi batido)</p>
-          <p className="text-sm text-blue-800">
-            {formatarReceita(receitasMassa)} / {formatarReceita(receitasOP)} receitas
-            {ordemProducao.produto.receita_massa?.quantidade_por_produto ? (
-              <>
-                {' '}
-                — aprox.{' '}
-                <strong>
-                  {unidadesPorLt != null
-                    ? `${assadeirasDeReceitas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ ${unidadesPorLt}`
-                    : `${Math.round(receitasMassa * ordemProducao.produto.receita_massa.quantidade_por_produto).toLocaleString('pt-BR')} un`}
-                </strong>
-              </>
-            ) : null}
-          </p>
-        </div>
-      )}
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-blue-900">Demanda total da ordem</p>
-        <p className="text-xs text-blue-800/90 leading-relaxed">
-          Usa a <strong>quantidade planejada da OP inteira</strong> (
-          {ordemProducao.qtd_planejada.toLocaleString('pt-BR')} {unidadeOpLabel}), não o volume do último lote
-          de massa. Por isso esse número pode ser muito maior que as receitas que você acabou de bater.
+        <p className="text-xs tabular-nums text-blue-900 sm:text-sm">
+          Massa: <strong>{formatarReceita(receitasMassa)}</strong> / {formatarReceita(receitasOP)} rec.
+          {ordemProducao.produto.receita_massa?.quantidade_por_produto && unidadesPorLt != null ? (
+            <>
+              {' '}
+              · ≈{' '}
+              <strong>
+                {assadeirasDeReceitas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/{unidadesPorLt}
+              </strong>
+            </>
+          ) : null}
         </p>
+      )}
+      <div>
+        <p className={`${FORM_SECTION_SUB} text-blue-800/90`}>Demanda da OP</p>
         {unidadesPorLt != null ? (
-          <p className="text-lg font-bold text-blue-900">
+          <p className="text-sm font-bold tabular-nums text-blue-900 sm:text-base">
             {demandaAssadeiras.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} LT c/ {unidadesPorLt}
           </p>
         ) : (
-          <>
-            <p className="text-lg font-bold text-blue-900">
-              {Math.round(demandaAssadeiras).toLocaleString('pt-BR')} un
-            </p>
-            <p className="text-xs text-blue-800 leading-relaxed">
-              Sem &quot;unidades por assadeira&quot; no cadastro do produto, o sistema mostra a demanda em unidades.
-              O valor acima são unidades (não são latas).
-            </p>
-          </>
+          <p className="text-sm font-bold tabular-nums text-blue-900 sm:text-base">
+            {Math.round(demandaAssadeiras).toLocaleString('pt-BR')} {unidadeOpLabel}
+          </p>
         )}
       </div>
+      <span className="sr-only">
+        Demanda usa a quantidade planejada da ordem inteira ({ordemProducao.qtd_planejada.toLocaleString('pt-BR')}{' '}
+        {unidadeOpLabel}), não só o último lote de massa.
+        {!unidadesPorLt && ' Sem unidades por assadeira no cadastro: valor em unidades.'}
+      </span>
     </div>
   );
 
@@ -281,18 +269,21 @@ export default function FermentacaoStepClient({
       etapaNome="Fermentação"
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
+      backHref={filaUrlForProductionStep('fermentacao')}
+      denseHeader
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
-      <div className="space-y-4">
+      <div className="space-y-2">
         {barraProgresso}
-        {painelDemandaFermentacao}
+        {painelResumo}
       </div>
 
-      <form onSubmit={onSubmitForm} className="space-y-6">
+      <form onSubmit={onSubmitForm} className="space-y-3 pt-1 sm:space-y-3 sm:pt-0">
         <ProductionErrorAlert error={error} />
 
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-gray-700 ml-1" htmlFor="numero-carrinho-fermentacao">
-            Número do carrinho *
+          <label className={FORM_FIELD_LABEL} htmlFor="numero-carrinho-fermentacao">
+            Número do carrinho <span className="text-red-500">*</span>
           </label>
           <input
             id="numero-carrinho-fermentacao"
@@ -303,35 +294,30 @@ export default function FermentacaoStepClient({
             onChange={(e) => setNumeroCarrinho(e.target.value)}
             placeholder="ex.: 12"
             required
-            className="w-full max-w-xs px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+            className={`${INPUT_COMPACT_LINE} max-w-xs`}
           />
-          <p className="text-xs text-gray-500 ml-1">Carrinho onde a massa está fermentando.</p>
         </div>
 
         <div className="space-y-1.5">
           <NumberDecimalInput
-            label="Quantidade de assadeiras produzidas"
+            label="Assadeiras produzidas"
             value={assadeirasProduzidas}
             onChange={(value) => {
               const v = Math.round(value);
-              setAssadeirasProduzidas(
-                Math.min(ASSADEIRAS_PRODUZIDAS_MAX, Math.max(0, v)),
-              );
+              setAssadeirasProduzidas(Math.min(ASSADEIRAS_PRODUZIDAS_MAX, Math.max(0, v)));
             }}
             min={0}
             max={ASSADEIRAS_PRODUZIDAS_MAX}
             step={1}
             placeholder={String(ASSADEIRAS_PRODUZIDAS_PADRAO)}
             required
+            compact
           />
-          <p className="text-xs text-gray-500 ml-1">
-            Padrão {ASSADEIRAS_PRODUZIDAS_PADRAO} assadeiras; máximo {ASSADEIRAS_PRODUZIDAS_MAX}.
-            {!logEmAndamento && (
-              <span className="block mt-1 text-gray-600">
-                Regista de uma vez o carrinho e as assadeiras (início e conclusão do lote).
-              </span>
-            )}
-          </p>
+          <span className="sr-only">
+            {!logEmAndamento
+              ? 'Regista carrinho e assadeiras de uma vez (início e conclusão do lote).'
+              : 'Finalize com o número do carrinho e as assadeiras.'}
+          </span>
         </div>
 
         <ProductionFormActions
@@ -340,12 +326,8 @@ export default function FermentacaoStepClient({
           cancelLabel="Voltar"
           loading={loading}
           disabled={assadeirasProduzidas <= 0 || !numeroCarrinho.trim()}
+          compact
         />
-        {!loading && (!numeroCarrinho.trim() || assadeirasProduzidas <= 0) && (
-          <p className="text-xs text-gray-500 text-center">
-            Preencha o número do carrinho e a quantidade de assadeiras para continuar.
-          </p>
-        )}
       </form>
     </ProductionStepLayout>
   );

@@ -13,6 +13,7 @@ interface QueueItem {
   id: string;
   lote_codigo: string;
   produto_id: string;
+  assadeira_id?: string | null;
   qtd_planejada: number;
   status?: string | null;
   prioridade?: number | null;
@@ -34,8 +35,10 @@ interface QueueItem {
     carrinho: string;
     em_fermentacao: boolean;
     latas_registradas: number;
+    ordenacao_fermentacao_ms: number;
   }>;
   qtd_massa_finalizada?: number | null;
+  lata_tipo_nome?: string | null;
   /** True quando o join com `produtos` falhou (ex.: produto apagado ou FK inválida). */
   produtoJoinFaltando?: boolean;
   produtos: {
@@ -44,6 +47,8 @@ interface QueueItem {
     package_units?: number | null;
     box_units?: number | null;
     unidades_assadeira?: number | null;
+    unidades_lata_antiga?: number | null;
+    unidades_lata_nova?: number | null;
     receita_massa?: {
       quantidade_por_produto: number;
     } | null;
@@ -52,6 +57,7 @@ interface QueueItem {
     cliente_id: string;
     clientes?: {
       nome_fantasia: string;
+      somente_lata_antiga?: boolean | null;
     };
   } | null;
 }

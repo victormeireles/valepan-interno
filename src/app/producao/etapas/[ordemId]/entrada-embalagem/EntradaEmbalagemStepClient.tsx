@@ -11,6 +11,12 @@ import BandejasStepper, {
   DEFAULT_BANDEJAS_SAIDA,
   MAX_BANDEJAS_SAIDA,
 } from '@/components/Producao/BandejasStepper';
+import {
+  CARD_FORM_BLOCK,
+  FORM_FIELD_LABEL,
+  FORM_SECTION_TITLE,
+  INPUT_COMPACT_LINE,
+} from '@/components/Producao/production-step-form-classes';
 
 type Props = {
   ordemProducaoId: string;
@@ -141,15 +147,14 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
 
   return (
     <>
-      <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Entrada na embalagem</p>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Produto <strong>{produtoNome}</strong>. Use <strong>Novo</strong> para escolher um carrinho vindo da{' '}
-            <strong>saída do forno</strong> e informar quantas latas entram na embalagem. Ao registrar, o saldo
-            daquele carrinho é liberado para novos lançamentos quando ainda houver latas disponíveis.
-          </p>
-        </div>
+      <div className={`${CARD_FORM_BLOCK} mt-2 border-slate-200`}>
+        <p className={FORM_SECTION_TITLE}>Entrada na embalagem</p>
+        <p className="text-xs text-slate-500 sm:text-sm">
+          {produtoNome}
+          <span className="sr-only">
+            Novo abre carrinhos da saída do forno; informe latas. Saldo do carrinho atualiza após registrar.
+          </span>
+        </p>
 
         <div>
           <button
@@ -159,9 +164,9 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
               setPickerOpen(true);
             }}
             disabled={saving || modalStep === 'postSave'}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
           >
-            <span className="material-icons text-xl">add_circle_outline</span>
+            <span className="material-icons text-lg sm:text-xl">add_circle_outline</span>
             Novo
           </button>
         </div>
@@ -174,53 +179,54 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
           aria-modal="true"
           aria-labelledby="modal-entrada-embalagem-picker-titulo"
         >
-          <div className="w-full max-w-lg max-h-[min(90vh,640px)] rounded-2xl bg-white shadow-xl border border-slate-200 flex flex-col">
-            <div className="p-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
+          <div className="flex max-h-[min(90vh,640px)] w-full max-w-lg flex-col rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-100 p-3">
               <div>
-                <h2 id="modal-entrada-embalagem-picker-titulo" className="text-lg font-bold text-slate-900">
-                  Carrinhos — saída do forno
+                <h2 id="modal-entrada-embalagem-picker-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
+                  Carrinhos (forno)
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Somente carrinhos com latas ainda disponíveis para embalagem.
-                </p>
+                <p className="sr-only">Apenas carrinhos com latas disponíveis para embalagem.</p>
               </div>
               <button
                 type="button"
                 onClick={() => !saving && fecharPicker()}
-                className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 shrink-0"
+                className="shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
                 aria-label="Fechar"
               >
-                <span className="material-icons">close</span>
+                <span className="material-icons text-xl">close</span>
               </button>
             </div>
 
-            <div className="px-4 pt-3 shrink-0">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Pesquisar carrinho</label>
+            <div className="shrink-0 px-3 pt-2">
+              <label className={FORM_FIELD_LABEL} htmlFor="entrada-embalagem-busca">
+                Buscar
+              </label>
               <input
+                id="entrada-embalagem-busca"
                 type="search"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Número do carrinho…"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                placeholder="Carrinho…"
+                className={INPUT_COMPACT_LINE}
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-3 min-h-[160px]">
+            <div className="min-h-[140px] flex-1 overflow-y-auto px-3 py-2">
               {loadingLista ? (
-                <div className="flex justify-center py-10">
-                  <span className="w-8 h-8 border-2 border-slate-200 border-t-emerald-600 rounded-full animate-spin" />
+                <div className="flex justify-center py-8">
+                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
                 </div>
               ) : listaError ? (
-                <p className="text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                <p className="rounded-lg border border-rose-100 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700 sm:text-sm">
                   {listaError}
                 </p>
               ) : filtrada.length === 0 ? (
-                <p className="text-sm text-slate-600 py-2">
-                  Nenhum carrinho disponível. Registre primeiro a <strong>saída do forno</strong> para este lote ou
-                  aguarde novas saídas.
+                <p className="py-1 text-xs text-slate-600 sm:text-sm">
+                  Nenhum carrinho.
+                  <span className="sr-only"> Registre saída do forno para este lote.</span>
                 </p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {filtrada.map((row) => {
                     const ativo = selected?.saida_forno_log_id === row.saida_forno_log_id;
                     return (
@@ -228,19 +234,22 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
                         <button
                           type="button"
                           onClick={() => selecionarLinha(row)}
-                          className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                          className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
                             ativo
                               ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500/30'
                               : 'border-slate-200 hover:bg-slate-50'
                           }`}
                         >
                           <div className="flex justify-between gap-2">
-                            <span className="font-semibold text-slate-900">Carrinho {row.numero_carrinho}</span>
-                            <span className="text-xs text-slate-500 tabular-nums">{fmtDataHora(row.saida_fim)}</span>
+                            <span className="text-xs font-semibold text-slate-900 sm:text-sm">
+                              Carrinho {row.numero_carrinho}
+                            </span>
+                            <span className="text-[11px] text-slate-500 tabular-nums sm:text-xs">
+                              {fmtDataHora(row.saida_fim)}
+                            </span>
                           </div>
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            Saída: {row.latas_saida} LT · Disponível:{' '}
-                            <strong className="text-slate-800">{row.latas_disponiveis}</strong> LT
+                          <p className="mt-0.5 text-[11px] text-slate-600 sm:text-xs">
+                            Saída {row.latas_saida} LT · disp. <strong>{row.latas_disponiveis}</strong>
                           </p>
                         </button>
                       </li>
@@ -251,11 +260,10 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
             </div>
 
             {selected && (
-              <div className="px-4 pb-3 border-t border-slate-100 space-y-2 shrink-0 bg-slate-50/80">
-                <p className="text-xs font-semibold text-slate-700 pt-3">Latas que entram na embalagem</p>
-                <p className="text-xs text-slate-500">
-                  Máximo {maxParaSelecionado} por lançamento (até {MAX_BANDEJAS_SAIDA} por regra ou o saldo do
-                  carrinho).
+              <div className="shrink-0 space-y-1 border-t border-slate-100 bg-slate-50/80 px-3 pb-2 pt-2">
+                <p className="text-xs font-semibold text-slate-800 sm:text-sm">Latas (embalagem)</p>
+                <p className="text-[11px] text-slate-500 sm:text-xs" aria-hidden="true">
+                  Máx. {maxParaSelecionado} (regra {MAX_BANDEJAS_SAIDA} ou saldo)
                 </p>
                 <BandejasStepper
                   id="entrada-embalagem-latas-picker"
@@ -267,12 +275,12 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
               </div>
             )}
 
-            <div className="p-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end shrink-0">
+            <div className="flex shrink-0 flex-col-reverse gap-1.5 border-t border-slate-100 p-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 disabled={saving}
                 onClick={() => fecharPicker()}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-800 font-medium hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 sm:text-sm"
               >
                 Cancelar
               </button>
@@ -280,22 +288,22 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
                 type="button"
                 disabled={saving || !selected}
                 onClick={() => void handleRegistrarNoPicker()}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
               >
                 {saving ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Registrando…
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    …
                   </>
                 ) : (
-                  'Registrar entrada'
+                  'Registrar'
                 )}
               </button>
             </div>
 
             {error && (
-              <div className="px-4 pb-3">
-                <p className="text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              <div className="px-3 pb-2">
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-800 sm:text-sm">
                   {error}
                 </p>
               </div>
@@ -311,29 +319,27 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
           aria-modal="true"
           aria-labelledby="modal-entrada-embalagem-pos-titulo"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-5 space-y-4">
-            <h2 id="modal-entrada-embalagem-pos-titulo" className="text-lg font-bold text-slate-900">
-              Entrada registrada
+          <div className="w-full max-w-md space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            <h2 id="modal-entrada-embalagem-pos-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
+              Registrado
             </h2>
-            <p className="text-sm text-slate-600">
-              Deseja registrar <strong>outro carrinho</strong> para este mesmo pedido (
-              <strong>{produtoNome}</strong>
-              ) ou retornar?
+            <p className="text-xs text-slate-600 sm:text-sm">
+              <strong>{produtoNome}</strong> — outro carrinho?
             </p>
-            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-1">
+            <div className="flex flex-col-reverse gap-1.5 pt-0.5 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={handleRetornar}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-800 font-medium hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 sm:text-sm"
               >
-                Retornar
+                Voltar
               </button>
               <button
                 type="button"
                 onClick={handleAdicionarMais}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 sm:text-sm"
               >
-                Adicionar mais (mesmo pedido)
+                Outro carrinho
               </button>
             </div>
           </div>

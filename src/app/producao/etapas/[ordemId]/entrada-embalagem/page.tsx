@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
 import { getProductionOrderWithProduct } from '@/app/actions/producao-etapas-actions';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
+import { PRODUCTION_STEP_DENSE_SHELL } from '@/components/Producao/production-step-form-classes';
 import EntradaEmbalagemStepClient from './EntradaEmbalagemStepClient';
 
 interface PageProps {
@@ -23,18 +23,14 @@ export default async function EntradaEmbalagemPage({ params }: PageProps) {
       etapaNome="Entrada da Embalagem"
       loteCodigo={o.lote_codigo}
       produtoNome={produto.nome ?? 'Produto'}
+      backHref={filaUrlForProductionStep('entrada_embalagem')}
+      denseHeader
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
-      <p className="text-sm text-slate-600">
-        Escolha carrinhos registrados na <strong>saída do forno</strong> e informe as latas que entram na embalagem.
-        Etapa: <code className="text-xs bg-slate-100 px-1 rounded">entrada_embalagem</code>.
+      <p className="sr-only">
+        Carrinhos da saída do forno; informar latas que entram na embalagem. Etapa entrada_embalagem.
       </p>
       <EntradaEmbalagemStepClient ordemProducaoId={o.id} produtoNome={produto.nome ?? 'Produto'} />
-      <Link
-        href={filaUrlForProductionStep('entrada_embalagem')}
-        className="inline-flex mt-4 px-4 py-2 rounded-xl border border-slate-200 text-slate-800 text-sm font-medium hover:bg-slate-50"
-      >
-        Voltar à fila
-      </Link>
     </ProductionStepLayout>
   );
 }

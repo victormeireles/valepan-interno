@@ -36,6 +36,9 @@ export async function fermentacaoIniciarEFinalizar(
   const qtdSaida =
     ua != null && Number(ua) > 0 ? ass * Number(ua) : 0;
 
+  /** Marca o instante do cadastro do carrinho (FIFO na fila do forno), antes de abrir o log. */
+  const carrinhoCadastradoEm = new Date().toISOString();
+
   const start = await startProductionStep({
     ordem_producao_id: input.ordemProducaoId,
     etapa: 'fermentacao',
@@ -49,6 +52,7 @@ export async function fermentacaoIniciarEFinalizar(
 
   const dadosQualidade: FermentacaoQualityData = {
     observacoes: '',
+    carrinho_cadastrado_em: carrinhoCadastradoEm,
     numero_carrinho: carrinhoTrim,
     assadeiras_lt: ass,
   };

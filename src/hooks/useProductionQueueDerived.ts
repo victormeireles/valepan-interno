@@ -132,6 +132,7 @@ export function useProductionQueueDerived(
           carrinho: c.carrinho,
           em_fermentacao: c.em_fermentacao,
           latas_registradas: c.latas_registradas,
+          ordenacao_fermentacao_ms: c.ordenacao_fermentacao_ms,
           ordem_producao_id: item.id,
           lote_codigo: item.lote_codigo,
           produto_nome: item.produtos.nome,
@@ -140,9 +141,11 @@ export function useProductionQueueDerived(
         });
       }
     }
-    return out.sort((a, b) =>
-      a.carrinho.localeCompare(b.carrinho, 'pt-BR', { numeric: true, sensitivity: 'base' }),
-    );
+    return out.sort((a, b) => {
+      const d = a.ordenacao_fermentacao_ms - b.ordenacao_fermentacao_ms;
+      if (d !== 0) return d;
+      return a.carrinho.localeCompare(b.carrinho, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    });
   }, [isEntradaForno, filteredQueue]);
 
   const saidaFilaGlobal = useMemo(() => {

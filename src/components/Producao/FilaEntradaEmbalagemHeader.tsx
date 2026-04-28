@@ -35,18 +35,12 @@ export default function FilaEntradaEmbalagemHeader({
 }: FilaEntradaEmbalagemHeaderProps) {
   const pct = meta > 0 ? Math.min(100, (entradaEmbalagem / meta) * 100) : entradaEmbalagem > 0 ? 100 : 0;
 
-  const unitHint =
-    unidadesPorAssadeiraHomogenea != null && unidadesPorAssadeiraHomogenea > 0
-      ? `latas (LT c/ ${unidadesPorAssadeiraHomogenea.toLocaleString('pt-BR')})`
-      : 'latas (várias assadeiras na fila)';
-
   const hintFaltam = hintFaltamEntrada(meta, entradaEmbalagem);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
       <div className="mb-2 sm:mb-3">
         <p className="text-xs font-semibold text-slate-900 sm:text-sm">Entrada na embalagem — fila geral</p>
-        <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-xs">Soma de todas as ordens · {unitHint}</p>
         {hintFaltam && (
           <p className="mt-1 text-[10px] font-medium text-slate-700 sm:text-xs">{hintFaltam}</p>
         )}

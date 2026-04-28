@@ -5,8 +5,21 @@ import { revalidatePath } from 'next/cache';
 
 const PATH = '/produtos/latas';
 
+function serializeSupabaseError(error: unknown): Record<string, unknown> {
+  if (error == null) return { kind: 'null' };
+  if (typeof error !== 'object') return { kind: typeof error, value: String(error) };
+  const o = error as Record<string, unknown>;
+  return {
+    message: o.message,
+    code: o.code,
+    details: o.details,
+    hint: o.hint,
+    ownKeys: Object.getOwnPropertyNames(error),
+  };
+}
+
 function logSupabaseError(context: string, error: unknown): void {
-  console.error(context, error);
+  console.error(context, serializeSupabaseError(error));
 }
 
 export type VinculoProdutoAssadeira = {
@@ -79,6 +92,14 @@ async function fetchProdutoAssadeirasLinks(
   return map;
 }
 
+type ProdutoLatasDbPartial = {
+  id: string;
+  nome: string;
+  codigo: string;
+  unidades_assadeira?: number | null;
+  latas_cadastro_conferido?: boolean | null;
+};
+
 export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
@@ -91,14 +112,16 @@ export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
     .order('nome');
 
   if (error) {
-    logSupabaseError('getProdutosLatas (completo)', error);
     const retry = await supabase
       .from('produtos')
       .select('id, nome, codigo, unidades_assadeira')
       .or(PRODUTOS_ATIVOS_OR)
       .order('nome');
     if (retry.error) {
-      logSupabaseError('getProdutosLatas (sem conferido)', retry.error);
+      console.error('getProdutosLatas (falha no select completo e no retry)', {
+        selectCompleto: serializeSupabaseError(error),
+        selectSemConferido: serializeSupabaseError(retry.error),
+      });
       const minimal = await supabase
         .from('produtos')
         .select('id, nome, codigo')
@@ -108,22 +131,22 @@ export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
         logSupabaseError('getProdutosLatas (id/nome/código)', minimal.error);
         return [];
       }
-      data = minimal.data;
-      const ids = (data ?? []).map((r) => r.id);
-      const linksMap = await fetchProdutoAssadeirasLinks(supabase, ids);
-      return (data ?? []).map((row) => ({
+      const minimalRows = (minimal.data ?? []) as ProdutoLatasDbPartial[];
+      const idsM = minimalRows.map((r) => r.id);
+      const linksMapM = await fetchProdutoAssadeirasLinks(supabase, idsM);
+      return minimalRows.map((row) => ({
         id: row.id,
         nome: row.nome,
         codigo: row.codigo,
         unidades_assadeira: null,
-        vinculos: linksMap?.get(row.id) ?? [],
+        vinculos: linksMapM?.get(row.id) ?? [],
         latas_cadastro_conferido: false,
       }));
     }
-    data = retry.data;
+    data = retry.data as typeof data;
   }
 
-  const rows = data ?? [];
+  const rows = (data ?? []) as ProdutoLatasDbPartial[];
   const ids = rows.map((r) => r.id);
   const linksMap = await fetchProdutoAssadeirasLinks(supabase, ids);
 
@@ -309,5 +332,63 @@ export async function updateClienteSomenteLataAntiga(
   }
 
   revalidatePath(PATH);
+  return { success: true };
+}
+
+export type ClienteAssadeiraBloqueioRow = {
+  assadeira_id: string;
+  cliente_id: string;
+};
+
+export async function getClienteAssadeiraBloqueios(): Promise<ClienteAssadeiraBloqueioRow[]> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data, error } = await supabase.from('cliente_assadeira_bloqueios').select('assadeira_id, cliente_id');
+
+  if (error) {
+    logSupabaseError('getClienteAssadeiraBloqueios', error);
+    return [];
+  }
+
+  return (data ?? []) as ClienteAssadeiraBloqueioRow[];
+}
+
+/** Substitui todos os bloqueios desta lata pelos `clienteIdsBloqueados` indicados. */
+export async function saveAssadeiraClienteBloqueios(input: {
+  assadeiraId: string;
+  clienteIdsBloqueados: string[];
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const aid = input.assadeiraId?.trim();
+  if (!aid) {
+    return { success: false, error: 'Lata inválida.' };
+  }
+
+  const { error: delErr } = await supabase.from('cliente_assadeira_bloqueios').delete().eq('assadeira_id', aid);
+
+  if (delErr) {
+    logSupabaseError('saveAssadeiraClienteBloqueios delete', delErr);
+    return {
+      success: false,
+      error:
+        delErr.message.includes('does not exist') || delErr.message.includes('schema cache')
+          ? 'Tabela cliente_assadeira_bloqueios não encontrada. Rode a migração no banco.'
+          : delErr.message,
+    };
+  }
+
+  const uniq = [...new Set(input.clienteIdsBloqueados.map((x) => String(x).trim()).filter(Boolean))];
+  if (uniq.length > 0) {
+    const { error: insErr } = await supabase.from('cliente_assadeira_bloqueios').insert(
+      uniq.map((cliente_id) => ({ cliente_id, assadeira_id: aid })),
+    );
+    if (insErr) {
+      logSupabaseError('saveAssadeiraClienteBloqueios insert', insErr);
+      return { success: false, error: insErr.message };
+    }
+  }
+
+  revalidatePath(PATH);
+  revalidatePath('/producao/fila');
   return { success: true };
 }

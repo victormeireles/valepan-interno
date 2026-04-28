@@ -23,6 +23,13 @@ import {
   latasRegistradasNaFermentacao,
   type CarrinhoDisponivelVM,
 } from '@/lib/utils/forno-carrinhos-disponiveis';
+import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
+import {
+  FORM_SECTION_TITLE,
+  FORM_FIELD_LABEL,
+  INPUT_COMPACT_LINE,
+  PRODUCTION_STEP_DENSE_SHELL,
+} from '@/components/Producao/production-step-form-classes';
 
 interface FornoStepClientProps {
   ordemProducao: {
@@ -328,8 +335,11 @@ export default function FornoStepClient({
         etapaNome="Entrada do Forno"
         loteCodigo={ordemProducao.lote_codigo}
         produtoNome={ordemProducao.produto.nome}
+        backHref={filaUrlForProductionStep('entrada_forno')}
+        denseHeader
+        {...PRODUCTION_STEP_DENSE_SHELL}
       >
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-12">
           <div className="w-10 h-10 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
         </div>
       </ProductionStepLayout>
@@ -341,8 +351,11 @@ export default function FornoStepClient({
       etapaNome="Entrada do Forno"
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
+      backHref={filaUrlForProductionStep('entrada_forno')}
+      denseHeader
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
-      <div className="space-y-5">
+      <div className="space-y-3">
         <EntradaFornoProgressoBar
           metaOp={metaForno}
           jaEntraramOp={volumeFornoComAtual}
@@ -353,13 +366,12 @@ export default function FornoStepClient({
         />
 
         {fornosAbertos.length > 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-            <p className="text-sm font-semibold text-slate-900">Entradas em aberto (ajuste)</p>
-            <p className="text-xs text-slate-600">
-              Corrija a quantidade de latas antes da saída do forno, se necessário. Se houver registro duplicado,
-              use <strong className="text-slate-800">Excluir entrada</strong>.
-            </p>
-            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 overflow-hidden">
+          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <p className={FORM_SECTION_TITLE}>Entradas em aberto</p>
+            <span className="sr-only">
+              Ajuste latas antes da saída do forno; use excluir entrada se houver duplicado.
+            </span>
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-100">
               {fornosAbertos.map((log, idx) => {
                 const latas = latasDoLogAberto(log, uaOk);
                 const dq = log.dados_qualidade as FornoQualityData | null;
@@ -369,17 +381,17 @@ export default function FornoStepClient({
                 return (
                   <li
                     key={log.id}
-                    className="bg-white px-3 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                    className="flex flex-col gap-2 bg-white px-2.5 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-medium text-slate-800">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-xs font-medium text-slate-800 sm:text-sm">
                         Entrada {idx + 1} · {formatInicio(log.inicio)}
                       </p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-xs text-slate-600 sm:text-sm">
                         Carrinho{' '}
                         <strong>{carrinhoLabelDoFermentacaoLog(logs, dq?.fermentacao_log_id)}</strong>
                       </p>
-                      <p className="text-sm text-slate-700">
+                      <p className="text-xs text-slate-700 sm:text-sm">
                         {latas > 0 ? (
                           <>
                             <strong>{latas.toLocaleString('pt-BR')}</strong> {sufixoLt}
@@ -395,17 +407,17 @@ export default function FornoStepClient({
                         )}
                       </p>
                       {maxRef > 0 && (
-                        <p className="text-xs text-slate-500">
-                          Teto referência (fermentação): {maxRef.toLocaleString('pt-BR')} {sufixoLt}
+                        <p className="text-[11px] text-slate-500 sm:text-xs">
+                          Teto ref.: {maxRef.toLocaleString('pt-BR')} {sufixoLt}
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-2 shrink-0">
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
                       <button
                         type="button"
                         onClick={() => abrirModalEditarEntrada(log)}
                         disabled={loading}
-                        className="px-3 py-2 rounded-xl border border-slate-200 text-slate-800 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 sm:text-sm"
                       >
                         Editar latas
                       </button>
@@ -413,9 +425,9 @@ export default function FornoStepClient({
                         type="button"
                         onClick={() => void excluirEntradaForno(log)}
                         disabled={loading}
-                        className="px-3 py-2 rounded-xl border border-rose-200 text-rose-800 text-sm font-semibold hover:bg-rose-50 disabled:opacity-50"
+                        className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:opacity-50 sm:text-sm"
                       >
-                        Excluir entrada
+                        Excluir
                       </button>
                     </div>
                   </li>
@@ -435,11 +447,11 @@ export default function FornoStepClient({
           aria-modal="true"
           aria-labelledby="modal-edit-forno-titulo"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h2 id="modal-edit-forno-titulo" className="text-lg font-bold text-slate-900">
-              Editar latas da entrada
+          <div className="max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+            <h2 id="modal-edit-forno-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
+              Editar latas
             </h2>
-            <p className="text-sm text-slate-600">
+            <p className="text-xs text-slate-600 sm:text-sm">
               Carrinho{' '}
               <strong>
                 {carrinhoLabelDoFermentacaoLog(
@@ -447,19 +459,16 @@ export default function FornoStepClient({
                   (modalEditLog.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id,
                 )}
               </strong>
-              . Ajuste a quantidade de latas ({sufixoLt}) desta entrada em aberto.
               {editModalMaxRefFermentacao > 0 && (
                 <>
                   {' '}
-                  Máximo:{' '}
-                  <strong>{editModalMaxRefFermentacao.toLocaleString('pt-BR')}</strong> {sufixoLt}
-                  (referência na fermentação).
+                  · máx. <strong>{editModalMaxRefFermentacao.toLocaleString('pt-BR')}</strong> {sufixoLt}
                 </>
               )}
             </p>
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700" htmlFor="input-edit-latas-forno">
-                Latas no forno
+            <div className="space-y-1">
+              <label className={FORM_FIELD_LABEL} htmlFor="input-edit-latas-forno">
+                Latas ({sufixoLt})
               </label>
               <input
                 id="input-edit-latas-forno"
@@ -468,15 +477,15 @@ export default function FornoStepClient({
                 autoComplete="off"
                 value={modalEditLatasField}
                 onChange={(e) => setModalEditLatasField(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 text-slate-900 font-medium"
+                className={`${INPUT_COMPACT_LINE} border-slate-200 text-left`}
               />
             </div>
-            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
+            <div className="flex flex-col-reverse gap-1.5 pt-1 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={fecharModalEditar}
                 disabled={loading}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:text-sm"
               >
                 Cancelar
               </button>
@@ -484,7 +493,7 @@ export default function FornoStepClient({
                 type="button"
                 onClick={() => void salvarEdicaoEntrada()}
                 disabled={loading}
-                className="px-4 py-2.5 rounded-xl bg-gray-900 text-white font-semibold hover:bg-black disabled:opacity-60 flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60 sm:text-sm"
               >
                 {loading ? (
                   <>
@@ -507,16 +516,13 @@ export default function FornoStepClient({
           aria-modal="true"
           aria-labelledby="modal-entrada-forno-titulo"
         >
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200 flex flex-col max-h-[min(90vh,640px)]">
-            <div className="p-5 pb-3 border-b border-slate-100 shrink-0">
-              <div className="flex items-start justify-between gap-3">
+          <div className="flex max-h-[min(92vh,820px)] w-full max-w-2xl flex-col rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="shrink-0 border-b border-slate-100 px-4 pb-3 pt-3 sm:px-5">
+              <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h2 id="modal-entrada-forno-titulo" className="text-lg font-bold text-slate-900">
+                  <h2 id="modal-entrada-forno-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
                     Entrada no forno
                   </h2>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Selecione o carrinho cadastrado na fermentação, informe as latas e confirme.
-                  </p>
                 </div>
                 <button
                   type="button"
@@ -528,7 +534,7 @@ export default function FornoStepClient({
                   <span className="material-icons">close</span>
                 </button>
               </div>
-              <div className="mt-4 relative">
+              <div className="mt-3 relative">
                 <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">
                   search
                 </span>
@@ -542,23 +548,18 @@ export default function FornoStepClient({
                   }}
                   placeholder="Buscar pelo número do carrinho…"
                   autoComplete="off"
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-slate-200 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20 text-slate-900"
+                  className="w-full rounded-lg border-2 border-slate-200 py-2 pl-10 pr-3 text-sm text-slate-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
                 />
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-3 min-h-[120px]">
+            <div className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2 sm:px-4">
               {carrinhosDisponiveis.length === 0 ? (
-                <p className="text-sm text-slate-500 py-4 text-center">
-                  Nenhum carrinho disponível. Cadastre carrinhos na fermentação ou todos já tiveram
-                  entrada no forno.
-                </p>
+                <p className="py-3 text-center text-xs text-slate-500 sm:text-sm">Nenhum carrinho disponível.</p>
               ) : carrinhosFiltrados.length === 0 ? (
-                <p className="text-sm text-slate-500 py-4 text-center">
-                  Nenhum carrinho corresponde à busca.
-                </p>
+                <p className="py-3 text-center text-xs text-slate-500 sm:text-sm">Sem resultados na busca.</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-1">
                   {carrinhosFiltrados.map((c) => {
                     const sel = carrinhoSelecionado?.log_id === c.log_id;
                     return (
@@ -566,37 +567,26 @@ export default function FornoStepClient({
                         <button
                           type="button"
                           disabled={loading || !c.pode_colocar_no_forno}
+                          title={
+                            !c.pode_colocar_no_forno
+                              ? 'Finalize a fermentação com latas para liberar este carrinho.'
+                              : undefined
+                          }
                           onClick={() => selecionarCarrinho(c)}
-                          className={`w-full text-left rounded-xl border-2 px-4 py-3 transition-colors ${
+                          className={`flex w-full min-h-[44px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
                             sel
-                              ? 'border-orange-500 bg-orange-50 ring-2 ring-orange-200'
-                              : 'border-slate-100 bg-slate-50/80 hover:border-slate-200 hover:bg-white'
-                          } disabled:opacity-45 disabled:cursor-not-allowed`}
+                              ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-200'
+                              : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                          } disabled:cursor-not-allowed disabled:opacity-45`}
                         >
-                          <p className="font-semibold text-slate-900">Carrinho {c.carrinho}</p>
-                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
-                            {c.em_fermentacao ? (
-                              <span className="rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 font-medium">
-                                Em fermentação
-                              </span>
-                            ) : (
-                              <span className="rounded-full bg-slate-200/80 text-slate-800 px-2 py-0.5 font-medium">
-                                Fermentação concluída
-                              </span>
-                            )}
-                            {c.latas_registradas > 0 && (
-                              <span className="text-slate-600">
-                                Ref. fermentação:{' '}
-                                <strong>{c.latas_registradas.toLocaleString('pt-BR')}</strong>{' '}
-                                {sufixoLt}
-                              </span>
-                            )}
-                          </div>
-                          {c.em_fermentacao && c.latas_registradas <= 0 && (
-                            <p className="text-xs text-amber-800 mt-1">
-                              Finalize a fermentação com as latas para habilitar.
-                            </p>
-                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-900">
+                              {c.carrinho}
+                            </span>
+                            <span className="block truncate text-[11px] leading-tight text-slate-500 sm:text-xs">
+                              {ordemProducao.produto.nome}
+                            </span>
+                          </span>
                         </button>
                       </li>
                     );
@@ -606,16 +596,15 @@ export default function FornoStepClient({
             </div>
 
             {carrinhoSelecionado && (
-              <div className="border-t border-slate-100 p-5 space-y-4 bg-slate-50/90 shrink-0">
-                <p className="text-sm text-slate-700">
-                  Carrinho <strong>{carrinhoSelecionado.carrinho}</strong> — quantas latas ({sufixoLt})
-                  entram no forno?
+              <div className="shrink-0 space-y-3 border-t border-slate-100 bg-slate-50/90 p-4">
+                <p className="text-xs text-slate-700 sm:text-sm">
+                  Carrinho <strong>{carrinhoSelecionado.carrinho}</strong> · latas ({sufixoLt})
                 </p>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="input-latas-forno-modal">
+                <div className="space-y-1">
+                  <label className={FORM_FIELD_LABEL} htmlFor="input-latas-forno-modal">
                     Latas
                   </label>
-                  <div className="flex items-center justify-center gap-1 sm:gap-2">
+                  <div className="flex items-center justify-center gap-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -625,10 +614,10 @@ export default function FornoStepClient({
                         );
                         setModalLatasField(String(Math.max(1, base - 1)));
                       }}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10"
                       aria-label="Diminuir uma lata"
                     >
-                      <span className="material-icons text-2xl">remove</span>
+                      <span className="material-icons text-xl sm:text-2xl">remove</span>
                     </button>
                     <input
                       id="input-latas-forno-modal"
@@ -649,7 +638,7 @@ export default function FornoStepClient({
                         }
                         setModalLatasField(String(Math.min(MAX_LATAS_POR_CARRINHO, Math.max(1, parsed))));
                       }}
-                      className="w-20 sm:w-24 shrink-0 rounded-xl border-2 border-slate-200 px-2 py-2.5 text-center text-lg font-semibold text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 bg-white"
+                      className="w-16 shrink-0 rounded-lg border-2 border-slate-200 bg-white px-1.5 py-1.5 text-center text-sm font-semibold text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 sm:w-20 sm:text-base"
                       placeholder="ex.: 15"
                     />
                     <button
@@ -668,20 +657,20 @@ export default function FornoStepClient({
                           carrinhoSelecionado.latas_registradas > 0 ? carrinhoSelecionado.latas_registradas : 1,
                         ) >= MAX_LATAS_POR_CARRINHO
                       }
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10"
                       aria-label="Aumentar uma lata"
                     >
-                      <span className="material-icons text-2xl">add</span>
+                      <span className="material-icons text-xl sm:text-2xl">add</span>
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500">Máximo por carrinho: 20 latas.</p>
+                  <p className="text-[11px] text-slate-500 sm:text-xs">Máx. 20 latas/carrinho</p>
                 </div>
                 <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={() => void confirmarColocarCarrinhoNoForno()}
                     disabled={loading}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60 sm:w-auto sm:text-sm"
                   >
                     {loading ? (
                       <>
@@ -702,15 +691,6 @@ export default function FornoStepClient({
         </div>
       )}
 
-      <div className="pt-6">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="w-full px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50"
-        >
-          Voltar
-        </button>
-      </div>
     </ProductionStepLayout>
   );
 }

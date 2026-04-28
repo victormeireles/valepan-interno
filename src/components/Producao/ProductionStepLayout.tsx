@@ -9,6 +9,11 @@ interface ProductionStepLayoutProps {
   etapaNome: string;
   loteCodigo: string;
   produtoNome: string;
+  /** Repassado ao header; em Massa costuma ser false */
+  showLoteProdutoSubtitle?: boolean;
+  /** Voltar (canto superior esquerdo do header), ex. `filaUrlForProductionStep('massa')` */
+  backHref?: string;
+  backLabel?: string;
   /** Linha do tempo / etapas (acima do conteúdo principal) */
   beforeContent?: ReactNode;
   children: ReactNode;
@@ -24,6 +29,9 @@ export default function ProductionStepLayout({
   etapaNome,
   loteCodigo,
   produtoNome,
+  showLoteProdutoSubtitle = true,
+  backHref,
+  backLabel,
   beforeContent,
   children,
   contentClassName,
@@ -42,7 +50,10 @@ export default function ProductionStepLayout({
           etapaNome={etapaNome}
           loteCodigo={loteCodigo}
           produtoNome={produtoNome}
+          showLoteProdutoSubtitle={showLoteProdutoSubtitle}
           dense={denseHeader}
+          backHref={backHref}
+          backLabel={backLabel}
         />
         <div className={content}>{children}</div>
       </div>

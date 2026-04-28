@@ -7,8 +7,10 @@ import VolumeTriploProgressoBar from '@/components/Producao/VolumeTriploProgress
 import type { ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
 import {
   entradaEmbalagemItemProgressMetrics,
+  filaCardEstadoVisual,
   fermentacaoProgressMetricsForQueueItem,
   planningOrderRankById,
+  type FilaCardEstadoVisual,
 } from '@/components/Producao/queue/production-queue-metrics';
 import { formatIsoDateToDDMMYYYY } from '@/lib/utils/date-utils';
 import { getQuantityByStation, type Station } from '@/lib/utils/production-conversions';
@@ -31,18 +33,63 @@ interface Props {
 }
 
 const BTN_PRIMARY =
-  'inline-flex items-center justify-center gap-1 rounded-lg font-semibold shadow-sm border transition-all whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-tight min-h-[40px] sm:gap-2 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base sm:leading-normal sm:min-h-[52px]';
+  'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold shadow-sm border transition-all whitespace-nowrap px-3 py-2.5 text-xs leading-tight min-h-[48px] sm:gap-2 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base sm:leading-normal sm:min-h-[52px]';
 const BTN_PRIMARY_ICON = 'material-icons text-[18px] leading-none sm:text-[26px]';
 
-const MASSA_METRIC_LABEL = 'text-[9px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]';
+const MASSA_METRIC_LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
 const MASSA_METRIC_VALUE =
-  'mt-0.5 text-[11px] font-semibold tabular-nums leading-tight break-words sm:text-sm';
+  'mt-0.5 text-xs font-semibold tabular-nums leading-tight break-words sm:text-sm';
 
 const NAME_BTN_EXPANDED =
-  'min-w-0 flex-1 text-left text-xs font-bold leading-tight text-gray-900 transition-colors hover:text-blue-600 sm:text-base sm:leading-snug md:text-lg cursor-pointer';
+  'min-w-0 flex-1 flex text-left text-sm font-bold leading-snug text-gray-900 transition-colors hover:text-blue-600 min-h-[44px] items-center py-1 sm:min-h-0 sm:py-0 sm:text-base sm:leading-snug md:text-lg cursor-pointer';
 
 function isOrdemStatusConcluida(status: string | null | undefined): boolean {
   return typeof status === 'string' && status.toLowerCase() === 'concluido';
+}
+
+function filaCardShellClass(estado: FilaCardEstadoVisual, joinFaltando: boolean): string {
+  if (joinFaltando) return 'border-rose-200/80 bg-rose-50/50';
+  switch (estado) {
+    case 'finalizada':
+      return 'border-emerald-200/85 bg-emerald-50/40';
+    case 'em_andamento':
+      return 'border-amber-200/85 bg-amber-50/45';
+    case 'proximo':
+      return 'border-sky-400/75 bg-sky-50/50 ring-1 ring-sky-200/55';
+    default:
+      return 'border-gray-100/90 bg-white';
+  }
+}
+
+function filaCardSelo(estado: FilaCardEstadoVisual): { label: string; className: string } | null {
+  switch (estado) {
+    case 'finalizada':
+      return {
+        label: 'Etapa ok',
+        className:
+          'shrink-0 rounded-full border border-emerald-300/90 bg-emerald-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-emerald-950',
+      };
+    case 'em_andamento':
+      return {
+        label: 'Em andamento',
+        className:
+          'shrink-0 rounded-full border border-amber-300/90 bg-amber-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-amber-950',
+      };
+    case 'proximo':
+      return {
+        label: 'Próximo',
+        className:
+          'shrink-0 rounded-full border border-sky-400/90 bg-sky-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-sky-950',
+      };
+    case 'pendente':
+      return {
+        label: 'Não iniciado',
+        className:
+          'shrink-0 rounded-full border border-slate-300/90 bg-slate-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-slate-700',
+      };
+    default:
+      return null;
+  }
 }
 
 export default function ProductionQueueGenericCards({
@@ -94,9 +141,21 @@ export default function ProductionQueueGenericCards({
     return formatIsoDateToDDMMYYYY(dateString) || null;
   };
 
-  const renderOrdemCard = (item: ProductionQueueItem, index: number) => {
+  const renderOrdemCard = (
+    item: ProductionQueueItem,
+    index: number,
+    fromProntosSection: boolean,
+    isFirstActiveInFila: boolean,
+  ) => {
         const posicaoNaFila = posicaoPorPlanejamento.get(item.id) ?? index + 1;
         const totalNaFila = totalOrdensNaFila;
+
+        const filaEstado = filaCardEstadoVisual(item, effectiveStation, {
+          fromProntosSection,
+          isFirstActiveInFila,
+        });
+        const shell = filaCardShellClass(filaEstado, Boolean(item.produtoJoinFaltando));
+        const estadoSelo = filaCardSelo(filaEstado);
 
         const quantidadeParaCalculo = item.qtd_planejada;
         const quantityInfo = getQuantityByStation(effectiveStation, quantidadeParaCalculo, item.produtos);
@@ -121,63 +180,70 @@ export default function ProductionQueueGenericCards({
 
         if (!isExpanded) {
           return (
-            <div
+            <button
               key={item.id}
-              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 shadow-sm ${
-                item.produtoJoinFaltando
-                  ? 'border-rose-200/80 bg-rose-50/50'
-                  : 'border-gray-100/90 bg-white'
-              }`}
+              type="button"
+              onClick={() => toggleExpandOrdem(item.id)}
+              className={`flex w-full min-h-[52px] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left shadow-sm active:opacity-95 ${shell}`}
             >
               <span
-                className="shrink-0 tabular-nums text-[9px] font-semibold leading-none text-slate-500"
+                className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200/80 bg-slate-100/95 px-2 py-1 tabular-nums text-xs font-bold leading-none text-slate-700"
                 title="Posição na fila de planejamento / total"
               >
                 {posicaoNaFila}/{totalNaFila}
               </span>
-              <div className="flex min-w-0 flex-1 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => toggleExpandOrdem(item.id)}
-                  className="min-w-0 flex-1 truncate text-left text-[10px] font-semibold leading-tight text-gray-800 hover:text-blue-600"
-                >
-                  {item.produtos.nome}
-                </button>
-                {ordemConcluida && (
-                  <span className="shrink-0 text-[8px] font-semibold leading-none text-emerald-700">Concluído</span>
-                )}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-sm font-semibold leading-snug text-gray-800">
+                    {item.produtos.nome}
+                  </span>
+                  {isMassa && item.lata_tipo_nome && !item.produtoJoinFaltando && (
+                    <span
+                      className="mt-0.5 block truncate text-xs font-medium leading-tight text-slate-500"
+                      title={`Lata: ${item.lata_tipo_nome}`}
+                    >
+                      Lata: {item.lata_tipo_nome}
+                    </span>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                  {estadoSelo && <span className={estadoSelo.className}>{estadoSelo.label}</span>}
+                  {ordemConcluida && (
+                    <span className="shrink-0 text-xs font-semibold leading-none text-emerald-800">
+                      Concluído
+                    </span>
+                  )}
+                </div>
               </div>
               {item.produtoJoinFaltando && (
-                <span className="material-icons shrink-0 text-[14px] text-rose-500" aria-hidden>
+                <span className="material-icons shrink-0 text-lg text-rose-500" aria-hidden>
                   error_outline
                 </span>
               )}
-            </div>
+            </button>
           );
         }
 
         return (
           <div
             key={item.id}
-            className={`group rounded-xl border p-2.5 shadow-sm transition-all duration-200 relative overflow-hidden sm:rounded-2xl sm:p-5 ${
-              item.produtoJoinFaltando
-                ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
-                : 'bg-white border-gray-100 hover:shadow-md hover:border-gray-200'
+            className={`group relative overflow-hidden rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md sm:rounded-2xl sm:p-5 ${shell} ${
+              item.produtoJoinFaltando ? 'hover:border-rose-300' : 'hover:border-slate-300/80'
             }`}
           >
             <div className="flex flex-col gap-2 sm:gap-4">
               {/* Linha 1: cabeçalho + ação (massa: layout em colunas; resto: linha flex) */}
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 {isMassa ? (
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-[11px] leading-snug sm:gap-2.5 sm:text-sm sm:leading-normal">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs leading-snug sm:gap-2.5 sm:text-sm sm:leading-normal">
                     <div className="flex min-w-0 items-start gap-1.5 sm:gap-2">
                       <span
-                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-800 sm:rounded-lg sm:px-2 sm:py-1 sm:text-xs"
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 sm:rounded-lg sm:px-2 sm:py-1"
                         title="Ordem de planejamento (fixa); a lista pode mostrar concluídos por último"
                       >
                         {posicaoNaFila}/{totalNaFila}
                       </span>
-                      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 sm:items-baseline sm:gap-y-0.5">
                         <button
                           type="button"
                           onClick={() => toggleExpandOrdem(item.id)}
@@ -185,11 +251,23 @@ export default function ProductionQueueGenericCards({
                         >
                           {item.produtos.nome}
                         </button>
-                        {ordemConcluida && (
-                          <span className="shrink-0 text-[10px] font-semibold text-emerald-700 sm:text-xs">Concluído</span>
-                        )}
+                        <div className="flex shrink-0 flex-wrap items-center gap-1">
+                          {estadoSelo && <span className={estadoSelo.className}>{estadoSelo.label}</span>}
+                          {ordemConcluida && (
+                            <span className="shrink-0 text-xs font-semibold text-emerald-800">
+                              Concluído
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {item.lata_tipo_nome && !item.produtoJoinFaltando && (
+                      <p className="rounded-lg border border-slate-100 bg-slate-50/90 px-2.5 py-1.5 text-center text-xs text-slate-700">
+                        <span className="text-slate-500">Lata</span>{' '}
+                        <span className="font-semibold text-slate-900">{item.lata_tipo_nome}</span>
+                      </p>
+                    )}
 
                     {showMassaMetrics ? (
                       <div className="w-full rounded-lg border border-slate-100 bg-slate-50/70 px-2 py-2 sm:rounded-xl sm:px-3 sm:py-2.5">
@@ -232,12 +310,12 @@ export default function ProductionQueueGenericCards({
 
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2 sm:gap-y-2">
                       {productionDate && (
-                        <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 sm:px-2.5 sm:py-1 sm:text-xs">
+                        <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 sm:px-2.5 sm:py-1">
                           {productionDate}
                         </span>
                       )}
                       {item.pedidos?.clientes?.nome_fantasia && (
-                        <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-600 sm:gap-1 sm:px-2 sm:text-xs md:text-sm">
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-md bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600 sm:gap-1 sm:px-2 md:text-sm">
                           <span className="material-icons shrink-0 text-[14px] sm:text-sm">person</span>
                           <span className="truncate">{item.pedidos.clientes.nome_fantasia}</span>
                         </span>
@@ -245,9 +323,9 @@ export default function ProductionQueueGenericCards({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-snug sm:gap-x-2 sm:gap-y-1.5 sm:text-sm sm:leading-normal">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 text-xs leading-snug sm:gap-x-2.5 sm:text-sm sm:leading-normal">
                     <span
-                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-800 sm:rounded-lg sm:px-2 sm:py-1 sm:text-xs"
+                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-bold tabular-nums text-slate-800 sm:rounded-lg sm:px-2 sm:py-1"
                       title="Ordem de planejamento (fixa); a lista pode mostrar concluídos por último"
                     >
                       {posicaoNaFila}/{totalNaFila}
@@ -259,32 +337,21 @@ export default function ProductionQueueGenericCards({
                     >
                       {item.produtos.nome}
                     </button>
+                    {estadoSelo && <span className={estadoSelo.className}>{estadoSelo.label}</span>}
                     {ordemConcluida && (
-                      <>
-                        <span className="text-gray-300">·</span>
-                        <span className="shrink-0 text-[10px] font-semibold text-emerald-700 sm:text-xs">Concluído</span>
-                      </>
+                      <span className="shrink-0 text-xs font-semibold text-emerald-800">Concluído</span>
                     )}
-                    <>
-                      <span className="text-gray-300 hidden sm:inline">·</span>
-                      <span className="font-semibold text-gray-800 sm:whitespace-nowrap">{headerQuantityReadable}</span>
-                    </>
+                    <span className="font-semibold text-gray-800 sm:whitespace-nowrap">{headerQuantityReadable}</span>
                     {productionDate && (
-                      <>
-                        <span className="text-gray-300">·</span>
-                        <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 sm:px-2.5 sm:py-1 sm:text-xs">
-                          {productionDate}
-                        </span>
-                      </>
+                      <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 sm:px-2.5 sm:py-1">
+                        {productionDate}
+                      </span>
                     )}
                     {item.pedidos?.clientes?.nome_fantasia && (
-                      <>
-                        <span className="text-gray-300">·</span>
-                        <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-0.5 truncate rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-600 sm:max-w-none sm:gap-1 sm:px-2 sm:text-xs md:text-sm">
-                          <span className="material-icons shrink-0 text-[14px] sm:text-sm">person</span>
-                          <span className="truncate">{item.pedidos.clientes.nome_fantasia}</span>
-                        </span>
-                      </>
+                      <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-0.5 truncate rounded-md bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600 sm:max-w-none sm:gap-1 sm:px-2 md:text-sm">
+                        <span className="material-icons shrink-0 text-[14px] sm:text-sm">person</span>
+                        <span className="truncate">{item.pedidos.clientes.nome_fantasia}</span>
+                      </span>
                     )}
                   </div>
                 )}
@@ -297,7 +364,9 @@ export default function ProductionQueueGenericCards({
                       title={
                         item.produtoJoinFaltando
                           ? 'Corrija o cadastro do produto antes de iniciar a massa'
-                          : undefined
+                          : receitasBatidas > 0
+                            ? 'Continuar registro de massa desta ordem'
+                            : 'Iniciar massa desta ordem'
                       }
                       className={`${BTN_PRIMARY} w-full sm:w-auto ${
                         disableMassaAction
@@ -307,7 +376,7 @@ export default function ProductionQueueGenericCards({
                       disabled={disableMassaAction}
                     >
                       <span className={BTN_PRIMARY_ICON}>play_circle</span>
-                      <span>Iniciar</span>
+                      <span>{receitasBatidas > 0 ? 'Continuar massa' : 'Iniciar massa'}</span>
                     </button>
                   )}
                   {isFermentacao && (
@@ -334,7 +403,7 @@ export default function ProductionQueueGenericCards({
                       }`}
                     >
                       <span className={BTN_PRIMARY_ICON}>play_circle</span>
-                      <span>Iniciar</span>
+                      <span>Iniciar fermentação</span>
                     </button>
                   )}
                   {isEntradaEmbalagem && (
@@ -353,7 +422,7 @@ export default function ProductionQueueGenericCards({
                       }`}
                     >
                       <span className={BTN_PRIMARY_ICON}>inventory_2</span>
-                      <span>Abrir</span>
+                      <span>Registrar entrada</span>
                     </button>
                   )}
                   {isSaidaEmbalagem && (
@@ -372,7 +441,7 @@ export default function ProductionQueueGenericCards({
                       }`}
                     >
                       <span className={BTN_PRIMARY_ICON}>local_shipping</span>
-                      <span>Abrir</span>
+                      <span>Registrar saída</span>
                     </button>
                   )}
                   {!isPlanning &&
@@ -456,15 +525,15 @@ export default function ProductionQueueGenericCards({
 
   return (
     <>
-      {queueForCardsActive.map((item, i) => renderOrdemCard(item, i))}
+      {queueForCardsActive.map((item, i) => renderOrdemCard(item, i, false, i === 0))}
       {queueForCardsProntos.length > 0 && (
         <>
           <div className="w-full border-t border-slate-200/90 pt-3 mt-2">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {tituloSecaoProntos}
             </p>
           </div>
-          {queueForCardsProntos.map((item, i) => renderOrdemCard(item, i))}
+          {queueForCardsProntos.map((item, i) => renderOrdemCard(item, i, true, false))}
         </>
       )}
     </>

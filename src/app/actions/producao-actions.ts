@@ -22,6 +22,8 @@ interface CreateProductionOrderParams {
   pedidoId?: string;
   prioridade?: number; // 0=Normal, 1=Alta, 2=Urgente
   dataProducao?: string;
+  /** Assadeira permitida em `produto_assadeiras`; null = inferir na fila pelo cadastro do produto. */
+  assadeiraId?: string | null;
 }
 
 interface UpdateProductionOrderParams {
@@ -30,6 +32,118 @@ interface UpdateProductionOrderParams {
   qtdPlanejada: number;
   prioridade?: number; // 0=Normal, 1=Alta, 2=Urgente
   dataProducao?: string;
+  assadeiraId?: string | null;
+}
+
+export type AssadeiraOpcaoOrdemProducao = {
+  id: string;
+  nome: string;
+  unidades_por_assadeira: number;
+  ordem: number;
+};
+
+/** Lista assadeiras vinculadas ao produto (modal Nova ordem / planejamento). Opcionalmente exclui latas bloqueadas para o cliente. */
+export async function getAssadeirasDisponiveisParaOrdemProducao(
+  produtoId: string,
+  clienteId?: string | null,
+): Promise<
+  { success: true; data: AssadeiraOpcaoOrdemProducao[] } | { success: false; error: string }
+> {
+  const id = produtoId?.trim();
+  if (!id) {
+    return { success: true, data: [] };
+  }
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('produto_assadeiras')
+    .select(
+      `
+      unidades_por_assadeira,
+      assadeiras ( id, nome, ordem )
+    `,
+    )
+    .eq('produto_id', id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const out: AssadeiraOpcaoOrdemProducao[] = [];
+  for (const row of data ?? []) {
+    const a = row.assadeiras as { id: string; nome: string; ordem: number } | null;
+    if (!a?.id) continue;
+    const u = Math.round(Number(row.unidades_por_assadeira));
+    if (!Number.isFinite(u) || u <= 0) continue;
+    out.push({
+      id: a.id,
+      nome: (a.nome ?? '').trim() || '—',
+      ordem: a.ordem ?? 0,
+      unidades_por_assadeira: u,
+    });
+  }
+  out.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, 'pt-BR', { sensitivity: 'base' }));
+
+  const cid = clienteId?.trim();
+  if (!cid) {
+    return { success: true, data: out };
+  }
+
+  const { data: bloqs, error: bloqErr } = await supabase
+    .from('cliente_assadeira_bloqueios')
+    .select('assadeira_id')
+    .eq('cliente_id', cid);
+
+  if (bloqErr) {
+    return { success: true, data: out };
+  }
+
+  const blocked = new Set(
+    (bloqs ?? []).map((r: { assadeira_id: string }) => String(r.assadeira_id)),
+  );
+  return { success: true, data: out.filter((o) => !blocked.has(o.id)) };
+}
+
+async function validarAssadeiraIdParaProduto(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  produtoId: string,
+  assadeiraId: string | null | undefined,
+  clienteId?: string | null,
+): Promise<{ ok: true; value: string | null } | { ok: false; error: string }> {
+  const t = assadeiraId?.trim() ?? '';
+  if (!t) return { ok: true, value: null };
+  const { data, error } = await supabase
+    .from('produto_assadeiras')
+    .select('assadeira_id')
+    .eq('produto_id', produtoId)
+    .eq('assadeira_id', t)
+    .maybeSingle();
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      error: 'O tipo de lata escolhido não está permitido para este produto.',
+    };
+  }
+
+  const cid = clienteId?.trim();
+  if (cid) {
+    const { data: bloq, error: bloqErr } = await supabase
+      .from('cliente_assadeira_bloqueios')
+      .select('id')
+      .eq('cliente_id', cid)
+      .eq('assadeira_id', t)
+      .maybeSingle();
+    if (!bloqErr && bloq) {
+      return {
+        ok: false,
+        error: 'Esta lata está bloqueada para o cliente do pedido (exclusão no cadastro de latas).',
+      };
+    }
+  }
+
+  return { ok: true, value: t };
 }
 
 export async function createProductionOrder(params: CreateProductionOrderParams) {
@@ -80,6 +194,27 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
         ? Number(maxOrdRow.ordem_planejamento) + 1
         : 1;
 
+    let clienteIdParaLata: string | null = null;
+    if (params.pedidoId?.trim()) {
+      const { data: pedRow } = await supabase
+        .from('pedidos')
+        .select('cliente_id')
+        .eq('id', params.pedidoId.trim())
+        .maybeSingle();
+      const rawCid = (pedRow as { cliente_id?: string | null } | null)?.cliente_id;
+      clienteIdParaLata = rawCid && String(rawCid).trim() ? String(rawCid).trim() : null;
+    }
+
+    const assadeiraOk = await validarAssadeiraIdParaProduto(
+      supabase,
+      params.produtoId,
+      params.assadeiraId,
+      clienteIdParaLata,
+    );
+    if (!assadeiraOk.ok) {
+      return { success: false as const, error: assadeiraOk.error };
+    }
+
     const { data, error } = await supabase
       .from('ordens_producao')
       .insert({
@@ -91,6 +226,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
         status: 'planejado',
         data_producao: dataProducao,
         ordem_planejamento: nextOrdemPlanejamento,
+        assadeira_id: assadeiraOk.value,
       })
       .select()
       .single();
@@ -118,6 +254,36 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
     if (params.dataProducao) {
       updateData.data_producao = new Date(params.dataProducao).toISOString();
     }
+
+    let clienteIdParaLata: string | null = null;
+    const { data: ordemPed, error: ordemPedErr } = await supabase
+      .from('ordens_producao')
+      .select('pedido_id')
+      .eq('id', params.ordemId)
+      .maybeSingle();
+    if (!ordemPedErr && ordemPed?.pedido_id) {
+      const pid = String(ordemPed.pedido_id).trim();
+      if (pid) {
+        const { data: pedRow } = await supabase
+          .from('pedidos')
+          .select('cliente_id')
+          .eq('id', pid)
+          .maybeSingle();
+        const rawCid = (pedRow as { cliente_id?: string | null } | null)?.cliente_id;
+        clienteIdParaLata = rawCid && String(rawCid).trim() ? String(rawCid).trim() : null;
+      }
+    }
+
+    const assadeiraOk = await validarAssadeiraIdParaProduto(
+      supabase,
+      params.produtoId,
+      params.assadeiraId,
+      clienteIdParaLata,
+    );
+    if (!assadeiraOk.ok) {
+      return { success: false as const, error: assadeiraOk.error };
+    }
+    updateData.assadeira_id = assadeiraOk.value;
 
     const { data, error } = await supabase
       .from('ordens_producao')
@@ -289,13 +455,22 @@ function serializeSupabaseError(err: unknown): Record<string, unknown> {
   }
   if (err && typeof err === 'object') {
     const e = err as Record<string, unknown>;
-    return {
+    const out: Record<string, unknown> = {
       message: e.message,
       code: e.code,
       details: e.details,
       hint: e.hint,
       status: e.status,
     };
+    const hasText = Object.values(out).some((v) => v != null && String(v).trim() !== '');
+    if (!hasText) {
+      try {
+        out.serialized = JSON.stringify(err);
+      } catch {
+        out.serialized = '[object]';
+      }
+    }
+    return out;
   }
   return { raw: String(err) };
 }
@@ -307,6 +482,53 @@ function formatEstoquePlanilhaResumo(q: Quantidade): string {
   if (q.unidades) parts.push(`${formatIntegerWithThousands(q.unidades)} un`);
   if (q.kg) parts.push(`${formatNumberWithThousands(q.kg, { decimals: 2 })} kg`);
   return parts.length > 0 ? parts.join(' · ') : '0';
+}
+
+type LataLinkRow = { assadeira_id: string; unidades: number; nome: string; ordem: number };
+
+/**
+ * Nome da assadeira (cadastro de latas) que corresponde ao pedido/produto:
+ * cliente só lata antiga → casa com `unidades_lata_antiga`; senão com `unidades_assadeira` (primária no produto).
+ * Respeita `assadeirasBloqueadasParaCliente`: latas nessa lista são ignoradas (exclusão no cadastro).
+ */
+function nomeLataTipoParaOrdem(
+  produtoId: string,
+  produto: {
+    unidades_assadeira?: number | null;
+    unidades_lata_antiga?: number | null;
+    unidades_lata_nova?: number | null;
+  } | null | undefined,
+  somenteLataAntigaCliente: boolean,
+  linksByProduto: Map<string, LataLinkRow[]>,
+  assadeirasBloqueadasParaCliente: Set<string>,
+): string | null {
+  if (!produto || !produtoId) return null;
+  const raw = linksByProduto.get(produtoId);
+  if (!raw?.length) return null;
+  const links = [...raw]
+    .filter((l) => !assadeirasBloqueadasParaCliente.has(l.assadeira_id))
+    .sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
+  if (!links.length) return null;
+
+  const matchUnidades = (u: number | null | undefined): string | null => {
+    if (u == null || !Number.isFinite(Number(u)) || Number(u) <= 0) return null;
+    const n = Math.round(Number(u));
+    const hit = links.find((l) => l.unidades === n);
+    return hit?.nome ?? null;
+  };
+
+  if (somenteLataAntigaCliente) {
+    const fromAntiga = matchUnidades(produto.unidades_lata_antiga ?? produto.unidades_assadeira);
+    if (fromAntiga) return fromAntiga;
+  }
+
+  const fromPrimary = matchUnidades(produto.unidades_assadeira);
+  if (fromPrimary) return fromPrimary;
+
+  const fromNova = matchUnidades(produto.unidades_lata_nova);
+  if (fromNova) return fromNova;
+
+  return links[0]?.nome ?? null;
 }
 
 export async function getProductionQueue() {
@@ -354,6 +576,60 @@ export async function getProductionQueue() {
   };
   const produtoIds = [...new Set(data.map((item: OrdemProducaoItem) => item.produto_id))];
 
+  const clienteIds = [
+    ...new Set(
+      (data as { pedidos?: { cliente_id?: string | null } | null }[])
+        .map((i) => i.pedidos?.cliente_id)
+        .filter((id): id is string => Boolean(id && String(id).trim())),
+    ),
+  ];
+
+  /** Colunas opcionais (migração): leitura isolada para não quebrar o embed principal. */
+  const somenteLataAntigaPorCliente = new Map<string, boolean>();
+  if (clienteIds.length > 0) {
+    const { data: cliRows, error: cliErr } = await supabase
+      .from('clientes')
+      .select('id, somente_lata_antiga')
+      .in('id', clienteIds);
+    if (cliErr) {
+      console.warn(
+        '[fila] clientes.somente_lata_antiga:',
+        JSON.stringify(serializeSupabaseError(cliErr)),
+      );
+    } else {
+      for (const row of cliRows ?? []) {
+        const r = row as { id: string; somente_lata_antiga?: boolean | null };
+        somenteLataAntigaPorCliente.set(r.id, Boolean(r.somente_lata_antiga));
+      }
+    }
+  }
+
+  const unidadesLataPorProduto = new Map<string, { antiga: number | null; nova: number | null }>();
+  if (produtoIds.length > 0) {
+    const { data: plRows, error: plErr } = await supabase
+      .from('produtos')
+      .select('id, unidades_lata_antiga, unidades_lata_nova')
+      .in('id', produtoIds);
+    if (plErr) {
+      console.warn(
+        '[fila] produtos.unidades_lata_*:',
+        JSON.stringify(serializeSupabaseError(plErr)),
+      );
+    } else {
+      for (const row of plRows ?? []) {
+        const r = row as {
+          id: string;
+          unidades_lata_antiga?: number | null;
+          unidades_lata_nova?: number | null;
+        };
+        unidadesLataPorProduto.set(r.id, {
+          antiga: r.unidades_lata_antiga ?? null,
+          nova: r.unidades_lata_nova ?? null,
+        });
+      }
+    }
+  }
+
   type ProdutoReceitaItem = {
     produto_id: string;
     quantidade_por_produto: number;
@@ -389,6 +665,61 @@ export async function getProductionQueue() {
     }
   }
 
+  const bloqueiosPorCliente = new Map<string, Set<string>>();
+  if (clienteIds.length > 0) {
+    const { data: bioRows, error: bioErr } = await supabase
+      .from('cliente_assadeira_bloqueios')
+      .select('cliente_id, assadeira_id')
+      .in('cliente_id', clienteIds);
+    if (bioErr) {
+      console.warn(
+        '[fila] cliente_assadeira_bloqueios:',
+        JSON.stringify(serializeSupabaseError(bioErr)),
+      );
+    } else {
+      for (const row of (bioRows ?? []) as { cliente_id: string; assadeira_id: string }[]) {
+        const cid = String(row.cliente_id);
+        const s = bloqueiosPorCliente.get(cid) ?? new Set<string>();
+        s.add(String(row.assadeira_id));
+        bloqueiosPorCliente.set(cid, s);
+      }
+    }
+  }
+
+  const linksByProduto = new Map<string, LataLinkRow[]>();
+  if (produtoIds.length > 0) {
+    const { data: paData, error: paError } = await supabase
+      .from('produto_assadeiras')
+      .select(
+        `
+        produto_id,
+        unidades_por_assadeira,
+        assadeiras ( id, nome, ordem )
+      `,
+      )
+      .in('produto_id', produtoIds);
+
+    if (paError) {
+      console.error('Erro ao buscar latas por produto (fila):', serializeSupabaseError(paError));
+    } else {
+      for (const row of (paData ?? []) as {
+        produto_id: string;
+        unidades_por_assadeira: number | string | null;
+        assadeiras: { id: string; nome: string; ordem: number } | null;
+      }[]) {
+        const aid = row.assadeiras?.id?.trim();
+        const nome = row.assadeiras?.nome?.trim();
+        if (!aid || !nome) continue;
+        const ordem = row.assadeiras?.ordem ?? 0;
+        const u = Math.round(Number(row.unidades_por_assadeira));
+        if (!Number.isFinite(u) || u <= 0) continue;
+        const list = linksByProduto.get(row.produto_id) ?? [];
+        list.push({ assadeira_id: aid, unidades: u, nome, ordem });
+        linksByProduto.set(row.produto_id, list);
+      }
+    }
+  }
+
   // Criar mapa de produto_id -> receita_massa (filtrar apenas tipo massa e receita ativa)
   const receitasMap = new Map<string, { quantidade_por_produto: number }>();
   receitasVinculadas?.forEach((pr: ProdutoReceitaItem) => {
@@ -406,20 +737,24 @@ export async function getProductionQueue() {
     .select(`
       id,
       ordem_producao_id,
-      receitas_batidas
+      receitas_batidas,
+      receita_id
     `)
     .eq('etapa', 'massa')
     .in('ordem_producao_id', data.map((item: OrdemProducaoItem) => item.id));
 
-  // Criar mapa de ordem_producao_id -> total de receitas batidas
+  // Criar mapa de ordem_producao_id -> total de receitas batidas (só logs com lote gravado: receita_id preenchido)
   type MassaLogItem = {
     ordem_producao_id: string;
     receitas_batidas: number | null;
+    receita_id: string | null;
   };
   const receitasBatidasMap = new Map<string, number>();
   if (massaLogs && Array.isArray(massaLogs)) {
     (massaLogs as unknown as MassaLogItem[]).forEach((log) => {
-      // Agrupa por ordem_producao_id e soma receitas_batidas
+      if (log.receita_id == null || String(log.receita_id).trim() === '') {
+        return;
+      }
       const currentTotal = receitasBatidasMap.get(log.ordem_producao_id) || 0;
       const receitas = log.receitas_batidas || 0;
       receitasBatidasMap.set(log.ordem_producao_id, currentTotal + receitas);
@@ -440,6 +775,7 @@ export async function getProductionQueue() {
       [key: string]: unknown;
     } | null;
     pedidos?: {
+      cliente_id?: string | null;
       clientes?: { nome_fantasia?: string | null } | null;
     } | null;
   };
@@ -610,6 +946,32 @@ export async function getProductionQueue() {
     }
   }
 
+  const assadeiraIdsDasOrdens = [
+    ...new Set(
+      (data as { assadeira_id?: string | null }[])
+        .map((r) => r.assadeira_id?.trim())
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const nomeAssadeiraPorId = new Map<string, string>();
+  if (assadeiraIdsDasOrdens.length > 0) {
+    const { data: anRows, error: anErr } = await supabase
+      .from('assadeiras')
+      .select('id, nome')
+      .in('id', assadeiraIdsDasOrdens);
+    if (anErr) {
+      console.warn(
+        '[fila] assadeiras (nome na OP):',
+        JSON.stringify(serializeSupabaseError(anErr)),
+      );
+    } else {
+      for (const r of anRows ?? []) {
+        const row = r as { id: string; nome: string };
+        nomeAssadeiraPorId.set(row.id, (row.nome ?? '').trim() || '—');
+      }
+    }
+  }
+
   // Transformar os dados para incluir receita_massa, receitas_batidas e receitas_fermentacao no formato esperado
   const transformedData = (data as OrdemProducaoWithProduto[]).map((item) => {
     const produto = item.produtos;
@@ -627,14 +989,19 @@ export async function getProductionQueue() {
 
     const produtoJoinFaltando = produto == null;
 
+    const latExtra = unidadesLataPorProduto.get(item.produto_id);
     const uaAntiga =
-      produto != null && typeof produto.unidades_lata_antiga === 'number'
-        ? produto.unidades_lata_antiga
-        : null;
+      latExtra?.antiga != null && Number.isFinite(Number(latExtra.antiga)) && Number(latExtra.antiga) > 0
+        ? Number(latExtra.antiga)
+        : produto != null && typeof produto.unidades_lata_antiga === 'number'
+          ? produto.unidades_lata_antiga
+          : null;
     const uaNova =
-      produto != null && typeof produto.unidades_lata_nova === 'number'
-        ? produto.unidades_lata_nova
-        : null;
+      latExtra?.nova != null && Number.isFinite(Number(latExtra.nova)) && Number(latExtra.nova) > 0
+        ? Number(latExtra.nova)
+        : produto != null && typeof produto.unidades_lata_nova === 'number'
+          ? produto.unidades_lata_nova
+          : null;
     const uaAssadeira =
       produto != null && typeof produto.unidades_assadeira === 'number'
         ? produto.unidades_assadeira
@@ -692,6 +1059,36 @@ export async function getProductionQueue() {
     const saida_forno_bandejas_total = saidaBandejasByOrdem.get(item.id) || 0;
     const entrada_embalagem_latas_total = entradaEmbalagemLatasByOrdem.get(item.id) || 0;
 
+    const clienteId = item.pedidos?.cliente_id;
+    const somenteLataAntigaCliente = clienteId
+      ? Boolean(somenteLataAntigaPorCliente.get(String(clienteId)))
+      : false;
+    const produtoParaNomeLata =
+      produtoJoinFaltando || !produto
+        ? null
+        : {
+            unidades_assadeira: produto.unidades_assadeira ?? null,
+            unidades_lata_antiga: latExtra?.antiga ?? null,
+            unidades_lata_nova: latExtra?.nova ?? null,
+          };
+    const opAssadeiraId = (item as { assadeira_id?: string | null }).assadeira_id?.trim() ?? null;
+    const nomeLataDefinidoNaOp = opAssadeiraId ? (nomeAssadeiraPorId.get(opAssadeiraId) ?? null) : null;
+    const bloqueadosLata =
+      clienteId && String(clienteId).trim()
+        ? (bloqueiosPorCliente.get(String(clienteId)) ?? new Set<string>())
+        : new Set<string>();
+    const lataInferida =
+      produtoParaNomeLata != null
+        ? nomeLataTipoParaOrdem(
+            item.produto_id,
+            produtoParaNomeLata,
+            somenteLataAntigaCliente,
+            linksByProduto,
+            bloqueadosLata,
+          )
+        : null;
+    const lata_tipo_nome = nomeLataDefinidoNaOp ?? lataInferida;
+
     return {
       ...item,
       produtoJoinFaltando,
@@ -700,6 +1097,8 @@ export async function getProductionQueue() {
         nome: produto?.nome || (produtoJoinFaltando ? 'Produto não encontrado' : 'Produto sem nome'),
         unidadeNomeResumido,
         receita_massa: receitaMassa,
+        unidades_lata_antiga: uaAntiga,
+        unidades_lata_nova: uaNova,
       },
       receitas_batidas: receitasBatidas,
       receitas_fermentacao: receitasFermentacao,
@@ -714,6 +1113,7 @@ export async function getProductionQueue() {
       estoque_resumo,
       estoque_unidades_consumo,
       qtd_a_produzir_planejada,
+      lata_tipo_nome,
     };
   });
 

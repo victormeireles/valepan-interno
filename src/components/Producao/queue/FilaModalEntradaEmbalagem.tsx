@@ -1,6 +1,6 @@
 'use client';
 
-import BandejasStepper, { MAX_BANDEJAS_SAIDA } from '@/components/Producao/BandejasStepper';
+import BandejasStepper from '@/components/Producao/BandejasStepper';
 import type { CarrinhoSaidaFornoParaEmbalagemVM } from '@/app/actions/producao-etapas-actions';
 
 export type CarrinhoEmbalagemFilaRow = CarrinhoSaidaFornoParaEmbalagemVM & {
@@ -9,18 +9,21 @@ export type CarrinhoEmbalagemFilaRow = CarrinhoSaidaFornoParaEmbalagemVM & {
   produto_nome: string;
 };
 
-function fmtDataHora(iso: string) {
-  try {
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
+type EsperaTone = 'normal' | 'atencao' | 'critico';
+
+function getEsperaTone(saidaFimIso: string): EsperaTone {
+  const saidaMs = Date.parse(saidaFimIso);
+  if (!Number.isFinite(saidaMs)) return 'normal';
+  const minutos = (Date.now() - saidaMs) / 60000;
+  if (minutos >= 60) return 'critico';
+  if (minutos >= 30) return 'atencao';
+  return 'normal';
+}
+
+function getEsperaLabel(tone: EsperaTone): string | null {
+  if (tone === 'critico') return 'Aguardando há bastante tempo';
+  if (tone === 'atencao') return 'Aguardando há mais tempo';
+  return null;
 }
 
 interface Props {
@@ -58,10 +61,6 @@ export default function FilaModalEntradaEmbalagem({
 }: Props) {
   if (!open) return null;
 
-  const maxParaSelecionado = selecionado
-    ? Math.min(MAX_BANDEJAS_SAIDA, Math.max(1, selecionado.latas_disponiveis))
-    : MAX_BANDEJAS_SAIDA;
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/40"
@@ -76,10 +75,6 @@ export default function FilaModalEntradaEmbalagem({
               <h2 id="modal-embalagem-entrada-titulo" className="text-lg font-bold text-slate-900">
                 Entrada na embalagem
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Busque pelo carrinho, lote ou produto. Os carrinhos vêm da <strong>saída do forno</strong> com latas
-                ainda disponíveis.
-              </p>
             </div>
             <button
               type="button"
@@ -127,6 +122,8 @@ export default function FilaModalEntradaEmbalagem({
             <ul className="space-y-2">
               {carrinhosFiltrados.map((row) => {
                 const sel = selecionado?.saida_forno_log_id === row.saida_forno_log_id;
+                const esperaTone = getEsperaTone(row.saida_fim);
+                const esperaLabel = getEsperaLabel(esperaTone);
                 return (
                   <li key={`${row.ordem_producao_id}-${row.saida_forno_log_id}`}>
                     <button
@@ -136,18 +133,26 @@ export default function FilaModalEntradaEmbalagem({
                       className={`w-full text-left rounded-xl border-2 px-4 py-3 transition-colors ${
                         sel
                           ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
-                          : 'border-slate-100 bg-slate-50/80 hover:border-slate-200 hover:bg-white'
+                          : esperaTone === 'critico'
+                            ? 'border-rose-300 bg-rose-50 hover:border-rose-400'
+                            : esperaTone === 'atencao'
+                              ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
+                              : 'border-slate-100 bg-slate-50/80 hover:border-slate-200 hover:bg-white'
                       }`}
                     >
                       <p className="font-bold text-slate-900 text-base">Carrinho {row.numero_carrinho}</p>
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <p className="mt-0.5 truncate text-xs text-slate-600">
                         {row.produto_nome} · <span className="font-mono">{row.lote_codigo}</span>
                       </p>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Saída: {row.latas_saida} LT · Disponível:{' '}
-                        <strong className="text-slate-800">{row.latas_disponiveis}</strong> LT ·{' '}
-                        <span className="text-slate-500">{fmtDataHora(row.saida_fim)}</span>
-                      </p>
+                      {esperaLabel && (
+                        <p
+                          className={`mt-1 text-xs font-medium ${
+                            esperaTone === 'critico' ? 'text-rose-700' : 'text-amber-700'
+                          }`}
+                        >
+                          {esperaLabel}
+                        </p>
+                      )}
                     </button>
                   </li>
                 );
@@ -160,9 +165,6 @@ export default function FilaModalEntradaEmbalagem({
           <div className="border-t border-slate-100 p-5 space-y-3 bg-slate-50/90 shrink-0">
             <p className="text-sm text-slate-700">
               Carrinho <strong>{selecionado.numero_carrinho}</strong> — quantas latas entram na embalagem?
-            </p>
-            <p className="text-xs text-slate-500">
-              Máximo {maxParaSelecionado} neste lançamento (até {MAX_BANDEJAS_SAIDA} por regra ou o saldo do carrinho).
             </p>
             <BandejasStepper
               id="latas-fila-embalagem"

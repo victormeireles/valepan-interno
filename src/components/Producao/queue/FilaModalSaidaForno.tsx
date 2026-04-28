@@ -1,7 +1,6 @@
 'use client';
 
 import BandejasStepper, {
-  DEFAULT_BANDEJAS_SAIDA,
   MAX_BANDEJAS_SAIDA,
 } from '@/components/Producao/BandejasStepper';
 import type { ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
@@ -12,10 +11,15 @@ interface Props {
   saidaPosConfirm: 'form' | 'nextChoice';
   saidaLastProdutoNome: string;
   ordensParaSelectSaida: ProductionQueueItem[];
+  saidaBuscaOrdem: string;
+  onSaidaBuscaOrdemChange: (v: string) => void;
   saidaOrdemId: string;
   onSaidaOrdemIdChange: (id: string) => void;
   saidaCarrinhoField: string;
   onSaidaCarrinhoChange: (v: string) => void;
+  saidaCarrinhosDisponiveis: string[];
+  saidaCarrinhosLoading: boolean;
+  saidaCarrinhosError: string | null;
   saidaBandejasField: string;
   onSaidaBandejasChange: (v: string) => void;
   saidaActionLoading: boolean;
@@ -31,10 +35,15 @@ export default function FilaModalSaidaForno({
   saidaPosConfirm,
   saidaLastProdutoNome,
   ordensParaSelectSaida,
+  saidaBuscaOrdem,
+  onSaidaBuscaOrdemChange,
   saidaOrdemId,
   onSaidaOrdemIdChange,
   saidaCarrinhoField,
   onSaidaCarrinhoChange,
+  saidaCarrinhosDisponiveis,
+  saidaCarrinhosLoading,
+  saidaCarrinhosError,
   saidaBandejasField,
   onSaidaBandejasChange,
   saidaActionLoading,
@@ -44,6 +53,14 @@ export default function FilaModalSaidaForno({
   onNextChoiceNao,
 }: Props) {
   if (!open) return null;
+  const buscaNorm = saidaBuscaOrdem.trim().toLowerCase();
+  const ordensFiltradas = buscaNorm
+    ? ordensParaSelectSaida.filter((item) => {
+        const produto = item.produtos.nome.toLowerCase();
+        const lote = item.lote_codigo.toLowerCase();
+        return produto.includes(buscaNorm) || lote.includes(buscaNorm);
+      })
+    : ordensParaSelectSaida;
 
   return (
     <div
@@ -58,11 +75,11 @@ export default function FilaModalSaidaForno({
             <h2 id="modal-saida-forno-fila-titulo" className="text-lg font-bold text-slate-900">
               {saidaPosConfirm === 'nextChoice' ? 'Registrar outro carrinho?' : 'Registrar saída do forno'}
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              {saidaPosConfirm === 'nextChoice'
-                ? `Você pode lançar outro carrinho do mesmo produto (${saidaLastProdutoNome}) ou voltar à fila.`
-                : 'Escolha o produto (ordem/lote), o número do carrinho e quantas bandejas saíram (1 bandeja = 1 LT).'}
-            </p>
+            {saidaPosConfirm === 'nextChoice' && (
+              <p className="mt-1 text-sm text-slate-600">
+                {`Você pode lançar outro carrinho do mesmo produto (${saidaLastProdutoNome}) ou voltar à fila.`}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -108,6 +125,14 @@ export default function FilaModalSaidaForno({
                 <label className="text-sm font-semibold text-slate-700" htmlFor="saida-produto-ordem">
                   Produto e ordem (lote)
                 </label>
+                <input
+                  type="search"
+                  value={saidaBuscaOrdem}
+                  onChange={(e) => onSaidaBuscaOrdemChange(e.target.value)}
+                  placeholder="Buscar produto ou lote…"
+                  autoComplete="off"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-slate-900"
+                />
                 <select
                   id="saida-produto-ordem"
                   value={saidaOrdemId}
@@ -115,7 +140,7 @@ export default function FilaModalSaidaForno({
                   className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 bg-white"
                 >
                   <option value="">Selecione…</option>
-                  {ordensParaSelectSaida.map((item) => (
+                  {ordensFiltradas.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.produtos.nome} · {item.lote_codigo}
                     </option>
@@ -126,25 +151,42 @@ export default function FilaModalSaidaForno({
                 <label className="text-sm font-semibold text-slate-700" htmlFor="saida-carrinho-fila">
                   Número do carrinho
                 </label>
-                <input
-                  id="saida-carrinho-fila"
-                  type="text"
-                  autoComplete="off"
-                  value={saidaCarrinhoField}
-                  onChange={(e) => onSaidaCarrinhoChange(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
-                  placeholder="ex.: 15"
-                />
+                {saidaCarrinhosDisponiveis.length > 0 ? (
+                  <select
+                    id="saida-carrinho-fila"
+                    value={saidaCarrinhoField}
+                    onChange={(e) => onSaidaCarrinhoChange(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 bg-white"
+                  >
+                    <option value="">Selecione…</option>
+                    {saidaCarrinhosDisponiveis.map((numero) => (
+                      <option key={numero} value={numero}>
+                        Carrinho {numero}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id="saida-carrinho-fila"
+                    type="text"
+                    autoComplete="off"
+                    value={saidaCarrinhoField}
+                    onChange={(e) => onSaidaCarrinhoChange(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900"
+                    placeholder="ex.: 15"
+                  />
+                )}
+                {saidaCarrinhosLoading && (
+                  <p className="text-xs text-slate-500">Carregando carrinhos da etapa anterior…</p>
+                )}
+                {saidaCarrinhosError && !saidaCarrinhosLoading && (
+                  <p className="text-xs text-rose-600">{saidaCarrinhosError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700" htmlFor="saida-bandejas-fila">
                   Bandejas (latas na saída)
                 </label>
-                <p className="text-xs text-slate-500">
-                  Padrão {DEFAULT_BANDEJAS_SAIDA} — use − / + para ajustar de 1 em 1 (máximo{' '}
-                  {MAX_BANDEJAS_SAIDA}). Cada bandeja conta como 1 LT na barra de progresso (alinhado à entrada no
-                  forno).
-                </p>
                 <BandejasStepper
                   id="saida-bandejas-fila"
                   value={saidaBandejasField}

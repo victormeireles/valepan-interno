@@ -52,7 +52,7 @@ export default function SaidaFornoProgressHeader({
   const titulo = variant === 'fila' ? 'Saída do forno — fila geral' : 'Saída do forno — esta ordem';
   const subtitulo =
     variant === 'fila'
-      ? 'Soma de todas as ordens com entrada no forno · bandejas contam como latas (LT)'
+      ? null
       : 'Progresso desta ordem · bandejas na saída = latas (LT)';
 
   const hintBelowTitle = hintFaltamSaida(meta, saidaForno);
@@ -62,7 +62,9 @@ export default function SaidaFornoProgressHeader({
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
       <div className="mb-2 sm:mb-3">
         <p className="text-xs font-semibold leading-snug text-slate-900 sm:text-sm">{titulo}</p>
-        <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-xs">{subtitulo}</p>
+        {subtitulo && (
+          <p className="mt-0.5 text-[10px] leading-snug text-slate-500 sm:text-xs">{subtitulo}</p>
+        )}
       </div>
 
       <VolumeTriploProgressoBar

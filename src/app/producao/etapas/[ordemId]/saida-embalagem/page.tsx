@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
 import { getProductionOrderWithProduct, getProductionStepLogs } from '@/app/actions/producao-etapas-actions';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
+import { PRODUCTION_STEP_DENSE_SHELL } from '@/components/Producao/production-step-form-classes';
 import SaidaEmbalagemPhotoClient from './SaidaEmbalagemPhotoClient';
 import { getMetaCaixasSaidaEmbalagem } from '@/lib/utils/production-conversions';
 import type { SaidaEmbalagemQualityData } from '@/domain/types/producao-etapas';
@@ -54,10 +54,12 @@ export default async function SaidaEmbalagemPage({ params }: PageProps) {
       etapaNome="Saída da Embalagem"
       loteCodigo={o.lote_codigo}
       produtoNome={produto.nome ?? 'Produto'}
+      backHref={filaUrlForProductionStep('saida_embalagem')}
+      denseHeader
+      {...PRODUCTION_STEP_DENSE_SHELL}
     >
-      <p className="text-sm text-slate-600">
-        Registre a contagem de caixas e, se quiser, a foto do lote. Etapa no sistema:{' '}
-        <code className="text-xs bg-slate-100 px-1 rounded">saida_embalagem</code>.
+      <p className="sr-only">
+        Contagem de caixas e foto opcional do lote. Etapa saida_embalagem.
       </p>
       <SaidaEmbalagemPhotoClient
         ordemProducaoId={o.id}
@@ -65,12 +67,6 @@ export default async function SaidaEmbalagemPage({ params }: PageProps) {
         metaCaixas={metaCaixas}
         initialCaixasRecebidas={initialCaixasRecebidas}
       />
-      <Link
-        href={filaUrlForProductionStep('saida_embalagem')}
-        className="inline-flex mt-4 px-4 py-2 rounded-xl border border-slate-200 text-slate-800 text-sm font-medium hover:bg-slate-50"
-      >
-        Voltar à fila
-      </Link>
     </ProductionStepLayout>
   );
 }

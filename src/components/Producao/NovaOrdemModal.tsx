@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   createProductionOrder,
   updateProductionOrder,
+  getAssadeirasDisponiveisParaOrdemProducao,
 } from '@/app/actions/producao-actions';
 import SelectRemoteAutocomplete from '@/components/Producao/SelectRemoteAutocomplete';
 import DateInput from '@/components/FormControls/DateInput';
@@ -36,6 +37,7 @@ interface NovaOrdemModalProps {
     };
     qtd_planejada: number;
     data_producao?: string | null;
+    assadeira_id?: string | null;
   };
   onSaved?: () => void;
 }
@@ -71,6 +73,11 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
   const [animating, setAnimating] = useState(false);
   const [produtoMeta, setProdutoMeta] = useState<ProductMeta | null>(null);
   const productInfo = produtoMeta;
+  const [lataOpcoes, setLataOpcoes] = useState<
+    { id: string; nome: string; unidades_por_assadeira: number }[]
+  >([]);
+  const [lataOpcoesLoading, setLataOpcoesLoading] = useState(false);
+  const [assadeiraId, setAssadeiraId] = useState('');
 
   const wasModalOpenRef = useRef(false);
   useEffect(() => {
@@ -90,6 +97,7 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
 
     if (order) {
       setProdutoId(order.produto_id);
+      setAssadeiraId(order.assadeira_id?.trim() ?? '');
       setDataProducao(order.data_producao ?? today());
       const pi = productInfoFromOrderProdutos(order.produtos);
       if (pi) {
@@ -104,12 +112,34 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
       }
     } else {
       setProdutoId('');
+      setAssadeiraId('');
       setInputKind('unidades');
       setRawQty('');
       setDataProducao(today());
       setProdutoMeta(null);
     }
   }, [isOpen, order]);
+
+  useEffect(() => {
+    if (!isOpen || !produtoId.trim()) {
+      setLataOpcoes([]);
+      return;
+    }
+    let cancelled = false;
+    setLataOpcoesLoading(true);
+    void getAssadeirasDisponiveisParaOrdemProducao(produtoId).then((r) => {
+      if (cancelled) return;
+      setLataOpcoesLoading(false);
+      if (r.success) {
+        setLataOpcoes(r.data);
+      } else {
+        setLataOpcoes([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, produtoId]);
 
   const handleKindChange = useCallback(
     (next: PlanningQuantityInputKind) => {
@@ -177,6 +207,7 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
         qtdPlanejada: computed.qtdPlanejada,
         prioridade: 0,
         dataProducao,
+        assadeiraId: assadeiraId.trim() || null,
       };
 
       const response = order
@@ -284,6 +315,7 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
                   setProdutoMeta(meta);
                   setInputKind('unidades');
                   setRawQty('');
+                  setAssadeiraId('');
                 }}
               />
               {productInfo && produtoId && (
@@ -294,6 +326,33 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
                 </div>
               )}
             </div>
+
+            {podeLatas && produtoId && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 ml-1">Tipo de lata</label>
+                {lataOpcoesLoading ? (
+                  <p className="text-xs text-gray-500">Carregando opções…</p>
+                ) : lataOpcoes.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    Nenhuma assadeira vinculada a este produto. Configure em Produtos → Latas ou use automático após
+                    cadastrar.
+                  </p>
+                ) : (
+                  <select
+                    value={assadeiraId}
+                    onChange={(e) => setAssadeiraId(e.target.value)}
+                    className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                  >
+                    <option value="">Automático (conforme cadastro do produto)</option>
+                    {lataOpcoes.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome} · {o.unidades_por_assadeira} un/LT
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
 
             <DateInput
               label="Data da Produção"
