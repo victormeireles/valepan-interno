@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DashboardHeader from '@/components/DashboardHeader';
 import {
   getAssadeiras,
+  deleteAssadeira,
   updateAssadeira,
   type AssadeiraRow,
 } from '@/app/actions/assadeiras-actions';
@@ -48,6 +49,51 @@ function parseOptionalInt(raw: string): number | null {
   const n = parseInt(t, 10);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
+}
+
+function extractPesoKey(text: string): string | null {
+  const m = text.match(/\b(\d{1,4}(?:[.,]\d+)?)\s*g\b/i);
+  if (!m) return null;
+  const raw = m[1].replace(',', '.');
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const normalized = Number.isInteger(n) ? String(n) : String(n).replace(/\.0+$/, '');
+  return `${normalized}g`;
+}
+
+/**
+ * Quando a lata aceita 2+ pesos distintos (extraídos de nome/código), devolve lista tipo
+ * «Pães 60g, Pães 65g» para mostrar junto da descrição manual.
+ */
+function descricaoPesosAceitosLista(plist: ProdutoPorLata[]): string | null {
+  const entries = plist
+    .map((p) => {
+      const peso = extractPesoKey(`${p.nome} ${p.codigo}`);
+      return peso ? { nome: p.nome.trim(), peso } : null;
+    })
+    .filter((x): x is { nome: string; peso: string } => x != null);
+  const pesosUnicos = new Set(entries.map((e) => e.peso));
+  if (pesosUnicos.size < 2) return null;
+  const byNome = new Map<string, { nome: string; peso: string }>();
+  for (const e of entries) {
+    if (!byNome.has(e.nome)) byNome.set(e.nome, e);
+  }
+  const list = [...byNome.values()].sort((a, b) => {
+    const na = Number(a.peso.replace('g', ''));
+    const nb = Number(b.peso.replace('g', ''));
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return a.nome.localeCompare(b.nome, 'pt-BR');
+  });
+  return list.map((x) => x.nome).join(', ');
+}
+
+function defaultUnidadesPorLata(assadeira: AssadeiraRow, produto: ProdutoLatasRow): string {
+  if (produto.unidades_assadeira != null && Number(produto.unidades_assadeira) > 0) {
+    return String(Math.round(Number(produto.unidades_assadeira)));
+  }
+  const ql = Number(assadeira.quantidade_latas ?? 0);
+  if (Number.isFinite(ql) && ql > 0) return String(Math.round(ql));
+  return '';
 }
 
 type StatusCadastro = 'ok' | 'incompleto' | 'vazio';
@@ -168,6 +214,7 @@ function PorLataTableRow({
   const [painelCompatExpandido, setPainelCompatExpandido] = useState(false);
   const [painelExclusaoExpandido, setPainelExclusaoExpandido] = useState(false);
   const [buscaProdutos, setBuscaProdutos] = useState('');
+  const [pesoSelecionado, setPesoSelecionado] = useState('');
   const [buscaClientesExclusao, setBuscaClientesExclusao] = useState('');
   const [map, setMap] = useState<Record<string, EntryState>>(() =>
     buildProdutoLataMapForAssadeira(produtos, assadeira.id),
@@ -186,9 +233,10 @@ function PorLataTableRow({
   const [savingLata, setSavingLata] = useState(false);
   const [savingCompat, setSavingCompat] = useState(false);
   const [savingBloqueios, setSavingBloqueios] = useState(false);
+  const [deletingLata, setDeletingLata] = useState(false);
   const [mapBloqueioCliente, setMapBloqueioCliente] = useState<Record<string, boolean>>({});
 
-  const busy = savingLata || savingCompat || savingBloqueios;
+  const busy = savingLata || savingCompat || savingBloqueios || deletingLata;
 
   useEffect(() => {
     setNome(assadeira.nome);
@@ -235,6 +283,20 @@ function PorLataTableRow({
     );
   }, [produtos, buscaProdutos]);
 
+  const opcoesPesoProdutos = useMemo(() => {
+    const pesos = new Set<string>();
+    for (const p of produtos) {
+      const peso = extractPesoKey(`${p.nome} ${p.codigo ?? ''}`);
+      if (peso) pesos.add(peso);
+    }
+    return [...pesos].sort((a, b) => {
+      const na = Number(a.replace('g', ''));
+      const nb = Number(b.replace('g', ''));
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+      return a.localeCompare(b, 'pt-BR');
+    });
+  }, [produtos]);
+
   const clientesFiltradosExclusao = useMemo(() => {
     const q = buscaClientesExclusao.toLowerCase().trim();
     const base = [...clientes].sort((a, b) => a.nome_fantasia.localeCompare(b.nome_fantasia, 'pt-BR'));
@@ -250,12 +312,43 @@ function PorLataTableRow({
     [map],
   );
 
+  const aplicarSelecaoPorPeso = useCallback(
+    (checked: boolean) => {
+      if (!pesoSelecionado) return;
+      setMap((prev) => {
+        const next = { ...prev };
+        for (const p of produtos) {
+          const peso = extractPesoKey(`${p.nome} ${p.codigo ?? ''}`);
+          if (peso !== pesoSelecionado) continue;
+          const atual = next[p.id] ?? { checked: false, unidades: '' };
+          const unidadesDefault = defaultUnidadesPorLata(assadeira, p);
+          next[p.id] = {
+            checked,
+            unidades: checked ? (atual.unidades || unidadesDefault) : '',
+          };
+        }
+        return next;
+      });
+    },
+    [pesoSelecionado, produtos, assadeira],
+  );
+
+  const desmarcarTodosCompativeis = useCallback(() => {
+    setMap((prev) => {
+      const next = { ...prev };
+      for (const p of produtos) {
+        next[p.id] = { checked: false, unidades: '' };
+      }
+      return next;
+    });
+  }, [produtos]);
+
   const nClientesExclusaoMarcados = useMemo(
     () => clientes.filter((c) => mapBloqueioCliente[c.id]).length,
     [clientes, mapBloqueioCliente],
   );
 
-  const handleSaveLata = async () => {
+  const handleSaveLata = async (): Promise<boolean> => {
     setSavingLata(true);
     setMsg(null);
     const qlRaw = quantidadeLatas.trim();
@@ -263,12 +356,12 @@ function PorLataTableRow({
     if (qlRaw === '' || !Number.isFinite(ql) || ql < 0) {
       setMsg({ type: 'err', text: 'Informe a quantidade de latas (número inteiro ≥ 0).' });
       setSavingLata(false);
-      return;
+      return false;
     }
     if (!nome.trim()) {
       setMsg({ type: 'err', text: 'Informe o nome da lata.' });
       setSavingLata(false);
-      return;
+      return false;
     }
     const nb = parseInt(numeroBuracos, 10);
     const res = await updateAssadeira({
@@ -285,13 +378,13 @@ function PorLataTableRow({
     setSavingLata(false);
     if (!res.success) {
       setMsg({ type: 'err', text: res.error ?? 'Erro ao guardar a lata.' });
-      return;
+      return false;
     }
-    setMsg({ type: 'ok', text: 'Lata atualizada.' });
     await onRefreshAssadeiras();
+    return true;
   };
 
-  const handleSaveCompat = async () => {
+  const handleSaveCompat = async (): Promise<boolean> => {
     setSavingCompat(true);
     setMsg(null);
     for (const p of produtos) {
@@ -303,19 +396,48 @@ function PorLataTableRow({
           text: `«${p.nome}»: indique unidades inteiras > 0 para cada produto marcado como compatível.`,
         });
         setSavingCompat(false);
-        return;
+        return false;
       }
       if (!vinculosPayloadChanged(p.vinculos, merged)) continue;
       const res = await saveProdutoLatasPermitidas({ produtoId: p.id, vinculos: merged });
       if (!res.success) {
         setMsg({ type: 'err', text: res.error ?? `Erro ao guardar «${p.nome}».` });
         setSavingCompat(false);
-        return;
+        return false;
       }
     }
     setSavingCompat(false);
-    setMsg({ type: 'ok', text: 'Compatibilidades guardadas.' });
     await onRefreshProdutos();
+    return true;
+  };
+
+  const handleSaveAll = async () => {
+    const okLata = await handleSaveLata();
+    if (!okLata) return;
+    const okCompat = await handleSaveCompat();
+    if (!okCompat) return;
+    setMsg({ type: 'ok', text: 'Alterações salvas.' });
+    setOpen(false);
+  };
+
+  const handleDeleteLata = async () => {
+    const ok = window.confirm(
+      `Excluir a lata "${assadeira.nome}"? Esta ação remove os vínculos de produtos e exclusões de clientes dessa lata.`,
+    );
+    if (!ok) return;
+    setDeletingLata(true);
+    setMsg(null);
+    const res = await deleteAssadeira({ id: assadeira.id });
+    setDeletingLata(false);
+    if (!res.success) {
+      setMsg({ type: 'err', text: res.error ?? 'Erro ao excluir a lata.' });
+      return;
+    }
+    setMsg({ type: 'ok', text: 'Lata excluída.' });
+    setOpen(false);
+    await onRefreshProdutos();
+    await onRefreshBloqueios();
+    await onRefreshAssadeiras();
   };
 
   const clientesBloqueadosResumo = useMemo(() => {
@@ -327,6 +449,17 @@ function PorLataTableRow({
       })
       .filter((x): x is { id: string; nome: string } => x != null);
   }, [bloqueadosClienteIds, clientes]);
+
+  const descricaoPesosAuto = useMemo(() => descricaoPesosAceitosLista(plist), [plist]);
+
+  const textoDescricaoExibicao = useMemo(() => {
+    const manual = assadeira.descricao?.trim() ?? '';
+    const auto = descricaoPesosAuto ?? '';
+    if (manual && auto) return `${manual} · ${auto}`;
+    if (manual) return manual;
+    if (auto) return auto;
+    return '';
+  }, [assadeira.descricao, descricaoPesosAuto]);
 
   const handleSaveBloqueios = async () => {
     setSavingBloqueios(true);
@@ -364,8 +497,10 @@ function PorLataTableRow({
           </span>
         </td>
         <td className="px-3 py-1.5 text-gray-700 align-middle">
-          {assadeira.descricao?.trim() ? (
-            <p className="text-sm leading-snug line-clamp-2">{assadeira.descricao.trim()}</p>
+          {textoDescricaoExibicao ? (
+            <p className="text-sm leading-snug line-clamp-2" title={textoDescricaoExibicao}>
+              {textoDescricaoExibicao}
+            </p>
           ) : (
             <p className="text-sm text-gray-400 italic">Sem descrição</p>
           )}
@@ -488,14 +623,6 @@ function PorLataTableRow({
                     </label>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleSaveLata()}
-                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
-                >
-                  {savingLata ? 'A guardar…' : 'Guardar lata'}
-                </button>
               </div>
 
               <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 min-w-0">
@@ -537,6 +664,46 @@ function PorLataTableRow({
                         disabled={busy}
                       />
                     </div>
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2">
+                      <span className="text-xs font-semibold text-blue-900">Selecionar por peso</span>
+                      <select
+                        value={pesoSelecionado}
+                        onChange={(e) => setPesoSelecionado(e.target.value)}
+                        disabled={busy || opcoesPesoProdutos.length === 0}
+                        className="min-w-[110px] rounded border border-blue-200 bg-white px-2 py-1.5 text-xs text-gray-800"
+                      >
+                        <option value="">Peso…</option>
+                        {opcoesPesoProdutos.map((peso) => (
+                          <option key={peso} value={peso}>
+                            {peso}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={busy || !pesoSelecionado}
+                        onClick={() => aplicarSelecaoPorPeso(true)}
+                        className="rounded border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        Marcar peso
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || !pesoSelecionado}
+                        onClick={() => aplicarSelecaoPorPeso(false)}
+                        className="rounded border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        Desmarcar peso
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || nProdutosCompatMarcados === 0}
+                        onClick={desmarcarTodosCompativeis}
+                        className="rounded border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      >
+                        Desmarcar tudo
+                      </button>
+                    </div>
                     <div className="max-h-[min(420px,55vh)] overflow-y-auto rounded-lg border border-gray-100">
                       <table className="w-full text-left text-xs sm:text-sm border-collapse">
                         <thead className="sticky top-0 z-[1] bg-gray-50 border-b border-gray-100">
@@ -559,13 +726,14 @@ function PorLataTableRow({
                                     disabled={busy}
                                     onChange={(ev) => {
                                       const checked = ev.target.checked;
+                                      const unidadesDefault = defaultUnidadesPorLata(assadeira, p);
                                       setMap((prev) => {
                                         const cur = prev[p.id] ?? { checked: false, unidades: '' };
                                         return {
                                           ...prev,
                                           [p.id]: {
                                             checked,
-                                            unidades: checked ? cur.unidades : '',
+                                            unidades: checked ? cur.unidades || unidadesDefault : '',
                                           },
                                         };
                                       });
@@ -599,14 +767,6 @@ function PorLataTableRow({
                         </tbody>
                       </table>
                     </div>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleSaveCompat()}
-                      className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
-                    >
-                      {savingCompat ? 'A guardar…' : 'Guardar compatíveis'}
-                    </button>
                   </div>
                 )}
               </div>
@@ -695,6 +855,24 @@ function PorLataTableRow({
                 </div>
               )}
             </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleDeleteLata()}
+                className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+              >
+                {deletingLata ? 'Excluindo…' : 'Excluir lata'}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleSaveAll()}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {busy ? 'A guardar…' : 'Salvar alterações'}
+              </button>
+            </div>
           </td>
         </tr>
       )}
@@ -775,8 +953,9 @@ export default function LatasCadastroClient({
     return linhasPorLata.filter(({ assadeira: a, produtos: plist }) => {
       const nome = a.nome.toLowerCase();
       const desc = (a.descricao ?? '').toLowerCase();
+      const descPesos = (descricaoPesosAceitosLista(plist) ?? '').toLowerCase();
       const tech = resumoTecnicoAssadeira(a).toLowerCase();
-      if (nome.includes(q) || desc.includes(q) || tech.includes(q)) return true;
+      if (nome.includes(q) || desc.includes(q) || descPesos.includes(q) || tech.includes(q)) return true;
       if (
         (bloqueiosPorAssadeira.get(a.id) ?? []).some((cid) => {
           const c = clientes.find((x) => x.id === cid);

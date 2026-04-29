@@ -19,9 +19,48 @@ const PATH = '/carrinhos';
 
 export type CarrinhoRow = Tables<'carrinhos'>;
 
+/** Onde o carrinho aparece no fluxo (logs de produção em curso). */
+export type CarrinhoUsoEtapa = 'fermentacao' | 'pos_forno';
+
+export type CarrinhoUsoOcorrencia = {
+  etapa: CarrinhoUsoEtapa;
+  ordem_producao_id: string;
+  lote_codigo: string | null;
+  produto_nome: string | null;
+  /** Latas (assadeiras LT) no lote de fermentação ou total na saída do forno. */
+  assadeiras_total: number | null;
+  /** Só pós-forno: latas ainda por registrar na embalagem. */
+  latas_restantes_embalagem: number | null;
+  fermentacao_log_id: string | null;
+  saida_forno_log_id: string | null;
+};
+
+export type CarrinhoComUsoDetalhe = CarrinhoRow & {
+  uso_ocorrencias: CarrinhoUsoOcorrencia[];
+};
+
 export type CarrinhosLoadResult =
-  | { ok: true; list: CarrinhoRow[] }
+  | { ok: true; list: CarrinhoComUsoDetalhe[] }
   | { ok: false; message: string };
+
+type StepLogSnapshot = {
+  id: string;
+  ordem_producao_id: string;
+  etapa: string;
+  fim: string | null;
+  dados_qualidade: unknown;
+  qtd_saida: number | null;
+};
+
+function pushUso(
+  map: Map<string, CarrinhoUsoOcorrencia[]>,
+  norm: string,
+  occ: CarrinhoUsoOcorrencia,
+): void {
+  const arr = map.get(norm) ?? [];
+  arr.push(occ);
+  map.set(norm, arr);
+}
 
 export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -39,20 +78,14 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
   }
 
   const normalizedCarrinhosEmUso = new Set<string>();
+  const usoPorCarrinhoNorm = new Map<string, CarrinhoUsoOcorrencia[]>();
+
   const { data: logs, error: logsError } = await supabase
     .from('producao_etapas_log')
     .select('id, ordem_producao_id, etapa, fim, dados_qualidade, qtd_saida')
     .in('etapa', ['fermentacao', 'entrada_forno', 'saida_forno', 'entrada_embalagem']);
 
   if (!logsError) {
-    type StepLogSnapshot = {
-      id: string;
-      ordem_producao_id: string;
-      etapa: string;
-      fim: string | null;
-      dados_qualidade: unknown;
-      qtd_saida: number | null;
-    };
     const rows = (logs ?? []) as StepLogSnapshot[];
 
     const entradaFornoByFermentacaoLogId = new Set<string>();
@@ -69,7 +102,21 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
       if (dq?.excluido_da_lista_forno === true) continue;
       if (entradaFornoByFermentacaoLogId.has(row.id)) continue;
       const norm = normalizeNumeroCarrinhoFermentacao(dq?.numero_carrinho);
-      if (norm) normalizedCarrinhosEmUso.add(norm);
+      if (!norm) continue;
+      normalizedCarrinhosEmUso.add(norm);
+      const lt = dq?.assadeiras_lt;
+      const assadeirasTotal =
+        lt != null && Number.isFinite(Number(lt)) ? Math.max(0, Math.round(Number(lt))) : null;
+      pushUso(usoPorCarrinhoNorm, norm, {
+        etapa: 'fermentacao',
+        ordem_producao_id: row.ordem_producao_id,
+        lote_codigo: null,
+        produto_nome: null,
+        assadeiras_total: assadeirasTotal,
+        latas_restantes_embalagem: null,
+        fermentacao_log_id: row.id,
+        saida_forno_log_id: null,
+      });
     }
 
     for (const row of rows) {
@@ -89,16 +136,70 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
           consumido += Number(dqEmb.assadeiras);
         }
       }
-      if (latasSaida - consumido > 0) normalizedCarrinhosEmUso.add(norm);
+      const restantes = latasSaida - consumido;
+      if (restantes > 0) {
+        normalizedCarrinhosEmUso.add(norm);
+        pushUso(usoPorCarrinhoNorm, norm, {
+          etapa: 'pos_forno',
+          ordem_producao_id: row.ordem_producao_id,
+          lote_codigo: null,
+          produto_nome: null,
+          assadeiras_total: latasSaida > 0 ? latasSaida : null,
+          latas_restantes_embalagem: restantes,
+          fermentacao_log_id: null,
+          saida_forno_log_id: row.id,
+        });
+      }
     }
   }
 
-  const list = ((data ?? []) as CarrinhoRow[]).map((row) => {
-    if (!row.ativo) return row;
+  const ordemIds = new Set<string>();
+  for (const occs of usoPorCarrinhoNorm.values()) {
+    for (const o of occs) ordemIds.add(o.ordem_producao_id);
+  }
+
+  const ordemMeta = new Map<string, { lote_codigo: string | null; produto_nome: string | null }>();
+  if (ordemIds.size > 0) {
+    const { data: ordensRows, error: ordensErr } = await supabase
+      .from('ordens_producao')
+      .select('id, lote_codigo, produtos(nome)')
+      .in('id', [...ordemIds]);
+
+    if (!ordensErr && ordensRows) {
+      for (const r of ordensRows as Array<{
+        id: string;
+        lote_codigo: string | null;
+        produtos: { nome: string } | { nome: string }[] | null;
+      }>) {
+        const p = r.produtos;
+        const nome =
+          p == null
+            ? null
+            : Array.isArray(p)
+              ? p[0]?.nome ?? null
+              : p.nome ?? null;
+        ordemMeta.set(r.id, { lote_codigo: r.lote_codigo ?? null, produto_nome: nome });
+      }
+    }
+  }
+
+  for (const occs of usoPorCarrinhoNorm.values()) {
+    for (const o of occs) {
+      const m = ordemMeta.get(o.ordem_producao_id);
+      if (m) {
+        o.lote_codigo = m.lote_codigo;
+        o.produto_nome = m.produto_nome;
+      }
+    }
+  }
+
+  const list: CarrinhoComUsoDetalhe[] = ((data ?? []) as CarrinhoRow[]).map((row) => {
     const norm = normalizeNumeroCarrinhoFermentacao(String(row.numero));
-    if (!norm) return row;
-    if (!normalizedCarrinhosEmUso.has(norm)) return row;
-    return { ...row, em_uso: true };
+    const uso = norm ? usoPorCarrinhoNorm.get(norm) ?? [] : [];
+    if (!row.ativo || !norm || !normalizedCarrinhosEmUso.has(norm)) {
+      return { ...row, uso_ocorrencias: uso };
+    }
+    return { ...row, em_uso: true, uso_ocorrencias: uso };
   });
 
   return { ok: true, list };

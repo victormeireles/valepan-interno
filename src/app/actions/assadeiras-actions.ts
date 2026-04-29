@@ -145,3 +145,35 @@ export async function updateAssadeira(input: {
   revalidateAssadeirasPaths();
   return { success: true };
 }
+
+export async function deleteAssadeira(input: { id: string }): Promise<{ success: boolean; error?: string }> {
+  if (!input.id?.trim()) {
+    return { success: false, error: 'Assadeira inválida.' };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { error: delBloqueiosErr } = await supabase
+    .from('cliente_assadeira_bloqueios')
+    .delete()
+    .eq('assadeira_id', input.id);
+  if (delBloqueiosErr) {
+    return { success: false, error: delBloqueiosErr.message };
+  }
+
+  const { error: delVinculosErr } = await supabase
+    .from('produto_assadeiras')
+    .delete()
+    .eq('assadeira_id', input.id);
+  if (delVinculosErr) {
+    return { success: false, error: delVinculosErr.message };
+  }
+
+  const { error: delAssadeiraErr } = await supabase.from('assadeiras').delete().eq('id', input.id);
+  if (delAssadeiraErr) {
+    return { success: false, error: delAssadeiraErr.message };
+  }
+
+  revalidateAssadeirasPaths();
+  return { success: true };
+}
