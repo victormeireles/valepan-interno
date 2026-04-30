@@ -34,21 +34,40 @@ interface UpdateInsumoParams {
   ativo?: boolean;
 }
 
+async function mergeInsumosComUnidades(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  rows: Record<string, unknown>[],
+): Promise<Insumo[]> {
+  if (rows.length === 0) return [];
+  const uids = [
+    ...new Set(rows.map((r) => r.unidade_id as string).filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  const { data: unRows } = await supabase
+    .from('unidades')
+    .select('id, nome, nome_resumido, codigo')
+    .in('id', uids);
+  const uById = new Map((unRows ?? []).map((u) => [u.id, u]));
+  return rows.map((r) => {
+    const row = r as unknown as Insumo;
+    const u = row.unidade_id ? uById.get(row.unidade_id) : undefined;
+    return {
+      ...row,
+      unidades: u
+        ? {
+            id: u.id,
+            nome: u.nome,
+            nome_resumido: u.nome_resumido,
+            codigo: u.codigo,
+          }
+        : undefined,
+    };
+  });
+}
+
 export async function getInsumos(includeInactive = false) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  let query = supabase
-    .from('insumos')
-    .select(`
-      *,
-      unidades (
-        id,
-        nome,
-        nome_resumido,
-        codigo
-      )
-    `)
-    .order('nome', { ascending: true });
+  let query = supabase.from('insumos').select('*').order('nome', { ascending: true });
 
   if (!includeInactive) {
     query = query.eq('ativo', true);
@@ -61,32 +80,38 @@ export async function getInsumos(includeInactive = false) {
     return [];
   }
 
-  return (data || []) as Insumo[];
+  return mergeInsumosComUnidades(supabase, data ?? []);
 }
 
 export async function getInsumoById(id: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const { data, error } = await supabase
-    .from('insumos')
-    .select(`
-      *,
-      unidades (
-        id,
-        nome,
-        nome_resumido,
-        codigo
-      )
-    `)
-    .eq('id', id)
-    .single();
+  const { data, error } = await supabase.from('insumos').select('*').eq('id', id).single();
 
   if (error) {
     console.error('Erro ao buscar insumo:', error);
     return null;
   }
 
-  return data as Insumo | null;
+  const [merged] = await mergeInsumosComUnidades(supabase, data ? [data as Record<string, unknown>] : []);
+  return merged ?? null;
+}
+
+/** Busca vários insumos de uma vez (ex.: nomes para lista de ingredientes da receita / lote). */
+export async function getInsumosByIds(ids: string[]): Promise<Insumo[]> {
+  const unique = [...new Set(ids.map((id) => id?.trim()).filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return [];
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data, error } = await supabase.from('insumos').select('*').in('id', unique);
+
+  if (error) {
+    console.error('Erro ao buscar insumos por ids:', error);
+    return [];
+  }
+
+  return mergeInsumosComUnidades(supabase, data ?? []);
 }
 
 export async function createInsumo(params: CreateInsumoParams) {

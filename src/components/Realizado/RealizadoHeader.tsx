@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import DateInput from '@/components/FormControls/DateInput';
+import CalendarDateFilter from '@/components/FormControls/CalendarDateFilter';
 
 interface RealizadoHeaderProps {
   title: string;
@@ -59,13 +59,17 @@ export default function RealizadoHeader({
               >
                 Data:
               </label>
-              <div id="date-filter" className="min-w-[9rem]">
-                <DateInput
-                  hideLabel
+              <div className="min-w-[11rem] max-w-[16rem]">
+                <CalendarDateFilter
+                  id="date-filter"
                   value={selectedDate}
-                  onChange={onDateChange}
-                  required
-                  className="w-full px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
+                  onChange={(d) => {
+                    if (d !== null) onDateChange(d);
+                  }}
+                  label="Data do painel"
+                  wrapperClassName="inline-flex min-h-10 w-full items-center gap-2"
+                  nativePickerClassName="min-h-10 min-w-0 flex-1 cursor-pointer rounded-lg border-2 border-gray-300 bg-white px-2.5 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  todayButtonClassName="min-h-10 shrink-0 rounded-lg border border-gray-300 bg-gray-50 px-2.5 text-xs font-semibold text-gray-800 transition hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
               </div>
             </div>

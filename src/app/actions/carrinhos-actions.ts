@@ -33,6 +33,11 @@ export type CarrinhoUsoOcorrencia = {
   latas_restantes_embalagem: number | null;
   fermentacao_log_id: string | null;
   saida_forno_log_id: string | null;
+  /**
+   * ISO 8601 — início desta etapa para o carrinho (fermentação: cadastro do carrinho ou início do log;
+   * pós-forno: fim da saída do forno).
+   */
+  etapa_inicio_iso: string | null;
 };
 
 export type CarrinhoComUsoDetalhe = CarrinhoRow & {
@@ -47,10 +52,20 @@ type StepLogSnapshot = {
   id: string;
   ordem_producao_id: string;
   etapa: string;
+  inicio: string | null;
   fim: string | null;
   dados_qualidade: unknown;
   qtd_saida: number | null;
 };
+
+function etapaInicioIsoFermentacao(
+  dq: FermentacaoQualityData | null | undefined,
+  inicio: string | null,
+  fim: string | null,
+): string | null {
+  const raw = dq?.carrinho_cadastrado_em?.trim() || inicio?.trim() || fim?.trim() || '';
+  return raw || null;
+}
 
 function pushUso(
   map: Map<string, CarrinhoUsoOcorrencia[]>,
@@ -82,7 +97,7 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
 
   const { data: logs, error: logsError } = await supabase
     .from('producao_etapas_log')
-    .select('id, ordem_producao_id, etapa, fim, dados_qualidade, qtd_saida')
+    .select('id, ordem_producao_id, etapa, inicio, fim, dados_qualidade, qtd_saida')
     .in('etapa', ['fermentacao', 'entrada_forno', 'saida_forno', 'entrada_embalagem']);
 
   if (!logsError) {
@@ -116,6 +131,7 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
         latas_restantes_embalagem: null,
         fermentacao_log_id: row.id,
         saida_forno_log_id: null,
+        etapa_inicio_iso: etapaInicioIsoFermentacao(dq, row.inicio, row.fim),
       });
     }
 
@@ -148,6 +164,7 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
           latas_restantes_embalagem: restantes,
           fermentacao_log_id: null,
           saida_forno_log_id: row.id,
+          etapa_inicio_iso: row.fim?.trim() || null,
         });
       }
     }

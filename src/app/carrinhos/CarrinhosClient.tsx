@@ -13,6 +13,17 @@ import { createCarrinho, createCarrinhosEmLote, updateCarrinho } from '@/app/act
 
 const CAPACIDADE_PADRAO_NOVO_CARRINHO = '20';
 
+/** Atualiza texto de tempo na etapa (minutos visíveis sem esperar um minuto exato em dev). */
+function usePeriodicNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    setNow(Date.now());
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
 function parseIntSafe(value: string, fallback: number): number {
   const n = parseInt(value, 10);
   return Number.isFinite(n) ? n : fallback;
@@ -211,14 +222,82 @@ function CarrinhoCard({
 }
 
 function etiquetaEtapaCurta(etapa: CarrinhoUsoEtapa): string {
-  return etapa === 'fermentacao' ? 'Fermentação' : 'Pós-forno';
+  return etapa === 'fermentacao' ? 'Fermentação' : 'Resfriamento';
 }
 
-function resumoEtapasUso(occs: CarrinhoUsoOcorrencia[]): string {
+/** Retorna ISO do início mais antigo na etapa (maior tempo nesta etapa). */
+function inicioEtapaMaisAntigo(occs: CarrinhoUsoOcorrencia[], etapa: CarrinhoUsoEtapa): string | null {
+  const filtradas = occs.filter((o) => o.etapa === etapa);
+  let best: string | null = null;
+  let bestMs = Number.POSITIVE_INFINITY;
+  for (const o of filtradas) {
+    const iso = o.etapa_inicio_iso?.trim();
+    if (!iso) continue;
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) continue;
+    if (t < bestMs) {
+      bestMs = t;
+      best = iso;
+    }
+  }
+  return best;
+}
+
+const MS_HORA = 60 * 60 * 1000;
+const WARN_MIN_MS = 2 * MS_HORA;
+const DANGER_MIN_MS = 3 * MS_HORA;
+
+function formatDuracaoNaEtapa(elapsedMs: number): string {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return '—';
+  const totalMin = Math.floor(elapsedMs / 60_000);
+  const d = Math.floor(totalMin / (24 * 60));
+  const h = Math.floor((totalMin % (24 * 60)) / 60);
+  const m = totalMin % 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0 || d > 0) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(' ');
+}
+
+type NivelDuracaoEtapa = 'ok' | 'warning' | 'danger';
+
+function nivelDuracaoEtapa(elapsedMs: number): NivelDuracaoEtapa {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return 'ok';
+  if (elapsedMs > DANGER_MIN_MS) return 'danger';
+  if (elapsedMs > WARN_MIN_MS) return 'warning';
+  return 'ok';
+}
+
+function usoResumoOuManual(occs: CarrinhoUsoOcorrencia[]): string {
+  if (occs.length === 0) return 'Marcação manual';
   const set = new Set(occs.map((o) => o.etapa));
   const order: CarrinhoUsoEtapa[] = ['fermentacao', 'pos_forno'];
   const parts = order.filter((e) => set.has(e)).map(etiquetaEtapaCurta);
   return parts.length > 0 ? parts.join(' · ') : 'Em uso';
+}
+
+function carrinhosNaEtapaOrdenados(
+  emUsoList: CarrinhoComUsoDetalhe[],
+  etapa: CarrinhoUsoEtapa,
+): { c: CarrinhoComUsoDetalhe; etapaInicioIso: string | null }[] {
+  const rows = emUsoList
+    .filter((c) => (c.uso_ocorrencias ?? []).some((o) => o.etapa === etapa))
+    .map((c) => ({
+      c,
+      etapaInicioIso: inicioEtapaMaisAntigo(c.uso_ocorrencias ?? [], etapa),
+    }));
+
+  return rows.sort((a, b) => {
+    const ta = a.etapaInicioIso ? Date.parse(a.etapaInicioIso) : Number.NaN;
+    const tb = b.etapaInicioIso ? Date.parse(b.etapaInicioIso) : Number.NaN;
+    const aOk = Number.isFinite(ta);
+    const bOk = Number.isFinite(tb);
+    if (aOk && bOk && ta !== tb) return ta - tb;
+    if (aOk && !bOk) return -1;
+    if (!aOk && bOk) return 1;
+    return a.c.numero - b.c.numero;
+  });
 }
 
 function hrefEtapaProducao(ordemId: string, etapa: CarrinhoUsoEtapa): string {
@@ -226,15 +305,89 @@ function hrefEtapaProducao(ordemId: string, etapa: CarrinhoUsoEtapa): string {
   return `/producao/etapas/${ordemId}/entrada-embalagem`;
 }
 
+function shellsCarrinhoEmUsoCard(
+  manut: boolean,
+  tempo: NivelDuracaoEtapa,
+): {
+  shell: string;
+  focusRing: string;
+  tempoClass: string;
+} {
+  if (tempo === 'danger') {
+    return {
+      shell:
+        'border-rose-500/85 bg-rose-50 text-rose-950 ring-1 ring-rose-400/50 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.25)]',
+      focusRing: 'focus-visible:ring-rose-600',
+      tempoClass: 'text-rose-950 font-semibold',
+    };
+  }
+  if (tempo === 'warning') {
+    return {
+      shell:
+        'border-amber-500/85 bg-amber-50 text-amber-950 ring-1 ring-amber-300/55 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.2)]',
+      focusRing: 'focus-visible:ring-amber-600',
+      tempoClass: 'text-amber-950 font-semibold',
+    };
+  }
+  if (manut) {
+    return {
+      shell: 'border-orange-400 bg-orange-50 text-orange-950 ring-1 ring-orange-300/50',
+      focusRing: 'focus-visible:ring-orange-600',
+      tempoClass: 'text-slate-700 font-medium',
+    };
+  }
+  return {
+    shell: 'border-blue-200 bg-blue-50/90 text-blue-950 ring-1 ring-blue-200/50',
+    focusRing: 'focus-visible:ring-blue-500',
+    tempoClass: 'text-slate-700 font-medium',
+  };
+}
+
 function CarrinhoEmUsoCard({
   c,
+  etapaInicioIso,
+  secaoNome,
   onSelect,
+  nowMs,
 }: {
   c: CarrinhoComUsoDetalhe;
+  etapaInicioIso: string | null;
+  secaoNome: string;
   onSelect: () => void;
+  nowMs: number;
 }) {
+  const manut = c.ativo && c.precisa_reparos;
+  const t0 = etapaInicioIso ? Date.parse(etapaInicioIso) : NaN;
+  const elapsedMs = Number.isFinite(t0) ? Math.max(0, nowMs - t0) : NaN;
+  const tempoFmt = formatDuracaoNaEtapa(elapsedMs);
+  const nivel = nivelDuracaoEtapa(elapsedMs);
+  /** Destaque temporal prevalece sobre manutenção na borda/fundo */
+  const { shell, focusRing, tempoClass } = shellsCarrinhoEmUsoCard(manut, nivel);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-label={`Carrinho ${c.numero}, secção ${secaoNome}. Tempo nesta etapa: ${tempoFmt}. Abrir detalhes.`}
+      className={`flex min-w-[6.85rem] max-w-[12rem] min-h-[52px] flex-col gap-0.5 rounded-lg border px-2 py-2 text-left shadow-sm transition hover:brightness-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${focusRing} ${shell}`}
+    >
+      <div className="flex items-center justify-between gap-1.5">
+        <span className="text-sm font-bold tabular-nums leading-none">#{c.numero}</span>
+        {manut && (
+          <span className="shrink-0 rounded bg-orange-200/90 px-1 py-0.5 text-[9px] font-semibold uppercase leading-none text-orange-950">
+            Reparo
+          </span>
+        )}
+      </div>
+      <span className={`text-[10px] tabular-nums leading-tight ${tempoClass}`}>{tempoFmt}</span>
+    </button>
+  );
+}
+
+/** Carrinho em uso sem fermentação nem pós-forno nos logs (marcação manual). */
+function CarrinhoEmUsoCardOutros({ c, onSelect }: { c: CarrinhoComUsoDetalhe; onSelect: () => void }) {
   const occs = c.uso_ocorrencias ?? [];
-  const resumo = resumoEtapasUso(occs);
+  const resumo = usoResumoOuManual(occs);
   const manut = c.ativo && c.precisa_reparos;
   const shell = manut
     ? 'border-orange-400 bg-orange-50 text-orange-950 ring-1 ring-orange-300/50'
@@ -245,7 +398,7 @@ function CarrinhoEmUsoCard({
       type="button"
       onClick={onSelect}
       aria-label={`Carrinho ${c.numero}, ${resumo}. Abrir detalhes.`}
-      className={`flex min-w-[6.75rem] max-w-[11rem] flex-col gap-0.5 rounded-lg border px-2 py-1.5 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${shell}`}
+      className={`flex min-w-[6.85rem] max-w-[11.5rem] flex-col gap-0.5 rounded-lg border px-2 py-2 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${shell}`}
     >
       <div className="flex items-center justify-between gap-1.5">
         <span className="text-sm font-bold tabular-nums leading-none">#{c.numero}</span>
@@ -264,10 +417,12 @@ function CarrinhoUsoDetalheModal({
   open,
   onClose,
   carrinho,
+  nowMs,
 }: {
   open: boolean;
   onClose: () => void;
   carrinho: CarrinhoComUsoDetalhe | null;
+  nowMs: number;
 }) {
   if (!open || !carrinho) return null;
 
@@ -319,6 +474,26 @@ function CarrinhoUsoDetalheModal({
                     </Link>
                   </div>
                   <dl className="space-y-1.5 text-sm text-slate-800">
+                    {(() => {
+                      const t0 = o.etapa_inicio_iso ? Date.parse(o.etapa_inicio_iso) : NaN;
+                      const elapsed = Number.isFinite(t0) ? Math.max(0, nowMs - t0) : NaN;
+                      const txt = formatDuracaoNaEtapa(elapsed);
+                      const niv = nivelDuracaoEtapa(elapsed);
+                      const cor =
+                        niv === 'danger'
+                          ? 'text-rose-800'
+                          : niv === 'warning'
+                            ? 'text-amber-900'
+                            : 'text-slate-800';
+                      return (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Tempo nesta etapa</dt>
+                          <dd className={`font-semibold tabular-nums ${cor}`}>
+                            {txt}
+                          </dd>
+                        </div>
+                      );
+                    })()}
                     <div>
                       <dt className="text-xs font-medium text-slate-500">Produto</dt>
                       <dd className="font-medium">{o.produto_nome?.trim() || '—'}</dd>
@@ -647,9 +822,26 @@ export default function CarrinhosClient({
     return { livres, emUso, reparos, inativos };
   }, [list]);
 
-  const emUsoRows = useMemo(
-    () => list.filter((c) => c.ativo && c.em_uso).sort((a, b) => a.numero - b.numero),
-    [list],
+  const emUsoRows = useMemo(() => list.filter((c) => c.ativo && c.em_uso), [list]);
+  const nowMs = usePeriodicNow(30_000);
+
+  const carrinhosFermentacao = useMemo(
+    () => carrinhosNaEtapaOrdenados(emUsoRows, 'fermentacao'),
+    [emUsoRows],
+  );
+  const carrinhosResfriamento = useMemo(
+    () => carrinhosNaEtapaOrdenados(emUsoRows, 'pos_forno'),
+    [emUsoRows],
+  );
+  const carrinhosEmUsoOutros = useMemo(
+    () =>
+      emUsoRows.filter(
+        (c) =>
+          !(c.uso_ocorrencias ?? []).some(
+            (o) => o.etapa === 'fermentacao' || o.etapa === 'pos_forno',
+          ),
+      ),
+    [emUsoRows],
   );
   const disponiveisRows = useMemo(
     () => list.filter((c) => c.ativo && !c.em_uso).sort((a, b) => a.numero - b.numero),
@@ -784,18 +976,88 @@ export default function CarrinhosClient({
         onCriarLote={criarLote}
       />
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Em uso</h2>
         {emUsoRows.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
             Nenhum carrinho em uso.
           </p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {emUsoRows.map((c) => (
-              <CarrinhoEmUsoCard key={c.id} c={c} onSelect={() => setDetalheCarrinho(c)} />
-            ))}
-          </div>
+          <>
+            <div className="flex flex-col gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-violet-900">Fermentação</h3>
+                <p className="text-xs text-slate-500">
+                  Mais tempo nesta etapa primeiro; aviso acima de 2&nbsp;h, alerta forte acima de 3&nbsp;h.
+                </p>
+              </div>
+              {carrinhosFermentacao.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-violet-200/80 bg-violet-50/40 px-4 py-5 text-center text-sm text-slate-600">
+                  Nenhum carrinho nesta fermentação.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {carrinhosFermentacao.map(({ c, etapaInicioIso }) => (
+                    <CarrinhoEmUsoCard
+                      key={c.id}
+                      c={c}
+                      etapaInicioIso={etapaInicioIso}
+                      secaoNome="fermentação"
+                      nowMs={nowMs}
+                      onSelect={() => setDetalheCarrinho(c)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 pt-6">
+              <div>
+                <h3 className="text-sm font-semibold text-sky-900">Resfriamento (pós-forno)</h3>
+                <p className="text-xs text-slate-500">
+                  Mais tempo nesta etapa primeiro; mesmos limites de 2&nbsp;h e 3&nbsp;h.
+                </p>
+              </div>
+              {carrinhosResfriamento.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-sky-200/80 bg-sky-50/40 px-4 py-5 text-center text-sm text-slate-600">
+                  Nenhum carrinho no resfriamento.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {carrinhosResfriamento.map(({ c, etapaInicioIso }) => (
+                    <CarrinhoEmUsoCard
+                      key={c.id}
+                      c={c}
+                      etapaInicioIso={etapaInicioIso}
+                      secaoNome="resfriamento (pós-forno)"
+                      nowMs={nowMs}
+                      onSelect={() => setDetalheCarrinho(c)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {carrinhosEmUsoOutros.length > 0 ? (
+              <div className="flex flex-col gap-3 border-t border-slate-100 pt-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Outros em uso</h3>
+                  <p className="text-xs text-slate-500">
+                    Carrinhos marcados em uso sem registo em fermentação ou pós-forno.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {carrinhosEmUsoOutros.map((c) => (
+                    <CarrinhoEmUsoCardOutros
+                      key={c.id}
+                      c={c}
+                      onSelect={() => setDetalheCarrinho(c)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
 
@@ -803,6 +1065,7 @@ export default function CarrinhosClient({
         open={detalheCarrinho != null}
         onClose={() => setDetalheCarrinho(null)}
         carrinho={detalheCarrinho}
+        nowMs={nowMs}
       />
 
       <section className="flex flex-col gap-3">

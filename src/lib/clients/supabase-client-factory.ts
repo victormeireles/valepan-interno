@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 
+/** Schema Postgres usado por este app (domínio isolado de `public`). */
+export const APP_DATABASE_SCHEMA = 'interno' as const;
+
 type ClientVariant = 'anon' | 'service';
 
 export type SupabaseClientFactoryOptions = {
@@ -18,7 +21,8 @@ export class SupabaseClientFactory {
   private readonly url: string;
   private readonly anonKey: string;
   private readonly serviceRoleKey: string;
-  private readonly cache: Partial<Record<ClientVariant, SupabaseClient<Database>>> = {};
+  /** Tipagem usa schema `public` (CLI preenche Relationships); runtime usa `APP_DATABASE_SCHEMA`. */
+  private readonly cache: Partial<Record<ClientVariant, SupabaseClient<Database, 'public'>>> = {};
 
   constructor(options?: Partial<SupabaseClientFactoryOptions>) {
     const url = options?.url ?? process.env.SUPABASE_URL;
@@ -34,26 +38,30 @@ export class SupabaseClientFactory {
     this.serviceRoleKey = serviceRoleKey!;
   }
 
-  public createAnonClient(): SupabaseClient<Database> {
+  public createAnonClient(): SupabaseClient<Database, 'public'> {
     return this.getOrCreateClient('anon', this.anonKey);
   }
 
-  public createServiceRoleClient(): SupabaseClient<Database> {
+  public createServiceRoleClient(): SupabaseClient<Database, 'public'> {
     return this.getOrCreateClient('service', this.serviceRoleKey);
   }
 
   private getOrCreateClient(
     variant: ClientVariant,
     key: string,
-  ): SupabaseClient<Database> {
+  ): SupabaseClient<Database, 'public'> {
     const cachedClient = this.cache[variant];
     if (cachedClient) {
       return cachedClient;
     }
 
-    const client = createClient<Database>(this.url, key, {
+    const client = createClient<Database, 'public'>(this.url, key, {
       auth: {
         persistSession: false,
+      },
+      db: {
+        // Satisfaz o generic `public` no createClient; em runtime continua sendo `interno`.
+        schema: APP_DATABASE_SCHEMA as unknown as 'public',
       },
     });
 

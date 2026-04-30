@@ -10,6 +10,9 @@ import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
 interface MassaLotesModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenLote: (loteId: string) => void;
+  onNewLote: () => void;
+  reloadToken?: number;
   ordemProducaoId: string;
   produtoNome: string;
   loteCodigo: string;
@@ -28,6 +31,9 @@ function minutosInteiroDoDecimal(decimal: number): number {
 export default function MassaLotesModal({
   isOpen,
   onClose,
+  onOpenLote,
+  onNewLote,
+  reloadToken,
   ordemProducaoId,
   produtoNome,
   loteCodigo,
@@ -43,7 +49,7 @@ export default function MassaLotesModal({
       void loadData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, ordemProducaoId]);
+  }, [isOpen, ordemProducaoId, reloadToken]);
 
   const loadData = async () => {
     setLoading(true);
@@ -70,13 +76,11 @@ export default function MassaLotesModal({
   };
 
   const handleEditLote = (loteId: string) => {
-    router.push(`/producao/etapas/${ordemProducaoId}/massa?loteId=${loteId}`);
-    onClose();
+    onOpenLote(loteId);
   };
 
   const handleNewLote = () => {
-    router.push(`/producao/etapas/${ordemProducaoId}/massa`);
-    onClose();
+    onNewLote();
   };
 
   const handleDeleteLote = async (loteId: string) => {
@@ -104,11 +108,19 @@ export default function MassaLotesModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 p-0 sm:items-center sm:p-3">
-      <div className="flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 p-0 sm:items-center sm:p-3"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="massa-lotes-modal-title"
+    >
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Fechar" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-gray-200 bg-gray-50/90 px-3 py-2.5 sm:px-4">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold leading-tight text-gray-900">Massa — lotes</h2>
+            <h2 id="massa-lotes-modal-title" className="truncate text-sm font-semibold leading-tight text-gray-900">
+              Massa — lotes
+            </h2>
             <p className="truncate text-[11px] leading-snug text-gray-600">
               <span className="font-mono text-gray-700">{loteCodigo}</span>
               <span className="text-gray-400"> · </span>
@@ -118,7 +130,7 @@ export default function MassaLotesModal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-1 text-gray-500 hover:bg-gray-200/80 hover:text-gray-800"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-200/80 hover:text-gray-800"
             aria-label="Fechar"
           >
             <span className="material-icons text-lg leading-none">close</span>

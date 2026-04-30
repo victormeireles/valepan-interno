@@ -149,7 +149,7 @@ export default function SelectRemoteAutocomplete({
           }}
           onFocus={() => {
             setOpen(true);
-            if (options.length === 0 && query.trim().length >= 1) {
+            if (options.length === 0) {
               void runSearch(query);
             }
           }}

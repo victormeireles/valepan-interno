@@ -450,16 +450,7 @@ function PorLataTableRow({
       .filter((x): x is { id: string; nome: string } => x != null);
   }, [bloqueadosClienteIds, clientes]);
 
-  const descricaoPesosAuto = useMemo(() => descricaoPesosAceitosLista(plist), [plist]);
-
-  const textoDescricaoExibicao = useMemo(() => {
-    const manual = assadeira.descricao?.trim() ?? '';
-    const auto = descricaoPesosAuto ?? '';
-    if (manual && auto) return `${manual} · ${auto}`;
-    if (manual) return manual;
-    if (auto) return auto;
-    return '';
-  }, [assadeira.descricao, descricaoPesosAuto]);
+  const descricaoManual = assadeira.descricao?.trim() ?? '';
 
   const handleSaveBloqueios = async () => {
     setSavingBloqueios(true);
@@ -497,9 +488,9 @@ function PorLataTableRow({
           </span>
         </td>
         <td className="px-3 py-1.5 text-gray-700 align-middle">
-          {textoDescricaoExibicao ? (
-            <p className="text-sm leading-snug line-clamp-2" title={textoDescricaoExibicao}>
-              {textoDescricaoExibicao}
+          {descricaoManual ? (
+            <p className="text-sm leading-snug line-clamp-2" title={descricaoManual}>
+              {descricaoManual}
             </p>
           ) : (
             <p className="text-sm text-gray-400 italic">Sem descrição</p>

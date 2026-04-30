@@ -323,7 +323,7 @@ export async function getTotalLatasEntradaFornoHoje(diaReferenciaIso?: string): 
     const orderIds = [...new Set(logs.map((l) => l.ordem_producao_id as string))];
     const { data: ordens, error: errOrdens } = await supabase
       .from('ordens_producao')
-      .select('id, produtos!ordens_producao_produto_id_fkey ( unidades_assadeira )')
+      .select('id, produto_id')
       .in('id', orderIds);
 
     if (errOrdens) {
@@ -331,15 +331,28 @@ export async function getTotalLatasEntradaFornoHoje(diaReferenciaIso?: string): 
       return 0;
     }
 
+    const produtoIdsOrdens = [...new Set((ordens ?? []).map((o) => o.produto_id).filter(Boolean))];
+    const uaByProduto = new Map<string, number | null>();
+    if (produtoIdsOrdens.length > 0) {
+      const { data: prodRows, error: errProd } = await supabase
+        .from('produtos')
+        .select('id, unidades_assadeira')
+        .in('id', produtoIdsOrdens);
+      if (errProd) {
+        console.error('getTotalLatasEntradaFornoHoje produtos:', errProd);
+        return 0;
+      }
+      for (const p of prodRows ?? []) {
+        const ua = p.unidades_assadeira;
+        const uaOk = ua != null && Number(ua) > 0 ? Number(ua) : null;
+        uaByProduto.set(p.id, uaOk);
+      }
+    }
+
     const uaByOrder = new Map<string, number | null>();
     for (const o of ordens ?? []) {
-      const row = o as {
-        id: string;
-        produtos?: { unidades_assadeira?: number | null } | null;
-      };
-      const ua = row.produtos?.unidades_assadeira;
-      const uaOk = ua != null && Number(ua) > 0 ? Number(ua) : null;
-      uaByOrder.set(row.id, uaOk);
+      const uaOk = uaByProduto.get(o.produto_id as string) ?? null;
+      uaByOrder.set(o.id as string, uaOk);
     }
 
     let total = 0;
@@ -914,11 +927,9 @@ export async function getReceitasProduzidas(ordemProducaoId: string) {
       const orderRepository = new ProductionOrderRepository(supabase);
       const order = await orderRepository.findById(ordemProducaoId);
       if (order) {
-        const { data: produtoReceitasRows } = await supabase
+        const { data: prRows } = await supabase
           .from('produto_receitas')
-          .select(
-            'quantidade_por_produto, receitas!produto_receitas_receita_id_fkey(tipo, ativo)',
-          )
+          .select('quantidade_por_produto, receita_id')
           .eq('produto_id', order.produto_id)
           .eq('ativo', true);
 
@@ -927,11 +938,27 @@ export async function getReceitasProduzidas(ordemProducaoId: string) {
           tipo?: string | null;
           receitas?: { tipo?: string; ativo?: boolean | null } | null;
         };
-        const produtoReceita = produtoReceitasRows?.find((row) =>
-          isVinculoReceitaMassaAtiva(row as PRMassa),
-        );
+
+        let produtoReceita: { quantidade_por_produto: number } | undefined;
+        if (prRows?.length) {
+          const rids = [...new Set(prRows.map((r) => r.receita_id).filter(Boolean))];
+          const { data: recRows } = await supabase.from('receitas').select('id, tipo, ativo').in('id', rids);
+          const recById = new Map((recRows ?? []).map((r) => [r.id, r]));
+          for (const row of prRows) {
+            const rec = row.receita_id ? recById.get(row.receita_id) : undefined;
+            const item: PRMassa = {
+              quantidade_por_produto: row.quantidade_por_produto,
+              receitas: rec ? { tipo: rec.tipo, ativo: rec.ativo } : null,
+            };
+            if (isVinculoReceitaMassaAtiva(item)) {
+              produtoReceita = row;
+              break;
+            }
+          }
+        }
+
         if (produtoReceita) {
-          const quantidadePorProduto = (produtoReceita as PRMassa).quantidade_por_produto;
+          const quantidadePorProduto = produtoReceita.quantidade_por_produto;
           if (quantidadePorProduto > 0) {
             // Converter unidades para receitas
             receitasFermentacao = fermentacaoLog.qtd_saida / quantidadePorProduto;
@@ -967,19 +994,9 @@ export async function getReceitasMassaByProduto(produtoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
-    const { data: produtoReceitas, error } = await supabase
+    const { data: prRows, error } = await supabase
       .from('produto_receitas')
-      .select(
-        `
-        receitas!produto_receitas_receita_id_fkey (
-          id,
-          nome,
-          codigo,
-          tipo,
-          ativo
-        )
-      `,
-      )
+      .select('receita_id')
       .eq('produto_id', produtoId)
       .eq('ativo', true);
 
@@ -987,25 +1004,27 @@ export async function getReceitasMassaByProduto(produtoId: string) {
       throw new Error(`Erro ao buscar receitas: ${error.message}`);
     }
 
-    type ProdutoReceitaWithReceita = {
-      tipo?: string | null;
-      receitas?: {
-        id: string;
-        nome: string;
-        codigo: string | null;
-        tipo: string;
-        ativo?: boolean | null;
-      } | null;
-    };
-    const receitasMassa = (produtoReceitas || [])
-      .filter((pr: ProdutoReceitaWithReceita) =>
-        isVinculoReceitaMassaAtiva({
-          tipo: pr.tipo,
-          receitas: pr.receitas ?? null,
-        }),
-      )
-      .map((pr: ProdutoReceitaWithReceita) => pr.receitas)
-      .filter(Boolean);
+    if (!prRows?.length) {
+      return { success: true, data: [] };
+    }
+
+    const receitaIds = [...new Set(prRows.map((r) => r.receita_id).filter(Boolean))];
+    const { data: receitasRows, error: recErr } = await supabase
+      .from('receitas')
+      .select('id, nome, codigo, tipo, ativo')
+      .in('id', receitaIds);
+
+    if (recErr) {
+      throw new Error(`Erro ao buscar receitas: ${recErr.message}`);
+    }
+
+    const receitasMassa = (receitasRows ?? []).filter((rec) => {
+      const pr = prRows.find((p) => p.receita_id === rec.id);
+      if (!pr) return false;
+      return isVinculoReceitaMassaAtiva({
+        receitas: { tipo: rec.tipo, ativo: rec.ativo },
+      });
+    });
 
     return { success: true, data: receitasMassa };
   } catch (error) {
@@ -1071,34 +1090,29 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
       return { success: false, error: 'Ordem de produção não encontrada' };
     }
 
-    // Buscar dados do produto com join em unidades
     const { data: produto, error: produtoError } = await withFetchRetry(async () =>
-      await supabase
-        .from('produtos')
-        .select('*, unidades (nome_resumido)')
-        .eq('id', order.produto_id)
-        .single(),
+      await supabase.from('produtos').select('*').eq('id', order.produto_id).single(),
     );
 
     if (produtoError || !produto) {
       return { success: false, error: 'Produto não encontrado' };
     }
 
-    // Extrair nome_resumido do join com unidades
-    const unidades = produto.unidades as { nome_resumido?: string } | null;
-    const unidadeNomeResumido = unidades?.nome_resumido || null;
+    let unidadeNomeResumido: string | null = null;
+    const uid = produto.unidade_padrao_id;
+    if (uid) {
+      const { data: unRow } = await supabase
+        .from('unidades')
+        .select('nome_resumido')
+        .eq('id', uid)
+        .maybeSingle();
+      unidadeNomeResumido = unRow?.nome_resumido ?? null;
+    }
 
-    // Buscar receita de massa vinculada (usando a mesma lógica da fila de produção)
-    const { data: produtoReceitas, error: receitasError } = await withFetchRetry(async () =>
+    const { data: prList, error: receitasError } = await withFetchRetry(async () =>
       await supabase
         .from('produto_receitas')
-        .select(`
-        quantidade_por_produto,
-        receitas!produto_receitas_receita_id_fkey (
-          tipo,
-          ativo
-        )
-      `)
+        .select('quantidade_por_produto, receita_id')
         .eq('produto_id', order.produto_id)
         .eq('ativo', true),
     );
@@ -1108,27 +1122,22 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
     }
 
     let receitaMassa = null;
-    if (produtoReceitas && produtoReceitas.length > 0) {
-      type ProdutoReceitaItem = {
-        quantidade_por_produto: number;
-        tipo?: string | null;
-        receitas?: {
-          tipo?: string;
-          ativo?: boolean;
-        } | null;
-      };
-      const receitaMassaData = (produtoReceitas as ProdutoReceitaItem[]).find((pr) =>
-        isVinculoReceitaMassaAtiva(pr),
-      );
-
-      if (receitaMassaData) {
-        receitaMassa = {
-          quantidade_por_produto: receitaMassaData.quantidade_por_produto,
+    if (prList && prList.length > 0) {
+      const rids = [...new Set(prList.map((p) => p.receita_id).filter(Boolean))];
+      const { data: recRows } = await supabase.from('receitas').select('id, tipo, ativo').in('id', rids);
+      const recById = new Map((recRows ?? []).map((r) => [r.id, r]));
+      for (const pr of prList) {
+        const rec = pr.receita_id ? recById.get(pr.receita_id) : undefined;
+        const item = {
+          quantidade_por_produto: pr.quantidade_por_produto,
+          receitas: rec ? { tipo: rec.tipo, ativo: rec.ativo } : null,
         };
+        if (isVinculoReceitaMassaAtiva(item)) {
+          receitaMassa = { quantidade_por_produto: pr.quantidade_por_produto };
+          break;
+        }
       }
     }
-    
-    console.log('[getProductionOrderWithProduct] receitaMassa encontrada:', receitaMassa);
 
     return {
       success: true,

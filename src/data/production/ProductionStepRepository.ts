@@ -78,7 +78,7 @@ type ProductionStepLogUpdate = {
 };
 
 export class ProductionStepRepository {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  constructor(private readonly supabase: SupabaseClient<Database, 'public'>) {}
 
   /**
    * Cria um novo log de etapa de produção

@@ -78,7 +78,7 @@ export class TiposEstoqueService {
     return this.mapRecord(data);
   }
 
-  private resolveClient(): SupabaseClient<Database> {
+  private resolveClient(): SupabaseClient<Database, 'public'> {
     return this.factory.createServiceRoleClient();
   }
 

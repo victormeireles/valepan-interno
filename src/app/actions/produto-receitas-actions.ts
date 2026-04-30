@@ -46,18 +46,7 @@ export async function getProdutosComReceitas() {
 
   const { data: vinculos, error: vinculosError } = await supabase
     .from('produto_receitas')
-    .select(`
-      id,
-      produto_id,
-      receita_id,
-      quantidade_por_produto,
-      ativo,
-      receitas (
-        id,
-        nome,
-        tipo
-      )
-    `)
+    .select('id, produto_id, receita_id, quantidade_por_produto, ativo')
     .eq('ativo', true);
 
   if (vinculosError) {
@@ -65,12 +54,25 @@ export async function getProdutosComReceitas() {
     return [];
   }
 
+  const receitaIds = [...new Set((vinculos ?? []).map((v) => v.receita_id).filter(Boolean))];
+  const { data: receitasRows, error: receitasErr } = await supabase
+    .from('receitas')
+    .select('id, nome, tipo')
+    .in('id', receitaIds);
+
+  if (receitasErr) {
+    console.error('Erro ao buscar receitas (vínculos):', receitasErr);
+    return [];
+  }
+
+  const receitaById = new Map((receitasRows ?? []).map((r) => [r.id, r]));
+
   const produtosComReceitas: ProdutoResumoComReceitas[] = produtos.map((produto) => {
     const vinculosDoProduto = vinculos?.filter((v) => v.produto_id === produto.id) || [];
     const receitasVinculadas: ProdutoResumoComReceitas['receitas_vinculadas'] = {};
 
     vinculosDoProduto.forEach((vinculo) => {
-      const receita = vinculo.receitas;
+      const receita = receitaById.get(vinculo.receita_id);
       if (receita) {
         receitasVinculadas[receita.tipo as TipoReceita] = {
           id: vinculo.id,
@@ -119,20 +121,23 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
     // Busca todas as receitas vinculadas ao produto e verifica se alguma tem o mesmo tipo
     const { data: existingLinks, error: existingError } = await supabase
       .from('produto_receitas')
-      .select(`
-        id,
-        receitas!inner(tipo)
-      `)
+      .select('id, receita_id')
       .eq('produto_id', payload.produtoId)
       .eq('ativo', true);
-    
-    if (existingError) throw existingError;
-    
-    const existing = existingLinks?.find(
-      (link) => (link.receitas as { tipo: string })?.tipo === receita.tipo
-    );
 
     if (existingError) throw existingError;
+
+    const linkReceitaIds = [...new Set((existingLinks ?? []).map((l) => l.receita_id).filter(Boolean))];
+    const { data: receitasDosLinks, error: recLinkErr } = await supabase
+      .from('receitas')
+      .select('id, tipo')
+      .in('id', linkReceitaIds);
+
+    if (recLinkErr) throw recLinkErr;
+
+    const tipoPorReceitaId = new Map((receitasDosLinks ?? []).map((r) => [r.id, r.tipo]));
+
+    const existing = existingLinks?.find((link) => tipoPorReceitaId.get(link.receita_id) === receita.tipo);
 
     if (existing) {
       const { error } = await supabase

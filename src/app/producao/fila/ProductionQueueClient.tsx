@@ -7,14 +7,15 @@ import {
   formatIsoDateToDDMMYYYY,
   getTodayISOInBrazilTimezone,
   normalizeToISODate,
-  parseDateInputToIsoBR,
 } from '@/lib/utils/date-utils';
+import CalendarDateFilter from '@/components/FormControls/CalendarDateFilter';
 import NovaOrdemModal from '@/components/Producao/NovaOrdemModal';
 import DashboardHeader from '@/components/DashboardHeader';
 import FilaEntradaFornoHeader from '@/components/Producao/FilaEntradaFornoHeader';
 import FilaEntradaEmbalagemHeader from '@/components/Producao/FilaEntradaEmbalagemHeader';
 import SaidaFornoProgressHeader from '@/components/Producao/SaidaFornoProgressHeader';
 import MassaLotesModal from '@/components/Producao/MassaLotesModal';
+import MassaStepModal from '@/components/Producao/MassaStepModal';
 import PlanningQueueTable from '@/components/Producao/PlanningQueueTable';
 import FilaModalEntradaForno from '@/components/Producao/queue/FilaModalEntradaForno';
 import FilaModalSaidaForno from '@/components/Producao/queue/FilaModalSaidaForno';
@@ -56,6 +57,9 @@ export default function ProductionQueueClient({
   const [editingOrder, setEditingOrder] = useState<ProductionQueueItem | undefined>(undefined);
   const [isMassaLotesModalOpen, setIsMassaLotesModalOpen] = useState(false);
   const [selectedMassaOrder, setSelectedMassaOrder] = useState<ProductionQueueItem | undefined>(undefined);
+  const [isMassaStepModalOpen, setIsMassaStepModalOpen] = useState(false);
+  const [massaStepInitialLoteId, setMassaStepInitialLoteId] = useState<string | undefined>(undefined);
+  const [massaLotesReloadToken, setMassaLotesReloadToken] = useState(0);
   const [fermentacaoModalItem, setFermentacaoModalItem] = useState<ProductionQueueItem | null>(null);
   const [expandedFornoProdutoId, setExpandedFornoProdutoId] = useState<string | null>(null);
   const [modalFornoCarrinhosAberto, setModalFornoCarrinhosAberto] = useState(false);
@@ -132,30 +136,8 @@ export default function ProductionQueueClient({
     router.replace(url);
   };
 
-  const [filaDataTexto, setFilaDataTexto] = useState(() =>
-    filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '',
-  );
-
-  useEffect(() => {
-    setFilaDataTexto(filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '');
-  }, [filterDateIso]);
-
   const mostrarTodosFila = () => {
     setFilaDateQuery(null);
-    setFilaDataTexto('');
-  };
-
-  /** Aplica filtro só ao clicar em «Filtrar» ou Enter no campo (campo vazio não altera a URL). */
-  const aplicarFiltrarData = () => {
-    const raw = filaDataTexto.trim();
-    if (!raw) return;
-    const iso = parseDateInputToIsoBR(raw);
-    if (iso) {
-      setFilaDateQuery(iso);
-      setFilaDataTexto(formatIsoDateToDDMMYYYY(iso));
-      return;
-    }
-    setFilaDataTexto(filterDateIso ? formatIsoDateToDDMMYYYY(filterDateIso) : '');
   };
 
   const {
@@ -463,29 +445,15 @@ export default function ProductionQueueClient({
         className={`mx-auto space-y-4 px-3 py-4 sm:space-y-8 sm:p-6 md:p-10 ${isPlanning ? 'max-w-[min(100rem,calc(100vw-2rem))]' : 'max-w-6xl'}`}
       >
         <div className="flex flex-wrap items-center gap-1.5 pb-2 sm:gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="DD/MM/AAAA"
-            value={filaDataTexto}
-            onChange={(e) => setFilaDataTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                aplicarFiltrarData();
-              }
-            }}
-            className="min-w-[7.5rem] max-w-[8.5rem] rounded border border-slate-200/60 bg-slate-50/80 px-1.5 py-1.5 text-center text-xs leading-tight tabular-nums text-slate-700 placeholder:text-slate-400/90 focus:border-slate-300/80 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-200/60 sm:min-w-[8.25rem] sm:max-w-[9rem] sm:py-2"
-            aria-label="Data de produção (DD/MM/AAAA)"
+          <CalendarDateFilter
+            value={filterDateIso ?? ''}
+            onChange={setFilaDateQuery}
+            allowClear
+            label="Data de produção na fila"
+            wrapperClassName="inline-flex min-h-9 max-w-none items-center gap-1.5 sm:max-w-[20rem]"
+            nativePickerClassName="min-h-9 min-w-[10.5rem] flex-1 cursor-pointer rounded-md border border-slate-300/90 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 sm:min-w-[11rem] sm:text-sm"
+            todayButtonClassName="min-h-9 shrink-0 rounded-md border border-slate-300/90 bg-slate-50 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:px-2.5"
           />
-          <button
-            type="button"
-            onClick={aplicarFiltrarData}
-            className="shrink-0 rounded-md border border-slate-300/90 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 active:scale-[0.99] sm:px-3 sm:py-2"
-          >
-            Filtrar
-          </button>
           <button
             type="button"
             onClick={mostrarTodosFila}
@@ -680,6 +648,8 @@ export default function ProductionQueueClient({
               router={router}
               onOpenMassaLotes={(item) => {
                 setSelectedMassaOrder(item);
+                setMassaStepInitialLoteId(undefined);
+                setIsMassaStepModalOpen(false);
                 setIsMassaLotesModalOpen(true);
               }}
               onOpenFermentacaoModal={(item) => setFermentacaoModalItem(item)}
@@ -714,11 +684,38 @@ export default function ProductionQueueClient({
           isOpen={isMassaLotesModalOpen}
           onClose={() => {
             setIsMassaLotesModalOpen(false);
+            setIsMassaStepModalOpen(false);
+            setMassaStepInitialLoteId(undefined);
             setSelectedMassaOrder(undefined);
           }}
+          onOpenLote={(loteId) => {
+            setMassaStepInitialLoteId(loteId);
+            setIsMassaStepModalOpen(true);
+          }}
+          onNewLote={() => {
+            setMassaStepInitialLoteId(undefined);
+            setIsMassaStepModalOpen(true);
+          }}
+          reloadToken={massaLotesReloadToken}
           ordemProducaoId={selectedMassaOrder.id}
           produtoNome={selectedMassaOrder.produtos.nome}
           loteCodigo={selectedMassaOrder.lote_codigo}
+        />
+      )}
+
+      {selectedMassaOrder && (
+        <MassaStepModal
+          isOpen={isMassaStepModalOpen}
+          ordem={selectedMassaOrder}
+          initialLoteId={massaStepInitialLoteId}
+          onClose={() => {
+            setIsMassaStepModalOpen(false);
+            setMassaStepInitialLoteId(undefined);
+          }}
+          onSaved={() => {
+            setMassaLotesReloadToken((value) => value + 1);
+            router.refresh();
+          }}
         />
       )}
 

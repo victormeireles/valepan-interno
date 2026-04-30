@@ -26,7 +26,7 @@ type MassaIngredienteInsert = {
 };
 
 export class ProductionMassaIngredienteRepository {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  constructor(private readonly supabase: SupabaseClient<Database, 'public'>) {}
 
   /**
    * Cria múltiplos ingredientes

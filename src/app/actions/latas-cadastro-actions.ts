@@ -59,13 +59,7 @@ async function fetchProdutoAssadeirasLinks(
 
   const { data, error } = await supabase
     .from('produto_assadeiras')
-    .select(
-      `
-      produto_id,
-      unidades_por_assadeira,
-      assadeiras ( id, nome, ordem )
-    `,
-    )
+    .select('produto_id, unidades_por_assadeira, assadeira_id')
     .in('produto_id', produtoIds);
 
   if (error) {
@@ -73,18 +67,45 @@ async function fetchProdutoAssadeirasLinks(
     return null;
   }
 
+  const assIds = [
+    ...new Set(
+      (data ?? [])
+        .map((r) => (r as { assadeira_id?: string }).assadeira_id)
+        .filter((id): id is string => Boolean(id && String(id).trim())),
+    ),
+  ];
+  const assById = new Map<string, { id: string; nome: string; ordem: number }>();
+  if (assIds.length > 0) {
+    const { data: assRows, error: assErr } = await supabase
+      .from('assadeiras')
+      .select('id, nome, ordem')
+      .in('id', assIds);
+    if (assErr) {
+      logSupabaseError('getProdutosLatas assadeiras', assErr);
+    } else {
+      for (const a of assRows ?? []) {
+        assById.set(a.id, { id: a.id, nome: a.nome, ordem: a.ordem });
+      }
+    }
+  }
+
   const map = new Map<string, VinculoProdutoAssadeira[]>();
   for (const row of data ?? []) {
-    const a = row.assadeiras as { id: string; nome: string; ordem: number } | null;
+    const pr = row as {
+      produto_id: string;
+      unidades_por_assadeira: number;
+      assadeira_id: string;
+    };
+    const a = assById.get(pr.assadeira_id);
     if (!a) continue;
-    const list = map.get(row.produto_id) ?? [];
+    const list = map.get(pr.produto_id) ?? [];
     list.push({
       assadeira_id: a.id,
       nome: a.nome,
       ordem: a.ordem,
-      unidades_por_assadeira: row.unidades_por_assadeira,
+      unidades_por_assadeira: pr.unidades_por_assadeira,
     });
-    map.set(row.produto_id, list);
+    map.set(pr.produto_id, list);
   }
   for (const list of map.values()) {
     list.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome));
@@ -105,11 +126,14 @@ export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
 
   const fullSelect = 'id, nome, codigo, unidades_assadeira, latas_cadastro_conferido';
 
-  let { data, error } = await supabase
+  const first = await supabase
     .from('produtos')
     .select(fullSelect)
     .or(PRODUTOS_ATIVOS_OR)
     .order('nome');
+
+  let data = first.data;
+  const { error } = first;
 
   if (error) {
     const retry = await supabase
@@ -228,21 +252,32 @@ export async function saveProdutoLatasPermitidas(input: {
   if (limpos.length > 0) {
     const { data: paRows, error: paErr } = await supabase
       .from('produto_assadeiras')
-      .select(
-        `
-        unidades_por_assadeira,
-        assadeiras ( ordem )
-      `,
-      )
+      .select('unidades_por_assadeira, assadeira_id')
       .eq('produto_id', input.produtoId);
 
     if (!paErr && paRows?.length) {
+      const aidList = [
+        ...new Set(
+          paRows
+            .map((r) => (r as { assadeira_id?: string }).assadeira_id)
+            .filter((id): id is string => Boolean(id && String(id).trim())),
+        ),
+      ];
+      const ordemByAss = new Map<string, number>();
+      if (aidList.length > 0) {
+        const { data: assRows } = await supabase.from('assadeiras').select('id, ordem').in('id', aidList);
+        for (const a of assRows ?? []) {
+          ordemByAss.set(a.id, a.ordem);
+        }
+      }
       const sorted = [...paRows].sort((a, b) => {
-        const oa = (a.assadeiras as { ordem: number } | null)?.ordem ?? 0;
-        const ob = (b.assadeiras as { ordem: number } | null)?.ordem ?? 0;
+        const ra = a as { assadeira_id: string; unidades_por_assadeira: number };
+        const rb = b as { assadeira_id: string; unidades_por_assadeira: number };
+        const oa = ordemByAss.get(ra.assadeira_id) ?? 0;
+        const ob = ordemByAss.get(rb.assadeira_id) ?? 0;
         return oa - ob;
       });
-      primary = sorted[0]?.unidades_por_assadeira ?? null;
+      primary = (sorted[0] as { unidades_por_assadeira?: number })?.unidades_por_assadeira ?? null;
     }
   }
 

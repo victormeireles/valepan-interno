@@ -65,11 +65,13 @@ Regra de fechamento do inventário: incluir automaticamente tabelas adicionais q
 Definir lista de tabelas de uso do app + dependências, clonar para `interno`, validar e virar código.
 
 **Prós**
+
 - Escopo controlado;
 - menor risco de carregar objetos desnecessários do `public`;
 - melhor auditabilidade no repositório.
 
 **Contras**
+
 - Exige fechamento cuidadoso de dependências.
 
 ### 2) Dump/restore parcial por filtros
@@ -77,9 +79,11 @@ Definir lista de tabelas de uso do app + dependências, clonar para `interno`, v
 Usar export/import filtrando objetos específicos.
 
 **Prós**
+
 - Fidelidade DDL alta.
 
 **Contras**
+
 - Operação mais opaca e mais difícil de revisar no Git.
 
 ### 3) Recriação manual + carga
@@ -87,9 +91,11 @@ Usar export/import filtrando objetos específicos.
 Reescrever DDL e copiar dados manualmente.
 
 **Prós**
+
 - Controle total.
 
 **Contras**
+
 - Maior risco de erro e maior tempo.
 
 ## Decisão

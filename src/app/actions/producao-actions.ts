@@ -56,23 +56,49 @@ export async function getAssadeirasDisponiveisParaOrdemProducao(
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('produto_assadeiras')
-    .select(
-      `
-      unidades_por_assadeira,
-      assadeiras ( id, nome, ordem )
-    `,
-    )
+    .select('assadeira_id, unidades_por_assadeira')
     .eq('produto_id', id);
 
   if (error) {
     return { success: false, error: error.message };
   }
 
+  const assadeiraIds = [
+    ...new Set(
+      (data ?? [])
+        .map((row) => (row as { assadeira_id?: string | null }).assadeira_id?.trim())
+        .filter((aid): aid is string => Boolean(aid)),
+    ),
+  ];
+
+  if (assadeiraIds.length === 0) {
+    return { success: true, data: [] };
+  }
+
+  const { data: assadeirasRows, error: assadeirasErr } = await supabase
+    .from('assadeiras')
+    .select('id, nome, ordem')
+    .in('id', assadeiraIds);
+
+  if (assadeirasErr) {
+    return { success: false, error: assadeirasErr.message };
+  }
+
+  const assadeiraById = new Map(
+    (assadeirasRows ?? []).map((row) => [
+      row.id,
+      { id: row.id, nome: row.nome, ordem: row.ordem ?? 0 },
+    ]),
+  );
+
   const out: AssadeiraOpcaoOrdemProducao[] = [];
   for (const row of data ?? []) {
-    const a = row.assadeiras as { id: string; nome: string; ordem: number } | null;
+    const rel = row as { assadeira_id?: string | null; unidades_por_assadeira?: number | null };
+    const assadeiraId = rel.assadeira_id?.trim();
+    if (!assadeiraId) continue;
+    const a = assadeiraById.get(assadeiraId);
     if (!a?.id) continue;
-    const u = Math.round(Number(row.unidades_por_assadeira));
+    const u = Math.round(Number(rel.unidades_por_assadeira));
     if (!Number.isFinite(u) || u <= 0) continue;
     out.push({
       id: a.id,
@@ -110,7 +136,9 @@ async function validarAssadeiraIdParaProduto(
   clienteId?: string | null,
 ): Promise<{ ok: true; value: string | null } | { ok: false; error: string }> {
   const t = assadeiraId?.trim() ?? '';
-  if (!t) return { ok: true, value: null };
+  if (!t) {
+    return { ok: false, error: 'Selecione o tipo de lata (assadeira) para a ordem.' };
+  }
   const { data, error } = await supabase
     .from('produto_assadeiras')
     .select('assadeira_id')
@@ -456,23 +484,75 @@ function serializeSupabaseError(err: unknown): Record<string, unknown> {
   if (err && typeof err === 'object') {
     const e = err as Record<string, unknown>;
     const out: Record<string, unknown> = {
+      constructorName: (err as object).constructor?.name,
+      ownKeys: Object.getOwnPropertyNames(err as object),
       message: e.message,
       code: e.code,
       details: e.details,
       hint: e.hint,
       status: e.status,
     };
-    const hasText = Object.values(out).some((v) => v != null && String(v).trim() !== '');
+    const hasText = Object.values(out).some(
+      (v) => v != null && !Array.isArray(v) && String(v).trim() !== '',
+    );
     if (!hasText) {
       try {
-        out.serialized = JSON.stringify(err);
+        out.serialized = JSON.stringify(err, Object.getOwnPropertyNames(err as object));
       } catch {
-        out.serialized = '[object]';
+        out.serialized = Object.prototype.toString.call(err);
       }
     }
     return out;
   }
   return { raw: String(err) };
+}
+
+/** Vínculo produto↔receita + dados da receita (substitui embed PostgREST no schema `interno`). */
+type ProdutoReceitaJoinRow = {
+  produto_id: string;
+  quantidade_por_produto: number;
+  tipo?: string | null;
+  receitas?: { tipo?: string; ativo?: boolean | null } | null;
+};
+
+async function fetchProdutoReceitasComReceita(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  produtoIds: string[],
+): Promise<ProdutoReceitaJoinRow[]> {
+  if (produtoIds.length === 0) return [];
+
+  const { data: prRows, error: prErr } = await supabase
+    .from('produto_receitas')
+    .select('produto_id, quantidade_por_produto, receita_id')
+    .in('produto_id', produtoIds)
+    .eq('ativo', true);
+
+  if (prErr) {
+    console.error('produto_receitas (join receitas):', serializeSupabaseError(prErr));
+    return [];
+  }
+  if (!prRows?.length) return [];
+
+  const receitaIds = [...new Set(prRows.map((r) => r.receita_id).filter(Boolean))];
+  const { data: recRows, error: recErr } = await supabase
+    .from('receitas')
+    .select('id, tipo, ativo')
+    .in('id', receitaIds);
+
+  if (recErr) {
+    console.error('receitas (após produto_receitas):', serializeSupabaseError(recErr));
+    return [];
+  }
+
+  const recById = new Map((recRows ?? []).map((r) => [r.id, r]));
+  return prRows.map((pr) => {
+    const rec = pr.receita_id ? recById.get(pr.receita_id) : undefined;
+    return {
+      produto_id: pr.produto_id,
+      quantidade_por_produto: pr.quantidade_por_produto,
+      receitas: rec ? { tipo: rec.tipo, ativo: rec.ativo } : null,
+    };
+  });
 }
 
 function formatEstoquePlanilhaResumo(q: Quantidade): string {
@@ -534,26 +614,12 @@ function nomeLataTipoParaOrdem(
 export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  // Hints de FK explícitos: views (ex.: vw_dashboard_producao) podem gerar ambiguidade no PostgREST
-  // e retornar erro sem mensagem útil no cliente — ver postgrest#2277 / resource embedding disambiguation.
-  const { data, error } = await supabase
+  // Schema `interno`: não usar embed aninhado (produtos→unidades, pedidos→clientes). No `public`
+  // existem FKs duplicados na introspecção (tabelas + views), e no `interno` o PostgREST pode falhar
+  // com hints nomeados — montamos o mesmo formato em JS com queries separadas.
+  const { data: rawOps, error } = await supabase
     .from('ordens_producao')
-    .select(`
-      *,
-      produtos!ordens_producao_produto_id_fkey (
-        id,
-        nome,
-        unidade_padrao_id,
-        package_units,
-        box_units,
-        unidades_assadeira,
-        unidades!produtos_unidade_padrao_id_fkey (nome_resumido)
-      ),
-      pedidos!ordens_producao_pedido_id_fkey (
-        cliente_id,
-        clientes!pedidos_cliente_id_fkey (nome_fantasia)
-      )
-    `)
+    .select('*')
     .neq('status', 'concluido')
     .neq('status', 'cancelado');
 
@@ -562,9 +628,133 @@ export async function getProductionQueue() {
     return [];
   }
 
-  if (!data || data.length === 0) {
+  if (!rawOps || rawOps.length === 0) {
     return [];
   }
+
+  type OpRow = (typeof rawOps)[number];
+  const produtoIdsList = [...new Set(rawOps.map((o: OpRow) => o.produto_id))];
+  const pedidoIdsList = [
+    ...new Set(
+      rawOps
+        .map((o: OpRow) => o.pedido_id)
+        .filter((id): id is string => Boolean(id && String(id).trim())),
+    ),
+  ];
+
+  const { data: produtosRows, error: produtosErr } = await supabase
+    .from('produtos')
+    .select('id, nome, unidade_padrao_id, package_units, box_units, unidades_assadeira')
+    .in('id', produtoIdsList);
+
+  if (produtosErr) {
+    console.error('Erro ao buscar produtos (fila):', serializeSupabaseError(produtosErr));
+    return [];
+  }
+
+  const unidadeIds = [
+    ...new Set(
+      (produtosRows ?? [])
+        .map((p) => p.unidade_padrao_id)
+        .filter((id): id is string => Boolean(id && String(id).trim())),
+    ),
+  ];
+
+  const unidadeById = new Map<string, { nome_resumido: string | null }>();
+  if (unidadeIds.length > 0) {
+    const { data: unidadesRows, error: unidadesErr } = await supabase
+      .from('unidades')
+      .select('id, nome_resumido')
+      .in('id', unidadeIds);
+    if (unidadesErr) {
+      console.warn('[fila] unidades:', JSON.stringify(serializeSupabaseError(unidadesErr)));
+    } else {
+      for (const u of unidadesRows ?? []) {
+        unidadeById.set(u.id, { nome_resumido: u.nome_resumido });
+      }
+    }
+  }
+
+  const produtoEnrichedById = new Map<
+    string,
+    {
+      id: string;
+      nome: string;
+      unidade_padrao_id: string | null;
+      package_units: number | null;
+      box_units: number | null;
+      unidades_assadeira: number | null;
+      unidades: { nome_resumido: string | null } | null;
+    }
+  >();
+
+  for (const p of produtosRows ?? []) {
+    const uid = p.unidade_padrao_id;
+    const unRow = uid ? unidadeById.get(uid) : undefined;
+    produtoEnrichedById.set(p.id, {
+      id: p.id,
+      nome: p.nome,
+      unidade_padrao_id: p.unidade_padrao_id,
+      package_units: p.package_units,
+      box_units: p.box_units,
+      unidades_assadeira: p.unidades_assadeira,
+      unidades: uid ? { nome_resumido: unRow?.nome_resumido ?? null } : null,
+    });
+  }
+
+  const pedidoEnrichedById = new Map<
+    string,
+    { cliente_id: string | null; clientes: { nome_fantasia: string | null } | null }
+  >();
+
+  if (pedidoIdsList.length > 0) {
+    const { data: pedidosRows, error: pedidosErr } = await supabase
+      .from('pedidos')
+      .select('id, cliente_id')
+      .in('id', pedidoIdsList);
+
+    if (pedidosErr) {
+      console.error('Erro ao buscar pedidos (fila):', serializeSupabaseError(pedidosErr));
+      return [];
+    }
+
+    const clienteIdsFromPedidos = [
+      ...new Set(
+        (pedidosRows ?? [])
+          .map((p) => p.cliente_id)
+          .filter((id): id is string => Boolean(id && String(id).trim())),
+      ),
+    ];
+
+    const clienteNomeById = new Map<string, string | null>();
+    if (clienteIdsFromPedidos.length > 0) {
+      const { data: clientesRows, error: clientesErr } = await supabase
+        .from('clientes')
+        .select('id, nome_fantasia')
+        .in('id', clienteIdsFromPedidos);
+      if (clientesErr) {
+        console.warn('[fila] clientes (nome):', JSON.stringify(serializeSupabaseError(clientesErr)));
+      } else {
+        for (const c of clientesRows ?? []) {
+          clienteNomeById.set(c.id, c.nome_fantasia);
+        }
+      }
+    }
+
+    for (const ped of pedidosRows ?? []) {
+      const nome = ped.cliente_id ? (clienteNomeById.get(ped.cliente_id) ?? null) : null;
+      pedidoEnrichedById.set(ped.id, {
+        cliente_id: ped.cliente_id,
+        clientes: ped.cliente_id ? { nome_fantasia: nome } : null,
+      });
+    }
+  }
+
+  const data = rawOps.map((op: OpRow) => ({
+    ...op,
+    produtos: produtoEnrichedById.get(op.produto_id) ?? null,
+    pedidos: op.pedido_id ? (pedidoEnrichedById.get(op.pedido_id) ?? null) : null,
+  }));
 
   // Buscar receitas de massa para todos os produtos
   type OrdemProducaoItem = {
@@ -630,39 +820,9 @@ export async function getProductionQueue() {
     }
   }
 
-  type ProdutoReceitaItem = {
-    produto_id: string;
-    quantidade_por_produto: number;
-    tipo?: string | null;
-    receitas?: {
-      tipo?: string;
-      ativo?: boolean | null;
-    } | null;
-  };
-
-  let receitasVinculadas: ProdutoReceitaItem[] | null = null;
+  let receitasVinculadas: ProdutoReceitaJoinRow[] | null = null;
   if (produtoIds.length > 0) {
-    // Hint explícito: evita ambiguidade com view vw_produtos_com_receitas (mesmo padrão da fila principal).
-    // Não selecionar produto_receitas.tipo: em bases sem migração multitipo a coluna não existe;
-    // isVinculoReceitaMassaAtiva usa receitas.tipo quando tipo do vínculo está ausente.
-    const { data: receitasData, error: receitasError } = await supabase
-      .from('produto_receitas')
-      .select(`
-        produto_id,
-        quantidade_por_produto,
-        receitas!produto_receitas_receita_id_fkey (
-          tipo,
-          ativo
-        )
-      `)
-      .in('produto_id', produtoIds)
-      .eq('ativo', true);
-
-    if (receitasError) {
-      console.error('Erro ao buscar receitas vinculadas:', serializeSupabaseError(receitasError));
-    } else {
-      receitasVinculadas = receitasData as unknown as ProdutoReceitaItem[];
-    }
+    receitasVinculadas = await fetchProdutoReceitasComReceita(supabase, produtoIds);
   }
 
   const bloqueiosPorCliente = new Map<string, Set<string>>();
@@ -690,39 +850,57 @@ export async function getProductionQueue() {
   if (produtoIds.length > 0) {
     const { data: paData, error: paError } = await supabase
       .from('produto_assadeiras')
-      .select(
-        `
-        produto_id,
-        unidades_por_assadeira,
-        assadeiras ( id, nome, ordem )
-      `,
-      )
+      .select('produto_id, unidades_por_assadeira, assadeira_id')
       .in('produto_id', produtoIds);
 
     if (paError) {
       console.error('Erro ao buscar latas por produto (fila):', serializeSupabaseError(paError));
     } else {
-      for (const row of (paData ?? []) as {
-        produto_id: string;
-        unidades_por_assadeira: number | string | null;
-        assadeiras: { id: string; nome: string; ordem: number } | null;
-      }[]) {
-        const aid = row.assadeiras?.id?.trim();
-        const nome = row.assadeiras?.nome?.trim();
+      const assIds = [
+        ...new Set(
+          (paData ?? [])
+            .map((r) => (r as { assadeira_id?: string }).assadeira_id)
+            .filter((id): id is string => Boolean(id && String(id).trim())),
+        ),
+      ];
+      const assById = new Map<string, { id: string; nome: string; ordem: number }>();
+      if (assIds.length > 0) {
+        const { data: assRows, error: assErr } = await supabase
+          .from('assadeiras')
+          .select('id, nome, ordem')
+          .in('id', assIds);
+        if (assErr) {
+          console.warn('[fila] assadeiras:', JSON.stringify(serializeSupabaseError(assErr)));
+        } else {
+          for (const a of assRows ?? []) {
+            assById.set(a.id, { id: a.id, nome: a.nome, ordem: a.ordem });
+          }
+        }
+      }
+
+      for (const row of paData ?? []) {
+        const pr = row as {
+          produto_id: string;
+          unidades_por_assadeira: number | string | null;
+          assadeira_id: string;
+        };
+        const meta = assById.get(pr.assadeira_id);
+        const aid = meta?.id?.trim();
+        const nome = meta?.nome?.trim();
         if (!aid || !nome) continue;
-        const ordem = row.assadeiras?.ordem ?? 0;
-        const u = Math.round(Number(row.unidades_por_assadeira));
+        const ordem = meta?.ordem ?? 0;
+        const u = Math.round(Number(pr.unidades_por_assadeira));
         if (!Number.isFinite(u) || u <= 0) continue;
-        const list = linksByProduto.get(row.produto_id) ?? [];
+        const list = linksByProduto.get(pr.produto_id) ?? [];
         list.push({ assadeira_id: aid, unidades: u, nome, ordem });
-        linksByProduto.set(row.produto_id, list);
+        linksByProduto.set(pr.produto_id, list);
       }
     }
   }
 
   // Criar mapa de produto_id -> receita_massa (filtrar apenas tipo massa e receita ativa)
   const receitasMap = new Map<string, { quantidade_por_produto: number }>();
-  receitasVinculadas?.forEach((pr: ProdutoReceitaItem) => {
+  receitasVinculadas?.forEach((pr: ProdutoReceitaJoinRow) => {
     if (isVinculoReceitaMassaAtiva(pr)) {
       receitasMap.set(pr.produto_id, {
         quantidade_por_produto: pr.quantidade_por_produto,
@@ -1159,18 +1337,15 @@ type ProdutoRowForAutocomplete = {
   package_units: number | null;
   box_units: number | null;
   unidades_assadeira: number | null;
-  unidades_lata_antiga: number | null;
-  unidades_lata_nova: number | null;
+  unidades_lata_antiga?: number | null;
+  unidades_lata_nova?: number | null;
   unidades: { nome_resumido: string } | null;
 };
 
+type ProdutoRowSemUnidade = Omit<ProdutoRowForAutocomplete, 'unidades'>;
+
 function sanitizeIlikeQuery(raw: string): string {
   return raw.replace(/[%_\\,]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/** Valor entre aspas duplas para uso em `.or()` do PostgREST (vírgulas no texto). */
-function postgrestQuotedValue(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '""')}"`;
 }
 
 async function receitasMassaMapForProdutoIds(
@@ -1180,34 +1355,8 @@ async function receitasMassaMapForProdutoIds(
   const map = new Map<string, { quantidade_por_produto: number }>();
   if (produtoIds.length === 0) return map;
 
-  type ProdutoReceitaItem = {
-    produto_id: string;
-    quantidade_por_produto: number;
-    tipo?: string | null;
-    receitas?: { tipo?: string; ativo?: boolean | null } | null;
-  };
-
-  const { data: receitasData, error: receitasError } = await supabase
-    .from('produto_receitas')
-    .select(
-      `
-        produto_id,
-        quantidade_por_produto,
-        receitas!produto_receitas_receita_id_fkey (
-          tipo,
-          ativo
-        )
-      `,
-    )
-    .in('produto_id', produtoIds)
-    .eq('ativo', true);
-
-  if (receitasError) {
-    console.error('Erro ao buscar receitas (autocomplete produto):', serializeSupabaseError(receitasError));
-    return map;
-  }
-
-  (receitasData as unknown as ProdutoReceitaItem[] | null)?.forEach((pr) => {
+  const joinRows = await fetchProdutoReceitasComReceita(supabase, produtoIds);
+  joinRows.forEach((pr) => {
     if (!isVinculoReceitaMassaAtiva(pr)) return;
     if (!map.has(pr.produto_id)) {
       map.set(pr.produto_id, { quantidade_por_produto: pr.quantidade_por_produto });
@@ -1215,6 +1364,65 @@ async function receitasMassaMapForProdutoIds(
   });
 
   return map;
+}
+
+async function attachUnidadesNomeResumidoToProdutos(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  rows: ProdutoRowSemUnidade[],
+): Promise<ProdutoRowForAutocomplete[]> {
+  const uids = [
+    ...new Set(rows.map((r) => r.unidade_padrao_id).filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  const nomeByUnidadeId = new Map<string, string>();
+  if (uids.length > 0) {
+    const { data: unRows } = await supabase.from('unidades').select('id, nome_resumido').in('id', uids);
+    for (const u of unRows ?? []) {
+      nomeByUnidadeId.set(u.id, u.nome_resumido ?? '');
+    }
+  }
+  return rows.map((r) => ({
+    ...r,
+    unidades: r.unidade_padrao_id
+      ? { nome_resumido: nomeByUnidadeId.get(r.unidade_padrao_id) ?? '' }
+      : null,
+  }));
+}
+
+/** Colunas que podem não existir em clones antigos de `interno.produtos` — busca à parte, ignora erro. */
+async function mergeOptionalLataColumnsIntoProdutoRows<
+  T extends {
+    id: string;
+    nome: string;
+    codigo: string;
+    unidade_padrao_id: string | null;
+    package_units: number | null;
+    box_units: number | null;
+    unidades_assadeira: number | null;
+  },
+>(supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>, rows: T[]): Promise<ProdutoRowSemUnidade[]> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  const { data: extra, error } = await supabase
+    .from('produtos')
+    .select('id, unidades_lata_antiga, unidades_lata_nova')
+    .in('id', ids);
+  if (error) {
+    return rows.map((r) => ({ ...r, unidades_lata_antiga: null, unidades_lata_nova: null }));
+  }
+  const byId = new Map(
+    (extra ?? []).map((e) => [
+      (e as { id: string }).id,
+      e as { unidades_lata_antiga?: number | null; unidades_lata_nova?: number | null },
+    ]),
+  );
+  return rows.map((r) => {
+    const e = byId.get(r.id);
+    return {
+      ...r,
+      unidades_lata_antiga: e?.unidades_lata_antiga ?? null,
+      unidades_lata_nova: e?.unidades_lata_nova ?? null,
+    };
+  });
 }
 
 function rowToAutocompleteOption(
@@ -1232,48 +1440,97 @@ function rowToAutocompleteOption(
       package_units: row.package_units,
       box_units: row.box_units,
       unidades_assadeira: row.unidades_assadeira,
-      unidades_lata_antiga: row.unidades_lata_antiga,
-      unidades_lata_nova: row.unidades_lata_nova,
+      unidades_lata_antiga: row.unidades_lata_antiga ?? null,
+      unidades_lata_nova: row.unidades_lata_nova ?? null,
       receita_massa: receita ?? null,
     },
   };
 }
 
-const PRODUTO_AUTOCOMPLETE_SELECT = `
+/** Colunas seguras no `interno` (clone de `public`); latas vêm em merge opcional. */
+const PRODUTO_AUTOCOMPLETE_CORE = `
   id,
   nome,
   codigo,
   unidade_padrao_id,
   package_units,
   box_units,
-  unidades_assadeira,
-  unidades_lata_antiga,
-  unidades_lata_nova,
-  unidades!produtos_unidade_padrao_id_fkey (nome_resumido)
+  unidades_assadeira
 `;
 
 export async function searchProdutosParaAutocomplete(query: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const q = sanitizeIlikeQuery(query);
   if (q.length < 1) {
-    return { success: true as const, options: [] as ProdutoAutocompleteOption[] };
+    const { data, error } = await supabase
+      .from('produtos')
+      .select(PRODUTO_AUTOCOMPLETE_CORE)
+      .eq('ativo', true)
+      .order('nome', { ascending: true })
+      .limit(25);
+
+    if (error) {
+      console.error('searchProdutosParaAutocomplete (sem filtro):', serializeSupabaseError(error));
+      return {
+        success: false as const,
+        options: [] as ProdutoAutocompleteOption[],
+        error: 'Erro ao carregar produtos.',
+      };
+    }
+
+    const withLata = await mergeOptionalLataColumnsIntoProdutoRows(
+      supabase,
+      (data ?? []) as ProdutoRowSemUnidade[],
+    );
+    const rows = await attachUnidadesNomeResumidoToProdutos(supabase, withLata);
+    const ids = rows.map((r) => r.id);
+    const receitasMap = await receitasMassaMapForProdutoIds(supabase, ids);
+    const options = rows.map((r) => rowToAutocompleteOption(r, receitasMap));
+    return { success: true as const, options };
   }
 
-  const pattern = postgrestQuotedValue(`%${q}%`);
-  const { data, error } = await supabase
+  const like = `%${q}%`;
+
+  const { data: byNome, error: errNome } = await supabase
     .from('produtos')
-    .select(PRODUTO_AUTOCOMPLETE_SELECT)
+    .select(PRODUTO_AUTOCOMPLETE_CORE)
     .eq('ativo', true)
-    .or(`nome.ilike.${pattern},codigo.ilike.${pattern}`)
+    .ilike('nome', like)
     .order('nome', { ascending: true })
     .limit(25);
 
-  if (error) {
-    console.error('searchProdutosParaAutocomplete:', serializeSupabaseError(error));
+  if (errNome) {
+    console.error('searchProdutosParaAutocomplete (nome):', serializeSupabaseError(errNome));
     return { success: false as const, options: [] as ProdutoAutocompleteOption[], error: 'Erro ao buscar produtos.' };
   }
 
-  const rows = (data ?? []) as unknown as ProdutoRowForAutocomplete[];
+  const { data: byCodigo, error: errCodigo } = await supabase
+    .from('produtos')
+    .select(PRODUTO_AUTOCOMPLETE_CORE)
+    .eq('ativo', true)
+    .ilike('codigo', like)
+    .order('nome', { ascending: true })
+    .limit(25);
+
+  if (errCodigo) {
+    console.warn('searchProdutosParaAutocomplete (codigo):', serializeSupabaseError(errCodigo));
+  }
+
+  const merged = new Map<string, ProdutoRowSemUnidade>();
+  for (const r of byNome ?? []) {
+    merged.set(r.id, r as ProdutoRowSemUnidade);
+  }
+  if (!errCodigo) {
+    for (const r of byCodigo ?? []) {
+      merged.set(r.id, r as ProdutoRowSemUnidade);
+    }
+  }
+
+  const sorted = [...merged.values()].sort((a, b) =>
+    a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+  );
+  const withLata = await mergeOptionalLataColumnsIntoProdutoRows(supabase, sorted.slice(0, 25));
+  const rows = await attachUnidadesNomeResumidoToProdutos(supabase, withLata);
   const ids = rows.map((r) => r.id);
   const receitasMap = await receitasMassaMapForProdutoIds(supabase, ids);
   const options = rows.map((r) => rowToAutocompleteOption(r, receitasMap));
@@ -1288,7 +1545,7 @@ export async function getProdutoAutocompleteOptionById(id: string) {
 
   const { data, error } = await supabase
     .from('produtos')
-    .select(PRODUTO_AUTOCOMPLETE_SELECT)
+    .select(PRODUTO_AUTOCOMPLETE_CORE)
     .eq('id', id)
     .maybeSingle();
 
@@ -1301,7 +1558,8 @@ export async function getProdutoAutocompleteOptionById(id: string) {
     return { success: true as const, option: null as ProdutoAutocompleteOption | null };
   }
 
-  const row = data as unknown as ProdutoRowForAutocomplete;
+  const [withLata] = await mergeOptionalLataColumnsIntoProdutoRows(supabase, [data as ProdutoRowSemUnidade]);
+  const [row] = await attachUnidadesNomeResumidoToProdutos(supabase, [withLata]);
   const receitasMap = await receitasMassaMapForProdutoIds(supabase, [row.id]);
   return { success: true as const, option: rowToAutocompleteOption(row, receitasMap) };
 }

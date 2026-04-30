@@ -190,6 +190,9 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
       if (!productInfo) {
         throw new Error('Aguarde o carregamento da unidade do produto ou selecione novamente.');
       }
+      if (podeLatas && !assadeiraId.trim()) {
+        throw new Error('Selecione o tipo de lata (assadeira).');
+      }
 
       const rawNum =
         typeof rawQty === 'number' ? rawQty : parseFloat(String(rawQty).replace(',', '.'));
@@ -207,7 +210,7 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
         qtdPlanejada: computed.qtdPlanejada,
         prioridade: 0,
         dataProducao,
-        assadeiraId: assadeiraId.trim() || null,
+        assadeiraId: assadeiraId.trim(),
       };
 
       const response = order
@@ -233,9 +236,6 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
     unitLower === 'lt' || unitLower.includes('lata') || unitLower.includes('bandeja');
   const podeCaixa = Boolean(productInfo?.box_units && productInfo.box_units > 0);
   const podeLatas = lataLike || Boolean(productInfo?.unidades_assadeira && productInfo.unidades_assadeira > 0);
-  const refLataAntiga =
-    productInfo?.unidades_lata_antiga ?? productInfo?.unidades_assadeira ?? null;
-  const refLataNova = productInfo?.unidades_lata_nova ?? null;
 
   const kindButton = (kind: PlanningQuantityInputKind, label: string, disabled: boolean) => (
     <button
@@ -318,13 +318,6 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
                   setAssadeiraId('');
                 }}
               />
-              {productInfo && produtoId && (
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-700">
-                  Antiga:{' '}
-                  {refLataAntiga != null && refLataAntiga > 0 ? `${refLataAntiga} un/lt` : '—'} · Nova:{' '}
-                  {refLataNova != null && refLataNova > 0 ? `${refLataNova} un/lt` : '—'}
-                </div>
-              )}
             </div>
 
             {podeLatas && produtoId && (
@@ -341,9 +334,12 @@ export default function NovaOrdemModal({ isOpen, onClose, order, onSaved }: Nova
                   <select
                     value={assadeiraId}
                     onChange={(e) => setAssadeiraId(e.target.value)}
+                    required
                     className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                   >
-                    <option value="">Automático (conforme cadastro do produto)</option>
+                    <option value="" disabled>
+                      Selecione a assadeira...
+                    </option>
                     {lataOpcoes.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.nome} · {o.unidades_por_assadeira} un/LT

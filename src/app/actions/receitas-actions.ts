@@ -61,43 +61,117 @@ export interface ReceitaWithRelations {
 
 const RECEITAS_PATH = '/receitas';
 
+type ReceitaRow = Database['public']['Tables']['receitas']['Row'];
+
+/** Monta a mesma árvore que o embed PostgREST, sem `unidades`/`insumos` aninhados (compatível com schema `interno`). */
+async function hydrateReceitasWithRelations(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  receitas: ReceitaRow[],
+): Promise<ReceitaWithRelations[]> {
+  if (receitas.length === 0) return [];
+
+  const rids = receitas.map((r) => r.id);
+
+  const { data: allIngs } = await supabase
+    .from('receita_ingredientes')
+    .select('id, receita_id, quantidade_padrao, insumo_id')
+    .in('receita_id', rids);
+
+  const insumoIds = [
+    ...new Set((allIngs ?? []).map((i) => i.insumo_id).filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  const { data: allInsumos } = await supabase
+    .from('insumos')
+    .select('id, nome, unidade_id')
+    .in('id', insumoIds);
+
+  const unidadeIds = [
+    ...new Set((allInsumos ?? []).map((i) => i.unidade_id).filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  const { data: allUnidades } = await supabase
+    .from('unidades')
+    .select('id, nome, nome_resumido, codigo')
+    .in('id', unidadeIds);
+
+  const uMap = new Map((allUnidades ?? []).map((u) => [u.id, u]));
+  const insMap = new Map(
+    (allInsumos ?? []).map((ins) => {
+      const u = ins.unidade_id ? uMap.get(ins.unidade_id) : undefined;
+      return [
+        ins.id,
+        {
+          id: ins.id,
+          nome: ins.nome,
+          unidade_id: ins.unidade_id,
+          unidades: u
+            ? {
+                id: u.id,
+                nome: u.nome,
+                nome_resumido: u.nome_resumido,
+                codigo: u.codigo,
+              }
+            : null,
+        },
+      ] as const;
+    }),
+  );
+
+  const ingsByReceita = new Map<string, NonNullable<typeof allIngs>>();
+  for (const ing of allIngs ?? []) {
+    if (!ing.receita_id) continue;
+    const list = ingsByReceita.get(ing.receita_id) ?? [];
+    list.push(ing);
+    ingsByReceita.set(ing.receita_id, list);
+  }
+
+  const { data: allPr } = await supabase
+    .from('produto_receitas')
+    .select('id, receita_id, produto_id, quantidade_por_produto, ativo')
+    .in('receita_id', rids);
+
+  const produtoIds = [
+    ...new Set((allPr ?? []).map((p) => p.produto_id).filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  const { data: allProds } = await supabase.from('produtos').select('id, nome').in('id', produtoIds);
+  const pMap = new Map((allProds ?? []).map((p) => [p.id, p]));
+
+  const prByReceita = new Map<string, NonNullable<typeof allPr>>();
+  for (const pr of allPr ?? []) {
+    const list = prByReceita.get(pr.receita_id) ?? [];
+    list.push(pr);
+    prByReceita.set(pr.receita_id, list);
+  }
+
+  return receitas.map((rec) => {
+    const ings = ingsByReceita.get(rec.id) ?? [];
+    const receita_ingredientes = ings.map((ing) => ({
+      id: ing.id,
+      quantidade_padrao: ing.quantidade_padrao,
+      insumo_id: ing.insumo_id,
+      insumos: ing.insumo_id ? (insMap.get(ing.insumo_id) ?? null) : null,
+    }));
+
+    const prs = prByReceita.get(rec.id) ?? [];
+    const produto_receitas = prs.map((pr) => ({
+      id: pr.id,
+      tipo: rec.tipo as TipoReceita,
+      quantidade_por_produto: pr.quantidade_por_produto,
+      ativo: Boolean(pr.ativo),
+      produtos: pMap.get(pr.produto_id) ? { id: pr.produto_id, nome: pMap.get(pr.produto_id)!.nome } : null,
+    }));
+
+    return {
+      ...rec,
+      receita_ingredientes,
+      produto_receitas,
+    } as ReceitaWithRelations;
+  });
+}
+
 export async function getReceitas(includeInactive = false) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  let query = supabase
-    .from('receitas')
-    .select(`
-      *,
-      receita_ingredientes (
-        id,
-        quantidade_padrao,
-        insumo_id,
-        insumos (
-          id,
-          nome,
-          unidade_id,
-          unidades (
-            id,
-            nome,
-            nome_resumido,
-            codigo
-          )
-        )
-      ),
-      produto_receitas (
-        id,
-        quantidade_por_produto,
-        ativo,
-        produtos (
-          id,
-          nome
-        ),
-        receitas (
-          tipo
-        )
-      )
-    `)
-    .order('nome', { ascending: true });
+  let query = supabase.from('receitas').select('*').order('nome', { ascending: true });
 
   if (!includeInactive) {
     query = query.eq('ativo', true);
@@ -110,54 +184,23 @@ export async function getReceitas(includeInactive = false) {
     return [];
   }
 
-  return (data || []) as unknown as ReceitaWithRelations[];
+  return hydrateReceitasWithRelations(supabase, data ?? []);
 }
 
 export async function getReceitaDetalhes(id: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const { data, error } = await supabase
-    .from('receitas')
-    .select(`
-      *,
-      receita_ingredientes (
-        id,
-        quantidade_padrao,
-        insumo_id,
-        insumos (
-          id,
-          nome,
-          unidade_id,
-          unidades (
-            id,
-            nome,
-            nome_resumido,
-            codigo
-          )
-        )
-      ),
-      produto_receitas (
-        id,
-        quantidade_por_produto,
-        ativo,
-        produtos (
-          id,
-          nome
-        ),
-        receitas (
-          tipo
-        )
-      )
-    `)
-    .eq('id', id)
-    .single();
+  const { data, error } = await supabase.from('receitas').select('*').eq('id', id).single();
 
   if (error) {
     console.error('Erro ao buscar receita:', error);
     return null;
   }
 
-  return data as unknown as ReceitaWithRelations;
+  if (!data) return null;
+
+  const [detail] = await hydrateReceitasWithRelations(supabase, [data]);
+  return detail ?? null;
 }
 
 export async function createReceita(payload: ReceitaInput) {
