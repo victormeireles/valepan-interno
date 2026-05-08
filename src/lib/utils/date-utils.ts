@@ -133,14 +133,9 @@ export function formatWeekdayDayMonthBr(isoDate: string): string {
   return `${wd} ${dd}/${mm}`;
 }
 
-/** Coluna D-7: "terça passada 07/04". */
+/** Coluna D-7: dia da semana + dd/mm no fuso BR (ex.: "quinta 30/04"). */
 export function formatWeekdayPassadaDayMonthBr(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  if (!y || !m || !d) return isoDate;
-  const wd = weekdayNameShortPt(isoDate);
-  const dd = String(d).padStart(2, '0');
-  const mm = String(m).padStart(2, '0');
-  return `${wd} passada ${dd}/${mm}`;
+  return formatWeekdayDayMonthBr(isoDate);
 }
 
 /** Hora e minuto atuais em America/Sao_Paulo. */
@@ -167,6 +162,38 @@ export function hoursRemainingUntilClockTodayBr(endHour: number, endMinute: numb
   const end = endHour * 60 + endMinute;
   if (cur >= end) return 0;
   return (end - cur) / 60;
+}
+
+/** Data civil YYYY-MM-DD (America/São_Paulo) para um instante UTC. */
+export function getBrazilDateISOFromInstant(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+/**
+ * Instantâneo UTC da **07:00:00** em America/São_Paulo na data ISO informada.
+ * Usa offset fixo -03:00 (Brasil sem horário de verão desde 2019).
+ */
+export function brazilSevenAmUtcMs(isoDate: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return NaN;
+  return new Date(`${isoDate}T07:00:00-03:00`).getTime();
+}
+
+/** Rótulo tipo `8h40` para instante no fuso BR. */
+export function formatBrazilHourMinuteLabel(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  return `${hour}h${String(minute).padStart(2, '0')}`;
 }
 
 /** Data civil (YYYY-MM-DD) + hora no fuso BR para um instante UTC. */
