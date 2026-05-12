@@ -12,7 +12,7 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
-  public: {
+  interno: {
     Tables: {
       assadeiras: {
         Row: {
@@ -341,7 +341,7 @@ export type Database = {
           somente_lata_antiga: boolean
           tem_texto_indicando_congelado_na_etiqueta: boolean
           tem_validade_congelado_na_etiqueta: boolean
-          tipo_cliente: Database["public"]["Enums"]["tipo_cliente_enum"]
+          tipo_cliente: Database["interno"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id: string | null
           updated_at: string | null
           valepan_produz_fatura: boolean
@@ -364,7 +364,7 @@ export type Database = {
           somente_lata_antiga?: boolean
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
-          tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
+          tipo_cliente?: Database["interno"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id?: string | null
           updated_at?: string | null
           valepan_produz_fatura?: boolean
@@ -387,7 +387,7 @@ export type Database = {
           somente_lata_antiga?: boolean
           tem_texto_indicando_congelado_na_etiqueta?: boolean
           tem_validade_congelado_na_etiqueta?: boolean
-          tipo_cliente?: Database["public"]["Enums"]["tipo_cliente_enum"]
+          tipo_cliente?: Database["interno"]["Enums"]["tipo_cliente_enum"]
           tipo_estoque_id?: string | null
           updated_at?: string | null
           valepan_produz_fatura?: boolean
@@ -651,6 +651,8 @@ export type Database = {
           produto_id: string
           qtd_planejada: number
           status: string | null
+          temporaria: boolean
+          temporaria_expira_em: string | null
         }
         Insert: {
           assadeira_id?: string | null
@@ -664,6 +666,8 @@ export type Database = {
           produto_id: string
           qtd_planejada: number
           status?: string | null
+          temporaria?: boolean
+          temporaria_expira_em?: string | null
         }
         Update: {
           assadeira_id?: string | null
@@ -677,6 +681,8 @@ export type Database = {
           produto_id?: string
           qtd_planejada?: number
           status?: string | null
+          temporaria?: boolean
+          temporaria_expira_em?: string | null
         }
         Relationships: [
           {
@@ -720,6 +726,109 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      ordens_producao_diarias: {
+        Row: {
+          id: string
+          data_producao: string
+          data_etiqueta_default: string
+          status: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          data_producao: string
+          data_etiqueta_default: string
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          data_producao?: string
+          data_etiqueta_default?: string
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      ordens_producao_diarias_itens: {
+        Row: {
+          id: string
+          ordem_diaria_id: string
+          prioridade: number
+          produto_id: string
+          tipo_lata: string
+          latas_planejadas: number
+          caixas_estimadas: number
+          clientes: Json
+          data_producao_override: string | null
+          data_etiqueta_override: string | null
+          observacao: string | null
+          status_linha: string
+          ordens_producao_id: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          ordem_diaria_id: string
+          prioridade?: number
+          produto_id: string
+          tipo_lata: string
+          latas_planejadas?: number
+          caixas_estimadas?: number
+          clientes?: Json
+          data_producao_override?: string | null
+          data_etiqueta_override?: string | null
+          observacao?: string | null
+          status_linha?: string
+          ordens_producao_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          ordem_diaria_id?: string
+          prioridade?: number
+          produto_id?: string
+          tipo_lata?: string
+          latas_planejadas?: number
+          caixas_estimadas?: number
+          clientes?: Json
+          data_producao_override?: string | null
+          data_etiqueta_override?: string | null
+          observacao?: string | null
+          status_linha?: string
+          ordens_producao_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_diarias_itens_ordem_diaria_id_fkey"
+            columns: ["ordem_diaria_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao_diarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_diarias_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_diarias_itens_ordens_producao_id_fkey"
+            columns: ["ordens_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -874,7 +983,7 @@ export type Database = {
           is_bonificacao: boolean
           observacoes: string | null
           status: string
-          tipo_pedido: Database["public"]["Enums"]["tipo_pedido_enum"]
+          tipo_pedido: Database["interno"]["Enums"]["tipo_pedido_enum"]
           updated_at: string | null
         }
         Insert: {
@@ -889,7 +998,7 @@ export type Database = {
           is_bonificacao?: boolean
           observacoes?: string | null
           status?: string
-          tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
+          tipo_pedido?: Database["interno"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
         }
         Update: {
@@ -904,7 +1013,7 @@ export type Database = {
           is_bonificacao?: boolean
           observacoes?: string | null
           status?: string
-          tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
+          tipo_pedido?: Database["interno"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
         }
         Relationships: [
@@ -937,6 +1046,98 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      estoque: {
+        Row: {
+          caixas: number
+          created_at: string
+          id: string
+          kg: number
+          pacotes: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades: number
+          updated_at: string
+        }
+        Insert: {
+          caixas?: number
+          created_at?: string
+          id?: string
+          kg?: number
+          pacotes?: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades?: number
+          updated_at?: string
+        }
+        Update: {
+          caixas?: number
+          created_at?: string
+          id?: string
+          kg?: number
+          pacotes?: number
+          produto_id?: string
+          tipo_estoque_id?: string
+          unidades?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estoque_auditoria: {
+        Row: {
+          criado_em: string
+          dados_anteriores: Json | null
+          dados_novos: Json | null
+          estoque_id: string | null
+          id: string
+          tipo: string
+        }
+        Insert: {
+          criado_em?: string
+          dados_anteriores?: Json | null
+          dados_novos?: Json | null
+          estoque_id?: string | null
+          id?: string
+          tipo: string
+        }
+        Update: {
+          criado_em?: string
+          dados_anteriores?: Json | null
+          dados_novos?: Json | null
+          estoque_id?: string | null
+          id?: string
+          tipo?: string
+        }
+        Relationships: []
       }
       producao_etapas_log: {
         Row: {
@@ -1133,7 +1334,7 @@ export type Database = {
           produto_id: string
           quantidade_por_produto: number
           receita_id: string
-          tipo: Database["public"]["Enums"]["tipo_receita"]
+          tipo: Database["interno"]["Enums"]["tipo_receita"]
           updated_at: string | null
         }
         Insert: {
@@ -1143,7 +1344,7 @@ export type Database = {
           produto_id: string
           quantidade_por_produto: number
           receita_id: string
-          tipo: Database["public"]["Enums"]["tipo_receita"]
+          tipo: Database["interno"]["Enums"]["tipo_receita"]
           updated_at?: string | null
         }
         Update: {
@@ -1153,7 +1354,7 @@ export type Database = {
           produto_id?: string
           quantidade_por_produto?: number
           receita_id?: string
-          tipo?: Database["public"]["Enums"]["tipo_receita"]
+          tipo?: Database["interno"]["Enums"]["tipo_receita"]
           updated_at?: string | null
         }
         Relationships: [
@@ -1290,6 +1491,7 @@ export type Database = {
           id: string
           nome: string
           package_units: number | null
+          tipo_embalagem: string | null
           unidade: string
           unidade_descricao: string | null
           unidade_padrao_id: string | null
@@ -1314,6 +1516,7 @@ export type Database = {
           nome: string
           package_units?: number | null
           permite_lata_antiga?: boolean
+          tipo_embalagem?: string | null
           permite_lata_nova?: boolean
           unidade: string
           unidade_descricao?: string | null
@@ -1337,6 +1540,7 @@ export type Database = {
           package_units?: number | null
           permite_lata_antiga?: boolean
           permite_lata_nova?: boolean
+          tipo_embalagem?: string | null
           unidade?: string
           unidade_descricao?: string | null
           unidade_padrao_id?: string | null
@@ -1460,7 +1664,7 @@ export type Database = {
           created_at: string | null
           id: string
           nome: string
-          tipo: Database["public"]["Enums"]["tipo_receita"]
+          tipo: Database["interno"]["Enums"]["tipo_receita"]
         }
         Insert: {
           ativo?: boolean | null
@@ -1468,7 +1672,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           nome: string
-          tipo?: Database["public"]["Enums"]["tipo_receita"]
+          tipo?: Database["interno"]["Enums"]["tipo_receita"]
         }
         Update: {
           ativo?: boolean | null
@@ -1476,7 +1680,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           nome?: string
-          tipo?: Database["public"]["Enums"]["tipo_receita"]
+          tipo?: Database["interno"]["Enums"]["tipo_receita"]
         }
         Relationships: []
       }
@@ -1764,7 +1968,7 @@ export type Database = {
           receita_id: string | null
           receita_nome: string | null
           receita_vinculada_ativa: boolean | null
-          tipo_receita: Database["public"]["Enums"]["tipo_receita"] | null
+          tipo_receita: Database["interno"]["Enums"]["tipo_receita"] | null
         }
         Relationships: []
       }
@@ -1783,7 +1987,7 @@ export type Database = {
     Functions: {
       get_receita_tipo: {
         Args: { receita_id: string }
-        Returns: Database["public"]["Enums"]["tipo_receita"]
+        Returns: Database["interno"]["Enums"]["tipo_receita"]
       }
       get_user_cliente_id: { Args: { user_id: string }; Returns: string }
       get_user_tipo: { Args: { user_id: string }; Returns: string }
@@ -1808,7 +2012,7 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "interno">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
@@ -1924,7 +2128,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  public: {
+  interno: {
     Enums: {
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
       tipo_pedido_enum: ["valepan", "hamburgueria"],
