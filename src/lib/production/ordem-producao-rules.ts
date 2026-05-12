@@ -72,10 +72,12 @@ export function groupItensOrdem(itens: OrdemProducaoItemBruto[]): OrdemProducaoI
 
 /** Resposta da action quando as tabelas da ordem diária ainda não existem (UI pode mostrar esqueleto). */
 export function isOrdemDiariaSchemaMigrationPendingError(message: string | null | undefined): boolean {
-  const m = String(message ?? '');
-  return (
-    m.includes('MIGRACAO_ORDENS_PRODUCAO_DIARIAS.sql') ||
-    m.includes('MIGRACAO_OFICIAL_ORDEM_DIARIA_OP_INTERNO.sql') ||
-    m.includes('ordens_producao_diarias')
-  );
+  const m = String(message ?? '').toLowerCase();
+  const estruturaMsg =
+    m.includes('migracao_oficial_ordem_diaria_op_interno.sql') ||
+    m.includes('migracao_ordens_producao_diarias.sql');
+  const relacaoAusente =
+    m.includes('ordens_producao_diarias') &&
+    (m.includes('does not exist') || m.includes('schema cache') || m.includes('could not find'));
+  return estruturaMsg || relacaoAusente;
 }

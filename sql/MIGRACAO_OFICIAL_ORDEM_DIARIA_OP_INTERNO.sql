@@ -151,3 +151,16 @@ DROP POLICY IF EXISTS "ordens_producao_diarias_itens_delete_admin" ON interno.or
 CREATE POLICY "ordens_producao_diarias_itens_delete_admin"
   ON interno.ordens_producao_diarias_itens FOR DELETE TO authenticated
   USING ((SELECT is_admin()));
+
+-- ---------------------------------------------------------------------------
+-- 4) Privilégios no schema interno (evita "permission denied for table" com
+--    PostgREST / service_role após CREATE TABLE sem GRANT herdado)
+-- ---------------------------------------------------------------------------
+
+GRANT USAGE ON SCHEMA interno TO anon, authenticated, service_role;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE interno.ordens_producao_diarias TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE interno.ordens_producao_diarias_itens TO authenticated;
+
+GRANT ALL ON TABLE interno.ordens_producao_diarias TO service_role;
+GRANT ALL ON TABLE interno.ordens_producao_diarias_itens TO service_role;
