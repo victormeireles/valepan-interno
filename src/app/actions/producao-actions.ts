@@ -25,6 +25,25 @@ import {
   updateOrdemProducaoForDiariaItem,
   type DiariaHeaderDates,
 } from '@/lib/production/ordem-producao-op-sync';
+import { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Debug session 8fe30e — NDJSON local + ingest (sem segredos). */
+function agentDebugLogOrdemDiaria(payload: Record<string, unknown>) {
+  const body = { sessionId: '8fe30e', timestamp: Date.now(), runId: 'debug-ordem-diaria', ...payload };
+  const line = `${JSON.stringify(body)}\n`;
+  try {
+    appendFileSync(join(process.cwd(), 'debug-8fe30e.log'), line, 'utf8');
+  } catch {
+    /* ignore */
+  }
+  fetch('http://127.0.0.1:7700/ingest/15090b9f-dfae-41a9-a6f7-fe765ce88323', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8fe30e' },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 const PATH_PRODUCAO_ORDEM_DIARIA = '/producao/ordem-producao';
 
 interface CreateProductionOrderParams {
@@ -2135,6 +2154,25 @@ export async function getOrdemProducaoDiariaByDate(
   if (!date) {
     return { success: false, error: 'Data inválida.' };
   }
+  // #region agent log
+  {
+    const sr = process.env.SERVICE_ROLE ?? '';
+    const an = process.env.SUPABASE_ANON_KEY ?? '';
+    agentDebugLogOrdemDiaria({
+      hypothesisId: 'B',
+      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:entry',
+      message: 'env_fingerprint',
+      data: {
+        date,
+        serviceRoleLen: sr.length,
+        anonKeyLen: an.length,
+        serviceRolePresent: sr.length > 0,
+        keysIdentical: sr.length > 0 && sr === an,
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+      },
+    });
+  }
+  // #endregion
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data: header, error: headErr } = await supabase
     .from('ordens_producao_diarias')
@@ -2143,6 +2181,19 @@ export async function getOrdemProducaoDiariaByDate(
     .maybeSingle();
 
   if (headErr) {
+    // #region agent log
+    agentDebugLogOrdemDiaria({
+      hypothesisId: 'A',
+      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:header_err',
+      message: 'header_query_failed',
+      data: {
+        code: (headErr as { code?: string }).code ?? null,
+        msg: headErr.message,
+        details: (headErr as { details?: string }).details ?? null,
+        hint: (headErr as { hint?: string }).hint ?? null,
+      },
+    });
+    // #endregion
     if (isMissingOrdemDiariaTableError(headErr.message)) {
       return {
         success: false,
@@ -2153,6 +2204,14 @@ export async function getOrdemProducaoDiariaByDate(
     return { success: false, error: headErr.message };
   }
   if (!header) {
+    // #region agent log
+    agentDebugLogOrdemDiaria({
+      hypothesisId: 'C',
+      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:no_header',
+      message: 'header_empty_ok',
+      data: { date },
+    });
+    // #endregion
     return { success: true, data: null };
   }
 
@@ -2178,6 +2237,19 @@ export async function getOrdemProducaoDiariaByDate(
     .order('prioridade', { ascending: true });
 
   if (itensErr) {
+    // #region agent log
+    agentDebugLogOrdemDiaria({
+      hypothesisId: 'C',
+      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:itens_err',
+      message: 'itens_query_failed',
+      data: {
+        headerId: header.id,
+        code: (itensErr as { code?: string }).code ?? null,
+        msg: itensErr.message,
+        details: (itensErr as { details?: string }).details ?? null,
+      },
+    });
+    // #endregion
     if (isMissingOrdemDiariaTableError(itensErr.message)) {
       return {
         success: false,
