@@ -1656,6 +1656,9 @@ function isMissingOrdemDiariaTableError(message: string | undefined): boolean {
 const ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG =
   'Estrutura da ordem diária ainda não está disponível no banco. Aplique a migração sql/MIGRACAO_OFICIAL_ORDEM_DIARIA_OP_INTERNO.sql.';
 
+const ORDEM_DIARIA_PERMISSION_MSG =
+  'Permissão negada nas tabelas da ordem diária (Postgres 42501). No Supabase → SQL Editor, execute o ficheiro sql/PATCH_GRANT_ORDEM_DIARIA_INTERNO.sql no mesmo projecto do SUPABASE_URL, depois recarregue esta página.';
+
 async function fetchOrdemDiariaHeaderDates(
   supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
   ordemDiariaId: string,
@@ -2200,6 +2203,13 @@ export async function getOrdemProducaoDiariaByDate(
         error: ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG,
       };
     }
+    const headCode = (headErr as { code?: string }).code;
+    if (
+      headCode === '42501' ||
+      headErr.message.toLowerCase().includes('permission denied')
+    ) {
+      return { success: false, error: ORDEM_DIARIA_PERMISSION_MSG };
+    }
     console.error('getOrdemProducaoDiariaByDate header', serializeSupabaseError(headErr));
     return { success: false, error: headErr.message };
   }
@@ -2256,6 +2266,13 @@ export async function getOrdemProducaoDiariaByDate(
         error: ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG,
       };
     }
+    const itensCode = (itensErr as { code?: string }).code;
+    if (
+      itensCode === '42501' ||
+      itensErr.message.toLowerCase().includes('permission denied')
+    ) {
+      return { success: false, error: ORDEM_DIARIA_PERMISSION_MSG };
+    }
     console.error('getOrdemProducaoDiariaByDate itens', serializeSupabaseError(itensErr));
     return { success: false, error: itensErr.message };
   }
@@ -2305,6 +2322,15 @@ export async function getOrdemProducaoDiariaByDate(
       loteCodigo,
     };
   });
+
+  // #region agent log
+  agentDebugLogOrdemDiaria({
+    hypothesisId: 'verify',
+    location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:success',
+    message: 'load_complete',
+    data: { headerId: header.id, itemCount: itens.length },
+  });
+  // #endregion
 
   return {
     success: true,
