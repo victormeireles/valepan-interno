@@ -2,20 +2,19 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { filaUrlForStation } from '@/lib/production/production-station-routes';
+import { filaStationUsesDefaultTodayFilter, filaUrlForStation } from '@/lib/production/production-station-routes';
 import {
   formatIsoDateToDDMMYYYY,
   getTodayISOInBrazilTimezone,
   normalizeToISODate,
   parseDateInputToIsoBR,
 } from '@/lib/utils/date-utils';
-import NovaOrdemModal from '@/components/Producao/NovaOrdemModal';
 import DashboardHeader from '@/components/DashboardHeader';
 import FilaEntradaFornoHeader from '@/components/Producao/FilaEntradaFornoHeader';
 import FilaEntradaEmbalagemHeader from '@/components/Producao/FilaEntradaEmbalagemHeader';
+import FilaSaidaEmbalagemHeader from '@/components/Producao/FilaSaidaEmbalagemHeader';
 import SaidaFornoProgressHeader from '@/components/Producao/SaidaFornoProgressHeader';
 import MassaLotesModal from '@/components/Producao/MassaLotesModal';
-import PlanningQueueTable from '@/components/Producao/PlanningQueueTable';
 import FilaModalEntradaForno from '@/components/Producao/queue/FilaModalEntradaForno';
 import FilaModalSaidaForno from '@/components/Producao/queue/FilaModalSaidaForno';
 import FilaModalEntradaEmbalagem, {
@@ -25,6 +24,7 @@ import FilaModalIniciarFermentacao from '@/components/Producao/queue/FilaModalIn
 import ProductionQueueFornoGroups from '@/components/Producao/queue/ProductionQueueFornoGroups';
 import ProductionQueueGenericCards from '@/components/Producao/queue/ProductionQueueGenericCards';
 import ProductionQueueSaidaFornoGroups from '@/components/Producao/queue/ProductionQueueSaidaFornoGroups';
+import PreRequisitoSyncConfirmModal from '@/components/Producao/queue/PreRequisitoSyncConfirmModal';
 import type { CarrinhoFilaForno, ProductionQueueClientProps, ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
 import {
   getStationInfo,
@@ -42,18 +42,23 @@ import { useProductionQueueDerived } from '@/hooks/useProductionQueueDerived';
 import { useProductionQueueStation } from '@/hooks/useProductionQueueStation';
 import { DEFAULT_BANDEJAS_SAIDA, MAX_BANDEJAS_SAIDA } from '@/components/Producao/BandejasStepper';
 import { filaEtapaTituloSecaoProntos } from '@/components/Producao/queue/production-queue-metrics';
+import type { EtapaFilaSyncPreRequisitos } from '@/app/actions/producao-fila-sync-actions';
+import type { Station } from '@/lib/utils/production-conversions';
 
 const MAX_LATAS_POR_CARRINHO = 20;
+const LATAS_PADRAO_ENTRADA_FORNO = 20;
+
+function isEtapaFilaSyncPreRequisitos(s: Station): s is EtapaFilaSyncPreRequisitos {
+  return s !== 'massa';
+}
 
 export default function ProductionQueueClient({
   initialQueue,
-  station = 'planejamento',
+  station = 'massa',
   totalLatasEntradaFornoHoje = 0,
   filterDateIso = null,
 }: ProductionQueueClientProps) {
   const router = useRouter();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingOrder, setEditingOrder] = useState<ProductionQueueItem | undefined>(undefined);
   const [isMassaLotesModalOpen, setIsMassaLotesModalOpen] = useState(false);
   const [selectedMassaOrder, setSelectedMassaOrder] = useState<ProductionQueueItem | undefined>(undefined);
   const [fermentacaoModalItem, setFermentacaoModalItem] = useState<ProductionQueueItem | null>(null);
@@ -78,6 +83,7 @@ export default function ProductionQueueClient({
   const [saidaLastProdutoId, setSaidaLastProdutoId] = useState<string | null>(null);
   const [saidaLastProdutoNome, setSaidaLastProdutoNome] = useState('');
   const [expandedSaidaFornoProdutoId, setExpandedSaidaFornoProdutoId] = useState<string | null>(null);
+  const [preReqSyncOrdem, setPreReqSyncOrdem] = useState<ProductionQueueItem | null>(null);
 
   const [modalEmbalagemAberto, setModalEmbalagemAberto] = useState(false);
   const [embalagemBusca, setEmbalagemBusca] = useState('');
@@ -104,6 +110,7 @@ export default function ProductionQueueClient({
     ordensComProdutoFaltando,
     filteredQueue,
     queueForCardsActive,
+    primeiraOrdemAcionavelId,
     queueForCardsProntos,
     fornoGroupsActive,
     fornoGroupsProntos,
@@ -116,6 +123,7 @@ export default function ProductionQueueClient({
     saidaFornoGroupsProntos,
     embalagemEntradaFilaGlobal,
     embalagemEntradaUaHomogenea,
+    saidaEmbalagemFilaGlobal,
   } = useProductionQueueDerived(queueFilteredByDataProducao, effectiveStation);
 
   const tituloSecaoProntosFila = filaEtapaTituloSecaoProntos(effectiveStation);
@@ -127,9 +135,8 @@ export default function ProductionQueueClient({
       : `em ${formatIsoDateToDDMMYYYY(filterDateIso)}`;
   }, [filterDateIso]);
 
-  const setFilaDateQuery = (iso: string | null) => {
-    const url = filaUrlForStation(effectiveStation, iso ? { data: iso } : undefined);
-    router.replace(url);
+  const setFilaDateQuery = (iso: string) => {
+    router.replace(filaUrlForStation(effectiveStation, { data: iso }));
   };
 
   const [filaDataTexto, setFilaDataTexto] = useState(() =>
@@ -141,7 +148,11 @@ export default function ProductionQueueClient({
   }, [filterDateIso]);
 
   const mostrarTodosFila = () => {
-    setFilaDateQuery(null);
+    if (filaStationUsesDefaultTodayFilter(effectiveStation)) {
+      router.replace(filaUrlForStation(effectiveStation, { todas: true }));
+    } else {
+      router.replace(filaUrlForStation(effectiveStation));
+    }
     setFilaDataTexto('');
   };
 
@@ -159,13 +170,20 @@ export default function ProductionQueueClient({
   };
 
   const {
-    isPlanning,
-    isFermentacao,
     isEntradaForno,
     isSaidaForno,
     isEntradaEmbalagem,
     isSaidaEmbalagem,
   } = flags;
+
+  const escopoFilaPorDataLegenda = useMemo(() => {
+    if (filterDateIso) {
+      return filterDateIso === getTodayISOInBrazilTimezone()
+        ? 'Barra e totais: somente ordens com data de produção hoje.'
+        : `Barra e totais: somente ordens com data de produção em ${formatIsoDateToDDMMYYYY(filterDateIso)}.`;
+    }
+    return 'Barra e totais: todas as ordens pendentes (use a data acima para filtrar um dia).';
+  }, [filterDateIso]);
 
   const stationInfo = getStationInfo(effectiveStation);
 
@@ -459,9 +477,7 @@ export default function ProductionQueueClient({
     <div className="min-h-screen bg-gray-50/50">
       <DashboardHeader title={`Produção - ${stationInfo.nome}`} icon={stationInfo.icon} />
 
-      <div
-        className={`mx-auto space-y-4 px-3 py-4 sm:space-y-8 sm:p-6 md:p-10 ${isPlanning ? 'max-w-[min(100rem,calc(100vw-2rem))]' : 'max-w-6xl'}`}
-      >
+      <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:space-y-8 sm:p-6 md:p-10">
         <div className="flex flex-wrap items-center gap-1.5 pb-2 sm:gap-2">
           <input
             type="text"
@@ -494,22 +510,6 @@ export default function ProductionQueueClient({
             Mostrar todos
           </button>
         </div>
-
-        {isPlanning && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-4">
-            <button
-              type="button"
-              onClick={() => {
-                setEditingOrder(undefined);
-                setIsModalOpen(true);
-              }}
-              className="group relative inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-gray-800 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 sm:w-auto sm:rounded-2xl sm:px-6 sm:py-4 sm:text-sm"
-            >
-              <span className="mr-1.5 text-base leading-none sm:mr-2 sm:text-lg">+</span> Nova Ordem
-              <div className="absolute inset-0 rounded-2xl ring-2 ring-white/20 group-hover:ring-white/40 transition-all pointer-events-none" />
-            </button>
-          </div>
-        )}
 
         {ordensComProdutoFaltando > 0 && (
           <div
@@ -588,6 +588,15 @@ export default function ProductionQueueClient({
           />
         )}
 
+        {isSaidaEmbalagem && saidaEmbalagemFilaGlobal && filteredQueue.length > 0 && (
+          <FilaSaidaEmbalagemHeader
+            metaCaixasSoma={saidaEmbalagemFilaGlobal.metaCaixasSoma}
+            caixasInformadasSoma={saidaEmbalagemFilaGlobal.caixasInformadasSoma}
+            lotesEntradaTotal={saidaEmbalagemFilaGlobal.lotesEntradaTotal}
+            escopoOrdensLegenda={escopoFilaPorDataLegenda}
+          />
+        )}
+
         <div className="grid grid-cols-1 gap-3 sm:gap-4">
           {filteredQueue.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white py-12 sm:rounded-3xl sm:py-20">
@@ -598,25 +607,9 @@ export default function ProductionQueueClient({
               <p className="mt-1 max-w-sm px-2 text-center text-xs text-gray-500 sm:text-base">
                 {filterDateIso && initialQueue.length > 0 && queueFilteredByDataProducao.length === 0
                   ? `Nenhuma ordem com data de produção em ${formatIsoDateToDDMMYYYY(filterDateIso)}. Tente outra data ou use Mostrar todos.`
-                  : isFermentacao
-                    ? 'Não há ordens com lotes de massa registrados no momento. Produza massa na etapa anterior para aparecer aqui.'
-                    : isEntradaForno
-                      ? 'Não há ordens com fermentação registrada no momento.'
-                      : isSaidaForno
-                        ? 'Não há ordens com entrada no forno registrada. Use a etapa Entrada do Forno antes.'
-                        : isEntradaEmbalagem || isSaidaEmbalagem
-                          ? 'Não há ordens com saída do forno registrada. Conclua a saída do forno antes da embalagem.'
-                          : 'Não há ordens de produção pendentes no momento. Crie uma nova ordem para começar.'}
+                  : 'Nenhuma ordem de produção a mostrar nesta fila (crie ordens ou ajuste o filtro por data).'}
               </p>
             </div>
-          ) : isPlanning ? (
-            <PlanningQueueTable
-              items={filteredQueue}
-              onEdit={(item) => {
-                setEditingOrder(item as ProductionQueueItem);
-                setIsModalOpen(true);
-              }}
-            />
           ) : isEntradaForno ? (
             <>
               {fornoGroupsActive.length > 0 && (
@@ -624,8 +617,9 @@ export default function ProductionQueueClient({
                   fornoGroups={fornoGroupsActive}
                   expandedFornoProdutoId={expandedFornoProdutoId}
                   setExpandedFornoProdutoId={setExpandedFornoProdutoId}
-                  router={router}
                   filaSecao="active"
+                  etapaFila="entrada_forno"
+                  onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
                 />
               )}
               {fornoGroupsProntos.length > 0 && (
@@ -637,8 +631,9 @@ export default function ProductionQueueClient({
                     fornoGroups={fornoGroupsProntos}
                     expandedFornoProdutoId={expandedFornoProdutoId}
                     setExpandedFornoProdutoId={setExpandedFornoProdutoId}
-                    router={router}
                     filaSecao="prontos"
+                    etapaFila="entrada_forno"
+                    onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
                   />
                 </div>
               )}
@@ -650,8 +645,9 @@ export default function ProductionQueueClient({
                   saidaFornoGroups={saidaFornoGroupsActive}
                   expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
                   setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
-                  router={router}
                   filaSecao="active"
+                  etapaFila="saida_forno"
+                  onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
                 />
               )}
               {saidaFornoGroupsProntos.length > 0 && (
@@ -663,8 +659,9 @@ export default function ProductionQueueClient({
                     saidaFornoGroups={saidaFornoGroupsProntos}
                     expandedSaidaFornoProdutoId={expandedSaidaFornoProdutoId}
                     setExpandedSaidaFornoProdutoId={setExpandedSaidaFornoProdutoId}
-                    router={router}
                     filaSecao="prontos"
+                    etapaFila="saida_forno"
+                    onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
                   />
                 </div>
               )}
@@ -673,6 +670,7 @@ export default function ProductionQueueClient({
             <ProductionQueueGenericCards
               queueForCardsActive={queueForCardsActive}
               queueForCardsProntos={queueForCardsProntos}
+              primeiraOrdemAcionavelId={primeiraOrdemAcionavelId}
               tituloSecaoProntos={tituloSecaoProntosFila}
               queueForPlanningOrder={filteredQueue}
               effectiveStation={effectiveStation}
@@ -683,24 +681,11 @@ export default function ProductionQueueClient({
                 setIsMassaLotesModalOpen(true);
               }}
               onOpenFermentacaoModal={(item) => setFermentacaoModalItem(item)}
+              onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
             />
           )}
         </div>
       </div>
-
-      <NovaOrdemModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingOrder(undefined);
-        }}
-        order={editingOrder}
-        onSaved={() => {
-          setIsModalOpen(false);
-          setEditingOrder(undefined);
-          router.refresh();
-        }}
-      />
 
       <FilaModalIniciarFermentacao
         open={fermentacaoModalItem != null}
@@ -708,6 +693,19 @@ export default function ProductionQueueClient({
         onClose={() => setFermentacaoModalItem(null)}
         onSuccess={() => router.refresh()}
       />
+
+      {preReqSyncOrdem != null && isEtapaFilaSyncPreRequisitos(effectiveStation) ? (
+        <PreRequisitoSyncConfirmModal
+          isOpen
+          item={preReqSyncOrdem}
+          etapaFila={effectiveStation}
+          onClose={() => setPreReqSyncOrdem(null)}
+          onSuccess={() => {
+            setPreReqSyncOrdem(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {selectedMassaOrder && (
         <MassaLotesModal
@@ -737,9 +735,13 @@ export default function ProductionQueueClient({
         carrinhoFornoSelecionado={carrinhoFornoSelecionado}
         onSelectCarrinho={(c) => {
           setCarrinhoFornoSelecionado(c);
-          const capped = c.latas_registradas > 0 ? Math.min(MAX_LATAS_POR_CARRINHO, c.latas_registradas) : 0;
-          const def = capped > 0 ? String(capped).replace('.', ',') : '';
-          setLatasFornoField(def);
+          const capFermentacao =
+            c.latas_registradas > 0 ? Math.min(MAX_LATAS_POR_CARRINHO, c.latas_registradas) : null;
+          const defNum =
+            capFermentacao != null
+              ? Math.min(LATAS_PADRAO_ENTRADA_FORNO, capFermentacao)
+              : LATAS_PADRAO_ENTRADA_FORNO;
+          setLatasFornoField(String(defNum).replace('.', ','));
           setFornoActionError(null);
         }}
         latasFornoField={latasFornoField}

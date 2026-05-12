@@ -1,5 +1,4 @@
 export type Station =
-  | "planejamento"
   | "massa"
   | "fermentacao"
   | "entrada_forno"
@@ -12,7 +11,7 @@ export type ProductConversionInfo = {
   package_units?: number | null;
   box_units?: number | null;
   unidades_assadeira?: number | null;
-  /** Cadastro de latas: espelha a lata antiga; opcional na UI de planejamento. */
+  /** Cadastro de latas: espelha a lata antiga; opcional na UI de ordem diária. */
   unidades_lata_antiga?: number | null;
   /** Cadastro de latas: unidades por lata nova (null = produto não usa lata nova neste cadastro). */
   unidades_lata_nova?: number | null;
@@ -27,7 +26,7 @@ export type StationQuantity = {
   readable: string;
   hasWarning?: boolean; // Indica se há algum problema (ex: receita não encontrada)
   warningMessage?: string;
-  // Conversões adicionais para planejamento e massa
+  // Conversões adicionais para massa (receitas / assadeiras)
   receitas?: {
     value: number;
     readable: string;
@@ -119,7 +118,7 @@ export function quantidadePlanejadaParaUnidadesConsumo(
   return quantity;
 }
 
-/** Buckets da planilha de estoque (caixas / pacotes / unidades / kg). */
+/** Buckets de quantidade de estoque (caixas / pacotes / unidades / kg). */
 export type EstoqueQuantidadeBuckets = {
   caixas: number;
   pacotes: number;
@@ -128,7 +127,7 @@ export type EstoqueQuantidadeBuckets = {
 };
 
 /**
- * Converte quantidade da planilha de estoque para as mesmas "unidades de consumo"
+ * Converte quantidade de estoque (caixas/pacotes/un/kg) para as mesmas "unidades de consumo"
  * usadas em {@link quantidadePlanejadaParaUnidadesConsumo} (soma cx→un, pct→un, un, e kg se a unidade do produto for massa).
  */
 export function quantidadeEstoqueParaUnidadesConsumo(
@@ -351,66 +350,6 @@ export function getQuantityByStation(
     };
   }
 
-  // planejamento -> mostra unidade padrão + conversões para receitas e assadeiras
-  if (station === "planejamento") {
-    const unitLabel = getUnitLabel(product);
-
-    const baseUnits = toUnits(quantidadePlanejada, product);
-
-    // Calcular receitas
-    const quantidadePorProduto = product.receita_massa?.quantidade_por_produto;
-    let receitasInfo: { value: number; readable: string; hasWarning?: boolean } | undefined;
-    let receitasArredondadasPlanej: number | undefined;
-
-    if (quantidadePorProduto && quantidadePorProduto > 0) {
-      const receitasCalculadas = baseUnits / quantidadePorProduto;
-
-      const receitasArredondadas = roundReceitasUp(receitasCalculadas);
-      receitasArredondadasPlanej = receitasArredondadas;
-
-      receitasInfo = {
-        value: receitasArredondadas,
-        readable: `${formatReceitas(receitasArredondadas)} receitas`,
-      };
-    } else {
-      receitasInfo = {
-        value: 0,
-        readable: "Sem receita",
-        hasWarning: true,
-      };
-    }
-
-    // Calcular assadeiras
-    let assadeirasInfo: { value: number; readable: string; unidadesPorAssadeira?: number } | undefined;
-
-    if (product.unidades_assadeira && product.unidades_assadeira > 0) {
-      const assadeirasBruto =
-        receitasArredondadasPlanej !== undefined
-          ? assadeirasFromReceitasArredondadas(receitasArredondadasPlanej, product) ??
-            toAssadeiras(baseUnits, product)
-          : toAssadeiras(baseUnits, product);
-      const unidadesPorAssadeira = product.unidades_assadeira;
-      const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
-        assadeirasBruto,
-        unidadesPorAssadeira,
-      );
-
-      assadeirasInfo = {
-        value: assadeiras,
-        readable: readableText,
-        unidadesPorAssadeira,
-      };
-    }
-
-    return {
-      value: quantidadePlanejada,
-      unitLabel,
-      readable: `${formatNumber(quantidadePlanejada)} ${unitLabel}`,
-      receitas: receitasInfo,
-      assadeiras: assadeirasInfo,
-    };
-  }
-
   // embalagem -> unidade padrão
   const unitLabel = getUnitLabel(product);
   return {
@@ -421,7 +360,7 @@ export function getQuantityByStation(
 }
 
 export type MetaCaixasSaidaEmbalagem = {
-  /** Quando dá para derivar caixas (cx no planejamento ou conversão por box_units). */
+  /** Quando dá para derivar caixas (unidade cx ou conversão por box_units). */
   caixasEsperadas: number | null;
   /** Linha principal (ex.: "10 cx" ou "120 un"). */
   resumo: string;

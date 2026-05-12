@@ -407,61 +407,6 @@ export async function cancelProductionOrder(ordemId: string) {
   }
 }
 
-/** Persiste a sequência do planejamento (1 = primeiro a produzir). Só ordens `planejado`. */
-export async function reorderProductionPlanningOrders(orderedIds: string[]) {
-  const supabase = supabaseClientFactory.createServiceRoleClient();
-
-  if (!orderedIds.length) {
-    return { success: true as const };
-  }
-
-  try {
-    const { data: rows, error: selErr } = await supabase
-      .from('ordens_producao')
-      .select('id, status')
-      .in('id', orderedIds);
-
-    if (selErr) throw selErr;
-    if (!rows || rows.length !== orderedIds.length) {
-      return {
-        success: false as const,
-        error: 'Algumas ordens não foram encontradas. Recarregue a página.',
-      };
-    }
-
-    for (const r of rows) {
-      const st = r.status ?? 'planejado';
-      if (st !== 'planejado') {
-        return {
-          success: false as const,
-          error: 'Só é possível reordenar ordens ainda em planejamento.',
-        };
-      }
-    }
-
-    const updates = orderedIds.map((id, index) =>
-      supabase
-        .from('ordens_producao')
-        .update({ ordem_planejamento: index + 1 })
-        .eq('id', id),
-    );
-
-    const results = await Promise.all(updates);
-    for (const res of results) {
-      if (res.error) throw res.error;
-    }
-
-    revalidatePath('/producao/fila');
-    return { success: true as const };
-  } catch (error) {
-    console.error('Erro ao reordenar planejamento:', error);
-    return {
-      success: false as const,
-      error: 'Não foi possível salvar a ordem de produção. Tente novamente.',
-    };
-  }
-}
-
 function serializeSupabaseError(err: unknown): Record<string, unknown> {
   if (err instanceof Error) {
     const anyErr = err as Error & {

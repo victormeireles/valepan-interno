@@ -1,12 +1,17 @@
 import { getProductionQueue } from '@/app/actions/producao-actions';
 import { getTotalLatasEntradaFornoHoje } from '@/app/actions/producao-etapas-actions';
-import { parseFilaDataQuery } from '@/lib/production/production-station-routes';
+import {
+  filaStationUsesDefaultTodayFilter,
+  normalizeFilaStationQuery,
+  parseFilaDataQuery,
+} from '@/lib/production/production-station-routes';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import ProductionQueueClient from './ProductionQueueClient';
 
 export const dynamic = 'force-dynamic';
 
 interface FilaPageProps {
-  searchParams: Promise<{ station?: string; data?: string }>;
+  searchParams: Promise<{ station?: string; data?: string; todas?: string }>;
 }
 
 interface QueueItem {
@@ -29,6 +34,8 @@ interface QueueItem {
   /** Bandejas já registradas na saída do forno (1 bandeja = 1 LT na fila). */
   saida_forno_bandejas_total?: number;
   entrada_embalagem_latas_total?: number;
+  entrada_embalagem_registros_count?: number;
+  saida_embalagem_caixas_informadas?: number | null;
   fermentacao_carrinhos?: Array<{ log_id: string; carrinho: string; latas: number }>;
   carrinhos_disponiveis_forno?: Array<{
     log_id: string;
@@ -64,9 +71,18 @@ interface QueueItem {
 
 export default async function FilaPage({ searchParams }: FilaPageProps) {
   const params = await searchParams;
-  const queue = await getProductionQueue();
-  const station = params?.station || 'planejamento';
-  const filterDateIso = parseFilaDataQuery(params?.data ?? null);
+  const station = normalizeFilaStationQuery(params?.station);
+  const todas =
+    params?.todas === '1' || String(params?.todas ?? '').toLowerCase() === 'true';
+  const parsedData = parseFilaDataQuery(params?.data ?? null);
+  const todayIso = getTodayISOInBrazilTimezone();
+  const filterDateIso = todas
+    ? null
+    : parsedData ??
+      (filaStationUsesDefaultTodayFilter(station) ? todayIso : null);
+  const queueLegacy = await getProductionQueue();
+  const queue = queueLegacy as unknown as QueueItem[];
+
   const totalLatasEntradaFornoHoje = await getTotalLatasEntradaFornoHoje(
     filterDateIso ?? undefined,
   );

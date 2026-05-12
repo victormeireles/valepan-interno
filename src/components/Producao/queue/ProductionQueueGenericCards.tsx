@@ -4,15 +4,19 @@ import { useEffect, useMemo, useState } from 'react';
 import ProductionProgressBar from '@/components/Producao/ProductionProgressBar';
 import FermentacaoProgressoBar from '@/components/Producao/FermentacaoProgressoBar';
 import VolumeTriploProgressoBar from '@/components/Producao/VolumeTriploProgressoBar';
+import FilaOrdemProducaoProgressBar from '@/components/Producao/queue/FilaOrdemProducaoProgressBar';
 import type { ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
 import {
   entradaEmbalagemItemProgressMetrics,
   filaCardEstadoVisual,
+  filaMensagemPreRequisitoEtapaAnterior,
   fermentacaoProgressMetricsForQueueItem,
+  ordemPreRequisitosAtendidosParaTrabalharNaEtapa,
   planningOrderRankById,
+  saidaEmbalagemItemProgressMetrics,
+  filaOrdemProducaoProgressoSequencialPct,
   type FilaCardEstadoVisual,
 } from '@/components/Producao/queue/production-queue-metrics';
-import { formatIsoDateToDDMMYYYY } from '@/lib/utils/date-utils';
 import { getQuantityByStation, type Station } from '@/lib/utils/production-conversions';
 import { etapaPathForOrdem } from '@/lib/production/production-station-routes';
 import type { ProductionQueueStationFlags } from '@/hooks/useProductionQueueDerived';
@@ -20,16 +24,19 @@ import type { ProductionQueueStationFlags } from '@/hooks/useProductionQueueDeri
 interface Props {
   queueForCardsActive: ProductionQueueItem[];
   queueForCardsProntos: ProductionQueueItem[];
+  /** Primeira ordem que já pode registar trabalho nesta etapa — destaca como «Próximo». */
+  primeiraOrdemAcionavelId: string | null;
   /** Título da secção inferior (meta/etapa já concluída nesta fila). */
   tituloSecaoProntos: string;
   /** Mesmo conjunto filtrado da estação, na ordem de planejamento do servidor — usado só para o badge X/Y (fixo). */
   queueForPlanningOrder: ProductionQueueItem[];
   effectiveStation: Station;
   flags: ProductionQueueStationFlags;
-  router: { push: (href: string) => void };
+  router: { push: (href: string) => void; refresh: () => void };
   onOpenMassaLotes: (item: ProductionQueueItem) => void;
   /** Na fermentação: abre modal (carrinho + assadeiras) em vez de ir à página da ordem. */
   onOpenFermentacaoModal?: (item: ProductionQueueItem) => void;
+  onOpenPreRequisitoSync: (item: ProductionQueueItem) => void;
 }
 
 const BTN_PRIMARY =
@@ -47,15 +54,22 @@ function isOrdemStatusConcluida(status: string | null | undefined): boolean {
   return typeof status === 'string' && status.toLowerCase() === 'concluido';
 }
 
+function stripCapacidadePorLata(text: string): string {
+  // Ex.: "500 LT c/ 48" -> "500 LT"
+  return text.replace(/\s*c\/\s*\d+/gi, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 function filaCardShellClass(estado: FilaCardEstadoVisual, joinFaltando: boolean): string {
   if (joinFaltando) return 'border-rose-200/80 bg-rose-50/50';
   switch (estado) {
     case 'finalizada':
       return 'border-emerald-200/85 bg-emerald-50/40';
     case 'em_andamento':
-      return 'border-amber-200/85 bg-amber-50/45';
+      return 'border-slate-250 bg-slate-50/60';
     case 'proximo':
-      return 'border-sky-400/75 bg-sky-50/50 ring-1 ring-sky-200/55';
+      return 'border-slate-300/90 bg-white ring-1 ring-slate-200/70';
+    case 'aguardando_etapa_anterior':
+      return 'border-violet-200/80 bg-violet-50/35';
     default:
       return 'border-gray-100/90 bg-white';
   }
@@ -87,6 +101,12 @@ function filaCardSelo(estado: FilaCardEstadoVisual): { label: string; className:
         className:
           'shrink-0 rounded-full border border-slate-300/90 bg-slate-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-slate-700',
       };
+    case 'aguardando_etapa_anterior':
+      return {
+        label: 'Aguardando etapa anterior',
+        className:
+          'shrink-0 rounded-full border border-violet-300/90 bg-violet-100/95 px-1.5 py-0.5 text-xs font-semibold leading-none text-violet-950',
+      };
     default:
       return null;
   }
@@ -95,6 +115,7 @@ function filaCardSelo(estado: FilaCardEstadoVisual): { label: string; className:
 export default function ProductionQueueGenericCards({
   queueForCardsActive,
   queueForCardsProntos,
+  primeiraOrdemAcionavelId,
   tituloSecaoProntos,
   queueForPlanningOrder,
   effectiveStation,
@@ -102,8 +123,16 @@ export default function ProductionQueueGenericCards({
   router,
   onOpenMassaLotes,
   onOpenFermentacaoModal,
+  onOpenPreRequisitoSync,
 }: Props) {
   const [expandedOrdemId, setExpandedOrdemId] = useState<string | null>(null);
+
+  const podeSincronizarPreRequisito: boolean =
+    effectiveStation === 'fermentacao' ||
+    effectiveStation === 'entrada_forno' ||
+    effectiveStation === 'saida_forno' ||
+    effectiveStation === 'entrada_embalagem' ||
+    effectiveStation === 'saida_embalagem';
 
   const toggleExpandOrdem = (id: string) => {
     setExpandedOrdemId((prev) => (prev === id ? null : id));
@@ -127,7 +156,6 @@ export default function ProductionQueueGenericCards({
   const totalOrdensNaFila = queueForPlanningOrder.length;
 
   const {
-    isPlanning,
     isMassa,
     isFermentacao,
     isEntradaForno,
@@ -136,23 +164,21 @@ export default function ProductionQueueGenericCards({
     isSaidaEmbalagem,
   } = flags;
 
-  const formatDay = (dateString?: string | null) => {
-    if (!dateString) return null;
-    return formatIsoDateToDDMMYYYY(dateString) || null;
-  };
-
   const renderOrdemCard = (
     item: ProductionQueueItem,
     index: number,
     fromProntosSection: boolean,
-    isFirstActiveInFila: boolean,
+    isFirstActionableInFila: boolean,
   ) => {
         const posicaoNaFila = posicaoPorPlanejamento.get(item.id) ?? index + 1;
         const totalNaFila = totalOrdensNaFila;
 
+        const podeAtuarNestaEtapa = ordemPreRequisitosAtendidosParaTrabalharNaEtapa(item, effectiveStation);
+        const msgAguardando = filaMensagemPreRequisitoEtapaAnterior(effectiveStation);
+
         const filaEstado = filaCardEstadoVisual(item, effectiveStation, {
           fromProntosSection,
-          isFirstActiveInFila,
+          isFirstActionableInFila,
         });
         const shell = filaCardShellClass(filaEstado, Boolean(item.produtoJoinFaltando));
         const estadoSelo = filaCardSelo(filaEstado);
@@ -162,9 +188,28 @@ export default function ProductionQueueGenericCards({
         const headerQuantityReadable = isEntradaEmbalagem
           ? getQuantityByStation('saida_forno', quantidadeParaCalculo, item.produtos).readable
           : quantityInfo.readable;
+        const headerQuantityReadableSemCapacidade = stripCapacidadePorLata(headerQuantityReadable);
         const embalagemEntradaProgress =
           isEntradaEmbalagem && !item.produtoJoinFaltando ? entradaEmbalagemItemProgressMetrics(item) : null;
-        const productionDate = formatDay(item.data_producao);
+        const embalagemSaidaProgress =
+          isSaidaEmbalagem && !item.produtoJoinFaltando ? saidaEmbalagemItemProgressMetrics(item) : null;
+        const embalagemSaidaResumoCompacto = embalagemSaidaProgress
+          ? (() => {
+              const se = embalagemSaidaProgress;
+              const parts: string[] = [];
+              parts.push(
+                se.lotesEntrada === 1
+                  ? '1 lote na embalagem'
+                  : `${se.lotesEntrada} lotes na embalagem`,
+              );
+              if (se.metaCaixas != null && se.caixasInformadas != null) {
+                parts.push(`${se.caixasInformadas}/${Number.isInteger(se.metaCaixas) ? se.metaCaixas : se.metaCaixas.toFixed(1)} cx`);
+              } else if (se.caixasInformadas != null) {
+                parts.push(`${se.caixasInformadas} cx`);
+              }
+              return parts.join(' · ');
+            })()
+          : null;
         const disableMassaAction =
           isMassa && (quantityInfo.hasWarning || Boolean(item.produtoJoinFaltando));
 
@@ -175,6 +220,24 @@ export default function ProductionQueueGenericCards({
           isMassa && !!(quantityInfo.receitas || quantityInfo.assadeiras || quantityInfo.unidades);
 
         const ordemConcluida = isOrdemStatusConcluida(item.status);
+        const massaResumoCompacto =
+          isMassa && !item.produtoJoinFaltando
+            ? [
+                headerQuantityReadableSemCapacidade || null,
+                item.lata_tipo_nome ? `(${item.lata_tipo_nome})` : null,
+              ]
+                .filter((x): x is string => Boolean(x))
+                .join(' ')
+            : '';
+        const fermentacaoResumoCompacto =
+          isFermentacao && !item.produtoJoinFaltando
+            ? [
+                headerQuantityReadableSemCapacidade || null,
+                item.lata_tipo_nome ? `(${item.lata_tipo_nome})` : null,
+              ]
+                .filter((x): x is string => Boolean(x))
+                .join(' ')
+            : '';
 
         const isExpanded = expandedOrdemId === item.id;
 
@@ -192,28 +255,50 @@ export default function ProductionQueueGenericCards({
               >
                 {posicaoNaFila}/{totalNaFila}
               </span>
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <div className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-semibold leading-snug text-gray-800">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex w-full min-w-0 items-center gap-2">
+                  <span className="min-w-0 max-w-[42%] shrink truncate text-sm font-semibold leading-snug text-gray-800 sm:max-w-[46%]">
                     {item.produtos.nome}
                   </span>
-                  {isMassa && item.lata_tipo_nome && !item.produtoJoinFaltando && (
-                    <span
-                      className="mt-0.5 block truncate text-xs font-medium leading-tight text-slate-500"
-                      title={`Lata: ${item.lata_tipo_nome}`}
-                    >
-                      Lata: {item.lata_tipo_nome}
-                    </span>
+                  {!item.produtoJoinFaltando && (
+                    <FilaOrdemProducaoProgressBar
+                      pct={filaOrdemProducaoProgressoSequencialPct(item)}
+                      className="basis-0"
+                    />
                   )}
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                    {estadoSelo && <span className={estadoSelo.className}>{estadoSelo.label}</span>}
+                    {ordemConcluida && (
+                      <span className="shrink-0 text-xs font-semibold leading-none text-emerald-800">
+                        Concluído
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                  {estadoSelo && <span className={estadoSelo.className}>{estadoSelo.label}</span>}
-                  {ordemConcluida && (
-                    <span className="shrink-0 text-xs font-semibold leading-none text-emerald-800">
-                      Concluído
-                    </span>
-                  )}
-                </div>
+                {isSaidaEmbalagem && embalagemSaidaResumoCompacto && (
+                  <span
+                    className="block truncate text-left text-xs font-medium leading-tight text-slate-500"
+                    title={embalagemSaidaResumoCompacto}
+                  >
+                    {embalagemSaidaResumoCompacto}
+                  </span>
+                )}
+                {isMassa && massaResumoCompacto && (
+                  <span
+                    className="block truncate text-left text-xs font-medium leading-tight text-slate-500"
+                    title={massaResumoCompacto}
+                  >
+                    {massaResumoCompacto}
+                  </span>
+                )}
+                {isFermentacao && fermentacaoResumoCompacto && (
+                  <span
+                    className="block truncate text-left text-xs font-medium leading-tight text-slate-500"
+                    title={fermentacaoResumoCompacto}
+                  >
+                    {fermentacaoResumoCompacto}
+                  </span>
+                )}
               </div>
               {item.produtoJoinFaltando && (
                 <span className="material-icons shrink-0 text-lg text-rose-500" aria-hidden>
@@ -274,21 +359,13 @@ export default function ProductionQueueGenericCards({
                         <div className="grid grid-cols-3 gap-2 sm:gap-4">
                           <div className="min-w-0">
                             <div className={MASSA_METRIC_LABEL}>Receitas</div>
-                            <div
-                              className={`${MASSA_METRIC_VALUE} ${
-                                quantityInfo.receitas?.hasWarning ? 'text-amber-600' : 'text-blue-600'
-                              }`}
-                            >
+                            <div className={`${MASSA_METRIC_VALUE} text-slate-800`}>
                               {quantityInfo.receitas?.readable ?? '—'}
                             </div>
                           </div>
                           <div className="min-w-0">
                             <div className={MASSA_METRIC_LABEL}>Assadeiras</div>
-                            <div
-                              className={`${MASSA_METRIC_VALUE} ${
-                                quantityInfo.assadeiras ? 'text-emerald-600' : 'text-slate-400'
-                              }`}
-                            >
+                            <div className={`${MASSA_METRIC_VALUE} text-slate-800`}>
                               {quantityInfo.assadeiras?.readable ?? '—'}
                             </div>
                           </div>
@@ -309,11 +386,6 @@ export default function ProductionQueueGenericCards({
                     )}
 
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2 sm:gap-y-2">
-                      {productionDate && (
-                        <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 sm:px-2.5 sm:py-1">
-                          {productionDate}
-                        </span>
-                      )}
                       {item.pedidos?.clientes?.nome_fantasia && (
                         <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 rounded-md bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600 sm:gap-1 sm:px-2 md:text-sm">
                           <span className="material-icons shrink-0 text-[14px] sm:text-sm">person</span>
@@ -341,12 +413,14 @@ export default function ProductionQueueGenericCards({
                     {ordemConcluida && (
                       <span className="shrink-0 text-xs font-semibold text-emerald-800">Concluído</span>
                     )}
-                    <span className="font-semibold text-gray-800 sm:whitespace-nowrap">{headerQuantityReadable}</span>
-                    {productionDate && (
-                      <span className="whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 sm:px-2.5 sm:py-1">
-                        {productionDate}
+                    {isSaidaEmbalagem && embalagemSaidaResumoCompacto && (
+                      <span className="w-full basis-full text-[11px] font-medium leading-snug text-slate-500 sm:text-xs">
+                        {embalagemSaidaResumoCompacto}
                       </span>
                     )}
+                    <span className="font-semibold text-gray-800 sm:whitespace-nowrap">
+                      {headerQuantityReadableSemCapacidade}
+                    </span>
                     {item.pedidos?.clientes?.nome_fantasia && (
                       <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-0.5 truncate rounded-md bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600 sm:max-w-none sm:gap-1 sm:px-2 md:text-sm">
                         <span className="material-icons shrink-0 text-[14px] sm:text-sm">person</span>
@@ -371,7 +445,9 @@ export default function ProductionQueueGenericCards({
                       className={`${BTN_PRIMARY} w-full sm:w-auto ${
                         disableMassaAction
                           ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
+                          : receitasBatidas > 0
+                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-[0.99]'
+                            : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800 hover:border-slate-800 active:scale-[0.99]'
                       }`}
                       disabled={disableMassaAction}
                     >
@@ -383,21 +459,23 @@ export default function ProductionQueueGenericCards({
                     <button
                       type="button"
                       onClick={() => {
-                        if (item.produtoJoinFaltando) return;
+                        if (item.produtoJoinFaltando || !podeAtuarNestaEtapa) return;
                         if (onOpenFermentacaoModal) {
                           onOpenFermentacaoModal(item);
                         } else {
                           router.push(etapaPathForOrdem(item.id, 'fermentacao'));
                         }
                       }}
-                      disabled={Boolean(item.produtoJoinFaltando)}
+                      disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa}
                       title={
                         item.produtoJoinFaltando
                           ? 'Corrija o cadastro do produto antes de iniciar a fermentação'
-                          : undefined
+                          : !podeAtuarNestaEtapa
+                            ? (msgAguardando ?? undefined)
+                            : undefined
                       }
                       className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        item.produtoJoinFaltando
+                        item.produtoJoinFaltando || !podeAtuarNestaEtapa
                           ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
                           : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
                       }`}
@@ -406,46 +484,31 @@ export default function ProductionQueueGenericCards({
                       <span>Iniciar fermentação</span>
                     </button>
                   )}
-                  {isEntradaEmbalagem && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!item.produtoJoinFaltando) {
-                          router.push(etapaPathForOrdem(item.id, 'entrada_embalagem'));
-                        }
-                      }}
-                      disabled={Boolean(item.produtoJoinFaltando)}
-                      className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        item.produtoJoinFaltando
-                          ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
-                      }`}
-                    >
-                      <span className={BTN_PRIMARY_ICON}>inventory_2</span>
-                      <span>Registrar entrada</span>
-                    </button>
-                  )}
                   {isSaidaEmbalagem && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (!item.produtoJoinFaltando) {
+                        if (!item.produtoJoinFaltando && podeAtuarNestaEtapa) {
                           router.push(etapaPathForOrdem(item.id, 'saida_embalagem'));
                         }
                       }}
-                      disabled={Boolean(item.produtoJoinFaltando)}
+                      disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa}
+                      title={
+                        !podeAtuarNestaEtapa && !item.produtoJoinFaltando
+                          ? (msgAguardando ?? undefined)
+                          : undefined
+                      }
                       className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        item.produtoJoinFaltando
+                        item.produtoJoinFaltando || !podeAtuarNestaEtapa
                           ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
                           : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
                       }`}
                     >
-                      <span className={BTN_PRIMARY_ICON}>local_shipping</span>
-                      <span>Registrar saída</span>
+                      <span className={BTN_PRIMARY_ICON}>assignment_turned_in</span>
+                      <span>Registrar saída de embalagem</span>
                     </button>
                   )}
-                  {!isPlanning &&
-                    !isMassa &&
+                  {!isMassa &&
                     !isFermentacao &&
                     !isEntradaForno &&
                     !isSaidaForno &&
@@ -481,6 +544,28 @@ export default function ProductionQueueGenericCards({
                   </span>
                 </div>
               )}
+
+              {!fromProntosSection &&
+                !item.produtoJoinFaltando &&
+                !podeAtuarNestaEtapa &&
+                msgAguardando &&
+                filaEstado !== 'finalizada' && (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/95 px-2 py-1.5 text-violet-950 sm:px-3 sm:py-2">
+                      <span className="material-icons text-sm shrink-0 sm:text-base">hourglass_empty</span>
+                      <span className="text-xs leading-snug sm:text-sm">{msgAguardando}</span>
+                    </div>
+                    {podeSincronizarPreRequisito && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPreRequisitoSync(item)}
+                        className="w-full rounded-lg border border-violet-400 bg-violet-700 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-800 sm:py-2"
+                      >
+                        Confirmar etapas
+                      </button>
+                    )}
+                  </div>
+                )}
 
               {/* Linha 2: barras de progresso */}
               {isMassa && receitasNecessarias > 0 && (
@@ -518,6 +603,77 @@ export default function ProductionQueueGenericCards({
                   </div>
                 </div>
               )}
+              {embalagemSaidaProgress && (
+                <div className="w-full pt-0.5 border-t border-slate-100">
+                  <div className="space-y-2 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/90 px-2.5 py-2 sm:px-3">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+                          Lotes na embalagem
+                        </p>
+                        <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">
+                          {embalagemSaidaProgress.lotesEntrada}
+                        </p>
+                        <p className="text-[10px] text-slate-500 sm:text-xs">Registros na entrada da embalagem</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+                          Caixas
+                        </p>
+                        <p className="text-lg font-bold tabular-nums text-indigo-900 sm:text-xl">
+                          {embalagemSaidaProgress.caixasInformadas != null
+                            ? embalagemSaidaProgress.caixasInformadas
+                            : '—'}
+                          {embalagemSaidaProgress.metaCaixas != null && (
+                            <span className="text-sm font-semibold text-slate-500">
+                              {' '}
+                              / {embalagemSaidaProgress.metaCaixas}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-500 sm:text-xs">
+                          Informadas · ref. {embalagemSaidaProgress.metaResumo}
+                        </p>
+                      </div>
+                    </div>
+                    {embalagemSaidaProgress.metaCaixas != null &&
+                      embalagemSaidaProgress.caixasInformadas != null && (
+                        <div>
+                          <div className="mb-1 flex justify-between text-[10px] font-medium text-slate-600 sm:text-xs">
+                            <span>Progresso (caixas)</span>
+                            <span className="tabular-nums">
+                              {Math.min(
+                                100,
+                                Math.round(
+                                  (embalagemSaidaProgress.caixasInformadas / embalagemSaidaProgress.metaCaixas) *
+                                    100,
+                                ),
+                              )}
+                              %
+                            </span>
+                          </div>
+                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 sm:h-3">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-[width] duration-300"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (embalagemSaidaProgress.caixasInformadas / embalagemSaidaProgress.metaCaixas) *
+                                    100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    {embalagemSaidaProgress.metaCaixas == null && embalagemSaidaProgress.metaSubtexto && (
+                      <p className="text-[10px] leading-snug text-slate-500 sm:text-xs">
+                        {embalagemSaidaProgress.metaSubtexto}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -525,7 +681,9 @@ export default function ProductionQueueGenericCards({
 
   return (
     <>
-      {queueForCardsActive.map((item, i) => renderOrdemCard(item, i, false, i === 0))}
+      {queueForCardsActive.map((item, i) =>
+        renderOrdemCard(item, i, false, primeiraOrdemAcionavelId != null && item.id === primeiraOrdemAcionavelId),
+      )}
       {queueForCardsProntos.length > 0 && (
         <>
           <div className="w-full border-t border-slate-200/90 pt-3 mt-2">

@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   currentFilaStation,
+  filaStationUsesDefaultTodayFilter,
   filaUrlForProductionStep,
-  filaUrlForStation,
+  ordemProducaoUrl,
   parseFilaDataQuery,
+  producaoEstoqueUrl,
 } from '@/lib/production/production-station-routes';
 
 interface NavigationProps {
@@ -22,12 +24,17 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
 
-  /** Na fila, `/producao/fila` sem query usa estação planejamento (igual a `page.tsx`). */
+  /** Na fila, `/producao/fila` sem query usa massa (default da pipeline). */
   const filaStation = currentFilaStation(searchParams);
   const filaDataPreserve = parseFilaDataQuery(searchParams.get('data'));
-  const filaOpts = filaDataPreserve ? { data: filaDataPreserve } : undefined;
-  const isFilaPlanejamentoActive =
-    pathname?.startsWith('/producao/fila') && filaStation === 'planejamento';
+  const filaTodas = searchParams.get('todas') === '1' || searchParams.get('todas') === 'true';
+  const filaOptsForStation = (station: string) => {
+    if (filaTodas) return { todas: true as const };
+    // Nas etapas operacionais, a data padrão já é "hoje":
+    // não carregar data antiga da URL ao trocar de estação pelo menu.
+    if (filaStationUsesDefaultTodayFilter(station)) return undefined;
+    return filaDataPreserve ? { data: filaDataPreserve } : undefined;
+  };
 
   // Listener para evento de toggle vindo de RealizadoHeader
   useEffect(() => {
@@ -367,6 +374,18 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   <span className="material-icons text-xl mr-3">shopping_cart</span>
                   Carrinhos
                 </Link>
+                <Link
+                  href="/producao/perdas-diarias"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/perdas-diarias')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">trending_down</span>
+                  Perdas diárias (produção)
+                </Link>
               </div>
 
               {/* Separador */}
@@ -378,19 +397,19 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   🏭 Fila de Produção
                 </h3>
                 <Link
-                  href={filaUrlForStation('planejamento', filaOpts)}
+                  href={ordemProducaoUrl()}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isFilaPlanejamentoActive
+                    pathname?.startsWith('/producao/ordem-producao')
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="material-icons text-xl mr-3">schedule</span>
-                  Planejamento
+                  <span className="material-icons text-xl mr-3">list_alt</span>
+                  Ordem de Produção
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('massa', filaOpts)}
+                  href={filaUrlForProductionStep('massa', filaOptsForStation('massa'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'massa'
@@ -402,7 +421,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Massa
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('fermentacao', filaOpts)}
+                  href={filaUrlForProductionStep('fermentacao', filaOptsForStation('fermentacao'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'fermentacao'
@@ -414,7 +433,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Fermentação
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('entrada_forno', filaOpts)}
+                  href={filaUrlForProductionStep('entrada_forno', filaOptsForStation('entrada_forno'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'entrada_forno'
@@ -426,7 +445,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Entrada do Forno
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('saida_forno', filaOpts)}
+                  href={filaUrlForProductionStep('saida_forno', filaOptsForStation('saida_forno'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'saida_forno'
@@ -438,7 +457,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Saída do Forno
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('entrada_embalagem', filaOpts)}
+                  href={filaUrlForProductionStep('entrada_embalagem', filaOptsForStation('entrada_embalagem'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'entrada_embalagem'
@@ -450,7 +469,7 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   Entrada da Embalagem
                 </Link>
                 <Link
-                  href={filaUrlForProductionStep('saida_embalagem', filaOpts)}
+                  href={filaUrlForProductionStep('saida_embalagem', filaOptsForStation('saida_embalagem'))}
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     pathname?.startsWith('/producao/fila') && filaStation === 'saida_embalagem'
@@ -458,8 +477,20 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="material-icons text-xl mr-3">local_shipping</span>
-                  Saída da Embalagem
+                  <span className="material-icons text-xl mr-3">assignment_turned_in</span>
+                  Saída de embalagem
+                </Link>
+                <Link
+                  href={producaoEstoqueUrl()}
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/producao/estoque')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">table_chart</span>
+                  Estoque
                 </Link>
               </div>
             </div>

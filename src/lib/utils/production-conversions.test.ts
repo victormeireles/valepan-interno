@@ -26,7 +26,7 @@ describe('quantidadePlanejadaParaUnidadesConsumo / unidadesConsumoParaQuantidade
 });
 
 describe('quantidadeEstoqueParaUnidadesConsumo', () => {
-  it('alinha caixas da planilha com box_units do produto', () => {
+  it('alinha caixas de estoque com box_units do produto', () => {
     const q = { caixas: 2, pacotes: 0, unidades: 0, kg: 0 };
     expect(quantidadeEstoqueParaUnidadesConsumo(q, produtoCaixa)).toBe(24);
   });
@@ -58,7 +58,21 @@ describe('getQuantityByStation', () => {
     expect(q.readable).toBeTruthy();
   });
 
-  it('planejamento: latas (LT) exibidas como inteiras, arredondamento para cima', () => {
+  it('massa: latas (LT) exibidas como inteiras, arredondamento para cima', () => {
+    const p: ProductConversionInfo = {
+      unidadeNomeResumido: 'un',
+      box_units: null,
+      package_units: null,
+      unidades_assadeira: 24,
+      receita_massa: { quantidade_por_produto: 100 },
+    };
+    // 600 un → 600/100 = 6 receitas → 6*100/24 = 25 LT
+    const q = getQuantityByStation('massa', 600, p);
+    expect(q.assadeiras?.value).toBe(25);
+    expect(q.assadeiras?.readable).toMatch(/^25 LT/);
+  });
+
+  it('entrada_forno: latas (LT) a partir de unidades, arredondamento para cima', () => {
     const p: ProductConversionInfo = {
       unidadeNomeResumido: 'un',
       box_units: null,
@@ -66,10 +80,9 @@ describe('getQuantityByStation', () => {
       unidades_assadeira: 24,
       receita_massa: null,
     };
-    // 617 un → 617/24 ≈ 25,708 LT → 26 (sem receita: só toAssadeiras)
-    const q = getQuantityByStation('planejamento', 617, p);
-    expect(q.assadeiras?.value).toBe(26);
-    expect(q.assadeiras?.readable).toMatch(/^26 LT/);
+    const q = getQuantityByStation('entrada_forno', 617, p);
+    expect(q.value).toBe(26);
+    expect(q.readable).toMatch(/^26 LT/);
   });
 });
 

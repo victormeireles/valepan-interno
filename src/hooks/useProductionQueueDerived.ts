@@ -6,13 +6,14 @@ import {
   entradaEmbalagemGroupProgressMetrics,
   fornoGroupProgressMetrics,
   fornoProductGroupEtapaCompleta,
+  ordemPreRequisitosAtendidosParaTrabalharNaEtapa,
   ordemProntaNaEtapaFila,
+  saidaEmbalagemFilaGlobalMetrics,
   saidaFornoGroupProgressMetrics,
   saidaFornoProductGroupEtapaCompleta,
 } from '@/components/Producao/queue/production-queue-metrics';
 
 export interface ProductionQueueStationFlags {
-  isPlanning: boolean;
   isMassa: boolean;
   isFermentacao: boolean;
   isEntradaForno: boolean;
@@ -26,7 +27,6 @@ export function useProductionQueueDerived(
   effectiveStation: Station,
 ) {
   const {
-    isPlanning,
     isMassa,
     isFermentacao,
     isEntradaForno,
@@ -34,7 +34,6 @@ export function useProductionQueueDerived(
     isEntradaEmbalagem,
     isSaidaEmbalagem,
   }: ProductionQueueStationFlags = {
-    isPlanning: effectiveStation === 'planejamento',
     isMassa: effectiveStation === 'massa',
     isFermentacao: effectiveStation === 'fermentacao',
     isEntradaForno: effectiveStation === 'entrada_forno',
@@ -48,37 +47,25 @@ export function useProductionQueueDerived(
     [initialQueue],
   );
 
-  const filteredQueue = useMemo(() => {
-    if (isFermentacao) {
-      return initialQueue.filter((item) => {
-        const qtdMassaFinalizada = item.qtd_massa_finalizada ?? 0;
-        return qtdMassaFinalizada > 0;
-      });
-    }
-    if (isEntradaForno) {
-      return initialQueue.filter((item) => (item.receitas_fermentacao ?? 0) > 0);
-    }
-    if (isSaidaForno) {
-      return initialQueue.filter((item) => (item.forno_entrada_latas_total ?? 0) > 0);
-    }
-    if (isEntradaEmbalagem || isSaidaEmbalagem) {
-      return initialQueue.filter((item) => (item.saida_forno_bandejas_total ?? 0) > 0);
-    }
-    return initialQueue;
-  }, [
-    initialQueue,
-    isFermentacao,
-    isEntradaForno,
-    isSaidaForno,
-    isEntradaEmbalagem,
-    isSaidaEmbalagem,
-  ]);
+  /** Todas as ordens do dia (ou sem filtro de data) visíveis em cada estação — pré-requisitos só afetam selo e botões. */
+  const filteredQueue = useMemo(() => initialQueue, [initialQueue]);
 
   const queueForCardsActive = useMemo(() => {
-    return [...filteredQueue]
-      .filter((i) => !ordemProntaNaEtapaFila(i, effectiveStation))
-      .sort(compareProductionQueuePlanningOrder);
+    const active = [...filteredQueue].filter((i) => !ordemProntaNaEtapaFila(i, effectiveStation));
+    return active.sort((a, b) => {
+      const pa = ordemPreRequisitosAtendidosParaTrabalharNaEtapa(a, effectiveStation);
+      const pb = ordemPreRequisitosAtendidosParaTrabalharNaEtapa(b, effectiveStation);
+      if (pa !== pb) return pa ? -1 : 1;
+      return compareProductionQueuePlanningOrder(a, b);
+    });
   }, [filteredQueue, effectiveStation]);
+
+  const primeiraOrdemAcionavelId = useMemo(() => {
+    const found = queueForCardsActive.find((i) =>
+      ordemPreRequisitosAtendidosParaTrabalharNaEtapa(i, effectiveStation),
+    );
+    return found?.id ?? null;
+  }, [queueForCardsActive, effectiveStation]);
 
   const queueForCardsProntos = useMemo(() => {
     return [...filteredQueue]
@@ -201,6 +188,11 @@ export function useProductionQueueDerived(
     return entradaEmbalagemGroupProgressMetrics(filteredQueue);
   }, [isEntradaEmbalagem, filteredQueue]);
 
+  const saidaEmbalagemFilaGlobal = useMemo(() => {
+    if (!isSaidaEmbalagem || filteredQueue.length === 0) return null;
+    return saidaEmbalagemFilaGlobalMetrics(filteredQueue);
+  }, [isSaidaEmbalagem, filteredQueue]);
+
   const embalagemEntradaUaHomogenea = useMemo(() => {
     if (!isEntradaEmbalagem || filteredQueue.length === 0) return null;
     const uas = [
@@ -216,7 +208,6 @@ export function useProductionQueueDerived(
 
   return {
     flags: {
-      isPlanning,
       isMassa,
       isFermentacao,
       isEntradaForno,
@@ -227,6 +218,7 @@ export function useProductionQueueDerived(
     ordensComProdutoFaltando,
     filteredQueue,
     queueForCardsActive,
+    primeiraOrdemAcionavelId,
     queueForCardsProntos,
     fornoGroupsActive,
     fornoGroupsProntos,
@@ -239,5 +231,6 @@ export function useProductionQueueDerived(
     saidaFornoGroupsProntos,
     embalagemEntradaFilaGlobal,
     embalagemEntradaUaHomogenea,
+    saidaEmbalagemFilaGlobal,
   };
 }
