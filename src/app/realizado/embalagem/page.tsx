@@ -312,7 +312,15 @@ export default function ProducaoEmbalagemPage() {
     });
     
     // Criar os grupos e separar em não finalizados e finalizados
-    const gruposNaoFinalizados: Array<RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }> = [];
+    const gruposNaoFinalizados: Array<
+      RealizadoGroup & {
+        cliente?: string;
+        dataFabricacao?: string;
+        observacao?: string;
+        minRowId?: number;
+        entregaParcial?: boolean;
+      }
+    > = [];
     const gruposFinalizados: Array<RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }> = [];
     
     Object.entries(groups).forEach(([groupKey, groupItems]) => {
@@ -339,8 +347,20 @@ export default function ProducaoEmbalagemPage() {
           naoFinalizados.push(item);
         }
       });
-      
-      if (naoFinalizados.length > 0) {
+
+      const temMistura = naoFinalizados.length > 0 && finalizados.length > 0;
+
+      if (temMistura) {
+        gruposNaoFinalizados.push({
+          key: groupKey,
+          cliente,
+          dataFabricacao: dataFab,
+          observacao: obs || undefined,
+          items: sortedItems,
+          entregaParcial: true,
+          minRowId,
+        });
+      } else if (naoFinalizados.length > 0) {
         gruposNaoFinalizados.push({
           key: groupKey,
           cliente,
@@ -350,8 +370,8 @@ export default function ProducaoEmbalagemPage() {
           minRowId,
         });
       }
-      
-      if (finalizados.length > 0) {
+
+      if (!temMistura && finalizados.length > 0) {
         gruposFinalizados.push({
           key: groupKey,
           cliente,
@@ -374,7 +394,9 @@ export default function ProducaoEmbalagemPage() {
     gruposFinalizados.sort(sortByMinRowId);
     
     // Remover minRowId do objeto final (usado apenas para ordenação)
-    const removeMinRowId = (group: typeof gruposNaoFinalizados[0]): RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string } => {
+    const removeMinRowId = (
+      group: (typeof gruposNaoFinalizados)[0] | (typeof gruposFinalizados)[0],
+    ): RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string } => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { minRowId, ...rest } = group;
       return rest;
@@ -436,14 +458,16 @@ export default function ProducaoEmbalagemPage() {
                       cliente?: string;
                       dataFabricacao?: string;
                       observacao?: string;
+                      entregaParcial?: boolean;
                     };
-                    
+
                     return (
                       <ClientGroup
                         cliente={embalagemGroup.cliente}
                         dataFabricacao={embalagemGroup.dataFabricacao}
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
+                        entregaParcial={embalagemGroup.entregaParcial === true}
                       >
                         {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
                           const parentProduzido = QuantityBreakdown.buildEntries([
@@ -496,14 +520,16 @@ export default function ProducaoEmbalagemPage() {
                       cliente?: string;
                       dataFabricacao?: string;
                       observacao?: string;
+                      entregaParcial?: boolean;
                     };
-                    
+
                     return (
                       <ClientGroup
                         cliente={embalagemGroup.cliente}
                         dataFabricacao={embalagemGroup.dataFabricacao}
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
+                        entregaParcial={embalagemGroup.entregaParcial === true}
                       >
                         {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
                           const parentProduzido = QuantityBreakdown.buildEntries([
