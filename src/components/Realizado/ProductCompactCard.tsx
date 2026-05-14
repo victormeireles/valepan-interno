@@ -2,6 +2,7 @@
 
 import { getProductionStatus, getStatusColor } from '@/domain/types/realizado';
 import { QuantityBreakdown, QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
+import type { ReactNode } from 'react';
 
 interface ProductCompactCardProps {
   produto: string;
@@ -24,6 +25,8 @@ interface ProductCompactCardProps {
   observacao?: string;
   /** HH:mm (fuso local), ex.: horário da coluna Q quando há embalagem registrada */
   horarioEmbalagem?: string;
+  /** Conteúdo à direita dentro do card (ex.: seta do acordeão pai). */
+  trailingSlot?: ReactNode;
 }
 
 export default function ProductCompactCard({
@@ -42,6 +45,7 @@ export default function ProductCompactCard({
   detalhesMeta = [],
   observacao,
   horarioEmbalagem,
+  trailingSlot,
 }: ProductCompactCardProps) {
   const status = getProductionStatus(produzido, aProduzir);
   const statusColor = getStatusColor(status);
@@ -135,6 +139,8 @@ export default function ProductCompactCard({
       <div className="text-sm text-gray-300 flex-shrink-0">
         {targetLabel}
       </div>
+
+      {trailingSlot != null && <div className="flex shrink-0 items-center pl-1">{trailingSlot}</div>}
     </div>
   );
 }
