@@ -13,6 +13,11 @@ interface ProductCompactCardProps {
   photoColor?: 'white' | 'yellow' | 'red';
   onPhotoClick?: () => void;
   onClick?: () => void;
+  /**
+   * When `false`, the card is not clickable as a whole (accordion parent).
+   * Default `true` preserves current behavior.
+   */
+  interactive?: boolean;
   isLoading?: boolean;
   detalhesProduzido?: QuantityBreakdownEntry[];
   detalhesMeta?: QuantityBreakdownEntry[];
@@ -31,6 +36,7 @@ export default function ProductCompactCard({
   photoColor = 'white',
   onPhotoClick,
   onClick,
+  interactive = true,
   isLoading = false,
   detalhesProduzido = [],
   detalhesMeta = [],
@@ -56,13 +62,14 @@ export default function ProductCompactCard({
   return (
     <div
       className={`
-        flex items-center gap-3 px-3 py-2 rounded-lg 
-        bg-gray-800/40 hover:bg-gray-700/40 
-        transition-all duration-200 cursor-pointer
+        relative flex items-center gap-3 px-3 py-2 rounded-lg 
+        bg-gray-800/40 
+        ${interactive ? 'hover:bg-gray-700/40 cursor-pointer' : 'cursor-default'}
+        transition-all duration-200
         ${status === 'not-started' ? 'ring-2 ring-red-500/50' : ''}
         ${isLoading ? 'opacity-50 pointer-events-none' : ''}
       `}
-      onClick={onClick}
+      onClick={interactive ? onClick : undefined}
     >
       {/* Loading Overlay */}
       {isLoading && (
