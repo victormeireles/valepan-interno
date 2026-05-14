@@ -8,7 +8,12 @@ import {
   ClientGroup,
   ThreeColumnLayout,
   EmbalagemDashboard,
+  EmbalagemProductAccordion,
 } from '@/components/Realizado';
+import {
+  groupEmbalagemItemsByProduto,
+  hasEmbalagemQuantity,
+} from '@/domain/realizado/embalagem-group-by-produto';
 import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
@@ -31,18 +36,9 @@ type PainelItem = RealizadoItemEmbalagem & {
   producaoUpdatedAt?: string;
 };
 
-function temQuantidadeEmbalagem(item: Pick<PainelItem, 'caixas' | 'pacotes' | 'unidades' | 'kg'>): boolean {
-  return (
-    (item.caixas ?? 0) > 0 ||
-    (item.pacotes ?? 0) > 0 ||
-    (item.unidades ?? 0) > 0 ||
-    (item.kg ?? 0) > 0
-  );
-}
-
 /** Só exibe horário se coluna Q preenchida e houver quantidade embalada (M–P). */
 function horarioEmbalagemParaCard(item: PainelItem): string | undefined {
-  if (!temQuantidadeEmbalagem(item)) return undefined;
+  if (!hasEmbalagemQuantity(item)) return undefined;
   const raw = item.producaoUpdatedAt?.trim();
   if (!raw) return undefined;
   return formatLocalTimeHHmm(raw) ?? undefined;
@@ -141,7 +137,7 @@ export default function ProducaoEmbalagemPage() {
     }
   }, [selectedDate, producaoModalOpen, loadEmbalagemFull]);
 
-  const handleEditProducao = async (item: PainelItem) => {
+  const handleEditProducao = useCallback(async (item: PainelItem) => {
     if (!item.rowId) {
       setMessage('Este item não pode ser editado');
       return;
@@ -182,7 +178,94 @@ export default function ProducaoEmbalagemPage() {
       setProducaoLoading(false);
       setLoadingCardId(null);
     }
-  };
+  }, []);
+
+  const handlePhotoClick = useCallback((item: PainelItem) => {
+    const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
+    setPhotoDropdownOpen((prev) => (prev === itemKey ? null : itemKey));
+  }, []);
+
+  const renderEmbalagemLot = useCallback(
+    (embalagemItem: PainelItem) => {
+      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
+      const isItemLoading = loadingCardId === itemKey;
+      const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
+      const produzidoDetalhes = QuantityBreakdown.buildEntries([
+        { quantidade: embalagemItem.caixas, unidade: 'cx' },
+        { quantidade: embalagemItem.pacotes, unidade: 'pct' },
+        { quantidade: embalagemItem.unidades, unidade: 'un' },
+        { quantidade: embalagemItem.kg, unidade: 'kg' },
+      ]);
+      const metaDetalhes = QuantityBreakdown.buildEntries([
+        { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
+        { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
+        { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
+        { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+      ]);
+
+      return (
+        <div key={itemKey} className="relative">
+          <ProductCompactCard
+            produto={embalagemItem.produto}
+            produzido={embalagemItem.produzido}
+            aProduzir={embalagemItem.aProduzir}
+            unidade={embalagemItem.unidade}
+            congelado={embalagemItem.congelado === 'Sim'}
+            hasPhoto={photoStatus.hasPhoto}
+            photoColor={photoStatus.color}
+            onPhotoClick={() => handlePhotoClick(embalagemItem)}
+            onClick={() => void handleEditProducao(embalagemItem)}
+            isLoading={isItemLoading}
+            detalhesProduzido={produzidoDetalhes}
+            detalhesMeta={metaDetalhes}
+            horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
+          />
+
+          {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
+            <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
+              {embalagemItem.pacoteFotoUrl && (
+                <a
+                  href={embalagemItem.pacoteFotoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                  onClick={() => setPhotoDropdownOpen(null)}
+                >
+                  <span className="text-sm">📦</span>
+                  <span className="text-sm">Foto do Pacote</span>
+                </a>
+              )}
+              {embalagemItem.etiquetaFotoUrl && (
+                <a
+                  href={embalagemItem.etiquetaFotoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                  onClick={() => setPhotoDropdownOpen(null)}
+                >
+                  <span className="text-sm">🏷️</span>
+                  <span className="text-sm">Foto da Etiqueta</span>
+                </a>
+              )}
+              {embalagemItem.palletFotoUrl && (
+                <a
+                  href={embalagemItem.palletFotoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                  onClick={() => setPhotoDropdownOpen(null)}
+                >
+                  <span className="text-sm">🚛</span>
+                  <span className="text-sm">Foto do Pallet</span>
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    },
+    [loadingCardId, photoDropdownOpen, handlePhotoClick, handleEditProducao],
+  );
 
   const refreshPainelData = async () => {
     await loadEmbalagemFull(false);
@@ -316,11 +399,6 @@ export default function ProducaoEmbalagemPage() {
     };
   }, [items]);
 
-  const handlePhotoClick = (item: PainelItem) => {
-    const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
-    setPhotoDropdownOpen(photoDropdownOpen === itemKey ? null : itemKey);
-  };
-
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <RealizadoHeader
@@ -367,84 +445,36 @@ export default function ProducaoEmbalagemPage() {
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
                       >
-                        {group.items.map((item, idx) => {
-                          const embalagemItem = item as PainelItem;
-                          const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
-                          const isItemLoading = loadingCardId === itemKey;
-                          const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
-                          const produzidoDetalhes = QuantityBreakdown.buildEntries([
-                            { quantidade: embalagemItem.caixas, unidade: 'cx' },
-                            { quantidade: embalagemItem.pacotes, unidade: 'pct' },
-                            { quantidade: embalagemItem.unidades, unidade: 'un' },
-                            { quantidade: embalagemItem.kg, unidade: 'kg' },
+                        {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
+                          const parentProduzido = QuantityBreakdown.buildEntries([
+                            { quantidade: g.somaCaixas, unidade: 'cx' },
+                            { quantidade: g.somaPacotes, unidade: 'pct' },
+                            { quantidade: g.somaUnidades, unidade: 'un' },
+                            { quantidade: g.somaKg, unidade: 'kg' },
                           ]);
-                          const metaDetalhes = QuantityBreakdown.buildEntries([
-                            { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
-                            { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
-                            { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
-                            { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+                          const parentMeta = QuantityBreakdown.buildEntries([
+                            { quantidade: g.somaPedidoCaixas, unidade: 'cx' },
+                            { quantidade: g.somaPedidoPacotes, unidade: 'pct' },
+                            { quantidade: g.somaPedidoUnidades, unidade: 'un' },
+                            { quantidade: g.somaPedidoKg, unidade: 'kg' },
                           ]);
-                          
+                          const unidadeRef = g.lots[0]?.unidade ?? '';
+                          const instanceId = `${embalagemGroup.key}|${g.produto}`;
+
                           return (
-                            <div key={`${embalagemItem.produto}-${idx}`} className="relative">
-                              <ProductCompactCard
-                                produto={embalagemItem.produto}
-                                produzido={embalagemItem.produzido}
-                                aProduzir={embalagemItem.aProduzir}
-                                unidade={embalagemItem.unidade}
-                                congelado={embalagemItem.congelado === 'Sim'}
-                                hasPhoto={photoStatus.hasPhoto}
-                                photoColor={photoStatus.color}
-                                onPhotoClick={() => handlePhotoClick(embalagemItem)}
-                                onClick={() => handleEditProducao(embalagemItem)}
-                                isLoading={isItemLoading}
-                                detalhesProduzido={produzidoDetalhes}
-                                detalhesMeta={metaDetalhes}
-                                horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
-                              />
-                              
-                              {/* Dropdown de fotos */}
-                              {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
-                                <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
-                                  {embalagemItem.pacoteFotoUrl && (
-                                    <a
-                                      href={embalagemItem.pacoteFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">📦</span>
-                                      <span className="text-sm">Foto do Pacote</span>
-                                    </a>
-                                  )}
-                                  {embalagemItem.etiquetaFotoUrl && (
-                                    <a
-                                      href={embalagemItem.etiquetaFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">🏷️</span>
-                                      <span className="text-sm">Foto da Etiqueta</span>
-                                    </a>
-                                  )}
-                                  {embalagemItem.palletFotoUrl && (
-                                    <a
-                                      href={embalagemItem.palletFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">🚛</span>
-                                      <span className="text-sm">Foto do Pallet</span>
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            <EmbalagemProductAccordion
+                              key={instanceId}
+                              instanceId={instanceId}
+                              produto={g.produto}
+                              somaProduzido={g.somaProduzido}
+                              somaAProduzir={g.somaAProduzir}
+                              unidade={unidadeRef}
+                              congelado={g.algumCongelado}
+                              detalhesProduzido={parentProduzido}
+                              detalhesMeta={parentMeta}
+                              horarioEmbalagem={g.horarioMaisRecente}
+                              renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
+                            />
                           );
                         })}
                       </ClientGroup>
@@ -475,84 +505,36 @@ export default function ProducaoEmbalagemPage() {
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
                       >
-                        {group.items.map((item, idx) => {
-                          const embalagemItem = item as PainelItem;
-                          const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
-                          const isItemLoading = loadingCardId === itemKey;
-                          const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
-                          const produzidoDetalhes = QuantityBreakdown.buildEntries([
-                            { quantidade: embalagemItem.caixas, unidade: 'cx' },
-                            { quantidade: embalagemItem.pacotes, unidade: 'pct' },
-                            { quantidade: embalagemItem.unidades, unidade: 'un' },
-                            { quantidade: embalagemItem.kg, unidade: 'kg' },
+                        {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
+                          const parentProduzido = QuantityBreakdown.buildEntries([
+                            { quantidade: g.somaCaixas, unidade: 'cx' },
+                            { quantidade: g.somaPacotes, unidade: 'pct' },
+                            { quantidade: g.somaUnidades, unidade: 'un' },
+                            { quantidade: g.somaKg, unidade: 'kg' },
                           ]);
-                          const metaDetalhes = QuantityBreakdown.buildEntries([
-                            { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
-                            { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
-                            { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
-                            { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+                          const parentMeta = QuantityBreakdown.buildEntries([
+                            { quantidade: g.somaPedidoCaixas, unidade: 'cx' },
+                            { quantidade: g.somaPedidoPacotes, unidade: 'pct' },
+                            { quantidade: g.somaPedidoUnidades, unidade: 'un' },
+                            { quantidade: g.somaPedidoKg, unidade: 'kg' },
                           ]);
-                          
+                          const unidadeRef = g.lots[0]?.unidade ?? '';
+                          const instanceId = `${embalagemGroup.key}|${g.produto}`;
+
                           return (
-                            <div key={`${embalagemItem.produto}-${idx}`} className="relative">
-                              <ProductCompactCard
-                                produto={embalagemItem.produto}
-                                produzido={embalagemItem.produzido}
-                                aProduzir={embalagemItem.aProduzir}
-                                unidade={embalagemItem.unidade}
-                                congelado={embalagemItem.congelado === 'Sim'}
-                                hasPhoto={photoStatus.hasPhoto}
-                                photoColor={photoStatus.color}
-                                onPhotoClick={() => handlePhotoClick(embalagemItem)}
-                                onClick={() => handleEditProducao(embalagemItem)}
-                                isLoading={isItemLoading}
-                                detalhesProduzido={produzidoDetalhes}
-                                detalhesMeta={metaDetalhes}
-                                horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
-                              />
-                              
-                              {/* Dropdown de fotos */}
-                              {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
-                                <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
-                                  {embalagemItem.pacoteFotoUrl && (
-                                    <a
-                                      href={embalagemItem.pacoteFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">📦</span>
-                                      <span className="text-sm">Foto do Pacote</span>
-                                    </a>
-                                  )}
-                                  {embalagemItem.etiquetaFotoUrl && (
-                                    <a
-                                      href={embalagemItem.etiquetaFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">🏷️</span>
-                                      <span className="text-sm">Foto da Etiqueta</span>
-                                    </a>
-                                  )}
-                                  {embalagemItem.palletFotoUrl && (
-                                    <a
-                                      href={embalagemItem.palletFotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                                      onClick={() => setPhotoDropdownOpen(null)}
-                                    >
-                                      <span className="text-sm">🚛</span>
-                                      <span className="text-sm">Foto do Pallet</span>
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            <EmbalagemProductAccordion
+                              key={instanceId}
+                              instanceId={instanceId}
+                              produto={g.produto}
+                              somaProduzido={g.somaProduzido}
+                              somaAProduzir={g.somaAProduzir}
+                              unidade={unidadeRef}
+                              congelado={g.algumCongelado}
+                              detalhesProduzido={parentProduzido}
+                              detalhesMeta={parentMeta}
+                              horarioEmbalagem={g.horarioMaisRecente}
+                              renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
+                            />
                           );
                         })}
                       </ClientGroup>
