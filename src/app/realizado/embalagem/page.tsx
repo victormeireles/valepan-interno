@@ -350,16 +350,33 @@ export default function ProducaoEmbalagemPage() {
 
       const temMistura = naoFinalizados.length > 0 && finalizados.length > 0;
 
+      const somaProduzidoGrupo = sortedItems.reduce((acc, i) => acc + i.produzido, 0);
+      const somaAProduzirGrupo = sortedItems.reduce((acc, i) => acc + i.aProduzir, 0);
+      /** Alinhado ao farol do card: total realizado ≥ meta total do grupo (pedido agregado). */
+      const grupoAtendeMetaAgregada =
+        somaAProduzirGrupo > 0 && somaProduzidoGrupo >= somaAProduzirGrupo;
+
       if (temMistura) {
-        gruposNaoFinalizados.push({
-          key: groupKey,
-          cliente,
-          dataFabricacao: dataFab,
-          observacao: obs || undefined,
-          items: sortedItems,
-          entregaParcial: true,
-          minRowId,
-        });
+        if (grupoAtendeMetaAgregada) {
+          gruposFinalizados.push({
+            key: groupKey,
+            cliente,
+            dataFabricacao: dataFab,
+            observacao: obs || undefined,
+            items: sortedItems,
+            minRowId,
+          });
+        } else {
+          gruposNaoFinalizados.push({
+            key: groupKey,
+            cliente,
+            dataFabricacao: dataFab,
+            observacao: obs || undefined,
+            items: sortedItems,
+            entregaParcial: true,
+            minRowId,
+          });
+        }
       } else if (naoFinalizados.length > 0) {
         gruposNaoFinalizados.push({
           key: groupKey,
