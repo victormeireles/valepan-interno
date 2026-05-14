@@ -1,0 +1,662 @@
+# Acordeão por produto — Realizado Embalagem — Plano de implementação
+
+> **Para agentes:** use o skill `superpowers:subagent-driven-development` (recomendado) ou `superpowers:executing-plans` e marque cada step com checkbox (`- [ ]`).
+
+**Objetivo:** Agrupar linhas de embalagem por `produto` dentro de cada `ClientGroup`, exibir card pai com totais e farol agregado, e lista de lotes expansível conforme o spec `docs/superpowers/specs/2026-05-14-embalagem-accordion-por-produto-design.mdx`.
+
+**Arquitetura:** Função pura `groupEmbalagemItemsByProduto` em `src/domain/realizado/` calcula lotes, somas e horário mais recente; componente `EmbalagemProductAccordion` encapsula seta, `aria-*` e painel de filhos; `ProductCompactCard` ganha modo não interativo para o pai; a página substitui o `map` direto em `group.items` por agrupamento + acordeão (duas seções: não finalizados e finalizados).
+
+**Stack:** Next.js 15 (App Router), React 19, TypeScript, Tailwind 4, Vitest (novo devDependency para testes do domínio).
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `package.json` | Scripts `test` / `test:watch`; devDependencies `vitest`. |
+| `vitest.config.ts` (raiz) | Alias `@` → `./src`; ambiente `node` para testes puros. |
+| `src/domain/realizado/embalagem-group-by-produto.ts` | Tipos mínimos de linha, `hasEmbalagemQuantity`, `latestEmbalagemHorarioHHmm`, `groupEmbalagemItemsByProduto`. |
+| `src/domain/realizado/embalagem-group-by-produto.test.ts` | Testes Vitest da função de agrupamento. |
+| `src/components/Realizado/ProductCompactCard.tsx` | Prop `interactive` (default `true`): remove `onClick`, cursor e hover de “clicável” quando `false`. |
+| `src/components/Realizado/EmbalagemProductAccordion.tsx` | Estado `expanded` (inicial `false`), botão seta, região de lotes, composição do card pai. |
+| `src/components/Realizado/index.ts` | Exportar `EmbalagemProductAccordion`. |
+| `src/app/realizado/embalagem/page.tsx` | Importar agrupador + acordeão; remover `temQuantidadeEmbalagem` duplicado (delegar ao domínio); renderizar lotes dentro do acordeão. |
+
+---
+
+### Task 1: Vitest e configuração de alias
+
+**Files:**
+- Modify: `c:\Users\victo\AI\Valepan Interno\package.json`
+- Create: `c:\Users\victo\AI\Valepan Interno\vitest.config.ts`
+
+- [ ] **Step 1: Instalar Vitest**
+
+Run:
+
+```powershell
+cd "c:\Users\victo\AI\Valepan Interno"
+pnpm add -D vitest
+```
+
+Expected: `package.json` contém `"vitest"` em `devDependencies`.
+
+- [ ] **Step 2: Adicionar scripts e criar `vitest.config.ts`**
+
+Em `package.json`, dentro de `"scripts"`:
+
+```json
+"test": "vitest run",
+"test:watch": "vitest"
+```
+
+Criar `vitest.config.ts` na raiz do repo:
+
+```typescript
+import path from 'node:path';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+});
+```
+
+- [ ] **Step 3: Rodar Vitest (suite vazia ainda pode falhar se não houver testes — após Task 2 deve passar)**
+
+Run:
+
+```powershell
+pnpm test
+```
+
+Expected (antes dos testes): Vitest conclui sem erros ou lista 0 arquivos; após adicionar `.test.ts`, **0 falhas**.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add package.json pnpm-lock.yaml vitest.config.ts
+git commit -m "chore: add vitest for domain unit tests"
+```
+
+---
+
+### Task 2: Domínio — agrupamento e agregação
+
+**Files:**
+- Create: `c:\Users\victo\AI\Valepan Interno\src\domain\realizado\embalagem-group-by-produto.ts`
+
+- [ ] **Step 1: Implementar o módulo completo**
+
+Criar `embalagem-group-by-produto.ts` com o conteúdo abaixo (ajuste apenas imports se o linter exigir `type` explícito).
+
+```typescript
+import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
+
+/** Campos mínimos para agrupar e agregar (alinha a `PainelItem` / `RealizadoItemEmbalagem`). */
+export type EmbalagemGroupRow = {
+  produto: string;
+  produzido: number;
+  aProduzir: number;
+  unidade: string;
+  congelado: 'Sim' | 'Não';
+  caixas?: number;
+  pacotes?: number;
+  unidades?: number;
+  kg?: number;
+  pedidoCaixas?: number;
+  pedidoPacotes?: number;
+  pedidoUnidades?: number;
+  pedidoKg?: number;
+  producaoUpdatedAt?: string;
+  rowId?: number;
+};
+
+export type EmbalagemProdutoGroup = {
+  produto: string;
+  lots: EmbalagemGroupRow[];
+  somaProduzido: number;
+  somaAProduzir: number;
+  /** `true` se qualquer lote tiver `congelado === 'Sim'`. */
+  algumCongelado: boolean;
+  somaCaixas: number;
+  somaPacotes: number;
+  somaUnidades: number;
+  somaKg: number;
+  somaPedidoCaixas: number;
+  somaPedidoPacotes: number;
+  somaPedidoUnidades: number;
+  somaPedidoKg: number;
+  /** Horário HH:mm do `producaoUpdatedAt` mais recente entre lotes com quantidade embalada. */
+  horarioMaisRecente?: string;
+};
+
+export function hasEmbalagemQuantity(item: Pick<EmbalagemGroupRow, 'caixas' | 'pacotes' | 'unidades' | 'kg'>): boolean {
+  return (
+    (item.caixas ?? 0) > 0 ||
+    (item.pacotes ?? 0) > 0 ||
+    (item.unidades ?? 0) > 0 ||
+    (item.kg ?? 0) > 0
+  );
+}
+
+function parseTimeMs(iso: string): number | null {
+  const t = Date.parse(iso.trim());
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Entre lotes com quantidade embalada e timestamp válido, devolve HH:mm do mais recente. */
+export function latestEmbalagemHorarioHHmm(lots: EmbalagemGroupRow[]): string | undefined {
+  let bestMs: number | null = null;
+  let bestRaw: string | null = null;
+  for (const lot of lots) {
+    if (!hasEmbalagemQuantity(lot)) continue;
+    const raw = lot.producaoUpdatedAt?.trim();
+    if (!raw) continue;
+    const ms = parseTimeMs(raw);
+    if (ms === null) continue;
+    if (bestMs === null || ms > bestMs) {
+      bestMs = ms;
+      bestRaw = raw;
+    }
+  }
+  if (!bestRaw) return undefined;
+  return formatLocalTimeHHmm(bestRaw) ?? undefined;
+}
+
+function aggregateLots(lots: EmbalagemGroupRow[]): Omit<EmbalagemProdutoGroup, 'produto' | 'lots'> {
+  let somaProduzido = 0;
+  let somaAProduzir = 0;
+  let somaCaixas = 0;
+  let somaPacotes = 0;
+  let somaUnidades = 0;
+  let somaKg = 0;
+  let somaPedidoCaixas = 0;
+  let somaPedidoPacotes = 0;
+  let somaPedidoUnidades = 0;
+  let somaPedidoKg = 0;
+  let algumCongelado = false;
+
+  for (const lot of lots) {
+    somaProduzido += lot.produzido;
+    somaAProduzir += lot.aProduzir;
+    somaCaixas += lot.caixas ?? 0;
+    somaPacotes += lot.pacotes ?? 0;
+    somaUnidades += lot.unidades ?? 0;
+    somaKg += lot.kg ?? 0;
+    somaPedidoCaixas += lot.pedidoCaixas ?? 0;
+    somaPedidoPacotes += lot.pedidoPacotes ?? 0;
+    somaPedidoUnidades += lot.pedidoUnidades ?? 0;
+    somaPedidoKg += lot.pedidoKg ?? 0;
+    if (lot.congelado === 'Sim') algumCongelado = true;
+  }
+
+  return {
+    somaProduzido,
+    somaAProduzir,
+    algumCongelado,
+    somaCaixas,
+    somaPacotes,
+    somaUnidades,
+    somaKg,
+    somaPedidoCaixas,
+    somaPedidoPacotes,
+    somaPedidoUnidades,
+    somaPedidoKg,
+    horarioMaisRecente: latestEmbalagemHorarioHHmm(lots),
+  };
+}
+
+/**
+ * Agrupa por `produto` preservando a ordem de primeira aparição do produto na lista de entrada
+ * (que já deve estar ordenada por `rowId` na página).
+ */
+export function groupEmbalagemItemsByProduto(items: EmbalagemGroupRow[]): EmbalagemProdutoGroup[] {
+  const order: string[] = [];
+  const byProduto = new Map<string, EmbalagemGroupRow[]>();
+
+  for (const item of items) {
+    const p = item.produto;
+    if (!byProduto.has(p)) {
+      byProduto.set(p, []);
+      order.push(p);
+    }
+    byProduto.get(p)!.push(item);
+  }
+
+  return order.map((produto) => {
+    const lots = byProduto.get(produto)!;
+    return { produto, lots, ...aggregateLots(lots) };
+  });
+}
+```
+
+- [ ] **Step 2: Garantir que `pnpm exec tsc --noEmit` passa**
+
+Run:
+
+```powershell
+pnpm exec tsc --noEmit
+```
+
+Expected: exit code 0.
+
+- [ ] **Step 3: Commit**
+
+```powershell
+git add src/domain/realizado/embalagem-group-by-produto.ts
+git commit -m "feat(realizado): group embalagem rows by produto with aggregates"
+```
+
+---
+
+### Task 3: Testes unitários do agrupamento
+
+**Files:**
+- Create: `c:\Users\victo\AI\Valepan Interno\src\domain\realizado\embalagem-group-by-produto.test.ts`
+
+- [ ] **Step 1: Criar arquivo de teste**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import {
+  groupEmbalagemItemsByProduto,
+  hasEmbalagemQuantity,
+  latestEmbalagemHorarioHHmm,
+  type EmbalagemGroupRow,
+} from './embalagem-group-by-produto';
+
+function row(partial: Partial<EmbalagemGroupRow> & Pick<EmbalagemGroupRow, 'produto' | 'rowId'>): EmbalagemGroupRow {
+  return {
+    produzido: 0,
+    aProduzir: 0,
+    unidade: 'cx',
+    congelado: 'Não',
+    ...partial,
+  };
+}
+
+describe('hasEmbalagemQuantity', () => {
+  it('returns false when all quantities zero', () => {
+    expect(hasEmbalagemQuantity({ caixas: 0, pacotes: 0, unidades: 0, kg: 0 })).toBe(false);
+  });
+  it('returns true when caixas > 0', () => {
+    expect(hasEmbalagemQuantity({ caixas: 1, pacotes: 0, unidades: 0, kg: 0 })).toBe(true);
+  });
+});
+
+describe('latestEmbalagemHorarioHHmm', () => {
+  it('picks latest timestamp among lots with embalagem', () => {
+    const lots: EmbalagemGroupRow[] = [
+      row({
+        produto: 'A',
+        rowId: 1,
+        caixas: 1,
+        producaoUpdatedAt: '2026-05-14T09:00:00.000Z',
+      }),
+      row({
+        produto: 'A',
+        rowId: 2,
+        caixas: 2,
+        producaoUpdatedAt: '2026-05-14T12:37:00.000Z',
+      }),
+    ];
+    expect(latestEmbalagemHorarioHHmm(lots)).toMatch(/^\d{2}:\d{2}$/);
+  });
+});
+
+describe('groupEmbalagemItemsByProduto', () => {
+  it('preserves product order and sums produzido', () => {
+    const items: EmbalagemGroupRow[] = [
+      row({ produto: 'P1', rowId: 1, produzido: 10, aProduzir: 100, caixas: 1 }),
+      row({ produto: 'P2', rowId: 2, produzido: 5, aProduzir: 50, caixas: 1 }),
+      row({ produto: 'P1', rowId: 3, produzido: 20, aProduzir: 100, caixas: 2 }),
+    ];
+    const g = groupEmbalagemItemsByProduto(items);
+    expect(g.map((x) => x.produto)).toEqual(['P1', 'P2']);
+    const p1 = g.find((x) => x.produto === 'P1')!;
+    expect(p1.lots).toHaveLength(2);
+    expect(p1.somaProduzido).toBe(30);
+    expect(p1.somaAProduzir).toBe(200);
+    expect(p1.somaCaixas).toBe(3);
+  });
+
+  it('sets algumCongelado when any lot frozen', () => {
+    const items: EmbalagemGroupRow[] = [
+      row({ produto: 'P1', rowId: 1, congelado: 'Não', caixas: 1 }),
+      row({ produto: 'P1', rowId: 2, congelado: 'Sim', caixas: 1 }),
+    ];
+    const p1 = groupEmbalagemItemsByProduto(items)[0];
+    expect(p1.algumCongelado).toBe(true);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(groupEmbalagemItemsByProduto([])).toEqual([]);
+  });
+});
+```
+
+Nota: o teste de horário usa `toMatch(/\d{2}:\d{2}/)` para não acoplar ao fuso exibido; opcionalmente fixe um instante e compare string esperada se o projeto fixar timezone nos testes.
+
+- [ ] **Step 2: Rodar testes**
+
+Run:
+
+```powershell
+pnpm test
+```
+
+Expected: todos os testes **PASS**.
+
+- [ ] **Step 3: Commit**
+
+```powershell
+git add src/domain/realizado/embalagem-group-by-produto.test.ts
+git commit -m "test(realizado): cover embalagem group-by-produto"
+```
+
+---
+
+### Task 4: `ProductCompactCard` — modo não interativo
+
+**Files:**
+- Modify: `c:\Users\victo\AI\Valepan Interno\src\components\Realizado\ProductCompactCard.tsx`
+
+- [ ] **Step 1: Adicionar prop `interactive`**
+
+Na interface de props:
+
+```typescript
+/** Quando false, o card não é clicável e não usa estilo de hover de ação (card pai do acordeão). Default: true. */
+interactive?: boolean;
+```
+
+Default no destructuring: `interactive = true`.
+
+Substituir o `className` do container externo para condicionar cursor e hover:
+
+```typescript
+const interactiveClass = interactive
+  ? 'cursor-pointer hover:bg-gray-700/40'
+  : 'cursor-default';
+```
+
+Incluir `interactiveClass` na template string do `className` do `div` raiz. Remover `onClick={onClick}` quando `!interactive` (usar `onClick={interactive ? onClick : undefined}`).
+
+- [ ] **Step 2: Lint do arquivo**
+
+Run:
+
+```powershell
+pnpm exec eslint src/components/Realizado/ProductCompactCard.tsx
+```
+
+Expected: sem erros novos.
+
+- [ ] **Step 3: Commit**
+
+```powershell
+git add src/components/Realizado/ProductCompactCard.tsx
+git commit -m "feat(realizado): non-interactive ProductCompactCard for accordion parent"
+```
+
+---
+
+### Task 5: Componente `EmbalagemProductAccordion`
+
+**Files:**
+- Create: `c:\Users\victo\AI\Valepan Interno\src\components\Realizado\EmbalagemProductAccordion.tsx`
+- Modify: `c:\Users\victo\AI\Valepan Interno\src\components\Realizado\index.ts`
+
+- [ ] **Step 1: Implementar o componente**
+
+`'use client';`
+
+Props sugeridas:
+
+```typescript
+import { useId, useState, type ReactNode } from 'react';
+import ProductCompactCard from './ProductCompactCard';
+import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
+
+export type EmbalagemProductAccordionProps = {
+  /** Prefixo estável e único por grupo+produto na página (ex.: `${group.key}|${produto}`). */
+  instanceId: string;
+  produto: string;
+  somaProduzido: number;
+  somaAProduzir: number;
+  unidade: string;
+  congelado: boolean;
+  detalhesProduzido: QuantityBreakdownEntry[];
+  detalhesMeta: QuantityBreakdownEntry[];
+  horarioEmbalagem?: string;
+  /** Conteúdo dos lotes (cards filhos); só montado na árvore quando expandido. */
+  renderLots: () => ReactNode;
+};
+```
+
+Comportamento:
+
+- `const [expanded, setExpanded] = useState(false);`
+- `const baseId = useId();` painel `id={`${instanceId}-${baseId}-lots`}` (sanitizar `instanceId` removendo caracteres inválidos em id se necessário — substituir `|` por `-`).
+- Botão seta: `type="button"`, classes `min-h-11 min-w-11` (44px), `rounded-lg`, `text-gray-300`, `hover:bg-gray-700/40`, `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80`.
+- Ícone: `chevron_right` com rotação `rotate(90deg)` quando `expanded` (transição ~200ms; respeitar `prefers-reduced-motion` com `motion-reduce:transition-none` se desejar).
+- `aria-expanded`, `aria-controls={panelId}`, `aria-label` em português incluindo nome do produto.
+- Painel: `id={panelId}`, `role="region"`, `aria-labelledby` opcional se houver heading oculto — pode omitir se o label da região for suficiente via `aria-label={`Lotes de ${produto}`}`.
+- Layout: `flex` horizontal — botão + `div.flex-1.min-w-0` contendo `ProductCompactCard` com `interactive={false}`, **sem** `onClick`, **sem** `hasPhoto` (omitir ou `hasPhoto={false}`).
+- Área expandida: `ml` alinhada ao botão (ex.: `pl-2` ou `border-l border-gray-700 pl-3` com `ml-11` para indentar sob o ícone), `className="flex flex-col gap-1"`; conteúdo `{expanded ? renderLots() : null}`.
+
+- [ ] **Step 2: Exportar em `index.ts`**
+
+```typescript
+export { default as EmbalagemProductAccordion } from './EmbalagemProductAccordion';
+```
+
+- [ ] **Step 3: `tsc` + eslint**
+
+Run:
+
+```powershell
+pnpm exec tsc --noEmit
+pnpm exec eslint src/components/Realizado/EmbalagemProductAccordion.tsx src/components/Realizado/index.ts
+```
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add src/components/Realizado/EmbalagemProductAccordion.tsx src/components/Realizado/index.ts
+git commit -m "feat(realizado): EmbalagemProductAccordion for grouped lots"
+```
+
+---
+
+### Task 6: Integrar na página de embalagem
+
+**Files:**
+- Modify: `c:\Users\victo\AI\Valepan Interno\src\app\realizado\embalagem\page.tsx`
+
+- [ ] **Step 1: Imports**
+
+```typescript
+import {
+  RealizadoHeader,
+  ProductCompactCard,
+  ClientGroup,
+  ThreeColumnLayout,
+  EmbalagemDashboard,
+  EmbalagemProductAccordion,
+} from '@/components/Realizado';
+import {
+  groupEmbalagemItemsByProduto,
+  hasEmbalagemQuantity,
+} from '@/domain/realizado/embalagem-group-by-produto';
+```
+
+- [ ] **Step 2: Remover função local `temQuantidadeEmbalagem`** e usar `hasEmbalagemQuantity` importada em `horarioEmbalagemParaCard`:
+
+```typescript
+function horarioEmbalagemParaCard(item: PainelItem): string | undefined {
+  if (!hasEmbalagemQuantity(item)) return undefined;
+  const raw = item.producaoUpdatedAt?.trim();
+  if (!raw) return undefined;
+  return formatLocalTimeHHmm(raw) ?? undefined;
+}
+```
+
+- [ ] **Step 3: Extrair renderização de um lote (evitar duplicação)**
+
+Dentro do componente da página, **antes** do `return`, criar uma função estável com `useCallback`:
+
+```typescript
+const renderEmbalagemLot = useCallback(
+  (embalagemItem: PainelItem) => {
+    const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
+    const isItemLoading = loadingCardId === itemKey;
+    const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
+    const produzidoDetalhes = QuantityBreakdown.buildEntries([
+      { quantidade: embalagemItem.caixas, unidade: 'cx' },
+      { quantidade: embalagemItem.pacotes, unidade: 'pct' },
+      { quantidade: embalagemItem.unidades, unidade: 'un' },
+      { quantidade: embalagemItem.kg, unidade: 'kg' },
+    ]);
+    const metaDetalhes = QuantityBreakdown.buildEntries([
+      { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
+      { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
+      { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
+      { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
+    ]);
+
+    return (
+      <div key={itemKey} className="relative">
+        <ProductCompactCard
+          produto={embalagemItem.produto}
+          produzido={embalagemItem.produzido}
+          aProduzir={embalagemItem.aProduzir}
+          unidade={embalagemItem.unidade}
+          congelado={embalagemItem.congelado === 'Sim'}
+          hasPhoto={photoStatus.hasPhoto}
+          photoColor={photoStatus.color}
+          onPhotoClick={() => handlePhotoClick(embalagemItem)}
+          onClick={() => handleEditProducao(embalagemItem)}
+          isLoading={isItemLoading}
+          detalhesProduzido={produzidoDetalhes}
+          detalhesMeta={metaDetalhes}
+          horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
+        />
+        {/* dropdown de fotos inalterado */}
+      </div>
+    );
+  },
+  [loadingCardId, photoDropdownOpen, /* incluir handlers usados no dropdown */],
+);
+```
+
+Incluir na lista de dependências do `useCallback` tudo que o JSX do dropdown usa (`photoDropdownOpen`, `setPhotoDropdownOpen`, `handlePhotoClick`, `handleEditProducao`). O **key** deve permanecer no elemento retornado; ao mapear `renderEmbalagemLot` dentro de `renderLots`, usar `g.lots.map((lot) => renderEmbalagemLot(lot))`.
+
+- [ ] **Step 4: Substituir `group.items.map` por agrupamento**
+
+Antes do `return` do `renderGroup`, para `group.items`:
+
+```typescript
+const produtoGroups = groupEmbalagemItemsByProduto(group.items as PainelItem[]);
+```
+
+Render:
+
+```typescript
+{produtoGroups.map((g) => {
+  const parentProduzido = QuantityBreakdown.buildEntries([
+    { quantidade: g.somaCaixas, unidade: 'cx' },
+    { quantidade: g.somaPacotes, unidade: 'pct' },
+    { quantidade: g.somaUnidades, unidade: 'un' },
+    { quantidade: g.somaKg, unidade: 'kg' },
+  ]);
+  const parentMeta = QuantityBreakdown.buildEntries([
+    { quantidade: g.somaPedidoCaixas, unidade: 'cx' },
+    { quantidade: g.somaPedidoPacotes, unidade: 'pct' },
+    { quantidade: g.somaPedidoUnidades, unidade: 'un' },
+    { quantidade: g.somaPedidoKg, unidade: 'kg' },
+  ]);
+  const unidadeRef = g.lots[0]?.unidade ?? '';
+  const instanceId = `${embalagemGroup.key}|${g.produto}`.replace(/\|/g, '-');
+
+  return (
+    <EmbalagemProductAccordion
+      key={instanceId}
+      instanceId={instanceId}
+      produto={g.produto}
+      somaProduzido={g.somaProduzido}
+      somaAProduzir={g.somaAProduzir}
+      unidade={unidadeRef}
+      congelado={g.algumCongelado}
+      detalhesProduzido={parentProduzido}
+      detalhesMeta={parentMeta}
+      horarioEmbalagem={g.horarioMaisRecente}
+      renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
+    />
+  );
+})}
+```
+
+Aplicar o mesmo bloco nas duas seções (`gruposNaoFinalizados` e `gruposFinalizados`).
+
+- [ ] **Step 5: Verificação**
+
+Run:
+
+```powershell
+pnpm exec tsc --noEmit
+pnpm lint
+pnpm test
+```
+
+Expected: tudo verde.
+
+- [ ] **Step 6: Verificação manual (browser)** conforme checklist do spec: vários lotes, um lote, seta/teclado, clique no pai não abre modal.
+
+- [ ] **Step 7: Commit**
+
+```powershell
+git add src/app/realizado/embalagem/page.tsx
+git commit -m "feat(realizado): accordion by product on embalagem page"
+```
+
+---
+
+## Cobertura do spec (self-review)
+
+| Requisito no spec | Onde no plano |
+|-------------------|---------------|
+| Agrupar por `produto` dentro do `ClientGroup` | Task 2 + Task 6 |
+| Totais cx/pct/un/kg + meta | `QuantityBreakdown.buildEntries` no Task 6 |
+| Farol pai = soma `produzido` / `aProduzir` | Props passadas ao mesmo `ProductCompactCard` |
+| Pai sem câmera | Não passar `hasPhoto` / `false` no Task 5 |
+| Horário mais recente com regra de quantidade | `latestEmbalagemHorarioHHmm` Task 2 |
+| Congelado se qualquer lote | `algumCongelado` Task 2 |
+| Só seta expande; corpo pai não edita | Task 4 + Task 5 |
+| Filhos idênticos | `renderEmbalagemLot` reutiliza JSX atual |
+| Recolhido por padrão | `useState(false)` Task 5 |
+| Ordem dos lotes | Ordem de inserção no `groupEmbalagemItemsByProduto` |
+| Acessibilidade seta | Task 5 |
+
+Nenhum placeholder `TBD` intencional no plano.
+
+---
+
+**Plano salvo em:** `c:\Users\victo\AI\Valepan Interno\docs\superpowers\plans\2026-05-14-embalagem-accordion-por-produto.mdx`
+
+**Como executar:**
+
+1. **Subagent-driven (recomendado)** — um agente por task, revisão entre tasks, usando o skill `superpowers:subagent-driven-development`.
+
+2. **Execução inline** — seguir os checkboxes nesta sessão com o skill `superpowers:executing-plans` e checkpoints para revisão.
+
+Qual abordagem você prefere para a implementação?
