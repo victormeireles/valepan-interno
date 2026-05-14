@@ -13,6 +13,7 @@ import {
 import {
   groupEmbalagemItemsByProduto,
   hasEmbalagemQuantity,
+  isEmbalagemPedidoProdutoFinalizado,
 } from '@/domain/realizado/embalagem-group-by-produto';
 import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
@@ -299,118 +300,88 @@ export default function ProducaoEmbalagemPage() {
 
   const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
     const groups: { [key: string]: PainelItem[] } = {};
-    
-    items.forEach(item => {
+
+    items.forEach((item) => {
       const dataFab = item.dataFabricacao || selectedDate;
       const obs = item.observacao?.trim() || '';
       const groupKey = `${item.cliente}|${dataFab}|${obs}`;
-      
+
       if (!groups[groupKey]) {
         groups[groupKey] = [];
       }
       groups[groupKey].push(item);
     });
-    
-    // Criar os grupos e separar em não finalizados e finalizados
+
     const gruposNaoFinalizados: Array<
       RealizadoGroup & {
         cliente?: string;
         dataFabricacao?: string;
         observacao?: string;
         minRowId?: number;
-        entregaParcial?: boolean;
       }
     > = [];
-    const gruposFinalizados: Array<RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }> = [];
-    
+    const gruposFinalizados: Array<
+      RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }
+    > = [];
+
     Object.entries(groups).forEach(([groupKey, groupItems]) => {
       const [cliente, dataFab, obs] = groupKey.split('|');
-      
-      // Ordenar itens dentro do grupo por row_id
+
       const sortedItems = [...groupItems].sort((a, b) => {
         const rowIdA = a.rowId ?? Number.MAX_SAFE_INTEGER;
         const rowIdB = b.rowId ?? Number.MAX_SAFE_INTEGER;
         return rowIdA - rowIdB;
       });
-      
-      const minRowId = Math.min(...sortedItems.map(item => item.rowId ?? Number.MAX_SAFE_INTEGER));
-      
-      // Separar em não finalizados e finalizados
-      const naoFinalizados: PainelItem[] = [];
-      const finalizados: PainelItem[] = [];
-      
-      sortedItems.forEach(item => {
-        const porcentagem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
-        if (porcentagem >= 90) {
-          finalizados.push(item);
+
+      const minRowId = Math.min(...sortedItems.map((item) => item.rowId ?? Number.MAX_SAFE_INTEGER));
+
+      const porProduto = groupEmbalagemItemsByProduto(sortedItems as PainelItem[]);
+      const finalizadoPorProduto = new Map(
+        porProduto.map((g) => [g.produto, isEmbalagemPedidoProdutoFinalizado(g)] as const),
+      );
+
+      const itemsNaoFinal: PainelItem[] = [];
+      const itemsFinal: PainelItem[] = [];
+      for (const it of sortedItems) {
+        if (finalizadoPorProduto.get(it.produto)) {
+          itemsFinal.push(it);
         } else {
-          naoFinalizados.push(item);
+          itemsNaoFinal.push(it);
         }
-      });
+      }
 
-      const temMistura = naoFinalizados.length > 0 && finalizados.length > 0;
-
-      const somaProduzidoGrupo = sortedItems.reduce((acc, i) => acc + i.produzido, 0);
-      const somaAProduzirGrupo = sortedItems.reduce((acc, i) => acc + i.aProduzir, 0);
-      /** Alinhado ao farol do card: total realizado ≥ meta total do grupo (pedido agregado). */
-      const grupoAtendeMetaAgregada =
-        somaAProduzirGrupo > 0 && somaProduzidoGrupo >= somaAProduzirGrupo;
-
-      if (temMistura) {
-        if (grupoAtendeMetaAgregada) {
-          gruposFinalizados.push({
-            key: groupKey,
-            cliente,
-            dataFabricacao: dataFab,
-            observacao: obs || undefined,
-            items: sortedItems,
-            minRowId,
-          });
-        } else {
-          gruposNaoFinalizados.push({
-            key: groupKey,
-            cliente,
-            dataFabricacao: dataFab,
-            observacao: obs || undefined,
-            items: sortedItems,
-            entregaParcial: true,
-            minRowId,
-          });
-        }
-      } else if (naoFinalizados.length > 0) {
+      if (itemsNaoFinal.length > 0) {
         gruposNaoFinalizados.push({
           key: groupKey,
           cliente,
           dataFabricacao: dataFab,
           observacao: obs || undefined,
-          items: naoFinalizados,
+          items: itemsNaoFinal,
           minRowId,
         });
       }
 
-      if (!temMistura && finalizados.length > 0) {
+      if (itemsFinal.length > 0) {
         gruposFinalizados.push({
           key: groupKey,
           cliente,
           dataFabricacao: dataFab,
           observacao: obs || undefined,
-          items: finalizados,
+          items: itemsFinal,
           minRowId,
         });
       }
     });
-    
-    // Ordenar grupos pelo menor row_id de cada grupo
+
     const sortByMinRowId = (a: { minRowId?: number }, b: { minRowId?: number }) => {
       const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
       const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
       return minRowIdA - minRowIdB;
     };
-    
+
     gruposNaoFinalizados.sort(sortByMinRowId);
     gruposFinalizados.sort(sortByMinRowId);
-    
-    // Remover minRowId do objeto final (usado apenas para ordenação)
+
     const removeMinRowId = (
       group: (typeof gruposNaoFinalizados)[0] | (typeof gruposFinalizados)[0],
     ): RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string } => {
@@ -418,7 +389,7 @@ export default function ProducaoEmbalagemPage() {
       const { minRowId, ...rest } = group;
       return rest;
     };
-    
+
     return {
       gruposNaoFinalizados: gruposNaoFinalizados.map(removeMinRowId) as RealizadoGroup[],
       gruposFinalizados: gruposFinalizados.map(removeMinRowId) as RealizadoGroup[],
@@ -475,7 +446,6 @@ export default function ProducaoEmbalagemPage() {
                       cliente?: string;
                       dataFabricacao?: string;
                       observacao?: string;
-                      entregaParcial?: boolean;
                     };
 
                     return (
@@ -484,7 +454,6 @@ export default function ProducaoEmbalagemPage() {
                         dataFabricacao={embalagemGroup.dataFabricacao}
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
-                        entregaParcial={embalagemGroup.entregaParcial === true}
                       >
                         {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
                           const parentProduzido = QuantityBreakdown.buildEntries([
@@ -514,6 +483,7 @@ export default function ProducaoEmbalagemPage() {
                               detalhesProduzido={parentProduzido}
                               detalhesMeta={parentMeta}
                               horarioEmbalagem={g.horarioMaisRecente}
+                              productionStatusOverride={g.somaProduzido === 0 ? 'not-started' : 'partial'}
                               renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
                             />
                           );
@@ -537,7 +507,6 @@ export default function ProducaoEmbalagemPage() {
                       cliente?: string;
                       dataFabricacao?: string;
                       observacao?: string;
-                      entregaParcial?: boolean;
                     };
 
                     return (
@@ -546,7 +515,6 @@ export default function ProducaoEmbalagemPage() {
                         dataFabricacao={embalagemGroup.dataFabricacao}
                         observacao={embalagemGroup.observacao}
                         selectedDate={selectedDate}
-                        entregaParcial={embalagemGroup.entregaParcial === true}
                       >
                         {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
                           const parentProduzido = QuantityBreakdown.buildEntries([

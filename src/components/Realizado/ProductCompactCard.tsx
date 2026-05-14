@@ -1,6 +1,6 @@
 'use client';
 
-import { getProductionStatus, getStatusColor } from '@/domain/types/realizado';
+import { getProductionStatus, getStatusColor, type ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown, QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 import type { ReactNode } from 'react';
 
@@ -27,6 +27,8 @@ interface ProductCompactCardProps {
   horarioEmbalagem?: string;
   /** Conteúdo à direita dentro do card (ex.: seta do acordeão pai). */
   trailingSlot?: ReactNode;
+  /** Se definido, substitui o cálculo do farol (ex.: pai na fila não finalizada: só vermelho/amarelo). */
+  productionStatusOverride?: ProductionStatus;
 }
 
 export default function ProductCompactCard({
@@ -46,8 +48,9 @@ export default function ProductCompactCard({
   observacao,
   horarioEmbalagem,
   trailingSlot,
+  productionStatusOverride,
 }: ProductCompactCardProps) {
-  const status = getProductionStatus(produzido, aProduzir);
+  const status = productionStatusOverride ?? getProductionStatus(produzido, aProduzir);
   const statusColor = getStatusColor(status);
 
   const photoColorClass = {

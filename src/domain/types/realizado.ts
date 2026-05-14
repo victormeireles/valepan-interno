@@ -50,8 +50,6 @@ export interface RealizadoGroup {
   dataFabricacao?: string;
   observacao?: string;
   items: RealizadoItem[];
-  /** Embalagem: grupo misto (linhas abaixo de 90% e linhas já finalizadas) fundido na fila principal — UI de entrega parcial. */
-  entregaParcial?: boolean;
 }
 
 export function getProductionStatus(produzido: number, aProduzir: number): ProductionStatus {

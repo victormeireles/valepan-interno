@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
-import type { EmbalagemGroupRow } from './embalagem-group-by-produto';
+import type { EmbalagemGroupRow, EmbalagemProdutoGroup } from './embalagem-group-by-produto';
 import {
   groupEmbalagemItemsByProduto,
   hasEmbalagemQuantity,
+  isEmbalagemPedidoProdutoFinalizado,
   latestEmbalagemHorarioHHmm,
 } from './embalagem-group-by-produto';
 
@@ -142,5 +143,68 @@ describe('groupEmbalagemItemsByProduto', () => {
       row({ produto: 'Z', caixas: 1, producaoUpdatedAt: isoVelho }),
     ]);
     expect(g!.horarioMaisRecente).toBe(formatLocalTimeHHmm(isoVelho));
+  });
+});
+
+function grupoParcial(over: Partial<EmbalagemProdutoGroup>): EmbalagemProdutoGroup {
+  return {
+    produto: 'X',
+    lots: [],
+    somaProduzido: 0,
+    somaAProduzir: 0,
+    algumCongelado: false,
+    somaCaixas: 0,
+    somaPacotes: 0,
+    somaUnidades: 0,
+    somaKg: 0,
+    somaPedidoCaixas: 0,
+    somaPedidoPacotes: 0,
+    somaPedidoUnidades: 0,
+    somaPedidoKg: 0,
+    ...over,
+  };
+}
+
+describe('isEmbalagemPedidoProdutoFinalizado', () => {
+  it('false quando não há meta a produzir', () => {
+    expect(isEmbalagemPedidoProdutoFinalizado(grupoParcial({ somaAProduzir: 0, somaProduzido: 10 }))).toBe(false);
+  });
+
+  it('false quando percentual ≤ 90%', () => {
+    expect(
+      isEmbalagemPedidoProdutoFinalizado(
+        grupoParcial({ somaAProduzir: 100, somaProduzido: 90, somaPedidoCaixas: 10, somaCaixas: 9 }),
+      ),
+    ).toBe(false);
+  });
+
+  it('true quando > 90% e falta < 3 caixas (meta em caixas)', () => {
+    expect(
+      isEmbalagemPedidoProdutoFinalizado(
+        grupoParcial({ somaAProduzir: 100, somaProduzido: 91, somaPedidoCaixas: 10, somaCaixas: 8 }),
+      ),
+    ).toBe(true);
+  });
+
+  it('false quando > 90% mas falta ≥ 3 caixas', () => {
+    expect(
+      isEmbalagemPedidoProdutoFinalizado(
+        grupoParcial({ somaAProduzir: 100, somaProduzido: 95, somaPedidoCaixas: 10, somaCaixas: 6 }),
+      ),
+    ).toBe(false);
+  });
+
+  it('true quando > 90% e sem meta em caixas (só percentual)', () => {
+    expect(
+      isEmbalagemPedidoProdutoFinalizado(
+        grupoParcial({
+          somaAProduzir: 100,
+          somaProduzido: 91,
+          somaPedidoCaixas: 0,
+          somaPedidoPacotes: 50,
+          somaCaixas: 0,
+        }),
+      ),
+    ).toBe(true);
   });
 });

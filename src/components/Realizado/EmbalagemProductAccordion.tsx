@@ -1,5 +1,6 @@
 'use client';
 
+import type { ProductionStatus } from '@/domain/types/realizado';
 import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 import { ReactNode, useId, useState } from 'react';
 import ProductCompactCard from './ProductCompactCard';
@@ -15,6 +16,8 @@ export interface EmbalagemProductAccordionProps {
   detalhesMeta: QuantityBreakdownEntry[];
   horarioEmbalagem?: string;
   renderLots: () => ReactNode;
+  /** Farol do card pai (ex.: só vermelho/amarelo na fila não finalizada). */
+  productionStatusOverride?: ProductionStatus;
 }
 
 function sanitizeForHtmlId(value: string): string {
@@ -32,6 +35,7 @@ export default function EmbalagemProductAccordion({
   detalhesMeta,
   horarioEmbalagem,
   renderLots,
+  productionStatusOverride,
 }: EmbalagemProductAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const reactId = useId();
@@ -79,6 +83,7 @@ export default function EmbalagemProductAccordion({
         detalhesMeta={detalhesMeta}
         horarioEmbalagem={horarioEmbalagem}
         trailingSlot={expandButton}
+        productionStatusOverride={productionStatusOverride}
       />
       <div
         id={panelId}

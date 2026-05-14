@@ -136,3 +136,17 @@ export function groupEmbalagemItemsByProduto(items: EmbalagemGroupRow[]): Embala
     return { produto, lots, ...aggregateLots(lots) };
   });
 }
+
+/**
+ * Regra de negócio embalagem (pedido = agregado por produto no cliente/data/obs):
+ * **Finalizado** quando realizado > 90% da meta (`produzido`/`aProduzir`) **e**
+ * `pedidoCaixas - caixas < 3` (margem em caixas).
+ * Se não houver meta em caixas (`somaPedidoCaixas === 0`), considera só o critério de percentual (> 90%).
+ */
+export function isEmbalagemPedidoProdutoFinalizado(g: EmbalagemProdutoGroup): boolean {
+  if (g.somaAProduzir <= 0) return false;
+  const pct = (g.somaProduzido / g.somaAProduzir) * 100;
+  if (pct <= 90) return false;
+  if (g.somaPedidoCaixas <= 0) return true;
+  return g.somaPedidoCaixas - g.somaCaixas < 3;
+}

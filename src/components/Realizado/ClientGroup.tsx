@@ -7,8 +7,6 @@ interface ClientGroupProps {
   dataFabricacao?: string;
   observacao?: string;
   selectedDate: string;
-  /** Farol amarelo + rótulo quando o bloco reúne itens ainda em aberto e itens já “finalizados” (ex.: embalagem). */
-  entregaParcial?: boolean;
   children: ReactNode;
 }
 
@@ -17,7 +15,6 @@ export default function ClientGroup({
   dataFabricacao,
   observacao,
   selectedDate,
-  entregaParcial = false,
   children,
 }: ClientGroupProps) {
   const dataDiferente = dataFabricacao && dataFabricacao !== selectedDate;
@@ -45,16 +42,6 @@ export default function ClientGroup({
             <h3 className="text-base font-bold text-white">{cliente}</h3>
           )}
 
-          {entregaParcial && (
-            <div
-              className="inline-flex items-center gap-1.5 rounded-full border border-yellow-500/40 bg-yellow-500/10 px-2 py-0.5 text-yellow-300"
-              title="Há itens em aberto e itens já finalizados neste mesmo pedido"
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full bg-yellow-500" aria-hidden />
-              <span className="font-medium">Entrega parcial</span>
-            </div>
-          )}
-          
           {/* Etiqueta (se diferente da data selecionada) */}
           {dataDiferente && (
             <div className="text-yellow-300">
