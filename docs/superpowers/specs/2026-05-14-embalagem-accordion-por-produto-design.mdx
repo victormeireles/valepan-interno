@@ -1,0 +1,81 @@
+# Design: Acordeão por produto — Realizado Embalagem
+
+**Data:** 2026-05-14  
+**Status:** Aprovado para implementação (após revisão do arquivo por stakeholders)
+
+## Contexto
+
+A página `Realizado: Embalagem` (`src/app/realizado/embalagem/page.tsx`) lista **uma linha da planilha por card** (`ProductCompactCard`) dentro de `ClientGroup`. Os dados já vêm filtrados pela data selecionada na API. O objetivo é **reduzir ruído visual** agrupando **todos os lotes do mesmo produto** (no mesmo grupo de cliente/data/observação), exibindo **totais** no card pai e **detalhe por lote** ao expandir.
+
+## Objetivos
+
+1. Agrupar linhas por **`produto`** dentro de cada grupo existente (`cliente` + `dataFabricacao` + `observacao`).
+2. Card **pai**: mesma linguagem visual do card atual + **seta** para expandir/recolher; **totais** de embalado e meta somando todos os lotes do grupo.
+3. Card **filho**: manter comportamento e conteúdo atuais (foto, horário, clique → modal, dropdown de fotos).
+4. **Farol** no pai: mesma regra global `getProductionStatus` / `getStatusColor` (`src/domain/types/realizado.ts`) usando **soma de `produzido`** e **soma de `aProduzir`** das linhas agregadas.
+
+## Regras de produto (comportamento)
+
+### Chave de agrupamento
+
+- Dentro de cada `RealizadoGroup` já montado na página, agrupar itens pela chave **`produto`** (string, igual à exibição atual).
+- Não cruzar grupos de cliente, data de fabricação ou observação: o agrupamento é **sempre um nível abaixo** do `ClientGroup` atual.
+
+### Totais no card pai
+
+Somar sobre **todos** os lotes daquele produto no grupo:
+
+| Campo agregado (exibição “realizado”) | Fonte por linha |
+|--------------------------------------|-----------------|
+| Caixas, pacotes, unidades, kg        | `caixas`, `pacotes`, `unidades`, `kg` |
+| Meta                                 | `pedidoCaixas`, `pedidoPacotes`, `pedidoUnidades`, `pedidoKg` |
+
+Formatação: reutilizar `QuantityBreakdown.buildEntries` + `QuantityBreakdown.format` como nos cards atuais, com entradas agregadas.
+
+### Farol (card pai)
+
+- `getProductionStatus(somaProduzido, somaAProduzir)` onde `somaProduzido` / `somaAProduzir` são as **somas** dos campos homônimos de cada linha do grupo de produto.
+- **Filhos:** farol **inalterado** (continua por linha).
+
+### Card pai — conteúdo e UX
+
+- **Sem** ícone de câmera.
+- **Horário:** entre lotes que tenham quantidade embalada (mesma regra `temQuantidadeEmbalagem` da página) e `producaoUpdatedAt` válido, exibir o **horário do timestamp mais recente** (`formatLocalTimeHHmm`).
+- **Congelado:** no pai, exibir o indicador `ac_unit` se **qualquer** lote do grupo tiver `congelado === 'Sim'` (alinha ao card atual, que já mostra o ícone quando aplicável).
+- **Seta:** único controle que **expande/recolhe** a lista de lotes. Botão com alvo de toque adequado (≥ 44px lógicos), `aria-expanded`, `aria-controls` apontando para o painel de lotes, `aria-label` descritivo (ex.: incluir nome do produto).
+- **Clique no restante do card pai:** **não** abre modal e **não** alterna expansão (evitar falso “card clicável”).
+- **Único lote (N = 1):** ainda mostrar **card pai + seta**; ao expandir, mostrar **um** filho com o mesmo conteúdo/comportamento de hoje.
+
+### Card filho
+
+- Idêntico ao comportamento atual: `ProductCompactCard` + dropdown de fotos + `handleEditProducao` por `rowId`.
+- Ordem dos filhos: **mesma ordem relativa** que no grupo antes do agrupamento (preservar ordenação por `rowId` já aplicada no `useMemo` da página).
+
+### Estado inicial do acordeão
+
+- **Recolhido** por padrão para cada grupo produto.
+
+## Arquitetura recomendada
+
+1. **Função pura** (ex.: em `src/domain/realizado/` ou `src/lib/`) que, dado um array de itens de embalagem do mesmo `ClientGroup`, retorna lista de `{ produto, lots, agregados }` com totais numéricos e breakdowns prontos para o card pai.
+2. **Componente de UI** (ex.: `EmbalagemProductAccordion` em `src/components/Realizado/`) responsável por estado `expanded`, seta, render do pai e lista de filhos — evita duplicar lógica entre seções “não finalizados” e “finalizados” na `page.tsx`.
+
+## Fora de escopo
+
+- Alterar API, modelo de dados ou outras telas (fermentação, forno).
+- Alterar regras de divisão `gruposNaoFinalizados` / `gruposFinalizados` (percentual 90%).
+- Redesenhar `EmbalagemDashboard` ou `RealizadoHeader`.
+
+## Testes / verificação manual
+
+- Grupo com **vários** lotes do mesmo produto: totais do pai = soma manual; farol coerente; expandir mostra N filhos.
+- **Um** lote: pai + 1 filho; recolhido por padrão.
+- Pai **sem** câmera; horário = último lote com embalagem + timestamp válido.
+- Seta: teclado (Enter/Espaço) e leitor de tela anunciam expandido/recolhido.
+- Clique no corpo do pai: **não** abre modal; clique no filho: abre modal como hoje.
+
+## Referências de código
+
+- Página: `src/app/realizado/embalagem/page.tsx`
+- Card: `src/components/Realizado/ProductCompactCard.tsx`
+- Status: `src/domain/types/realizado.ts` (`getProductionStatus`, `getStatusColor`)
