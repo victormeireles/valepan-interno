@@ -14,7 +14,7 @@ import { ProducaoData } from '@/domain/types';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
-import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+import { addCalendarDaysISO, formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 
 type PainelItem = RealizadoItemEmbalagem & {
   pacoteFotoId?: string;
@@ -30,6 +30,23 @@ type PainelItem = RealizadoItemEmbalagem & {
   obsEmbalagem?: string;
   producaoUpdatedAt?: string;
 };
+
+function temQuantidadeEmbalagem(item: Pick<PainelItem, 'caixas' | 'pacotes' | 'unidades' | 'kg'>): boolean {
+  return (
+    (item.caixas ?? 0) > 0 ||
+    (item.pacotes ?? 0) > 0 ||
+    (item.unidades ?? 0) > 0 ||
+    (item.kg ?? 0) > 0
+  );
+}
+
+/** Só exibe horário se coluna Q preenchida e houver quantidade embalada (M–P). */
+function horarioEmbalagemParaCard(item: PainelItem): string | undefined {
+  if (!temQuantidadeEmbalagem(item)) return undefined;
+  const raw = item.producaoUpdatedAt?.trim();
+  if (!raw) return undefined;
+  return formatLocalTimeHHmm(raw) ?? undefined;
+}
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
   const message = error instanceof Error ? error.message : fallback;
@@ -383,6 +400,7 @@ export default function ProducaoEmbalagemPage() {
                                 isLoading={isItemLoading}
                                 detalhesProduzido={produzidoDetalhes}
                                 detalhesMeta={metaDetalhes}
+                                horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
                               />
                               
                               {/* Dropdown de fotos */}
@@ -490,6 +508,7 @@ export default function ProducaoEmbalagemPage() {
                                 isLoading={isItemLoading}
                                 detalhesProduzido={produzidoDetalhes}
                                 detalhesMeta={metaDetalhes}
+                                horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
                               />
                               
                               {/* Dropdown de fotos */}

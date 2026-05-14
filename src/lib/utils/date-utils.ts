@@ -84,6 +84,21 @@ export function getBrazilHourFromIso(iso: string | undefined | null): number | n
   return parseInt(h, 10);
 }
 
+/**
+ * Formata um instante (ex.: ISO da coluna Q `producao_updated_at`) como HH:mm no fuso local
+ * do ambiente (no browser, o fuso da máquina do usuário).
+ */
+export function formatLocalTimeHHmm(isoOrDateString: string | undefined | null): string | null {
+  if (!isoOrDateString?.trim()) return null;
+  const d = new Date(isoOrDateString.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
 /** Soma dias em uma data ISO (YYYY-MM-DD), em calendário UTC (adequado para datas de pedido sem hora). */
 export function addCalendarDaysISO(isoDate: string, deltaDays: number): string {
   const [y, m, d] = isoDate.split('-').map(Number);

@@ -17,6 +17,8 @@ interface ProductCompactCardProps {
   detalhesProduzido?: QuantityBreakdownEntry[];
   detalhesMeta?: QuantityBreakdownEntry[];
   observacao?: string;
+  /** HH:mm (fuso local), ex.: horário da coluna Q quando há embalagem registrada */
+  horarioEmbalagem?: string;
 }
 
 export default function ProductCompactCard({
@@ -33,6 +35,7 @@ export default function ProductCompactCard({
   detalhesProduzido = [],
   detalhesMeta = [],
   observacao,
+  horarioEmbalagem,
 }: ProductCompactCardProps) {
   const status = getProductionStatus(produzido, aProduzir);
   const statusColor = getStatusColor(status);
@@ -102,6 +105,15 @@ export default function ProductCompactCard({
         >
           <span className="material-icons text-base">photo_camera</span>
         </button>
+      )}
+
+      {horarioEmbalagem && (
+        <span
+          className="text-xs text-gray-400 tabular-nums flex-shrink-0"
+          title="Horário registrado na embalagem"
+        >
+          {horarioEmbalagem}
+        </span>
       )}
 
       {/* Produção Realizada */}
