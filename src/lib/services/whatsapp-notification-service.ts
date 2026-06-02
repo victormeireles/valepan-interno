@@ -5,6 +5,10 @@
 
 import { zapiManager } from "@/lib/managers/zapi-manager";
 import {
+  whatsAppConfigService,
+  type WhatsAppNotificationType,
+} from "@/lib/services/whatsapp-config-service";
+import {
   EmbalagemSummaryResult,
   embalagemDailySummaryService,
   fermentacaoDailySummaryService,
@@ -83,10 +87,12 @@ interface NotifySaidasProductionParams {
 export class WhatsAppNotificationService {
 
   private async sendMessageToConfiguredGroup<TSummary>({
+    notificationType,
     grupoId,
     buildMessage,
     fetchSummary,
   }: {
+    notificationType: WhatsAppNotificationType;
     grupoId?: string;
     envVarName: string;
     stageLabel: string;
@@ -94,6 +100,11 @@ export class WhatsAppNotificationService {
     fetchSummary?: () => Promise<TSummary | null>;
   }): Promise<boolean> {
     try {
+      const enabled = await whatsAppConfigService.isTypeEnabled(notificationType);
+      if (!enabled) {
+        return false;
+      }
+
       if (!grupoId) {
         return false;
       }
@@ -131,6 +142,7 @@ export class WhatsAppNotificationService {
     params: NotifyEmbalagemProductionParams
   ): Promise<boolean> {
     return this.sendMessageToConfiguredGroup<EmbalagemSummaryResult>({
+      notificationType: 'embalagem',
       grupoId: process.env.WHATSAPP_GRUPO_EMBALAGEM,
       envVarName: 'WHATSAPP_GRUPO_EMBALAGEM',
       stageLabel: 'embalagem',
@@ -153,6 +165,7 @@ export class WhatsAppNotificationService {
     params: NotifyFermentacaoProductionParams,
   ): Promise<boolean> {
     return this.sendMessageToConfiguredGroup<StageSummaryResult>({
+      notificationType: 'fermentacao',
       grupoId: process.env.WHATSAPP_GRUPO_PRODUCAO,
       envVarName: 'WHATSAPP_GRUPO_PRODUCAO',
       stageLabel: 'fermentação',
@@ -174,6 +187,7 @@ export class WhatsAppNotificationService {
     params: NotifyFornoProductionParams,
   ): Promise<boolean> {
     return this.sendMessageToConfiguredGroup<StageSummaryResult>({
+      notificationType: 'forno',
       grupoId: process.env.WHATSAPP_GRUPO_FORNO,
       envVarName: 'WHATSAPP_GRUPO_FORNO',
       stageLabel: 'forno',
@@ -195,6 +209,7 @@ export class WhatsAppNotificationService {
     params: NotifySaidasProductionParams,
   ): Promise<boolean> {
     return this.sendMessageToConfiguredGroup({
+      notificationType: 'saidas',
       grupoId: process.env.WHATSAPP_GRUPO_SAIDAS,
       envVarName: 'WHATSAPP_GRUPO_SAIDAS',
       stageLabel: 'saídas',

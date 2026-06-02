@@ -2387,6 +2387,33 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_notificacoes_config: {
+        Row: {
+          id: string
+          embalagem_habilitado: boolean
+          fermentacao_habilitado: boolean
+          forno_habilitado: boolean
+          saidas_habilitado: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       verification_tokens: {
         Row: {
           created_at: string | null
