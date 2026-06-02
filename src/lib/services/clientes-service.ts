@@ -93,7 +93,7 @@ export class ClientesService {
     return (data ?? []).map((record) => this.mapRecord(record));
   }
 
-  private resolveClient(): SupabaseClient<Database> {
+  private resolveClient(): SupabaseClient<Database, 'public'> {
     return this.factory.createServiceRoleClient();
   }
 

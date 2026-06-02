@@ -42,7 +42,7 @@ export interface UpdateProductionOrderInput {
 }
 
 export class ProductionOrderRepository {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  constructor(private readonly supabase: SupabaseClient<Database, 'public'>) {}
 
   /**
    * Cria uma nova ordem de produção

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
-import DateInput from '@/components/FormControls/DateInput';
+import CalendarDateFilter from '@/components/FormControls/CalendarDateFilter';
 import { formatIsoDateToDDMMYYYY, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 type PainelItem = {
@@ -285,13 +285,17 @@ export default function PedidoFornoPage() {
               <button onClick={handleNewOrder} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">+ Novo Pedido</button>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label htmlFor="date-filter" className="text-gray-300 text-sm font-medium whitespace-nowrap">Data:</label>
-                <div id="date-filter" className="flex-1 sm:flex-none min-w-[9rem]">
-                  <DateInput
-                    hideLabel
+                <div className="flex-1 sm:flex-none min-w-[12rem] max-w-[18rem]">
+                  <CalendarDateFilter
+                    id="date-filter"
                     value={selectedDate}
-                    onChange={setSelectedDate}
-                    required
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500"
+                    onChange={(d) => {
+                      if (d !== null) setSelectedDate(d);
+                    }}
+                    label="Data da meta de produção"
+                    wrapperClassName="inline-flex min-h-10 w-full items-center gap-2"
+                    nativePickerClassName="min-h-10 min-w-0 flex-1 cursor-pointer rounded-lg border border-gray-600 bg-gray-800 px-2.5 py-2 text-sm text-white shadow-sm outline-none transition [color-scheme:dark] focus:border-blue-400 focus:ring-2 focus:ring-blue-300/40"
+                    todayButtonClassName="min-h-10 shrink-0 rounded-lg border border-gray-600 bg-gray-900 px-2.5 text-xs font-semibold text-blue-100 transition hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                   />
                 </div>
               </div>

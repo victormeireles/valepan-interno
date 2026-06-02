@@ -24,8 +24,9 @@ const projectId = projectIdMatch[1];
 console.log(`🔄 Gerando tipos do Supabase para o projeto: ${projectId}`);
 
 try {
-  const outputPath = path.join(__dirname, '..', 'types', 'database.ts');
-  const command = `npx supabase gen types typescript --project-id ${projectId} > "${outputPath}"`;
+  /** Tipos canônicos do app: `src/types/database.ts` (import `@/types/database`). */
+  const outputPath = path.join(__dirname, '..', 'src', 'types', 'database.ts');
+  const command = `npx supabase gen types typescript --project-id ${projectId} --schema public,interno > "${outputPath}"`;
   
   execSync(command, { stdio: 'inherit', shell: true });
   console.log(`✅ Tipos gerados com sucesso em: ${outputPath}`);

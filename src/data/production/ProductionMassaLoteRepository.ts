@@ -52,7 +52,7 @@ type MassaLoteUpdate = {
  * @deprecated Use ProductionStepRepository ao invés deste repositório
  */
 export class ProductionMassaLoteRepository {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  constructor(private readonly supabase: SupabaseClient<Database, 'public'>) {}
 
   /**
    * @deprecated Este método não deve ser usado. Use ProductionStepRepository.create() com campos de massa.
