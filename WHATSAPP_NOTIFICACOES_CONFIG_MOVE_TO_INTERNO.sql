@@ -1,6 +1,5 @@
--- WHATSAPP_NOTIFICACOES_CONFIG.sql
--- Tabela no schema interno (não usar public).
--- Aplicar no SQL Editor do Supabase (projeto valepan-pedidos).
+-- Migração one-off: mover whatsapp_notificacoes_config de public → interno
+-- (já aplicada em produção via Supabase migration whatsapp_notificacoes_config_move_to_interno)
 
 CREATE TABLE IF NOT EXISTS interno.whatsapp_notificacoes_config (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -13,7 +12,24 @@ CREATE TABLE IF NOT EXISTS interno.whatsapp_notificacoes_config (
 
 ALTER TABLE interno.whatsapp_notificacoes_config ENABLE ROW LEVEL SECURITY;
 
--- Sem políticas para authenticated/anon: apenas service role (bypass RLS) acessa via API interna.
+INSERT INTO interno.whatsapp_notificacoes_config (
+  id,
+  embalagem_habilitado,
+  fermentacao_habilitado,
+  forno_habilitado,
+  saidas_habilitado,
+  updated_at
+)
+SELECT
+  id,
+  embalagem_habilitado,
+  fermentacao_habilitado,
+  forno_habilitado,
+  saidas_habilitado,
+  updated_at
+FROM public.whatsapp_notificacoes_config
+WHERE EXISTS (SELECT 1 FROM public.whatsapp_notificacoes_config LIMIT 1)
+  AND NOT EXISTS (SELECT 1 FROM interno.whatsapp_notificacoes_config LIMIT 1);
 
 INSERT INTO interno.whatsapp_notificacoes_config (
   embalagem_habilitado,
@@ -24,5 +40,4 @@ INSERT INTO interno.whatsapp_notificacoes_config (
 SELECT false, false, false, false
 WHERE NOT EXISTS (SELECT 1 FROM interno.whatsapp_notificacoes_config LIMIT 1);
 
--- Se existir cópia legada em public (ambientes antigos):
--- DROP TABLE IF EXISTS public.whatsapp_notificacoes_config;
+DROP TABLE IF EXISTS public.whatsapp_notificacoes_config;

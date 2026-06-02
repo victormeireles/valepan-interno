@@ -2387,33 +2387,6 @@ export type Database = {
         }
         Relationships: []
       }
-      whatsapp_notificacoes_config: {
-        Row: {
-          id: string
-          embalagem_habilitado: boolean
-          fermentacao_habilitado: boolean
-          forno_habilitado: boolean
-          saidas_habilitado: boolean
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Relationships: []
-      }
       verification_tokens: {
         Row: {
           created_at: string | null
@@ -2600,6 +2573,49 @@ export type Database = {
         | "cadastro_realizado"
         | "em_analise_valepan"
         | "em_analise_distribuidor"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  interno: {
+    Tables: {
+      whatsapp_notificacoes_config: {
+        Row: {
+          id: string
+          embalagem_habilitado: boolean
+          fermentacao_habilitado: boolean
+          forno_habilitado: boolean
+          saidas_habilitado: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
