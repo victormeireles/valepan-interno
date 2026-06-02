@@ -85,6 +85,13 @@ export interface SaidaFornoQualityData {
   numero_carrinho?: string;
   bandejas?: number;
   observacoes?: string;
+  /**
+   * Quando true, o saldo deste carrinho deixa de contar como «em uso» (página Carrinhos)
+   * sem criar entradas na embalagem — perda total / encerramento administrativo.
+   */
+  liberacao_carrinho_perda_total?: boolean;
+  /** ISO 8601 — instante do encerramento administrativo do saldo. */
+  liberacao_carrinho_perda_total_em?: string;
 }
 
 /**

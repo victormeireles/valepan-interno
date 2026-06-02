@@ -43,7 +43,11 @@ export function useProductionQueueDerived(
   };
 
   const ordensComProdutoFaltando = useMemo(
-    () => initialQueue.filter((i) => i.produtoJoinFaltando).length,
+    () => initialQueue.filter((i) => i.produtoJoinFaltando && !i.produtoCargaFilaErro).length,
+    [initialQueue],
+  );
+  const ordensComCargaProdutoFalhou = useMemo(
+    () => initialQueue.filter((i) => i.produtoCargaFilaErro).length,
     [initialQueue],
   );
 
@@ -75,14 +79,11 @@ export function useProductionQueueDerived(
 
   const fornoGroups = useMemo(() => {
     if (!isEntradaForno) return [];
-    const m = new Map<string, ProductionQueueItem[]>();
-    for (const it of filteredQueue) {
-      if (!m.has(it.produto_id)) m.set(it.produto_id, []);
-      m.get(it.produto_id)!.push(it);
-    }
-    return [...m.entries()]
-      .map(([produto_id, orders]) => ({ produto_id, orders }))
-      .sort((a, b) => a.orders[0].produtos.nome.localeCompare(b.orders[0].produtos.nome, 'pt-BR'));
+    // Um card por ordem de produção (sem agrupar por produto), na ordem de planejamento —
+    // igual à fermentação. `produto_id` aqui é a chave do card (= id da OP), só para key/expansão.
+    return [...filteredQueue]
+      .sort(compareProductionQueuePlanningOrder)
+      .map((it) => ({ produto_id: it.id, orders: [it] }));
   }, [filteredQueue, isEntradaForno]);
 
   const fornoFilaGlobal = useMemo(() => {
@@ -216,6 +217,7 @@ export function useProductionQueueDerived(
       isSaidaEmbalagem,
     },
     ordensComProdutoFaltando,
+    ordensComCargaProdutoFalhou,
     filteredQueue,
     queueForCardsActive,
     primeiraOrdemAcionavelId,

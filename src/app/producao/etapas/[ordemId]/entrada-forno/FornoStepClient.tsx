@@ -36,6 +36,7 @@ interface FornoStepClientProps {
     id: string;
     lote_codigo: string;
     qtd_planejada: number;
+    planejadoUnidadesConsumo?: number;
     produto: {
       id: string;
       nome: string;
@@ -51,6 +52,7 @@ interface FornoStepClientProps {
 }
 
 const MAX_LATAS_POR_CARRINHO = 20;
+const LATAS_PADRAO_ENTRADA_FORNO = 20;
 
 function parseLatasInput(raw: string): number {
   const n = parseFloat(raw.replace(',', '.'));
@@ -144,7 +146,12 @@ export default function FornoStepClient({
   }, [modalEditLog, logs, uaOk]);
 
   const metaForno =
-    getQuantityByStation('entrada_forno', ordemProducao.qtd_planejada, productInfo).value || 0;
+    getQuantityByStation(
+      'entrada_forno',
+      ordemProducao.qtd_planejada,
+      productInfo,
+      ordemProducao.planejadoUnidadesConsumo,
+    ).value || 0;
   const volumeFornoConcluido = sumQuantidadeFornoConcluida(logs, uaOk);
   const latasFornoAberto = sumLatasFornoEmAndamento(logs, uaOk);
   const volumeFornoComAtual = volumeFornoConcluido + latasFornoAberto;
@@ -187,9 +194,13 @@ export default function FornoStepClient({
   const selecionarCarrinho = (c: CarrinhoDisponivelVM) => {
     if (!c.pode_colocar_no_forno) return;
     setCarrinhoSelecionado(c);
-    const capped = c.latas_registradas > 0 ? Math.min(MAX_LATAS_POR_CARRINHO, c.latas_registradas) : 0;
-    const def = capped > 0 ? String(capped).replace('.', ',') : '';
-    setModalLatasField(def);
+    const capFermentacao =
+      c.latas_registradas > 0 ? Math.min(MAX_LATAS_POR_CARRINHO, c.latas_registradas) : null;
+    const defNum =
+      capFermentacao != null
+        ? Math.min(LATAS_PADRAO_ENTRADA_FORNO, capFermentacao)
+        : LATAS_PADRAO_ENTRADA_FORNO;
+    setModalLatasField(String(defNum).replace('.', ','));
     setError(null);
   };
 
@@ -337,6 +348,7 @@ export default function FornoStepClient({
         produtoNome={ordemProducao.produto.nome}
         backHref={filaUrlForProductionStep('entrada_forno')}
         denseHeader
+        registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'entrada_forno' }}
         {...PRODUCTION_STEP_DENSE_SHELL}
       >
         <div className="flex justify-center py-12">
@@ -353,6 +365,7 @@ export default function FornoStepClient({
       produtoNome={ordemProducao.produto.nome}
       backHref={filaUrlForProductionStep('entrada_forno')}
       denseHeader
+      registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'entrada_forno' }}
       {...PRODUCTION_STEP_DENSE_SHELL}
     >
       <div className="space-y-3">

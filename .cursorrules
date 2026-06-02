@@ -51,6 +51,10 @@
 - Split into UI, State, Handlers, Networking, etc.
 </avoid_god_classes>
 
+<valepan_terminology>
+- No domínio deste produto (UI, comentários de negócio, nomes de tabelas Postgres internas, APIs da app), não usar o termo «planilha». Preferir: estoque, registo, relatório, dados consolidados. Integrações com Google Sheets podem mencionar «Google Sheets» ou «folha» só onde for inequivocamente integração externa.
+</valepan_terminology>
+
 <database_and_rls>
 - ALWAYS enable Row Level Security (RLS) on ALL new tables in Supabase.
 - When creating RLS policies, ALWAYS use (SELECT auth.uid()) and (SELECT is_admin()) instead of auth.uid() and is_admin() directly to avoid performance issues.

@@ -1,8 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { filaStationUsesDefaultTodayFilter, filaUrlForStation } from '@/lib/production/production-station-routes';
+import {
+  filaStationUsesDefaultTodayFilter,
+  filaUrlForStation,
+  ordemProducaoUrl,
+} from '@/lib/production/production-station-routes';
 import {
   formatIsoDateToDDMMYYYY,
   getTodayISOInBrazilTimezone,
@@ -33,7 +38,6 @@ import {
 import {
   startProductionStep,
   registerSaidaForno,
-  getEntradaFornoCarrinhosParaSaida,
   marcarPerdaTotalCarrinhoEntradaForno,
   getSaidaFornoCarrinhosParaEmbalagem,
   registerEntradaEmbalagemCarrinhoELatas,
@@ -42,7 +46,7 @@ import { useProductionQueueDerived } from '@/hooks/useProductionQueueDerived';
 import { useProductionQueueStation } from '@/hooks/useProductionQueueStation';
 import { DEFAULT_BANDEJAS_SAIDA, MAX_BANDEJAS_SAIDA } from '@/components/Producao/BandejasStepper';
 import { filaEtapaTituloSecaoProntos } from '@/components/Producao/queue/production-queue-metrics';
-import type { EtapaFilaSyncPreRequisitos } from '@/app/actions/producao-fila-sync-actions';
+import type { EtapaFilaSyncPreRequisitos } from '@/lib/production/producao-fila-sync-chain';
 import type { Station } from '@/lib/utils/production-conversions';
 
 const MAX_LATAS_POR_CARRINHO = 20;
@@ -60,6 +64,7 @@ export default function ProductionQueueClient({
 }: ProductionQueueClientProps) {
   const router = useRouter();
   const [isMassaLotesModalOpen, setIsMassaLotesModalOpen] = useState(false);
+  const [massaModalAutoNewLote, setMassaModalAutoNewLote] = useState(false);
   const [selectedMassaOrder, setSelectedMassaOrder] = useState<ProductionQueueItem | undefined>(undefined);
   const [fermentacaoModalItem, setFermentacaoModalItem] = useState<ProductionQueueItem | null>(null);
   const [expandedFornoProdutoId, setExpandedFornoProdutoId] = useState<string | null>(null);
@@ -74,9 +79,6 @@ export default function ProductionQueueClient({
   const [saidaOrdemId, setSaidaOrdemId] = useState('');
   const [saidaCarrinhoField, setSaidaCarrinhoField] = useState('');
   const [saidaBandejasField, setSaidaBandejasField] = useState(String(DEFAULT_BANDEJAS_SAIDA));
-  const [saidaCarrinhosDisponiveis, setSaidaCarrinhosDisponiveis] = useState<string[]>([]);
-  const [saidaCarrinhosLoading, setSaidaCarrinhosLoading] = useState(false);
-  const [saidaCarrinhosError, setSaidaCarrinhosError] = useState<string | null>(null);
   const [saidaActionLoading, setSaidaActionLoading] = useState(false);
   const [saidaActionError, setSaidaActionError] = useState<string | null>(null);
   const [saidaPosConfirm, setSaidaPosConfirm] = useState<'form' | 'nextChoice'>('form');
@@ -105,9 +107,24 @@ export default function ProductionQueueClient({
     });
   }, [initialQueue, filterDateIso]);
 
+  const ordensProdutoInvalido = useMemo(
+    () => initialQueue.filter((i) => i.produtoJoinFaltando && !i.produtoCargaFilaErro),
+    [initialQueue],
+  );
+  const ordensCargaProdutoFalhou = useMemo(
+    () => initialQueue.filter((i) => i.produtoCargaFilaErro),
+    [initialQueue],
+  );
+  const ordensProdutoInvalidoVisiveis = useMemo(
+    () =>
+      queueFilteredByDataProducao.filter((i) => i.produtoJoinFaltando && !i.produtoCargaFilaErro),
+    [queueFilteredByDataProducao],
+  );
+
   const {
     flags,
     ordensComProdutoFaltando,
+    ordensComCargaProdutoFalhou,
     filteredQueue,
     queueForCardsActive,
     primeiraOrdemAcionavelId,
@@ -122,7 +139,6 @@ export default function ProductionQueueClient({
     saidaFornoGroupsActive,
     saidaFornoGroupsProntos,
     embalagemEntradaFilaGlobal,
-    embalagemEntradaUaHomogenea,
     saidaEmbalagemFilaGlobal,
   } = useProductionQueueDerived(queueFilteredByDataProducao, effectiveStation);
 
@@ -230,49 +246,8 @@ export default function ProductionQueueClient({
     setSaidaOrdemId('');
     setSaidaCarrinhoField('');
     setSaidaBandejasField(String(DEFAULT_BANDEJAS_SAIDA));
-    setSaidaCarrinhosDisponiveis([]);
-    setSaidaCarrinhosLoading(false);
-    setSaidaCarrinhosError(null);
     setSaidaActionError(null);
   };
-
-  useEffect(() => {
-    if (!modalSaidaFornoAberto || saidaPosConfirm !== 'form' || !saidaOrdemId) {
-      setSaidaCarrinhosDisponiveis([]);
-      setSaidaCarrinhosLoading(false);
-      setSaidaCarrinhosError(null);
-      return;
-    }
-    let cancelled = false;
-    setSaidaCarrinhosLoading(true);
-    setSaidaCarrinhosError(null);
-    void getEntradaFornoCarrinhosParaSaida(saidaOrdemId)
-      .then((res) => {
-        if (cancelled) return;
-        if (!res.success) {
-          setSaidaCarrinhosDisponiveis([]);
-          setSaidaCarrinhosError(res.error || 'Erro ao carregar carrinhos.');
-          setSaidaCarrinhosLoading(false);
-          return;
-        }
-        const lista = res.data.map((row) => row.numero_carrinho);
-        setSaidaCarrinhosDisponiveis(lista);
-        setSaidaCarrinhosError(null);
-        setSaidaCarrinhosLoading(false);
-        if (lista.length > 0 && !lista.includes(saidaCarrinhoField.trim())) {
-          setSaidaCarrinhoField('');
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSaidaCarrinhosDisponiveis([]);
-        setSaidaCarrinhosLoading(false);
-        setSaidaCarrinhosError('Erro ao carregar carrinhos.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [modalSaidaFornoAberto, saidaPosConfirm, saidaOrdemId, saidaCarrinhoField]);
 
   const closeModalEmbalagem = () => {
     setModalEmbalagemAberto(false);
@@ -294,6 +269,7 @@ export default function ProductionQueueClient({
       (row) =>
         norm(row.numero_carrinho).includes(qn) ||
         row.numero_carrinho.toLowerCase().includes(q) ||
+        (row.rotulo_exibicao?.toLowerCase().includes(q) ?? false) ||
         row.lote_codigo.toLowerCase().includes(q) ||
         row.produto_nome.toLowerCase().includes(q),
     );
@@ -511,6 +487,40 @@ export default function ProductionQueueClient({
           </button>
         </div>
 
+        {ordensComCargaProdutoFalhou > 0 && (
+          <div
+            className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-amber-950 shadow-sm sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
+            role="alert"
+          >
+            <span className="material-icons shrink-0 text-lg text-amber-600 sm:text-xl">cloud_off</span>
+            <div className="min-w-0 text-xs leading-snug sm:text-sm">
+              <p className="font-semibold">
+                {ordensComCargaProdutoFalhou === 1
+                  ? 'Não foi possível carregar o cadastro do produto desta ordem na fila.'
+                  : `Não foi possível carregar o cadastro do produto de ${ordensComCargaProdutoFalhou} ordens na fila.`}
+              </p>
+              <p className="mt-1 text-amber-900/90">
+                O produto pode existir no sistema (como na ordem de produção), mas a consulta em lote da fila falhou —
+                por exemplo por coluna ausente no banco ou erro temporário. Recarregue a página (F5). Se continuar, verifique
+                o terminal do servidor (log «Erro ao buscar fila (produtos)»).
+              </p>
+              <ul className="mt-2 space-y-1">
+                {ordensCargaProdutoFalhou.slice(0, 5).map((o) => (
+                  <li key={o.id} className="font-medium tabular-nums">
+                    {o.lote_codigo}
+                    {o.produto_id ? (
+                      <span className="font-normal text-amber-800/90">
+                        {' '}
+                        · produto <code className="rounded bg-white/70 px-1 text-[11px]">{o.produto_id}</code>
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {ordensComProdutoFaltando > 0 && (
           <div
             className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-rose-900 shadow-sm sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3"
@@ -524,8 +534,57 @@ export default function ProductionQueueClient({
                   : `${ordensComProdutoFaltando} ordens estão sem cadastro de produto válido.`}
               </p>
               <p className="mt-1 text-rose-800/90">
-                O vínculo entre a ordem e o produto no banco está quebrado (produto pode ter sido excluído). Corrija o
-                cadastro ou edite a ordem e selecione um produto existente.
+                O <code className="rounded bg-white/70 px-1">produto_id</code> da ordem não existe na tabela{' '}
+                <code className="rounded bg-white/70 px-1">produtos</code> (produto apagado ou ID incorreto). Corrija na
+                ordem de produção ou restaure o produto no cadastro.
+              </p>
+              {filterDateIso &&
+                ordensProdutoInvalidoVisiveis.length === 0 &&
+                ordensProdutoInvalido.length > 0 && (
+                  <p className="mt-2 font-medium text-rose-900">
+                    Nenhuma dessas ordens aparece no filtro de data atual — use «Mostrar todos» ou altere a data.
+                  </p>
+                )}
+              <ul className="mt-2 space-y-1.5">
+                {ordensProdutoInvalido.slice(0, 8).map((o) => {
+                  const dataIso =
+                    o.data_producao != null && String(o.data_producao).trim() !== ''
+                      ? normalizeToISODate(o.data_producao)
+                      : null;
+                  const pid = String(o.produto_id ?? '').trim();
+                  return (
+                    <li
+                      key={o.id}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-rose-200/80 bg-white/60 px-2 py-1.5"
+                    >
+                      <span className="font-semibold tabular-nums text-rose-950">{o.lote_codigo}</span>
+                      {dataIso ? (
+                        <span className="text-rose-800/90">produção {formatIsoDateToDDMMYYYY(dataIso)}</span>
+                      ) : (
+                        <span className="text-rose-800/90">sem data de produção</span>
+                      )}
+                      <span className="text-rose-800/80">
+                        produto:{' '}
+                        <code className="rounded bg-rose-50 px-1 text-[11px]">
+                          {pid || '(vazio)'}
+                        </code>
+                      </span>
+                      <Link
+                        href={ordemProducaoUrl(dataIso ? { data: dataIso } : undefined)}
+                        className="ml-auto text-xs font-semibold text-rose-900 underline underline-offset-2 hover:text-rose-950"
+                      >
+                        Abrir ordem de produção
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+              {ordensProdutoInvalido.length > 8 ? (
+                <p className="mt-1 text-rose-800/80">+ {ordensProdutoInvalido.length - 8} ordem(ns) adicional(is).</p>
+              ) : null}
+              <p className="mt-2 text-rose-800/90">
+                Na fila, expanda o card em vermelho (se visível) para ver o ID completo ou cancele a ordem se não for
+                mais necessária.
               </p>
             </div>
           </div>
@@ -577,7 +636,6 @@ export default function ProductionQueueClient({
             meta={embalagemEntradaFilaGlobal.meta}
             saidaForno={embalagemEntradaFilaGlobal.saidaForno}
             entradaEmbalagem={embalagemEntradaFilaGlobal.entradaEmbalagem}
-            unidadesPorAssadeiraHomogenea={embalagemEntradaUaHomogenea}
             onIniciar={() => {
               setModalEmbalagemAberto(true);
               setEmbalagemBusca('');
@@ -620,6 +678,7 @@ export default function ProductionQueueClient({
                   filaSecao="active"
                   etapaFila="entrada_forno"
                   onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
+                  onRefresh={() => router.refresh()}
                 />
               )}
               {fornoGroupsProntos.length > 0 && (
@@ -634,6 +693,7 @@ export default function ProductionQueueClient({
                     filaSecao="prontos"
                     etapaFila="entrada_forno"
                     onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
+                    onRefresh={() => router.refresh()}
                   />
                 </div>
               )}
@@ -648,6 +708,7 @@ export default function ProductionQueueClient({
                   filaSecao="active"
                   etapaFila="saida_forno"
                   onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
+                  onRefresh={() => router.refresh()}
                 />
               )}
               {saidaFornoGroupsProntos.length > 0 && (
@@ -662,6 +723,7 @@ export default function ProductionQueueClient({
                     filaSecao="prontos"
                     etapaFila="saida_forno"
                     onOpenPreRequisitoSync={(item) => setPreReqSyncOrdem(item)}
+                    onRefresh={() => router.refresh()}
                   />
                 </div>
               )}
@@ -676,8 +738,9 @@ export default function ProductionQueueClient({
               effectiveStation={effectiveStation}
               flags={flags}
               router={router}
-              onOpenMassaLotes={(item) => {
+              onOpenMassaLotes={(item, mode = 'list') => {
                 setSelectedMassaOrder(item);
+                setMassaModalAutoNewLote(mode === 'newLote');
                 setIsMassaLotesModalOpen(true);
               }}
               onOpenFermentacaoModal={(item) => setFermentacaoModalItem(item)}
@@ -712,11 +775,13 @@ export default function ProductionQueueClient({
           isOpen={isMassaLotesModalOpen}
           onClose={() => {
             setIsMassaLotesModalOpen(false);
+            setMassaModalAutoNewLote(false);
             setSelectedMassaOrder(undefined);
           }}
           ordemProducaoId={selectedMassaOrder.id}
           produtoNome={selectedMassaOrder.produtos.nome}
           loteCodigo={selectedMassaOrder.lote_codigo}
+          autoOpenNewLote={massaModalAutoNewLote}
         />
       )}
 
@@ -764,14 +829,10 @@ export default function ProductionQueueClient({
         onSaidaOrdemIdChange={(id) => {
           setSaidaOrdemId(id);
           setSaidaCarrinhoField('');
-          setSaidaCarrinhosError(null);
           setSaidaActionError(null);
         }}
         saidaCarrinhoField={saidaCarrinhoField}
         onSaidaCarrinhoChange={setSaidaCarrinhoField}
-        saidaCarrinhosDisponiveis={saidaCarrinhosDisponiveis}
-        saidaCarrinhosLoading={saidaCarrinhosLoading}
-        saidaCarrinhosError={saidaCarrinhosError}
         saidaBandejasField={saidaBandejasField}
         onSaidaBandejasChange={setSaidaBandejasField}
         saidaActionLoading={saidaActionLoading}

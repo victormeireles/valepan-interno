@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
 import { getProductionOrderWithProduct, getProductionStepLogs } from '@/app/actions/producao-etapas-actions';
@@ -5,13 +6,51 @@ import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
 import { PRODUCTION_STEP_DENSE_SHELL } from '@/components/Producao/production-step-form-classes';
 import SaidaEmbalagemPhotoClient from './SaidaEmbalagemPhotoClient';
 import { getMetaCaixasSaidaEmbalagem } from '@/lib/utils/production-conversions';
-import type { SaidaEmbalagemQualityData } from '@/domain/types/producao-etapas';
+import type { ProductionStepLog, SaidaEmbalagemQualityData } from '@/domain/types/producao-etapas';
+
+export const dynamic = 'force-dynamic';
+
+/** Mesma regra que `getProductionQueue`: valor do log de saída emb. com `inicio` mais recente que tenha caixas. */
+function caixasRecebidasMaisRecenteNosLogs(logs: ProductionStepLog[]): number | null {
+  let best: { t: number; v: number } | null = null;
+  for (const l of logs) {
+    if (l.etapa !== 'saida_embalagem') continue;
+    const dq = l.dados_qualidade as SaidaEmbalagemQualityData | undefined;
+    const cr = dq?.caixas_recebidas;
+    if (cr == null || !Number.isFinite(Number(cr))) continue;
+    const t = new Date(l.inicio).getTime();
+    if (!best || t >= best.t) {
+      best = { t, v: Math.round(Number(cr)) };
+    }
+  }
+  return best?.v ?? null;
+}
+
+/** Todas as URLs em `producao_etapas_log.fotos` desta etapa, por ordem cronológica de `inicio`, sem duplicar. */
+function fotosSaidaEmbalagemNosLogs(logs: ProductionStepLog[]): string[] {
+  const saida = logs
+    .filter((l) => l.etapa === 'saida_embalagem' && l.inicio)
+    .sort((a, b) => new Date(a.inicio).getTime() - new Date(b.inicio).getTime());
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of saida) {
+    for (const u of l.fotos ?? []) {
+      const url = typeof u === 'string' ? u.trim() : '';
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        out.push(url);
+      }
+    }
+  }
+  return out;
+}
 
 interface PageProps {
   params: Promise<{ ordemId: string }>;
 }
 
 export default async function SaidaEmbalagemPage({ params }: PageProps) {
+  noStore();
   const { ordemId } = await params;
   const result = await getProductionOrderWithProduct(ordemId);
   if (!result.success || !result.data) {
@@ -28,44 +67,46 @@ export default async function SaidaEmbalagemPage({ params }: PageProps) {
   };
 
   const logsRes = await getProductionStepLogs(o.id);
-  let initialCaixasRecebidas: number | null = null;
-  if (logsRes.success && logsRes.data) {
-    const open = logsRes.data
-      .filter((l) => l.etapa === 'saida_embalagem' && l.fim === null)
-      .sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
-    const last = open[0];
-    const dq = last?.dados_qualidade as SaidaEmbalagemQualityData | undefined;
-    const cr = dq?.caixas_recebidas;
-    if (cr != null && Number.isFinite(Number(cr))) {
-      initialCaixasRecebidas = Math.round(Number(cr));
-    }
-  }
+  const initialCaixasRecebidas =
+    logsRes.success && logsRes.data ? caixasRecebidasMaisRecenteNosLogs(logsRes.data) : null;
+  const initialFotosSalvas =
+    logsRes.success && logsRes.data ? fotosSaidaEmbalagemNosLogs(logsRes.data) : [];
 
-  const metaCaixas = getMetaCaixasSaidaEmbalagem(o.qtd_planejada, {
-    unidadeNomeResumido: produto.unidadeNomeResumido,
-    box_units: produto.box_units,
-    package_units: produto.package_units,
-    unidades_assadeira: produto.unidades_assadeira,
-    receita_massa: produto.receita_massa,
-  });
+  const caixasPlanejadas = (o as { caixasPlanejadas?: number | null }).caixasPlanejadas;
+  const metaCaixas =
+    caixasPlanejadas != null && Number.isFinite(caixasPlanejadas) && caixasPlanejadas > 0
+      ? {
+          caixasEsperadas: caixasPlanejadas,
+          resumo: `${caixasPlanejadas} cx`,
+          subtexto: 'Caixas planejadas na ordem (conversão do planejamento, considerando o tipo de caixa).',
+        }
+      : getMetaCaixasSaidaEmbalagem(o.qtd_planejada, {
+          unidadeNomeResumido: produto.unidadeNomeResumido,
+          box_units: produto.box_units,
+          package_units: produto.package_units,
+          unidades_assadeira: produto.unidades_assadeira,
+          receita_massa: produto.receita_massa,
+        });
 
   return (
     <ProductionStepLayout
-      etapaNome="Saída da Embalagem"
+      etapaNome="Saída de embalagem"
       loteCodigo={o.lote_codigo}
       produtoNome={produto.nome ?? 'Produto'}
       backHref={filaUrlForProductionStep('saida_embalagem')}
       denseHeader
+      registrosEtapa={{ ordemProducaoId: o.id, etapa: 'saida_embalagem' }}
       {...PRODUCTION_STEP_DENSE_SHELL}
     >
       <p className="sr-only">
-        Contagem de caixas e foto opcional do lote. Etapa saida_embalagem.
+        Contagem de caixas embaladas e foto opcional do lote. Etapa saída de embalagem.
       </p>
       <SaidaEmbalagemPhotoClient
         ordemProducaoId={o.id}
         produtoNome={produto.nome ?? 'Produto'}
         metaCaixas={metaCaixas}
         initialCaixasRecebidas={initialCaixasRecebidas}
+        initialFotosSalvas={initialFotosSalvas}
       />
     </ProductionStepLayout>
   );

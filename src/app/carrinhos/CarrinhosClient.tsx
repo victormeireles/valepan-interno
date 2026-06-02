@@ -105,7 +105,7 @@ function CarrinhoCard({
       {!hideHeader && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">#{numero || '—'}</span>
+            <span className="text-sm font-semibold text-slate-800">Carrinho {numero || '—'}</span>
             {emUso ? (
               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
                 Em uso
@@ -127,8 +127,8 @@ function CarrinhoCard({
             )}
           </div>
           {cap > 0 && emUso && (
-            <span className="text-xs text-slate-600">
-              No carrinho: {ocup} / {cap}
+            <span className="text-xs text-slate-600 tabular-nums">
+              {ocup} / {cap}
             </span>
           )}
         </div>
@@ -145,7 +145,7 @@ function CarrinhoCard({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600">Capacidade (bandejas = latas)</span>
+          <span className="text-slate-600">Capacidade</span>
           <input
             className="rounded-md border border-slate-300 px-3 py-2"
             value={capacidade}
@@ -166,19 +166,18 @@ function CarrinhoCard({
           <span className="text-slate-700">Em uso</span>
         </label>
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="text-slate-600">Quantidade agora</span>
+          <span className="text-slate-600">Latas ocupadas</span>
           <input
             className="rounded-md border border-slate-300 px-3 py-2 disabled:bg-slate-50"
             value={latasOcupadas}
             onChange={(e) => setLatasOcupadas(e.target.value)}
             inputMode="numeric"
             disabled={!emUso}
-            placeholder={emUso ? 'Ex.: 20' : '—'}
           />
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={precisaReparos} onChange={(e) => setPrecisaReparos(e.target.checked)} />
-          <span className="text-slate-700">Precisa de reparos</span>
+          <span className="text-slate-700">Reparos</span>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
@@ -226,6 +225,10 @@ function hrefEtapaProducao(ordemId: string, etapa: CarrinhoUsoEtapa): string {
   return `/producao/etapas/${ordemId}/entrada-embalagem`;
 }
 
+function hrefEntradaForno(ordemId: string): string {
+  return `/producao/etapas/${ordemId}/entrada-forno`;
+}
+
 function CarrinhoEmUsoCard({
   c,
   onSelect,
@@ -235,6 +238,7 @@ function CarrinhoEmUsoCard({
 }) {
   const occs = c.uso_ocorrencias ?? [];
   const resumo = resumoEtapasUso(occs);
+  const produtoAtual = occs[0]?.produto_nome?.trim() || '';
   const manut = c.ativo && c.precisa_reparos;
   const shell = manut
     ? 'border-orange-400 bg-orange-50 text-orange-950 ring-1 ring-orange-300/50'
@@ -245,40 +249,88 @@ function CarrinhoEmUsoCard({
       type="button"
       onClick={onSelect}
       aria-label={`Carrinho ${c.numero}, ${resumo}. Abrir detalhes.`}
-      className={`flex min-w-[6.75rem] max-w-[11rem] flex-col gap-0.5 rounded-lg border px-2 py-1.5 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${shell}`}
+      className={`flex h-[3.1rem] w-[8.9rem] flex-col gap-0.5 overflow-hidden rounded-lg border px-2 py-1 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${shell}`}
     >
       <div className="flex items-center justify-between gap-1.5">
-        <span className="text-sm font-bold tabular-nums leading-none">#{c.numero}</span>
+        <span className="text-xs font-bold tabular-nums leading-none">Carrinho {c.numero}</span>
         {manut && (
-          <span className="shrink-0 rounded bg-orange-200/90 px-1 py-0.5 text-[9px] font-semibold uppercase leading-none text-orange-950">
-            Reparo
+          <span
+            className="shrink-0 text-[12px] leading-none font-bold text-rose-600"
+            title="Precisa de reparo"
+            aria-label="Precisa de reparo"
+          >
+            !
           </span>
         )}
       </div>
-      <span className="line-clamp-2 text-[10px] font-medium leading-tight text-slate-700">{resumo}</span>
+      <span className="truncate text-[9px] font-medium leading-tight text-slate-700">{resumo}</span>
+      {produtoAtual && (
+        <span className="truncate text-[9px] leading-tight text-slate-500">{produtoAtual}</span>
+      )}
     </button>
   );
 }
 
-function CarrinhoUsoDetalheModal({
+function CarrinhoPainelModal({
   open,
   onClose,
   carrinho,
+  onReload,
 }: {
   open: boolean;
   onClose: () => void;
   carrinho: CarrinhoComUsoDetalhe | null;
+  onReload: () => Promise<void>;
 }) {
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setBusyKey(null);
+      setActionMsg(null);
+    }
+  }, [open]);
+
   if (!open || !carrinho) return null;
 
   const occs = carrinho.uso_ocorrencias ?? [];
+  const resumoEtapas = resumoEtapasUso(occs);
+  const shell: CardShell =
+    !carrinho.ativo ? 'inativo' : carrinho.em_uso ? 'em_uso' : 'neutral';
+
+  const run = async (key: string, fn: () => Promise<{ success: boolean; error?: string } | void>) => {
+    setBusyKey(key);
+    setActionMsg(null);
+    try {
+      const res = await fn();
+      if (res && typeof res === 'object' && 'success' in res && !res.success) {
+        setActionMsg({ type: 'err', text: res.error ?? 'Operação falhou.' });
+        setBusyKey(null);
+        return;
+      }
+      await onReload();
+      setActionMsg({ type: 'ok', text: 'Operação concluída.' });
+    } catch (e) {
+      setActionMsg({
+        type: 'err',
+        text: e instanceof Error ? e.message : 'Erro inesperado.',
+      });
+    }
+    setBusyKey(null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Fechar" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[min(90vh,640px)] w-full max-w-md flex-col rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[85vh] sm:rounded-2xl">
+      <div className="relative z-10 flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[88vh] sm:rounded-2xl">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-          <h2 className="text-base font-semibold text-slate-900">Carrinho #{carrinho.numero}</h2>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Carrinho {carrinho.numero}</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {carrinho.ativo ? (carrinho.em_uso ? resumoEtapas : 'Disponível') : 'Inativo'}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -287,91 +339,191 @@ function CarrinhoUsoDetalheModal({
             Fechar
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {occs.length === 0 ? (
-            <p className="text-sm text-slate-600">
-              Este carrinho está marcado como em uso, mas não há registo detalhado nas etapas (pode
-              ser marcação manual).
-            </p>
-          ) : (
-            <ul className="space-y-4">
-              {occs.map((o, idx) => (
-                <li
-                  key={`${o.etapa}-${o.ordem_producao_id}-${o.fermentacao_log_id ?? ''}-${o.saida_forno_log_id ?? ''}-${idx}`}
-                  className="rounded-xl border border-slate-200 bg-slate-50/80 p-3"
-                >
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        o.etapa === 'fermentacao'
-                          ? 'bg-violet-100 text-violet-900'
-                          : 'bg-amber-100 text-amber-950'
-                      }`}
-                    >
-                      {etiquetaEtapaCurta(o.etapa)}
-                    </span>
-                    <Link
-                      href={hrefEtapaProducao(o.ordem_producao_id, o.etapa)}
-                      onClick={onClose}
-                      className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline"
-                    >
-                      Abrir etapa na OP
-                    </Link>
-                  </div>
-                  <dl className="space-y-1.5 text-sm text-slate-800">
-                    <div>
-                      <dt className="text-xs font-medium text-slate-500">Produto</dt>
-                      <dd className="font-medium">{o.produto_nome?.trim() || '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium text-slate-500">Lote (OP)</dt>
-                      <dd className="font-mono text-xs">{o.lote_codigo?.trim() || o.ordem_producao_id}</dd>
-                    </div>
-                    {o.etapa === 'fermentacao' && (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Assadeiras (latas LT)</dt>
-                        <dd>
-                          {o.assadeiras_total != null ? (
-                            <span className="tabular-nums font-semibold">{o.assadeiras_total}</span>
-                          ) : (
-                            <span className="text-slate-500">Não indicado no registo</span>
-                          )}
-                        </dd>
-                      </div>
-                    )}
-                    {o.etapa === 'pos_forno' && (
-                      <>
-                        <div>
-                          <dt className="text-xs font-medium text-slate-500">Latas na saída do forno</dt>
-                          <dd>
-                            {o.assadeiras_total != null ? (
-                              <span className="tabular-nums font-semibold">{o.assadeiras_total}</span>
-                            ) : (
-                              <span className="text-slate-500">—</span>
-                            )}
-                            <span className="text-slate-500"> (bandejas / LT)</span>
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs font-medium text-slate-500">Ainda por embalar</dt>
-                          <dd>
-                            {o.latas_restantes_embalagem != null ? (
-                              <span className="tabular-nums font-semibold text-amber-900">
-                                {o.latas_restantes_embalagem}
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                            <span className="text-slate-500"> lata(s)</span>
-                          </dd>
-                        </div>
-                      </>
-                    )}
-                  </dl>
-                </li>
-              ))}
-            </ul>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-5">
+          {actionMsg && (
+            <div
+              className={`rounded-lg px-3 py-2 text-sm ${
+                actionMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-800'
+              }`}
+            >
+              {actionMsg.text}
+            </div>
           )}
+
+          {occs.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">Produção</h3>
+              <ul className="space-y-3">
+                {occs.map((o, idx) => (
+                  <li
+                    key={`${o.etapa}-${o.ordem_producao_id}-${o.fermentacao_log_id ?? ''}-${o.saida_forno_log_id ?? ''}-${idx}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          o.etapa === 'fermentacao'
+                            ? 'bg-violet-100 text-violet-900'
+                            : 'bg-amber-100 text-amber-950'
+                        }`}
+                      >
+                        {etiquetaEtapaCurta(o.etapa)}
+                      </span>
+                    </div>
+                    <dl className="space-y-1.5 text-sm text-slate-800">
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Produto</dt>
+                        <dd className="font-medium">{o.produto_nome?.trim() || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Lote</dt>
+                        <dd className="font-mono text-xs">{o.lote_codigo?.trim() || o.ordem_producao_id}</dd>
+                      </div>
+                      {o.etapa === 'fermentacao' && (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Assadeiras</dt>
+                          <dd className="tabular-nums font-semibold">
+                            {o.assadeiras_total != null ? o.assadeiras_total : '—'}
+                          </dd>
+                        </div>
+                      )}
+                      {o.etapa === 'pos_forno' && (
+                        <>
+                          <div>
+                            <dt className="text-xs font-medium text-slate-500">Saída forno</dt>
+                            <dd className="tabular-nums font-semibold">
+                              {o.assadeiras_total != null ? o.assadeiras_total : '—'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-medium text-slate-500">Restantes</dt>
+                            <dd className="tabular-nums font-semibold text-amber-900">
+                              {o.latas_restantes_embalagem != null ? o.latas_restantes_embalagem : '—'}
+                            </dd>
+                          </div>
+                        </>
+                      )}
+                    </dl>
+
+                    <div className="flex flex-col gap-2 border-t border-slate-200/80 pt-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Ações</p>
+                      <div className="flex flex-wrap gap-2">
+                        {o.etapa === 'fermentacao' && (
+                          <>
+                            <Link
+                              href={hrefEntradaForno(o.ordem_producao_id)}
+                              onClick={onClose}
+                              className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100"
+                            >
+                              Entrada no forno
+                            </Link>
+                            <Link
+                              href={hrefEtapaProducao(o.ordem_producao_id, 'fermentacao')}
+                              onClick={onClose}
+                              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                              Ver fermentação
+                            </Link>
+                            {o.fermentacao_log_id && (
+                              <button
+                                type="button"
+                                disabled={busyKey != null}
+                                onClick={() => {
+                                  if (
+                                    !confirm(
+                                      'Perda total neste lote? O carrinho ficará livre.',
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  void run(`perda-ferm-${o.fermentacao_log_id}`, async () => {
+                                    const mod = await import('@/app/actions/producao-etapas-actions');
+                                    return mod.marcarPerdaTotalCarrinhoEntradaForno({
+                                      fermentacao_log_id: o.fermentacao_log_id as string,
+                                    });
+                                  });
+                                }}
+                                className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-50"
+                              >
+                                Perda total (libertar)
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {o.etapa === 'pos_forno' && o.saida_forno_log_id && (
+                          <>
+                            <Link
+                              href={hrefEtapaProducao(o.ordem_producao_id, 'pos_forno')}
+                              onClick={onClose}
+                              className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100"
+                            >
+                              Entrada na embalagem
+                            </Link>
+                            <button
+                              type="button"
+                              disabled={busyKey != null || (o.latas_restantes_embalagem ?? 0) < 1}
+                              onClick={() => {
+                                const n = o.latas_restantes_embalagem ?? 0;
+                                if (
+                                  !confirm(
+                                    `Registar todas as ${n} latas na embalagem?`,
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void run(`emb-tudo-${o.saida_forno_log_id}`, async () => {
+                                  const mod = await import('@/app/actions/producao-etapas-actions');
+                                  return mod.registerEntradaEmbalagemTodasLatasRestantes({
+                                    ordem_producao_id: o.ordem_producao_id,
+                                    saida_forno_log_id: o.saida_forno_log_id as string,
+                                  });
+                                });
+                              }}
+                              className="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                            >
+                              Registar tudo na embalagem
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyKey != null || (o.latas_restantes_embalagem ?? 0) < 1}
+                              onClick={() => {
+                                if (
+                                  !confirm(
+                                    'Encerrar saldo sem embalagem? O carrinho ficará livre.',
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void run(`perda-pos-${o.saida_forno_log_id}`, async () => {
+                                  const mod = await import('@/app/actions/producao-etapas-actions');
+                                  return mod.encerrarSaldoCarrinhoPosFornoAdministrativo({
+                                    saida_forno_log_id: o.saida_forno_log_id as string,
+                                  });
+                                });
+                              }}
+                              className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-50"
+                            >
+                              Perda total (sem embalagem)
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">Cadastro</h3>
+            <CarrinhoCard
+              c={carrinho}
+              shell={shell}
+              hideHeader={false}
+              onSaved={() => void onReload()}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -379,33 +531,58 @@ function CarrinhoUsoDetalheModal({
 }
 
 function CarrinhoNumeroTile({
-  numero,
+  c,
   tone,
+  onSelect,
 }: {
-  numero: number;
+  c: CarrinhoComUsoDetalhe;
   tone: 'em_uso' | 'disponivel' | 'inativo' | 'manutencao';
+  onSelect: () => void;
 }) {
   const classes =
     tone === 'manutencao'
-      ? 'border-orange-500 bg-orange-200 text-orange-950 ring-1 ring-orange-500/40'
+      ? 'border-orange-400 bg-orange-50 text-orange-950 ring-1 ring-orange-300/50'
       : tone === 'em_uso'
-      ? 'border-blue-200 bg-blue-50 text-blue-900'
+        ? 'border-blue-200 bg-blue-50/90 text-blue-950 ring-1 ring-blue-200/50'
+        : tone === 'inativo'
+          ? 'border-slate-300 bg-slate-100/90 text-slate-700 ring-1 ring-slate-200/70'
+          : 'border-slate-200 bg-white text-slate-900';
+  const subtitle =
+    tone === 'manutencao'
+      ? 'Disponível com reparo'
       : tone === 'inativo'
-        ? 'border-slate-300 bg-slate-100 text-slate-700'
-        : 'border-slate-200 bg-white text-slate-900';
+        ? 'Inativo'
+        : tone === 'em_uso'
+          ? 'Em uso'
+          : 'Disponível';
   return (
-    <div
-      className={`flex h-12 w-12 items-center justify-center rounded-lg border text-sm font-semibold shadow-sm ${classes}`}
-      title={`Carrinho ${numero}`}
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-label={`Carrinho ${c.numero}. Abrir informações e edição.`}
+      className={`flex h-[3.1rem] w-[8.9rem] flex-col gap-0.5 overflow-hidden rounded-lg border px-2 py-1 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${classes}`}
     >
-      {numero}
-    </div>
+      <div className="flex items-center justify-between gap-1.5">
+        <span className="text-xs font-bold tabular-nums leading-none">Carrinho {c.numero}</span>
+        {tone === 'manutencao' && (
+          <span
+            className="shrink-0 text-[12px] leading-none font-bold text-rose-600"
+            title="Precisa de reparo"
+            aria-label="Precisa de reparo"
+          >
+            !
+          </span>
+        )}
+      </div>
+      <span className="truncate text-[9px] font-medium leading-tight text-slate-700">{subtitle}</span>
+    </button>
   );
 }
 
 function ListaCarrinhosModal({
   open,
   onClose,
+  onAbrirPainel,
   list,
   reload,
   novoNumero,
@@ -429,6 +606,7 @@ function ListaCarrinhosModal({
 }: {
   open: boolean;
   onClose: () => void;
+  onAbrirPainel: (c: CarrinhoComUsoDetalhe) => void;
   list: CarrinhoComUsoDetalhe[];
   reload: () => void;
   novoNumero: string;
@@ -489,7 +667,6 @@ function ListaCarrinhosModal({
                   className="rounded-md border border-slate-300 bg-white px-3 py-2"
                   value={novoNumero}
                   onChange={(e) => setNovoNumero(e.target.value)}
-                  placeholder="Ex.: 12"
                   inputMode="numeric"
                 />
               </label>
@@ -533,7 +710,6 @@ function ListaCarrinhosModal({
                   className="rounded-md border border-slate-300 bg-white px-3 py-2"
                   value={novoNumeroInicial}
                   onChange={(e) => setNovoNumeroInicial(e.target.value)}
-                  placeholder="Ex.: 1"
                   inputMode="numeric"
                 />
               </label>
@@ -543,7 +719,6 @@ function ListaCarrinhosModal({
                   className="rounded-md border border-slate-300 bg-white px-3 py-2"
                   value={novoNumeroFinal}
                   onChange={(e) => setNovoNumeroFinal(e.target.value)}
-                  placeholder="Ex.: 20"
                   inputMode="numeric"
                 />
               </label>
@@ -555,7 +730,6 @@ function ListaCarrinhosModal({
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2"
                   value={novoCapacidadeLote}
                   onChange={(e) => setNovoCapacidadeLote(e.target.value)}
-                  placeholder="Ex.: 20"
                   inputMode="numeric"
                 />
               </label>
@@ -584,13 +758,25 @@ function ListaCarrinhosModal({
                     <li key={c.id}>
                       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
                         <span className="text-sm font-medium text-slate-800">Carrinho {c.numero}</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(expandido ? null : c.id)}
-                          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          {expandido ? 'Fechar' : 'Editar'}
-                        </button>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAbrirPainel(c);
+                              onClose();
+                            }}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-900 hover:bg-blue-100"
+                          >
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(expandido ? null : c.id)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            {expandido ? 'Fechar' : 'Editar'}
+                          </button>
+                        </div>
                       </div>
                       {expandido && (
                         <div className="border-t border-slate-100 bg-slate-50/60 p-2">
@@ -625,7 +811,7 @@ export default function CarrinhosClient({
   loadError?: string;
 }) {
   const [list, setList] = useState<CarrinhoComUsoDetalhe[]>(initialList);
-  const [detalheCarrinho, setDetalheCarrinho] = useState<CarrinhoComUsoDetalhe | null>(null);
+  const [carrinhoPainelId, setCarrinhoPainelId] = useState<string | null>(null);
   const [listaAberta, setListaAberta] = useState(false);
   const [novoNumero, setNovoNumero] = useState('');
   const [novoCapacidade, setNovoCapacidade] = useState(CAPACIDADE_PADRAO_NOVO_CARRINHO);
@@ -651,6 +837,20 @@ export default function CarrinhosClient({
     () => list.filter((c) => c.ativo && c.em_uso).sort((a, b) => a.numero - b.numero),
     [list],
   );
+  const emUsoFermentacaoRows = useMemo(
+    () =>
+      emUsoRows.filter((c) =>
+        (c.uso_ocorrencias ?? []).some((o) => o.etapa === 'fermentacao'),
+      ),
+    [emUsoRows],
+  );
+  const emUsoPosFornoRows = useMemo(
+    () =>
+      emUsoRows.filter((c) =>
+        (c.uso_ocorrencias ?? []).some((o) => o.etapa === 'pos_forno'),
+      ),
+    [emUsoRows],
+  );
   const disponiveisRows = useMemo(
     () => list.filter((c) => c.ativo && !c.em_uso).sort((a, b) => a.numero - b.numero),
     [list],
@@ -665,6 +865,17 @@ export default function CarrinhosClient({
     const res = await mod.getCarrinhos();
     if (res.ok) setList(res.list);
   }, []);
+
+  const carrinhoPainel = useMemo(
+    () => (carrinhoPainelId == null ? null : list.find((x) => x.id === carrinhoPainelId) ?? null),
+    [carrinhoPainelId, list],
+  );
+
+  useEffect(() => {
+    if (carrinhoPainelId != null && !list.some((c) => c.id === carrinhoPainelId)) {
+      setCarrinhoPainelId(null);
+    }
+  }, [list, carrinhoPainelId]);
 
   const criar = useCallback(async () => {
     setCreating(true);
@@ -762,6 +973,7 @@ export default function CarrinhosClient({
       <ListaCarrinhosModal
         open={listaAberta}
         onClose={() => setListaAberta(false)}
+        onAbrirPainel={(c) => setCarrinhoPainelId(c.id)}
         list={list}
         reload={reload}
         novoNumero={novoNumero}
@@ -785,24 +997,44 @@ export default function CarrinhosClient({
       />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Em uso</h2>
-        {emUsoRows.length === 0 ? (
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Em uso — Fermentação
+        </h2>
+        {emUsoFermentacaoRows.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-            Nenhum carrinho em uso.
+            Nenhum carrinho em uso na fermentação.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {emUsoRows.map((c) => (
-              <CarrinhoEmUsoCard key={c.id} c={c} onSelect={() => setDetalheCarrinho(c)} />
+            {emUsoFermentacaoRows.map((c) => (
+              <CarrinhoEmUsoCard key={c.id} c={c} onSelect={() => setCarrinhoPainelId(c.id)} />
             ))}
           </div>
         )}
       </section>
 
-      <CarrinhoUsoDetalheModal
-        open={detalheCarrinho != null}
-        onClose={() => setDetalheCarrinho(null)}
-        carrinho={detalheCarrinho}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Em uso — Pós-forno
+        </h2>
+        {emUsoPosFornoRows.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+            Nenhum carrinho em uso no pós-forno.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {emUsoPosFornoRows.map((c) => (
+              <CarrinhoEmUsoCard key={c.id} c={c} onSelect={() => setCarrinhoPainelId(c.id)} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <CarrinhoPainelModal
+        open={carrinhoPainelId != null && carrinhoPainel != null}
+        onClose={() => setCarrinhoPainelId(null)}
+        carrinho={carrinhoPainel}
+        onReload={reload}
       />
 
       <section className="flex flex-col gap-3">
@@ -816,8 +1048,9 @@ export default function CarrinhosClient({
             {disponiveisRows.map((c) => (
               <CarrinhoNumeroTile
                 key={c.id}
-                numero={c.numero}
+                c={c}
                 tone={c.ativo && c.precisa_reparos ? 'manutencao' : 'disponivel'}
+                onSelect={() => setCarrinhoPainelId(c.id)}
               />
             ))}
           </div>
@@ -833,7 +1066,12 @@ export default function CarrinhosClient({
         ) : (
           <div className="flex flex-wrap gap-2">
             {inativosRows.map((c) => (
-              <CarrinhoNumeroTile key={c.id} numero={c.numero} tone="inativo" />
+              <CarrinhoNumeroTile
+                key={c.id}
+                c={c}
+                tone="inativo"
+                onSelect={() => setCarrinhoPainelId(c.id)}
+              />
             ))}
           </div>
         )}

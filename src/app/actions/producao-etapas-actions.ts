@@ -2,6 +2,10 @@
 
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { isVinculoReceitaMassaAtiva } from '@/lib/utils/receita-massa-eligibility';
+import {
+  listReceitasMassaForProduto,
+  resolveReceitaMassaForProduto,
+} from '@/lib/utils/receita-massa-resolve';
 import { revalidatePath } from 'next/cache';
 import { ProductionStepRepository } from '@/data/production/ProductionStepRepository';
 import { ProductionOrderRepository } from '@/data/production/ProductionOrderRepository';
@@ -22,17 +26,32 @@ import {
   QualityData,
 } from '@/domain/types/producao-etapas';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
-import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
+import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
+import { etapaPathForOrdem } from '@/lib/production/production-station-routes';
+import { resolveOrdemProducaoOperacionalId } from '@/lib/production/ordem-producao-op-sync';
+import { latasRegistradasNaFermentacao } from '@/lib/utils/forno-carrinhos-disponiveis';
+import { ltFromFornoLogRow, sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
 import { validateCompleteProductionStepQuality } from '@/lib/production/production-step-complete-validation';
 import {
   assertCarrinhoFermentacaoUnicoNaOrdem,
   normalizeNumeroCarrinhoFermentacao,
 } from '@/lib/production/fermentacao-carrinho-uniqueness';
 import { assertNovaEntradaFornoSemDuplicata } from '@/lib/production/entrada-forno-start-validation';
+import { FERMENTACAO_ASSADEIRAS_MAX } from '@/lib/production/fermentacao-iniciar-e-finalizar';
+import {
+  planejadoUnidadesConsumoFromOp,
+  unidadesPorLataResolvidaParaOp,
+} from '@/lib/production/ordem-producao-conversions';
+import type { ProductConversionInfo } from '@/lib/utils/production-conversions';
 import {
   latasSaidaFornoDoLog,
   sumLatasEntradaEmbalagemPorSaidaFornoLogId,
 } from '@/lib/utils/entrada-embalagem-saida';
+import {
+  camposRotuloRegistroFila,
+  isRegistroAdiantadoFilaComCarrinho,
+  rotuloExibicaoRegistroFila,
+} from '@/lib/production/registro-adiantado-fila';
 
 async function assertCarrinhoDisponivelParaFermentacao(input: {
   supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
@@ -108,6 +127,7 @@ async function assertCarrinhoDisponivelParaFermentacao(input: {
   for (const row of logs) {
     if (row.etapa !== 'saida_forno' || row.fim == null) continue;
     const dqSaida = row.dados_qualidade as SaidaFornoQualityData | null;
+    if (dqSaida?.liberacao_carrinho_perda_total === true) continue;
     const n = normalizeNumeroCarrinhoFermentacao(dqSaida?.numero_carrinho);
     if (!n || n !== input.numeroNormalizado) continue;
     const latasSaida = latasSaidaFornoDoLog(dqSaida);
@@ -121,6 +141,82 @@ async function assertCarrinhoDisponivelParaFermentacao(input: {
       return {
         ok: false,
         error: `O carrinho "${input.numeroParaExibir}" ainda está em uso na saída do forno.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+/** Valida carrinho livre para registrar saída do forno (qualquer carrinho do cadastro, exceto em uso). */
+async function assertCarrinhoDisponivelParaSaidaForno(input: {
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
+  numeroNormalizado: string;
+  numeroParaExibir: string;
+  excludeSaidaFornoLogId?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const base = await assertCarrinhoDisponivelParaFermentacao({
+    supabase: input.supabase,
+    numeroNormalizado: input.numeroNormalizado,
+    numeroParaExibir: input.numeroParaExibir,
+  });
+  if (!base.ok) return base;
+
+  const { data: entradaAberta, error: entradaErr } = await input.supabase
+    .from('producao_etapas_log')
+    .select('dados_qualidade')
+    .eq('etapa', 'entrada_forno')
+    .is('fim', null);
+  if (entradaErr) {
+    return { ok: false, error: entradaErr.message };
+  }
+
+  const fermIds = new Set<string>();
+  for (const row of (entradaAberta ?? []) as { dados_qualidade: unknown }[]) {
+    const fid = String(
+      (row.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id ?? '',
+    ).trim();
+    if (fid) fermIds.add(fid);
+  }
+
+  if (fermIds.size > 0) {
+    const { data: ferms, error: fermErr } = await input.supabase
+      .from('producao_etapas_log')
+      .select('dados_qualidade')
+      .in('id', [...fermIds]);
+    if (fermErr) {
+      return { ok: false, error: fermErr.message };
+    }
+    for (const f of (ferms ?? []) as { dados_qualidade: unknown }[]) {
+      const n = normalizeNumeroCarrinhoFermentacao(
+        (f.dados_qualidade as FermentacaoQualityData | null)?.numero_carrinho,
+      );
+      if (n && n === input.numeroNormalizado) {
+        return {
+          ok: false,
+          error: `O carrinho "${input.numeroParaExibir}" ainda consta no forno (entrada em aberto).`,
+        };
+      }
+    }
+  }
+
+  const { data: saidaAberta, error: saidaErr } = await input.supabase
+    .from('producao_etapas_log')
+    .select('id, dados_qualidade')
+    .eq('etapa', 'saida_forno')
+    .is('fim', null);
+  if (saidaErr) {
+    return { ok: false, error: saidaErr.message };
+  }
+  for (const row of (saidaAberta ?? []) as { id: string; dados_qualidade: unknown }[]) {
+    if (input.excludeSaidaFornoLogId && row.id === input.excludeSaidaFornoLogId) continue;
+    const n = normalizeNumeroCarrinhoFermentacao(
+      (row.dados_qualidade as SaidaFornoQualityData | null)?.numero_carrinho,
+    );
+    if (n && n === input.numeroNormalizado) {
+      return {
+        ok: false,
+        error: `O carrinho "${input.numeroParaExibir}" já tem uma saída do forno em andamento.`,
       };
     }
   }
@@ -152,9 +248,15 @@ export async function startProductionStep(input: {
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
+    const resolved = await resolveOrdemProducaoOperacionalId(supabase, input.ordem_producao_id);
+    if ('error' in resolved) {
+      return { success: false, error: resolved.error };
+    }
+    const opId = resolved.opId;
+
     if (input.etapa === 'entrada_forno') {
       const dqForno = input.dados_qualidade as FornoQualityData | undefined;
-      const ordemLogs = await stepRepository.findByOrderId(input.ordem_producao_id);
+      const ordemLogs = await stepRepository.findByOrderId(opId);
       const dup = assertNovaEntradaFornoSemDuplicata(ordemLogs, dqForno?.fermentacao_log_id);
       if (!dup.ok) {
         return { success: false, error: dup.error };
@@ -162,7 +264,7 @@ export async function startProductionStep(input: {
     }
 
     const createInput: CreateProductionStepLogInput = {
-      ordem_producao_id: input.ordem_producao_id,
+      ordem_producao_id: opId,
       etapa: input.etapa,
       usuario_id: input.usuario_id,
       qtd_saida: input.qtd_saida,
@@ -174,9 +276,9 @@ export async function startProductionStep(input: {
     const log = await stepManager.startStep(createInput);
 
     revalidatePath('/producao/fila');
-    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${opId}`);
     if (input.etapa === 'entrada_forno') {
-      revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-forno`);
+      revalidatePath(`/producao/etapas/${opId}/entrada-forno`);
     }
 
     return { success: true, data: log };
@@ -323,7 +425,7 @@ export async function getTotalLatasEntradaFornoHoje(diaReferenciaIso?: string): 
     const orderIds = [...new Set(logs.map((l) => l.ordem_producao_id as string))];
     const { data: ordens, error: errOrdens } = await supabase
       .from('ordens_producao')
-      .select('id, produtos!ordens_producao_produto_id_fkey ( unidades_assadeira )')
+      .select('id, produto_id')
       .in('id', orderIds);
 
     if (errOrdens) {
@@ -331,15 +433,35 @@ export async function getTotalLatasEntradaFornoHoje(diaReferenciaIso?: string): 
       return 0;
     }
 
+    const produtoIds = [
+      ...new Set(
+        (ordens ?? [])
+          .map((o) => (o as { produto_id?: string }).produto_id)
+          .filter((id): id is string => Boolean(id && String(id).trim())),
+      ),
+    ];
+    const uaByProduto = new Map<string, number | null>();
+    if (produtoIds.length > 0) {
+      const { data: prows, error: perr } = await supabase
+        .from('produtos')
+        .select('id, unidades_assadeira')
+        .in('id', produtoIds);
+      if (perr) {
+        console.error('getTotalLatasEntradaFornoHoje produtos:', perr);
+      } else {
+        for (const p of (prows ?? []) as { id: string; unidades_assadeira?: number | null }[]) {
+          const ua = p.unidades_assadeira;
+          const uaOk = ua != null && Number(ua) > 0 ? Number(ua) : null;
+          uaByProduto.set(p.id, uaOk);
+        }
+      }
+    }
+
     const uaByOrder = new Map<string, number | null>();
     for (const o of ordens ?? []) {
-      const row = o as {
-        id: string;
-        produtos?: { unidades_assadeira?: number | null } | null;
-      };
-      const ua = row.produtos?.unidades_assadeira;
-      const uaOk = ua != null && Number(ua) > 0 ? Number(ua) : null;
-      uaByOrder.set(row.id, uaOk);
+      const row = o as { id: string; produto_id?: string };
+      const ua = row.produto_id ? uaByProduto.get(row.produto_id) ?? null : null;
+      uaByOrder.set(row.id, ua);
     }
 
     let total = 0;
@@ -473,6 +595,7 @@ export async function marcarPerdaTotalCarrinhoEntradaForno(input: { fermentacao_
 
     await stepRepository.update(log.id, { dados_qualidade: dadosAtualizados });
 
+    revalidatePath('/carrinhos');
     revalidatePath('/producao/fila');
     revalidatePath(`/producao/etapas/${log.ordem_producao_id}`);
     revalidatePath(`/producao/etapas/${log.ordem_producao_id}/entrada-forno`);
@@ -483,6 +606,92 @@ export async function marcarPerdaTotalCarrinhoEntradaForno(input: { fermentacao_
     return {
       success: false as const,
       error: error instanceof Error ? error.message : 'Erro ao marcar perda total do carrinho.',
+    };
+  }
+}
+
+const MAX_LATAS_ENTRADA_FORNO = 20;
+
+/**
+ * Corrige as latas (LT) de uma entrada no forno (aberta ou já finalizada).
+ */
+export async function updateEntradaFornoRegistroLog(input: {
+  log_id: string;
+  ordem_producao_id: string;
+  assadeiras_lt: number;
+  unidades_assadeira?: number | null;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  const latas = Math.round(Number(input.assadeiras_lt));
+  if (!Number.isFinite(latas) || latas < 1 || latas > MAX_LATAS_ENTRADA_FORNO) {
+    return {
+      success: false,
+      error: `Informe latas (LT) entre 1 e ${MAX_LATAS_ENTRADA_FORNO}.`,
+    };
+  }
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log || log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false, error: 'Registro não encontrado.' };
+    }
+    if (log.etapa !== 'entrada_forno') {
+      return { success: false, error: 'Registro não é de entrada no forno.' };
+    }
+
+    const prev = log.dados_qualidade as FornoQualityData | null;
+    const fermId = String(prev?.fermentacao_log_id ?? '').trim();
+    if (fermId) {
+      const all = await stepRepository.findByOrderId(input.ordem_producao_id);
+      const ua =
+        input.unidades_assadeira != null && input.unidades_assadeira > 0
+          ? Number(input.unidades_assadeira)
+          : null;
+      const maxRef = latasRegistradasNaFermentacao(all, fermId, ua);
+      if (maxRef > 0 && latas > maxRef + 1e-9) {
+        return {
+          success: false,
+          error: `No máximo ${maxRef.toLocaleString('pt-BR')} LT (referência na fermentação).`,
+        };
+      }
+    }
+
+    if (log.fim == null) {
+      const r = await updateInProgressProductionStepLog({
+        log_id: log.id,
+        dados_qualidade: {
+          ...(prev != null && typeof prev === 'object' ? prev : {}),
+          assadeiras_lt: latas,
+        },
+      });
+      if (!r.success) {
+        return { success: false, error: r.error ?? 'Erro ao atualizar entrada no forno.' };
+      }
+    } else {
+      const dadosQualidade: FornoQualityData = {
+        ...(prev != null && typeof prev === 'object' ? prev : {}),
+        assadeiras_lt: latas,
+      };
+      const ua = input.unidades_assadeira;
+      const patch: UpdateProductionStepLogInput = {
+        dados_qualidade: dadosQualidade as QualityData,
+      };
+      if (ua != null && Number(ua) > 0) {
+        patch.qtd_saida = latas * Number(ua);
+      }
+      await stepRepository.update(log.id, patch);
+    }
+
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'entrada_forno');
+    revalidatePath('/carrinhos');
+    return { success: true };
+  } catch (error) {
+    console.error('updateEntradaFornoRegistroLog:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar entrada no forno.',
     };
   }
 }
@@ -510,6 +719,7 @@ export async function deleteEntradaFornoProductionStepLog(input: {
     }
 
     await stepRepository.deleteById(input.log_id);
+    await removerOrigemSinteticaOrfaAposExclusao(stepRepository, input.ordem_producao_id, log);
 
     revalidatePath('/producao/fila');
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
@@ -521,6 +731,607 @@ export async function deleteEntradaFornoProductionStepLog(input: {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Erro ao excluir registro',
+    };
+  }
+}
+
+function revalidateOrdemEtapasEstoque(ordemProducaoId: string, etapa?: ProductionStep) {
+  revalidatePath('/producao/fila');
+  revalidatePath(`/producao/etapas/${ordemProducaoId}`);
+  revalidatePath('/producao/estoque');
+  if (etapa) {
+    revalidatePath(etapaPathForOrdem(ordemProducaoId, etapa));
+  }
+}
+
+function fmtRegistroEtapaData(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+/** Linha resumida para o painel «Registros» nas etapas. */
+export type StepRegistroUiItem = {
+  id: string;
+  inicioIso: string;
+  fimIso: string | null;
+  titulo: string;
+  subtitulo: string | null;
+  /** Preenchido só em `saida_embalagem` — permite ajuste rápido de caixas. */
+  caixasEditaveis: number | null;
+  /** Preenchido só em `entrada_embalagem` — latas (LT) do registro. */
+  latasEditaveis: number | null;
+  /** Fermentação: número do carrinho editável. */
+  carrinhoEditavel: string | null;
+  /** Fermentação: assadeiras (LT) editáveis. */
+  assadeirasLtEditavel: number | null;
+  /** Fermentação: bloqueado porque já entrou no forno. */
+  bloqueadoNoForno: boolean;
+  /** Fermentação: log ainda sem `fim` (fluxo legado). */
+  emAndamento: boolean;
+};
+
+function fermentacaoBloqueadoPorEntradaForno(
+  allLogs: ProductionStepLog[],
+  fermentacaoLogId: string,
+): boolean {
+  return allLogs.some(
+    (x) =>
+      x.etapa === 'entrada_forno' &&
+      String((x.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id ?? '').trim() ===
+        fermentacaoLogId,
+  );
+}
+
+export async function listRegistrosEtapaForUi(
+  ordem_producao_id: string,
+  etapa: ProductionStep,
+): Promise<{ success: true; data: StepRegistroUiItem[] } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    if (etapa === 'massa') {
+      const { getMassaLotesByOrder } = await import('./producao-massa-actions');
+      const r = await getMassaLotesByOrder(ordem_producao_id);
+      if (!r.success || !r.data) {
+        return { success: false, error: r.error ?? 'Erro ao listar lotes de massa.' };
+      }
+      const data: StepRegistroUiItem[] = r.data.map((l) => ({
+        id: l.id,
+        inicioIso: l.created_at,
+        fimIso: null,
+        titulo: `${formatReceitasBatidasDisplay(l.receitas_batidas) || '0'} receitas`,
+        subtitulo: fmtRegistroEtapaData(l.created_at),
+        caixasEditaveis: null,
+        latasEditaveis: null,
+        carrinhoEditavel: null,
+        assadeirasLtEditavel: null,
+        bloqueadoNoForno: false,
+        emAndamento: false,
+      }));
+      return { success: true, data };
+    }
+
+    const logs = await stepRepository.findByOrderId(ordem_producao_id);
+    const filtered = logs
+      .filter((l) => l.etapa === etapa)
+      .sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
+
+    const data: StepRegistroUiItem[] = filtered.map((l) => {
+      let titulo = String(etapa);
+      let subtitulo: string | null = fmtRegistroEtapaData(l.inicio);
+      let caixasEditaveis: number | null = null;
+      let latasEditaveis: number | null = null;
+      let carrinhoEditavel: string | null = null;
+      let assadeirasLtEditavel: number | null = null;
+      let bloqueadoNoForno = false;
+      let emAndamento = false;
+      const dq = l.dados_qualidade;
+
+      if (etapa === 'fermentacao') {
+        const d = dq as FermentacaoQualityData | null;
+        const carrinhoRaw =
+          d?.numero_carrinho != null ? String(d.numero_carrinho).trim() : '';
+        const lt = d?.assadeiras_lt;
+        const ltFerm =
+          lt != null && Number.isFinite(Number(lt)) ? Math.round(Number(lt)) : undefined;
+        titulo = rotuloExibicaoRegistroFila('fermentacao', dq, carrinhoRaw, { latas: ltFerm });
+        if (ltFerm != null) {
+          subtitulo = `${subtitulo} · ${ltFerm} LT`;
+          assadeirasLtEditavel = ltFerm;
+        }
+        carrinhoEditavel = carrinhoRaw || null;
+        emAndamento = l.fim == null;
+        bloqueadoNoForno =
+          l.fim != null && fermentacaoBloqueadoPorEntradaForno(logs, l.id);
+        if (bloqueadoNoForno) {
+          subtitulo = `${subtitulo ?? ''} · No forno`.replace(/^ · /, '');
+        }
+        if (emAndamento) {
+          subtitulo = `${subtitulo ?? ''} · Em andamento`.replace(/^ · /, '');
+        }
+      } else if (etapa === 'entrada_forno') {
+        const d = dq as FornoQualityData | null;
+        const ltForno =
+          d?.assadeiras_lt != null && Number.isFinite(Number(d.assadeiras_lt))
+            ? Math.round(Number(d.assadeiras_lt))
+            : undefined;
+        titulo = rotuloExibicaoRegistroFila('entrada_forno', dq, null, { latas: ltForno });
+        if (!titulo && ltForno != null) titulo = `${ltForno} LT`;
+        if (!titulo) titulo = 'Entrada no forno';
+      } else if (etapa === 'saida_forno') {
+        const d = dq as SaidaFornoQualityData | null;
+        const carSaida = d?.numero_carrinho != null ? String(d.numero_carrinho).trim() : '';
+        const bandejasN =
+          d?.bandejas != null && Number.isFinite(Number(d.bandejas))
+            ? Math.round(Number(d.bandejas))
+            : undefined;
+        titulo = rotuloExibicaoRegistroFila('saida_forno', dq, carSaida, { bandejas: bandejasN });
+        if (d?.bandejas != null && !String(titulo).includes('LT')) {
+          subtitulo = `${subtitulo} · ${d.bandejas} bandejas`;
+        }
+      } else if (etapa === 'entrada_embalagem') {
+        const d = dq as EmbalagemQualityData | null;
+        const carEmb = d?.numero_carrinho != null ? String(d.numero_carrinho).trim() : '';
+        const ltEmb = d?.assadeiras;
+        let nLtEmb: number | undefined;
+        if (ltEmb != null && Number.isFinite(Number(ltEmb))) {
+          nLtEmb = Math.round(Number(ltEmb));
+        } else if (l.qtd_saida != null && Number.isFinite(Number(l.qtd_saida))) {
+          const nLt = Math.round(Number(l.qtd_saida));
+          if (nLt > 0) nLtEmb = nLt;
+        }
+        titulo = rotuloExibicaoRegistroFila('entrada_embalagem', dq, carEmb, { latas: nLtEmb });
+        if (nLtEmb != null) {
+          subtitulo = `${subtitulo} · ${nLtEmb} LT`;
+          latasEditaveis = nLtEmb;
+        }
+      } else if (etapa === 'saida_embalagem') {
+        const d = dq as SaidaEmbalagemQualityData | null;
+        const cr = d?.caixas_recebidas;
+        if (cr != null && Number.isFinite(Number(cr))) {
+          const n = Math.round(Number(cr));
+          titulo = `${n} caixas`;
+          caixasEditaveis = n;
+        } else {
+          titulo = 'Saída embalagem';
+        }
+        subtitulo = `${fmtRegistroEtapaData(l.inicio)}${l.fim ? ' · Concluído' : ''}`;
+      }
+
+      return {
+        id: l.id,
+        inicioIso: l.inicio,
+        fimIso: l.fim,
+        titulo,
+        subtitulo,
+        caixasEditaveis,
+        latasEditaveis,
+        carrinhoEditavel,
+        assadeirasLtEditavel,
+        bloqueadoNoForno,
+        emAndamento,
+      };
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('listRegistrosEtapaForUi:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao listar registros.',
+    };
+  }
+}
+
+/**
+ * Atualiza `caixas_recebidas` em um log específico de `saida_embalagem` (ajuste retroativo).
+ */
+export async function updateSaidaEmbalagemLogCaixas(input: {
+  log_id: string;
+  ordem_producao_id: string;
+  caixas_recebidas: number;
+}) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const orderRepository = new ProductionOrderRepository(supabase);
+  const caixas = Math.round(Number(input.caixas_recebidas));
+  if (!Number.isFinite(caixas) || caixas < 0) {
+    return { success: false as const, error: 'Informe um número inteiro de caixas (0 ou mais).' };
+  }
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log || log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false as const, error: 'Registro não encontrado.' };
+    }
+    if (log.etapa !== 'saida_embalagem') {
+      return { success: false as const, error: 'Só é possível ajustar caixas em registros de saída de embalagem.' };
+    }
+    const prev = log.dados_qualidade;
+    const merged = {
+      ...(prev != null && typeof prev === 'object' ? prev : {}),
+      caixas_recebidas: caixas,
+    } as QualityData;
+    await stepRepository.update(log.id, {
+      dados_qualidade: merged,
+      qtd_saida: caixas,
+    });
+    await syncOrdemStatusAposSaidaEmbalagem(stepRepository, orderRepository, input.ordem_producao_id);
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'saida_embalagem');
+    return { success: true as const };
+  } catch (error) {
+    console.error('updateSaidaEmbalagemLogCaixas:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar caixas.',
+    };
+  }
+}
+
+/**
+ * Corrige carrinho e assadeiras (LT) de um lote de fermentação já concluído.
+ */
+export async function updateFermentacaoRegistroLog(input: {
+  log_id: string;
+  ordem_producao_id: string;
+  numero_carrinho: string;
+  assadeiras_lt: number;
+  unidades_assadeira?: number | null;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  const carrinhoTrim = input.numero_carrinho.trim();
+  if (!carrinhoTrim) {
+    return { success: false, error: 'Informe o número do carrinho.' };
+  }
+
+  const ass = Math.round(Number(input.assadeiras_lt));
+  if (!Number.isFinite(ass) || ass < 1 || ass > FERMENTACAO_ASSADEIRAS_MAX) {
+    return {
+      success: false,
+      error: `Informe a quantidade de assadeiras entre 1 e ${FERMENTACAO_ASSADEIRAS_MAX}.`,
+    };
+  }
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log || log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false, error: 'Registro não encontrado.' };
+    }
+    if (log.etapa !== 'fermentacao') {
+      return { success: false, error: 'Registro não é da etapa fermentação.' };
+    }
+    if (log.fim == null) {
+      return {
+        success: false,
+        error: 'Este lote ainda está em andamento. Finalize-o ou use o formulário principal.',
+      };
+    }
+
+    const all = await stepRepository.findByOrderId(input.ordem_producao_id);
+    if (fermentacaoBloqueadoPorEntradaForno(all, log.id)) {
+      return {
+        success: false,
+        error: 'Este carrinho já entrou no forno. Exclua primeiro a entrada no forno para alterar.',
+      };
+    }
+
+    const norm = normalizeNumeroCarrinhoFermentacao(carrinhoTrim);
+    const disponibilidade = await assertCarrinhoDisponivelParaFermentacao({
+      supabase,
+      numeroNormalizado: norm,
+      numeroParaExibir: carrinhoTrim,
+      excludeLogId: log.id,
+    });
+    if (!disponibilidade.ok) {
+      return { success: false, error: disponibilidade.error };
+    }
+
+    const dup = assertCarrinhoFermentacaoUnicoNaOrdem(all, log.id, norm, carrinhoTrim);
+    if (!dup.ok) {
+      return { success: false, error: dup.error };
+    }
+
+    const prev = log.dados_qualidade as FermentacaoQualityData | null;
+    const dadosQualidade: FermentacaoQualityData = {
+      ...(prev != null && typeof prev === 'object' ? prev : {}),
+      numero_carrinho: carrinhoTrim,
+      assadeiras_lt: ass,
+    };
+
+    const ua = input.unidades_assadeira;
+    const qtdSaida =
+      ua != null && Number(ua) > 0
+        ? ass * Number(ua)
+        : log.qtd_saida != null
+          ? log.qtd_saida
+          : undefined;
+
+    await stepRepository.update(log.id, {
+      dados_qualidade: dadosQualidade as QualityData,
+      ...(qtdSaida != null ? { qtd_saida: qtdSaida } : {}),
+    });
+
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'fermentacao');
+    revalidatePath('/carrinhos');
+    return { success: true };
+  } catch (error) {
+    console.error('updateFermentacaoRegistroLog:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar fermentação.',
+    };
+  }
+}
+
+const MAX_BANDEJAS_SAIDA_FORNO = 20;
+
+/**
+ * Corrige carrinho e bandejas (LT) de um lançamento de saída do forno.
+ */
+export async function updateSaidaFornoRegistroLog(input: {
+  log_id: string;
+  ordem_producao_id: string;
+  numero_carrinho: string;
+  bandejas: number;
+  unidades_assadeira?: number | null;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  const carrinhoTrim = input.numero_carrinho.trim();
+  if (!carrinhoTrim) {
+    return { success: false, error: 'Informe o número do carrinho.' };
+  }
+
+  const bandejas = Math.round(Number(input.bandejas));
+  if (!Number.isFinite(bandejas) || bandejas < 1 || bandejas > MAX_BANDEJAS_SAIDA_FORNO) {
+    return {
+      success: false,
+      error: `Informe bandejas (LT) entre 1 e ${MAX_BANDEJAS_SAIDA_FORNO}.`,
+    };
+  }
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log || log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false, error: 'Registro não encontrado.' };
+    }
+    if (log.etapa !== 'saida_forno') {
+      return { success: false, error: 'Registro não é de saída do forno.' };
+    }
+
+    const all = await stepRepository.findByOrderId(input.ordem_producao_id);
+    const bloqueadoEmb = all.some(
+      (x) =>
+        x.etapa === 'entrada_embalagem' &&
+        (x.dados_qualidade as EmbalagemQualityData | null)?.saida_forno_log_id === log.id,
+    );
+    if (bloqueadoEmb) {
+      return {
+        success: false,
+        error: 'Este lançamento já foi recebido na embalagem. Exclua primeiro a entrada na embalagem.',
+      };
+    }
+
+    const norm = normalizeNumeroCarrinhoFermentacao(carrinhoTrim);
+    const disponibilidade = await assertCarrinhoDisponivelParaSaidaForno({
+      supabase,
+      numeroNormalizado: norm,
+      numeroParaExibir: carrinhoTrim,
+      excludeSaidaFornoLogId: log.id,
+    });
+    if (!disponibilidade.ok) {
+      return { success: false, error: disponibilidade.error };
+    }
+
+    const prev = log.dados_qualidade as SaidaFornoQualityData | null;
+    const dadosQualidade: SaidaFornoQualityData = {
+      ...(prev != null && typeof prev === 'object' ? prev : {}),
+      numero_carrinho: carrinhoTrim,
+      bandejas,
+    };
+
+    const ua = input.unidades_assadeira;
+    const patch: UpdateProductionStepLogInput = {
+      dados_qualidade: dadosQualidade as QualityData,
+    };
+    if (ua != null && Number(ua) > 0) {
+      patch.qtd_saida = bandejas * Number(ua);
+    }
+
+    if (log.fim == null) {
+      const r = await updateInProgressProductionStepLog({
+        log_id: log.id,
+        dados_qualidade: dadosQualidade,
+        qtd_saida: patch.qtd_saida,
+      });
+      if (!r.success) {
+        return { success: false, error: r.error ?? 'Erro ao atualizar saída do forno.' };
+      }
+    } else {
+      await stepRepository.update(log.id, patch);
+    }
+
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'saida_forno');
+    revalidatePath('/carrinhos');
+    return { success: true };
+  } catch (error) {
+    console.error('updateSaidaFornoRegistroLog:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar saída do forno.',
+    };
+  }
+}
+
+/**
+ * Exclui um registro de etapa (lote / lançamento), com validações de encadeamento.
+ */
+/**
+ * Após excluir um registro «adiantado», remove o carrinho de ORIGEM sintético que ficou órfão
+ * (sem outros consumidores). Sem isto, as latas adiantadas reapareceriam no seletor da etapa
+ * seguinte com o saldo «restaurado» (ex.: saída do forno sintética volta a aparecer na entrada
+ * da embalagem). Só remove origens sintéticas — nunca produção real.
+ */
+async function removerOrigemSinteticaOrfaAposExclusao(
+  stepRepository: ProductionStepRepository,
+  ordemId: string,
+  logExcluido: ProductionStepLog,
+): Promise<void> {
+  // Só limpa a origem quando o próprio registro excluído é sintético (desfazer um adiantamento).
+  // Excluir um lançamento REAL (ex.: corrigir e recadastrar) não deve apagar o carrinho de origem.
+  const childDq = logExcluido.dados_qualidade as { numero_carrinho?: string | null } | null;
+  if (!isRegistroAdiantadoFilaComCarrinho(logExcluido.dados_qualidade, childDq?.numero_carrinho)) {
+    return;
+  }
+
+  let parentId = '';
+  let parentEtapa: ProductionStep | null = null;
+  if (logExcluido.etapa === 'entrada_embalagem') {
+    parentId = String(
+      (logExcluido.dados_qualidade as EmbalagemQualityData | null)?.saida_forno_log_id ?? '',
+    ).trim();
+    parentEtapa = 'saida_forno';
+  } else if (logExcluido.etapa === 'entrada_forno') {
+    parentId = String(
+      (logExcluido.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id ?? '',
+    ).trim();
+    parentEtapa = 'fermentacao';
+  }
+  if (!parentId || !parentEtapa) return;
+
+  const restantes = await stepRepository.findByOrderId(ordemId);
+  const parent = restantes.find((x) => x.id === parentId) ?? null;
+  if (!parent || parent.etapa !== parentEtapa) return;
+
+  const dq = parent.dados_qualidade as { numero_carrinho?: string | null } | null;
+  const sintetica = isRegistroAdiantadoFilaComCarrinho(parent.dados_qualidade, dq?.numero_carrinho);
+  if (!sintetica) return;
+
+  const aindaUsada = restantes.some((x) => {
+    if (x.id === logExcluido.id) return false;
+    if (parentEtapa === 'saida_forno') {
+      return (
+        x.etapa === 'entrada_embalagem' &&
+        String((x.dados_qualidade as EmbalagemQualityData | null)?.saida_forno_log_id ?? '').trim() ===
+          parentId
+      );
+    }
+    return (
+      x.etapa === 'entrada_forno' &&
+      String((x.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id ?? '').trim() ===
+        parentId
+    );
+  });
+  if (aindaUsada) return;
+
+  await stepRepository.deleteById(parentId);
+}
+
+export async function deleteRegistroEtapaProducao(input: {
+  log_id: string;
+  ordem_producao_id: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log) {
+      return { success: false, error: 'Registro não encontrado.' };
+    }
+    if (log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false, error: 'Registro não pertence a esta ordem.' };
+    }
+
+    if (log.etapa === 'massa') {
+      const { deleteMassaLote } = await import('./producao-massa-actions');
+      const r = await deleteMassaLote(log.id);
+      if (!r.success) {
+        return { success: false, error: r.error ?? 'Erro ao excluir lote de massa.' };
+      }
+      revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'massa');
+      return { success: true };
+    }
+
+    if (log.etapa === 'entrada_forno') {
+      const r = await deleteEntradaFornoProductionStepLog({
+        log_id: log.id,
+        ordem_producao_id: input.ordem_producao_id,
+      });
+      if (!r.success) {
+        return { success: false, error: r.error ?? 'Erro ao excluir entrada no forno.' };
+      }
+      return { success: true };
+    }
+
+    const all = await stepRepository.findByOrderId(input.ordem_producao_id);
+
+    if (log.etapa === 'fermentacao') {
+      const bloqueado = all.some(
+        (x) =>
+          x.etapa === 'entrada_forno' &&
+          (x.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id === log.id,
+      );
+      if (bloqueado) {
+        return {
+          success: false,
+          error: 'Este carrinho já entrou no forno. Exclua primeiro a entrada no forno.',
+        };
+      }
+    }
+
+    if (log.etapa === 'saida_forno') {
+      const bloqueado = all.some(
+        (x) =>
+          x.etapa === 'entrada_embalagem' &&
+          (x.dados_qualidade as EmbalagemQualityData | null)?.saida_forno_log_id === log.id,
+      );
+      if (bloqueado) {
+        return {
+          success: false,
+          error: 'Este lançamento já foi recebido na embalagem. Exclua primeiro a entrada na embalagem.',
+        };
+      }
+    }
+
+    const permitidasSemMassaForno: ProductionStep[] = [
+      'fermentacao',
+      'saida_forno',
+      'entrada_embalagem',
+      'saida_embalagem',
+    ];
+    if (!permitidasSemMassaForno.includes(log.etapa)) {
+      return { success: false, error: 'Exclusão não disponível para este tipo de registro.' };
+    }
+
+    await stepRepository.deleteById(log.id);
+    await removerOrigemSinteticaOrfaAposExclusao(stepRepository, input.ordem_producao_id, log);
+    if (log.etapa === 'saida_embalagem') {
+      const orderRepository = new ProductionOrderRepository(supabase);
+      await syncOrdemStatusAposSaidaEmbalagem(stepRepository, orderRepository, input.ordem_producao_id);
+    }
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, log.etapa);
+    if (log.etapa === 'entrada_embalagem') {
+      revalidatePath('/carrinhos');
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('deleteRegistroEtapaProducao:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao excluir registro.',
     };
   }
 }
@@ -581,9 +1392,58 @@ export async function appendFotoToSaidaEmbalagemStepLog(input: {
   }
 }
 
+function caixasFromSaidaEmbalagemLog(dq: unknown, qtdSaida: number | null | undefined): number | null {
+  const d = dq as SaidaEmbalagemQualityData | null;
+  const cr = d?.caixas_recebidas;
+  if (cr != null && Number.isFinite(Number(cr))) return Math.round(Number(cr));
+  if (qtdSaida != null && Number.isFinite(Number(qtdSaida)) && Number(qtdSaida) >= 0) {
+    return Math.round(Number(qtdSaida));
+  }
+  return null;
+}
+
+/** Marca a OP como concluída após saída de embalagem (habilita entrada no estoque de produção). */
+async function marcarOrdemConcluidaAposSaidaEmbalagem(
+  orderRepository: ProductionOrderRepository,
+  ordemProducaoId: string,
+): Promise<void> {
+  const order = await orderRepository.findById(ordemProducaoId);
+  if (!order) return;
+  const st = String(order.status ?? '').toLowerCase();
+  if (st === 'cancelado' || st === 'concluido') return;
+  await orderRepository.update(ordemProducaoId, { status: 'concluido' });
+}
+
+/** Reabre a OP se não restar nenhum lançamento de caixas na saída de embalagem. */
+async function syncOrdemStatusAposSaidaEmbalagem(
+  stepRepository: ProductionStepRepository,
+  orderRepository: ProductionOrderRepository,
+  ordemProducaoId: string,
+): Promise<void> {
+  const order = await orderRepository.findById(ordemProducaoId);
+  if (!order) return;
+  const st = String(order.status ?? '').toLowerCase();
+  if (st === 'cancelado') return;
+
+  const logs = await stepRepository.findByOrderId(ordemProducaoId);
+  const temCaixas = logs.some(
+    (l) =>
+      l.etapa === 'saida_embalagem' &&
+      caixasFromSaidaEmbalagemLog(l.dados_qualidade, l.qtd_saida) != null,
+  );
+
+  if (temCaixas) {
+    await marcarOrdemConcluidaAposSaidaEmbalagem(orderRepository, ordemProducaoId);
+    return;
+  }
+  if (st === 'concluido') {
+    await orderRepository.update(ordemProducaoId, { status: 'saida_embalagem' });
+  }
+}
+
 /**
  * Registra quantas caixas saíram / foram conferidas na saída da embalagem.
- * Reutiliza o log em aberto ou cria um novo (mesma política da foto).
+ * Finaliza o log da etapa e marca a ordem como concluída para contabilizar no estoque.
  */
 export async function upsertSaidaEmbalagemCaixasRecebidas(input: {
   ordem_producao_id: string;
@@ -605,28 +1465,42 @@ export async function upsertSaidaEmbalagemCaixasRecebidas(input: {
       'saida_embalagem',
     );
 
-    const dqPatch: SaidaEmbalagemQualityData = { caixas_recebidas: caixas };
+    const dqFinal: SaidaEmbalagemQualityData = {
+      ...(lastSaidaEmb?.dados_qualidade != null && typeof lastSaidaEmb.dados_qualidade === 'object'
+        ? (lastSaidaEmb.dados_qualidade as SaidaEmbalagemQualityData)
+        : {}),
+      caixas_recebidas: caixas,
+    };
+
+    let logId: string;
+    const fotos = lastSaidaEmb?.fotos ?? [];
 
     if (!lastSaidaEmb || lastSaidaEmb.fim != null) {
-      await stepManager.startStep({
+      const created = await stepManager.startStep({
         ordem_producao_id: input.ordem_producao_id,
         etapa: 'saida_embalagem',
         qtd_saida: 0,
-        dados_qualidade: dqPatch,
-        fotos: [],
+        dados_qualidade: dqFinal,
+        fotos,
       });
+      logId = created.id;
     } else {
-      const prev = lastSaidaEmb.dados_qualidade;
-      const merged = {
-        ...(prev != null && typeof prev === 'object' ? prev : {}),
-        ...dqPatch,
-      } as QualityData;
-      await stepRepository.update(lastSaidaEmb.id, { dados_qualidade: merged });
+      logId = lastSaidaEmb.id;
+      await stepRepository.update(lastSaidaEmb.id, {
+        dados_qualidade: dqFinal as QualityData,
+        fotos,
+      });
     }
 
-    revalidatePath('/producao/fila');
-    revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
-    revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-embalagem`);
+    await stepManager.completeStep(logId, {
+      qtd_saida: caixas,
+      dados_qualidade: dqFinal,
+      fotos,
+    });
+
+    await marcarOrdemConcluidaAposSaidaEmbalagem(orderRepository, input.ordem_producao_id);
+
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'saida_embalagem');
 
     return { success: true as const };
   } catch (error) {
@@ -640,12 +1514,112 @@ export async function upsertSaidaEmbalagemCaixasRecebidas(input: {
 
 const MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO = 20;
 
+/**
+ * Ajusta a quantidade de latas (LT) de um registro já concluído de `entrada_embalagem`,
+ * respeitando o saldo da saída do forno vinculada.
+ */
+export async function updateEntradaEmbalagemLogLatas(input: {
+  log_id: string;
+  ordem_producao_id: string;
+  assadeiras: number;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const latas = Math.round(Number(input.assadeiras));
+  if (!Number.isFinite(latas) || latas < 1) {
+    return { success: false as const, error: 'Informe um número inteiro de latas (mínimo 1).' };
+  }
+  if (latas > MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO) {
+    return {
+      success: false as const,
+      error: `Máximo de ${MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO} latas por registro.`,
+    };
+  }
+
+  try {
+    const log = await stepRepository.findById(input.log_id);
+    if (!log || log.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false as const, error: 'Registro não encontrado.' };
+    }
+    if (log.etapa !== 'entrada_embalagem' || log.fim == null) {
+      return {
+        success: false as const,
+        error: 'Só é possível ajustar latas em entradas na embalagem já concluídas.',
+      };
+    }
+
+    const dq = log.dados_qualidade as EmbalagemQualityData | null;
+    const saidaId = dq?.saida_forno_log_id?.trim();
+    if (!saidaId) {
+      return { success: false as const, error: 'Registro sem vínculo com saída do forno.' };
+    }
+
+    const saidaLog = await stepRepository.findById(saidaId);
+    if (!saidaLog || saidaLog.etapa !== 'saida_forno' || saidaLog.fim == null) {
+      return { success: false as const, error: 'Saída do forno não encontrada.' };
+    }
+    if (saidaLog.ordem_producao_id !== input.ordem_producao_id) {
+      return { success: false as const, error: 'Vínculo inválido com a ordem de produção.' };
+    }
+
+    const dqS = saidaLog.dados_qualidade as SaidaFornoQualityData | null;
+    if (dqS?.liberacao_carrinho_perda_total === true) {
+      return {
+        success: false as const,
+        error: 'Este carrinho foi encerrado administrativamente; não é possível ajustar.',
+      };
+    }
+
+    const logs = await stepRepository.findByOrderId(input.ordem_producao_id);
+    const latasSaida = latasSaidaFornoDoLog(dqS);
+    const consumidoTotal = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, saidaId);
+    let oldLatas =
+      dq?.assadeiras != null && Number.isFinite(Number(dq.assadeiras))
+        ? Math.round(Number(dq.assadeiras))
+        : 0;
+    if (oldLatas < 1 && log.qtd_saida != null && Number.isFinite(Number(log.qtd_saida))) {
+      oldLatas = Math.max(0, Math.round(Number(log.qtd_saida)));
+    }
+    const consumidoOutros = consumidoTotal - oldLatas;
+    const maxParaLog = latasSaida - consumidoOutros;
+    if (latas > maxParaLog) {
+      return {
+        success: false as const,
+        error: `No máximo ${maxParaLog} lata(s) para este carrinho (saldo da saída do forno).`,
+      };
+    }
+
+    const merged = {
+      ...(dq != null && typeof dq === 'object' ? dq : {}),
+      assadeiras: latas,
+    } as EmbalagemQualityData;
+
+    await stepRepository.update(log.id, {
+      qtd_saida: latas,
+      dados_qualidade: merged as QualityData,
+    });
+
+    revalidatePath('/carrinhos');
+    revalidateOrdemEtapasEstoque(input.ordem_producao_id, 'entrada_embalagem');
+    return { success: true as const };
+  } catch (error) {
+    console.error('updateEntradaEmbalagemLogLatas:', error);
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : 'Erro ao atualizar latas.',
+    };
+  }
+}
+
 export type CarrinhoSaidaFornoParaEmbalagemVM = {
   saida_forno_log_id: string;
   numero_carrinho: string;
+  rotulo_exibicao: string;
+  eh_registro_adiantado: boolean;
   latas_saida: number;
   latas_disponiveis: number;
   saida_fim: string;
+  observacao_embalagem: string | null;
 };
 
 export type CarrinhoEntradaFornoParaSaidaVM = {
@@ -654,7 +1628,8 @@ export type CarrinhoEntradaFornoParaSaidaVM = {
 };
 
 /**
- * Carrinhos com entrada no forno concluída para a ordem, ainda não lançados na saída do forno.
+ * Carrinhos com entrada no forno registrada (com latas), ainda não lançados na saída do forno.
+ * Inclui entradas em aberto (`fim` null), como no fluxo normal e no adiantar de etapas na fila.
  */
 export async function getEntradaFornoCarrinhosParaSaida(ordemProducaoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -662,9 +1637,20 @@ export async function getEntradaFornoCarrinhosParaSaida(ordemProducaoId: string)
 
   try {
     const logs = await stepRepository.findByOrderId(ordemProducaoId);
+    const ordRes = await getProductionOrderWithProduct(ordemProducaoId);
+    const ua =
+      ordRes.success && ordRes.data?.produto.unidades_assadeira != null
+        ? Number(ordRes.data.produto.unidades_assadeira)
+        : null;
+    const uaOk = ua != null && ua > 0 ? ua : null;
+
     const entradaLogs = logs
-      .filter((l) => l.etapa === 'entrada_forno' && l.fim != null)
-      .sort((a, b) => new Date(a.fim!).getTime() - new Date(b.fim!).getTime());
+      .filter((l) => l.etapa === 'entrada_forno')
+      .filter((l) => ltFromFornoLogRow(l.qtd_saida, l.dados_qualidade, uaOk) > 0)
+      .sort(
+        (a, b) =>
+          new Date(a.fim ?? a.inicio).getTime() - new Date(b.fim ?? b.inicio).getTime(),
+      );
     const fermentacaoById = new Map<string, ProductionStepLog>();
     for (const log of logs) {
       if (log.etapa !== 'fermentacao') continue;
@@ -695,7 +1681,7 @@ export async function getEntradaFornoCarrinhosParaSaida(ordemProducaoId: string)
       vistos.add(normalizado);
       data.push({
         numero_carrinho: numero,
-        entrada_forno_fim: log.fim as string,
+        entrada_forno_fim: log.fim ?? log.inicio,
       });
     }
 
@@ -722,21 +1708,43 @@ export async function getSaidaFornoCarrinhosParaEmbalagem(ordemProducaoId: strin
       .filter((l) => l.etapa === 'saida_forno' && l.fim != null)
       .sort((a, b) => new Date(a.fim!).getTime() - new Date(b.fim!).getTime());
 
+    // Observação de embalagem é por ordem (igual para todos os carrinhos desta OP).
+    let observacaoEmbalagem: string | null = null;
+    {
+      const { data: itemRow } = await supabase
+        .from('ordens_producao_diarias_itens')
+        .select('observacao_embalagem')
+        .eq('ordens_producao_id', ordemProducaoId)
+        .limit(1)
+        .maybeSingle();
+      const obsEmb = (itemRow as { observacao_embalagem?: string | null } | null)?.observacao_embalagem;
+      if (obsEmb != null && String(obsEmb).trim() !== '') {
+        observacaoEmbalagem = String(obsEmb).trim();
+      }
+    }
+
     const data: CarrinhoSaidaFornoParaEmbalagemVM[] = [];
     for (const s of saidaLogs) {
       const dq = s.dados_qualidade as SaidaFornoQualityData | null;
+      if (dq?.liberacao_carrinho_perda_total === true) continue;
       const latasSaida = latasSaidaFornoDoLog(dq);
       if (latasSaida < 1) continue;
       const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, s.id);
       const disp = latasSaida - consumido;
       if (disp <= 0) continue;
       const num = String(dq?.numero_carrinho ?? '').trim();
+      const carRaw = num || '—';
+      const rotulo = camposRotuloRegistroFila('saida_forno', s.dados_qualidade, carRaw, {
+        bandejas: latasSaida,
+      });
       data.push({
         saida_forno_log_id: s.id,
-        numero_carrinho: num || '—',
+        numero_carrinho: carRaw,
         latas_saida: latasSaida,
         latas_disponiveis: disp,
         saida_fim: s.fim as string,
+        observacao_embalagem: observacaoEmbalagem,
+        ...rotulo,
       });
     }
 
@@ -791,6 +1799,12 @@ export async function registerEntradaEmbalagemCarrinhoELatas(input: {
 
     const logs = await stepRepository.findByOrderId(input.ordem_producao_id);
     const dqS = saidaLog.dados_qualidade as SaidaFornoQualityData | null;
+    if (dqS?.liberacao_carrinho_perda_total === true) {
+      return {
+        success: false as const,
+        error: 'Este saldo foi encerrado administrativamente; não é possível registar na embalagem.',
+      };
+    }
     const latasSaida = latasSaidaFornoDoLog(dqS);
     const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, saidaLog.id);
     const disponivel = latasSaida - consumido;
@@ -828,6 +1842,7 @@ export async function registerEntradaEmbalagemCarrinhoELatas(input: {
       dados_qualidade: dqPatch,
     });
 
+    revalidatePath('/carrinhos');
     revalidatePath('/producao/fila');
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-embalagem`);
@@ -843,6 +1858,107 @@ export async function registerEntradaEmbalagemCarrinhoELatas(input: {
 }
 
 /**
+ * Regista na embalagem todas as latas ainda disponíveis desta saída do forno (em blocos de até
+ * {@link MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO} por registo).
+ */
+export async function registerEntradaEmbalagemTodasLatasRestantes(input: {
+  ordem_producao_id: string;
+  saida_forno_log_id: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+  const saidaInicial = await stepRepository.findById(input.saida_forno_log_id);
+  if (!saidaInicial || saidaInicial.etapa !== 'saida_forno' || saidaInicial.fim == null) {
+    return { success: false, error: 'Registo de saída do forno não encontrado ou ainda não concluído.' };
+  }
+  if (saidaInicial.ordem_producao_id !== input.ordem_producao_id) {
+    return { success: false, error: 'Este registo não pertence a esta ordem de produção.' };
+  }
+
+  const maxIter = 500;
+  for (let i = 0; i < maxIter; i += 1) {
+    const saidaLog = await stepRepository.findById(input.saida_forno_log_id);
+    if (!saidaLog || saidaLog.etapa !== 'saida_forno' || saidaLog.fim == null) {
+      return { success: false, error: 'Registo de saída do forno deixou de existir.' };
+    }
+    const logs = await stepRepository.findByOrderId(input.ordem_producao_id);
+    const dqS = saidaLog.dados_qualidade as SaidaFornoQualityData | null;
+    if (dqS?.liberacao_carrinho_perda_total === true) {
+      return { success: false, error: 'Este saldo já foi encerrado administrativamente.' };
+    }
+    const latasSaida = latasSaidaFornoDoLog(dqS);
+    const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, saidaLog.id);
+    const disponivel = latasSaida - consumido;
+    if (disponivel < 1) {
+      return { success: true };
+    }
+    const chunk = Math.min(MAX_LATAS_ENTRADA_EMBALAGEM_POR_REGISTRO, disponivel);
+    const res = await registerEntradaEmbalagemCarrinhoELatas({
+      ordem_producao_id: input.ordem_producao_id,
+      saida_forno_log_id: input.saida_forno_log_id,
+      latas: chunk,
+    });
+    if (!res.success) {
+      return { success: false, error: res.error };
+    }
+  }
+  return { success: false, error: 'Limite de iterações ao registar entradas na embalagem.' };
+}
+
+/**
+ * Encerra o saldo pendente deste carrinho na saída do forno sem criar entradas na embalagem
+ * (perda total / liberação administrativa na página Carrinhos).
+ */
+export async function encerrarSaldoCarrinhoPosFornoAdministrativo(input: {
+  saida_forno_log_id: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const stepRepository = new ProductionStepRepository(supabase);
+
+  try {
+    const log = await stepRepository.findById(input.saida_forno_log_id);
+    if (!log || log.etapa !== 'saida_forno' || log.fim == null) {
+      return { success: false, error: 'Registo de saída do forno não encontrado ou ainda não concluído.' };
+    }
+
+    const logs = await stepRepository.findByOrderId(log.ordem_producao_id);
+    const dqS = log.dados_qualidade as SaidaFornoQualityData | null;
+    if (dqS?.liberacao_carrinho_perda_total === true) {
+      return { success: true };
+    }
+    const latasSaida = latasSaidaFornoDoLog(dqS);
+    const consumido = sumLatasEntradaEmbalagemPorSaidaFornoLogId(logs, log.id);
+    const restantes = latasSaida - consumido;
+    if (restantes < 1) {
+      return { success: true };
+    }
+
+    const prev = log.dados_qualidade;
+    const dadosAtualizados = {
+      ...(prev != null && typeof prev === 'object' ? prev : {}),
+      liberacao_carrinho_perda_total: true,
+      liberacao_carrinho_perda_total_em: new Date().toISOString(),
+    } as QualityData;
+
+    await stepRepository.update(log.id, { dados_qualidade: dadosAtualizados });
+
+    revalidatePath('/carrinhos');
+    revalidatePath('/producao/fila');
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}`);
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}/entrada-forno`);
+    revalidatePath(`/producao/etapas/${log.ordem_producao_id}/entrada-embalagem`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('encerrarSaldoCarrinhoPosFornoAdministrativo:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao encerrar saldo do carrinho.',
+    };
+  }
+}
+
+/**
  * Busca progresso de uma ordem de produção
  */
 export async function getProductionProgress(
@@ -853,6 +1969,9 @@ export async function getProductionProgress(
     box_units?: number | null;
     unidades_assadeira?: number | null;
     receita_massa?: {
+      receita_id?: string;
+      receita_nome?: string | null;
+      receita_codigo?: string | null;
       quantidade_por_produto: number;
     } | null;
   },
@@ -967,46 +2086,7 @@ export async function getReceitasMassaByProduto(produtoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
-    const { data: produtoReceitas, error } = await supabase
-      .from('produto_receitas')
-      .select(
-        `
-        receitas!produto_receitas_receita_id_fkey (
-          id,
-          nome,
-          codigo,
-          tipo,
-          ativo
-        )
-      `,
-      )
-      .eq('produto_id', produtoId)
-      .eq('ativo', true);
-
-    if (error) {
-      throw new Error(`Erro ao buscar receitas: ${error.message}`);
-    }
-
-    type ProdutoReceitaWithReceita = {
-      tipo?: string | null;
-      receitas?: {
-        id: string;
-        nome: string;
-        codigo: string | null;
-        tipo: string;
-        ativo?: boolean | null;
-      } | null;
-    };
-    const receitasMassa = (produtoReceitas || [])
-      .filter((pr: ProdutoReceitaWithReceita) =>
-        isVinculoReceitaMassaAtiva({
-          tipo: pr.tipo,
-          receitas: pr.receitas ?? null,
-        }),
-      )
-      .map((pr: ProdutoReceitaWithReceita) => pr.receitas)
-      .filter(Boolean);
-
+    const receitasMassa = await listReceitasMassaForProduto(supabase, produtoId);
     return { success: true, data: receitasMassa };
   } catch (error) {
     console.error('Erro ao buscar receitas de massa:', error);
@@ -1050,6 +2130,13 @@ export async function getMasseiras() {
 export async function getProductionOrderWithProduct(ordemProducaoId: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const orderRepository = new ProductionOrderRepository(supabase);
+
+  const resolved = await resolveOrdemProducaoOperacionalId(supabase, ordemProducaoId);
+  if ('error' in resolved) {
+    return { success: false, error: resolved.error };
+  }
+  const opId = resolved.opId;
+
   const withFetchRetry = async <T>(fn: () => Promise<T>, attempts = 2): Promise<T> => {
     let lastErr: unknown;
     for (let i = 0; i < attempts; i += 1) {
@@ -1066,78 +2153,185 @@ export async function getProductionOrderWithProduct(ordemProducaoId: string) {
   };
 
   try {
-    const order = await withFetchRetry(() => orderRepository.findById(ordemProducaoId));
+    const order = await withFetchRetry(() => orderRepository.findById(opId));
     if (!order) {
       return { success: false, error: 'Ordem de produção não encontrada' };
     }
 
-    // Buscar dados do produto com join em unidades
+    // Buscar produto sem embed: PostgREST (schema interno) pode não expor FK produtos→unidades no cache (PGRST200).
     const { data: produto, error: produtoError } = await withFetchRetry(async () =>
-      await supabase
-        .from('produtos')
-        .select('*, unidades (nome_resumido)')
-        .eq('id', order.produto_id)
-        .single(),
+      await supabase.from('produtos').select('*').eq('id', order.produto_id).single(),
     );
 
     if (produtoError || !produto) {
       return { success: false, error: 'Produto não encontrado' };
     }
 
-    // Extrair nome_resumido do join com unidades
-    const unidades = produto.unidades as { nome_resumido?: string } | null;
-    const unidadeNomeResumido = unidades?.nome_resumido || null;
+    const unidadePadraoId = String(
+      (produto as { unidade_padrao_id?: string | null }).unidade_padrao_id ?? '',
+    ).trim();
+    let unidadeNomeResumido: string | null = null;
+    if (unidadePadraoId) {
+      const { data: unRow } = await withFetchRetry(async () =>
+        await supabase.from('unidades').select('nome_resumido').eq('id', unidadePadraoId).maybeSingle(),
+      );
+      const nr = (unRow as { nome_resumido?: string | null } | null)?.nome_resumido;
+      unidadeNomeResumido = nr != null && String(nr).trim() !== '' ? String(nr).trim() : null;
+    }
 
-    // Buscar receita de massa vinculada (usando a mesma lógica da fila de produção)
-    const { data: produtoReceitas, error: receitasError } = await withFetchRetry(async () =>
-      await supabase
-        .from('produto_receitas')
-        .select(`
-        quantidade_por_produto,
-        receitas!produto_receitas_receita_id_fkey (
-          tipo,
-          ativo
-        )
-      `)
-        .eq('produto_id', order.produto_id)
-        .eq('ativo', true),
+    const receitaMassa = await withFetchRetry(() =>
+      resolveReceitaMassaForProduto(supabase, order.produto_id),
     );
 
-    if (receitasError) {
-      console.error('Erro ao buscar receitas vinculadas:', receitasError);
+    let numeroBuracosAssadeira = 0;
+    let unidadesPorAssadeiraCadastro = 0;
+    let tipoLataNome: string | null = null;
+    const assadeiraId = order.assadeira_id?.trim() ?? '';
+    if (assadeiraId) {
+      const { data: assRow } = await withFetchRetry(async () =>
+        await supabase
+          .from('assadeiras')
+          .select('numero_buracos, nome')
+          .eq('id', assadeiraId)
+          .maybeSingle(),
+      );
+      numeroBuracosAssadeira =
+        Math.round(Number((assRow as { numero_buracos?: number })?.numero_buracos ?? 0)) || 0;
+      const nomeRaw = (assRow as { nome?: string | null } | null)?.nome;
+      tipoLataNome = nomeRaw != null && String(nomeRaw).trim() !== '' ? String(nomeRaw).trim() : null;
+      const { data: paRow } = await withFetchRetry(async () =>
+        await supabase
+          .from('produto_assadeiras')
+          .select('unidades_por_assadeira')
+          .eq('produto_id', order.produto_id)
+          .eq('assadeira_id', assadeiraId)
+          .maybeSingle(),
+      );
+      unidadesPorAssadeiraCadastro =
+        Math.round(
+          Number((paRow as { unidades_por_assadeira?: number })?.unidades_por_assadeira ?? 0),
+        ) || 0;
     }
 
-    let receitaMassa = null;
-    if (produtoReceitas && produtoReceitas.length > 0) {
-      type ProdutoReceitaItem = {
-        quantidade_por_produto: number;
-        tipo?: string | null;
-        receitas?: {
-          tipo?: string;
-          ativo?: boolean;
-        } | null;
-      };
-      const receitaMassaData = (produtoReceitas as ProdutoReceitaItem[]).find((pr) =>
-        isVinculoReceitaMassaAtiva(pr),
-      );
+    const opConsumoInput = {
+      qtd_planejada: order.qtd_planejada,
+      assadeira_id: order.assadeira_id,
+      numeroBuracosAssadeira: numeroBuracosAssadeira,
+      unidadesPorAssadeiraCadastro: unidadesPorAssadeiraCadastro,
+    };
 
-      if (receitaMassaData) {
-        receitaMassa = {
-          quantidade_por_produto: receitaMassaData.quantidade_por_produto,
-        };
+    const productInfo: ProductConversionInfo = {
+      unidadeNomeResumido,
+      package_units: (produto as { package_units?: number | null }).package_units ?? null,
+      box_units: (produto as { box_units?: number | null }).box_units ?? null,
+      unidades_assadeira: (produto as { unidades_assadeira?: number | null }).unidades_assadeira ?? null,
+      receita_massa: receitaMassa ?? undefined,
+    };
+
+    const unidadesPorLataOp = unidadesPorLataResolvidaParaOp(opConsumoInput, productInfo);
+    const productInfoComLata = {
+      ...productInfo,
+      unidades_assadeira: unidadesPorLataOp ?? productInfo.unidades_assadeira,
+    };
+
+    const planejadoUnidadesConsumo = planejadoUnidadesConsumoFromOp(
+      opConsumoInput,
+      productInfoComLata,
+    );
+
+    // Caixas planejadas da ordem diária (conversão já considerando o tipo de caixa escolhido):
+    // fonte de verdade para a meta de caixas na saída de embalagem.
+    let caixasPlanejadas: number | null = null;
+    let observacaoProducao: string | null = null;
+    // Sem maybeSingle(): uma OP pode ter mais de um item diário ligado; maybeSingle devolveria null e perderia os dados.
+    const { data: diariaItens } = await withFetchRetry(async () =>
+      await supabase
+        .from('ordens_producao_diarias_itens')
+        .select('caixas_estimadas, observacao_producao, observacao')
+        .eq('ordens_producao_id', opId),
+    );
+    const itensDiaria = (Array.isArray(diariaItens) ? diariaItens : []) as Array<{
+      caixas_estimadas?: number | null;
+      observacao_producao?: string | null;
+      observacao?: string | null;
+    }>;
+    for (const di of itensDiaria) {
+      const cxRaw = di.caixas_estimadas;
+      if (cxRaw != null && Number.isFinite(Number(cxRaw)) && Number(cxRaw) > 0) {
+        caixasPlanejadas = Math.round(Number(cxRaw));
+        break;
       }
     }
-    
-    console.log('[getProductionOrderWithProduct] receitaMassa encontrada:', receitaMassa);
+    const obsDoItem = (di: { observacao_producao?: string | null; observacao?: string | null }): string | null => {
+      const p = di.observacao_producao;
+      if (p != null && String(p).trim() !== '') return String(p).trim();
+      const l = di.observacao;
+      if (l != null && String(l).trim() !== '') return String(l).trim();
+      return null;
+    };
+    for (const di of itensDiaria) {
+      const obs = obsDoItem(di);
+      if (obs) {
+        observacaoProducao = obs;
+        break;
+      }
+    }
+
+    // Fallback: o vínculo reverso pode apontar para uma OP duplicada/temporária sem o item editado.
+    // Recupera a observação pelo item da MESMA data de produção e produto (identifica o pedido do dia).
+    if (observacaoProducao == null) {
+      const dataOp = String((order as { data_producao?: string | null }).data_producao ?? '').slice(0, 10);
+      const produtoIdOrder = String(order.produto_id ?? '').trim();
+      if (dataOp && produtoIdOrder) {
+        const { data: candItens } = await withFetchRetry(async () =>
+          await supabase
+            .from('ordens_producao_diarias_itens')
+            .select('observacao_producao, observacao, ordem_diaria_id')
+            .eq('produto_id', produtoIdOrder),
+        );
+        const cands = (Array.isArray(candItens) ? candItens : []) as Array<{
+          observacao_producao?: string | null;
+          observacao?: string | null;
+          ordem_diaria_id?: string | null;
+        }>;
+        const comObs = cands.filter((c) => obsDoItem(c) != null);
+        if (comObs.length > 0) {
+          const diariaIds = [
+            ...new Set(comObs.map((c) => String(c.ordem_diaria_id ?? '').trim()).filter(Boolean)),
+          ];
+          const dataPorDiaria = new Map<string, string>();
+          if (diariaIds.length > 0) {
+            const { data: hdrs } = await withFetchRetry(async () =>
+              await supabase
+                .from('ordens_producao_diarias')
+                .select('id, data_producao')
+                .in('id', diariaIds),
+            );
+            for (const h of (hdrs ?? []) as Array<{ id: string; data_producao?: string | null }>) {
+              dataPorDiaria.set(String(h.id), String(h.data_producao ?? '').slice(0, 10));
+            }
+          }
+          const mesmaData = comObs.find(
+            (c) => dataPorDiaria.get(String(c.ordem_diaria_id ?? '').trim()) === dataOp,
+          );
+          observacaoProducao = obsDoItem(mesmaData ?? comObs[0]);
+        }
+      }
+    }
 
     return {
       success: true,
       data: {
         ...order,
+        planejadoUnidadesConsumo,
+        caixasPlanejadas,
+        tipoLataNome,
+        observacaoProducao,
         produto: {
           ...produto,
           unidadeNomeResumido,
           receita_massa: receitaMassa,
+          unidades_assadeira: productInfoComLata.unidades_assadeira,
         },
       },
     };
@@ -1189,6 +2383,16 @@ export async function registerSaidaForno(input: {
   const uaNum = ua != null && Number(ua) > 0 ? Number(ua) : null;
   const qtdSaida = uaNum != null ? bandejas * uaNum : bandejas;
 
+  const norm = normalizeNumeroCarrinhoFermentacao(carrinho);
+  const disponibilidade = await assertCarrinhoDisponivelParaSaidaForno({
+    supabase,
+    numeroNormalizado: norm,
+    numeroParaExibir: carrinho,
+  });
+  if (!disponibilidade.ok) {
+    return { success: false, error: disponibilidade.error };
+  }
+
   const dq: SaidaFornoQualityData = { numero_carrinho: carrinho, bandejas };
 
   try {
@@ -1209,6 +2413,7 @@ export async function registerSaidaForno(input: {
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}`);
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}/entrada-forno`);
     revalidatePath(`/producao/etapas/${input.ordem_producao_id}/saida-forno`);
+    revalidatePath('/carrinhos');
 
     return { success: true, data: completed };
   } catch (error) {

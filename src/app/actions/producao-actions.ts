@@ -4,47 +4,78 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 import { isVinculoReceitaMassaAtiva } from '@/lib/utils/receita-massa-eligibility';
 import { listCarrinhosDisponiveisForOrdemFromSnapshots } from '@/lib/utils/forno-carrinhos-disponiveis';
-import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
+import { ltFromFornoLogRow, sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
+import {
+  latasFromEntradaEmbalagemLog,
+  maxLatasEditaveisEntradaEmbalagemLog,
+} from '@/lib/utils/entrada-embalagem-saida';
+import { bandejasFromSaidaFornoLog } from '@/lib/utils/saida-forno-volume';
+import type { ProductionStepLog } from '@/domain/types/producao-etapas';
+import type { SaidaFornoQualityData } from '@/domain/types/producao-etapas';
 import { estoqueService } from '@/lib/services/estoque-service';
 import type { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
 import {
-  quantidadePlanejadaParaUnidadesConsumo,
   unidadesConsumoParaQuantidadePlanejada,
   quantidadeEstoqueParaUnidadesConsumo,
   type ProductConversionInfo,
 } from '@/lib/utils/production-conversions';
+import {
+  planejadoUnidadesConsumoFromOp,
+  unidadesPorLataResolvidaParaOp,
+} from '@/lib/production/ordem-producao-conversions';
+import {
+  montarLatasUsoResumo,
+  type AssadeiraEstoqueInfo,
+  type ItemLataUso,
+  type LataUsoTipoResumo,
+} from '@/lib/production/latas-uso-resumo';
+import { ltFromFermentacaoLog } from '@/lib/utils/fermentacao-progresso';
 import { formatIntegerWithThousands, formatNumberWithThousands } from '@/lib/utils/number-utils';
 import { isGoogleServiceAccountConfigured } from '@/lib/googleSheets';
-import { ORDEM_PRODUCAO_TIPOS_LATA, type OrdemProducaoTipoLata } from '@/domain/types/ordem-producao';
+import type { OrdemProducaoLataSelecao } from '@/domain/types/ordem-producao';
 import type { Json } from '@/types/database';
 import { normalizeToISODate } from '@/lib/utils/date-utils';
-import { purgeExpiredTemporaryProductionOrders } from '@/lib/production/temporary-op-cleanup';
-import { opTemporariasAllowedOnServer } from '@/config/op-temporarias';
+import {
+  resolveAssadeiraIdFromLataSelecao,
+  type ProdutoUnidadesLataMeta,
+} from '@/lib/production/ordem-producao-assadeira';
+import {
+  loadProdutoReceitasMassaLinkRows,
+  type ProdutoReceitaMassaLinkRow,
+} from '@/lib/production/produto-receita-massa';
 import {
   insertOrdemProducaoForDiariaItem,
   updateOrdemProducaoForDiariaItem,
+  fetchProdutoMetaForAssadeira,
+  fetchAssadeiraCandidatos,
   type DiariaHeaderDates,
 } from '@/lib/production/ordem-producao-op-sync';
-import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-/** Debug session 8fe30e — NDJSON local + ingest (sem segredos). */
-function agentDebugLogOrdemDiaria(payload: Record<string, unknown>) {
-  const body = { sessionId: '8fe30e', timestamp: Date.now(), runId: 'debug-ordem-diaria', ...payload };
-  const line = `${JSON.stringify(body)}\n`;
-  try {
-    appendFileSync(join(process.cwd(), 'debug-8fe30e.log'), line, 'utf8');
-  } catch {
-    /* ignore */
-  }
-  fetch('http://127.0.0.1:7700/ingest/15090b9f-dfae-41a9-a6f7-fe765ce88323', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8fe30e' },
-    body: JSON.stringify(body),
-  }).catch(() => {});
-}
+import { estimateCaixasFromLatas } from '@/lib/production/ordem-producao-conversions';
+import { camposRotuloRegistroFila } from '@/lib/production/registro-adiantado-fila';
 
 const PATH_PRODUCAO_ORDEM_DIARIA = '/producao/ordem-producao';
+
+export type ClienteOrdemProducaoOpcao = { id: string; nomeFantasia: string };
+
+/** Clientes ativos para multiseleção na ordem de produção diária (nome guardado = nome_fantasia). */
+export async function listClientesOrdemProducaoDiaria(): Promise<
+  { success: true; data: ClienteOrdemProducaoOpcao[] } | { success: false; error: string }
+> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('id, nome_fantasia')
+    .order('nome_fantasia', { ascending: true });
+  if (error) return { success: false, error: error.message };
+  const rows = (data ?? []) as { id: string; nome_fantasia: string | null }[];
+  return {
+    success: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      nomeFantasia: String(r.nome_fantasia ?? '').trim() || '—',
+    })),
+  };
+}
 
 interface CreateProductionOrderParams {
   produtoId: string;
@@ -54,8 +85,6 @@ interface CreateProductionOrderParams {
   dataProducao?: string;
   /** Assadeira permitida em `produto_assadeiras`; null = inferir na fila pelo cadastro do produto. */
   assadeiraId?: string | null;
-  /** Se true, OP de teste removida após o fim do dia da data de produção (Brasília). */
-  temporaria?: boolean;
 }
 
 interface UpdateProductionOrderParams {
@@ -71,6 +100,10 @@ export type AssadeiraOpcaoOrdemProducao = {
   id: string;
   nome: string;
   unidades_por_assadeira: number;
+  /** `assadeiras.numero_buracos` — usado na conversão latas → unidades (prioridade sobre unidades_por_assadeira). */
+  numero_buracos: number;
+  /** `assadeiras.quantidade_latas` — estoque físico do tipo (aviso de divisão em lotes). */
+  quantidade_latas: number;
   ordem: number;
 };
 
@@ -86,31 +119,67 @@ export async function getAssadeirasDisponiveisParaOrdemProducao(
     return { success: true, data: [] };
   }
   const supabase = supabaseClientFactory.createServiceRoleClient();
-  const { data, error } = await supabase
+  const { data: paRows, error: paErr } = await supabase
     .from('produto_assadeiras')
-    .select(
-      `
-      unidades_por_assadeira,
-      assadeiras ( id, nome, ordem )
-    `,
-    )
+    .select('assadeira_id, unidades_por_assadeira')
     .eq('produto_id', id);
 
-  if (error) {
-    return { success: false, error: error.message };
+  if (paErr) {
+    return { success: false, error: paErr.message };
+  }
+
+  const byAid = new Map<string, number>();
+  for (const r of paRows ?? []) {
+    const aid = String((r as { assadeira_id?: string }).assadeira_id ?? '').trim();
+    const u = Math.round(Number((r as { unidades_por_assadeira?: number }).unidades_por_assadeira));
+    if (!aid || !Number.isFinite(u) || u <= 0) continue;
+    byAid.set(aid, u);
+  }
+
+  const aids = [...byAid.keys()];
+  const assMap = new Map<
+    string,
+    { id: string; nome: string; ordem: number; numero_buracos: number; quantidade_latas: number }
+  >();
+  if (aids.length > 0) {
+    const { data: assRows, error: assErr } = await supabase
+      .from('assadeiras')
+      .select('id, nome, ordem, numero_buracos, quantidade_latas')
+      .in('id', aids);
+    if (assErr) {
+      return { success: false, error: assErr.message };
+    }
+    for (const a of assRows ?? []) {
+      const row = a as {
+        id: string;
+        nome?: string | null;
+        ordem?: number | null;
+        numero_buracos?: number | null;
+        quantidade_latas?: number | null;
+      };
+      const nb = Math.round(Number(row.numero_buracos ?? 0));
+      const ql = Math.round(Number(row.quantidade_latas ?? 0));
+      assMap.set(row.id, {
+        id: row.id,
+        nome: (row.nome ?? '').trim(),
+        ordem: row.ordem ?? 0,
+        numero_buracos: Number.isFinite(nb) && nb > 0 ? nb : 0,
+        quantidade_latas: Number.isFinite(ql) && ql > 0 ? ql : 0,
+      });
+    }
   }
 
   const out: AssadeiraOpcaoOrdemProducao[] = [];
-  for (const row of data ?? []) {
-    const a = row.assadeiras as { id: string; nome: string; ordem: number } | null;
-    if (!a?.id) continue;
-    const u = Math.round(Number(row.unidades_por_assadeira));
-    if (!Number.isFinite(u) || u <= 0) continue;
+  for (const [aid, u] of byAid) {
+    const a = assMap.get(aid);
+    if (!a) continue;
     out.push({
-      id: a.id,
-      nome: (a.nome ?? '').trim() || '—',
-      ordem: a.ordem ?? 0,
+      id: aid,
+      nome: a.nome || '—',
+      ordem: a.ordem,
       unidades_por_assadeira: u,
+      numero_buracos: a.numero_buracos,
+      quantidade_latas: a.quantidade_latas,
     });
   }
   out.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, 'pt-BR', { sensitivity: 'base' }));
@@ -133,6 +202,69 @@ export async function getAssadeirasDisponiveisParaOrdemProducao(
     (bloqs ?? []).map((r: { assadeira_id: string }) => String(r.assadeira_id)),
   );
   return { success: true, data: out.filter((o) => !blocked.has(o.id)) };
+}
+
+/**
+ * Dados para o `<select>` de lata na ordem diária: opções do cadastro (`produto_assadeiras` + nomes)
+ * e `selectedAssadeiraId` coerente com `tipoLataGuardado` (UUID de assadeira cadastrada; valor desconhecido → primeira opção).
+ */
+export async function getOrdemProducaoDiariaLataPicker(
+  produtoId: string,
+  tipoLataGuardado: string,
+): Promise<
+  | {
+      success: true;
+      options: AssadeiraOpcaoOrdemProducao[];
+      selectedAssadeiraId: string | null;
+      /** `produtos.box_units` para preview latas → caixas. */
+      boxUnits: number | null;
+    }
+  | { success: false; error: string }
+> {
+  const ass = await getAssadeirasDisponiveisParaOrdemProducao(produtoId);
+  if (!ass.success) return ass;
+  const pid = produtoId?.trim() ?? '';
+  let boxUnits: number | null = null;
+  if (pid) {
+    const supabase = supabaseClientFactory.createServiceRoleClient();
+    const { data: pr } = await supabase
+      .from('produtos')
+      .select('box_units')
+      .eq('id', pid)
+      .maybeSingle();
+    const bu = (pr as { box_units?: number | null })?.box_units;
+    if (bu != null && Number(bu) > 0) boxUnits = Math.round(Number(bu));
+  }
+  if (!pid || ass.data.length === 0) {
+    return {
+      success: true,
+      options: ass.data,
+      selectedAssadeiraId: null,
+      boxUnits,
+    };
+  }
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const metaRow = await fetchProdutoMetaForAssadeira(supabase, pid);
+  const candidatos = await fetchAssadeiraCandidatos(supabase, pid);
+  const metaFallback: ProdutoUnidadesLataMeta = {
+    unidades_assadeira: null,
+    unidades_lata_antiga: null,
+    unidades_lata_nova: null,
+  };
+  const meta = metaRow ?? (candidatos.length > 0 ? metaFallback : null);
+  const g = String(tipoLataGuardado ?? '').trim();
+  let selected: string | null = null;
+  if (meta && candidatos.length > 0) {
+    selected = resolveAssadeiraIdFromLataSelecao(g, meta, candidatos);
+  } else if (ass.data.length > 0) {
+    selected = ass.data[0]!.id;
+  }
+  return {
+    success: true,
+    options: ass.data,
+    selectedAssadeiraId: selected,
+    boxUnits,
+  };
 }
 
 async function validarAssadeiraIdParaProduto(
@@ -183,11 +315,10 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
-    const isTemp = opTemporariasAllowedOnServer() && Boolean(params.temporaria);
-    // 1. Gerar código do lote (OP-YYYYMMDD-Sequence ou OP-T-YYYYMMDD-Sequence para teste)
+    // 1. Gerar código do lote (OP-YYYYMMDD-Sequence)
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-    const lotePrefix = isTemp ? `OP-T-${dateStr}-` : `OP-${dateStr}-`;
+    const lotePrefix = `OP-${dateStr}-`;
 
     const { data: lastOp } = await supabase
       .from('ordens_producao')
@@ -200,7 +331,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
     let sequence = 1;
     if (lastOp?.lote_codigo) {
       const parts = lastOp.lote_codigo.split('-');
-      const seqPart = isTemp ? parts[3] : parts[2];
+      const seqPart = parts[2];
       if (seqPart != null && !Number.isNaN(parseInt(seqPart, 10))) {
         sequence = parseInt(seqPart, 10) + 1;
       }
@@ -249,8 +380,6 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
       return { success: false as const, error: assadeiraOk.error };
     }
 
-    const dataProducaoIsoDate = normalizeToISODate(params.dataProducao);
-
     const { data, error } = await supabase
       .from('ordens_producao')
       .insert({
@@ -263,8 +392,8 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
         data_producao: dataProducao,
         ordem_planejamento: nextOrdemPlanejamento,
         assadeira_id: assadeiraOk.value,
-        temporaria: isTemp,
-        temporaria_expira_em: isTemp ? dataProducaoIsoDate : null,
+        temporaria: false,
+        temporaria_expira_em: null,
       })
       .select()
       .single();
@@ -296,7 +425,7 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
     let clienteIdParaLata: string | null = null;
     const { data: ordemPed, error: ordemPedErr } = await supabase
       .from('ordens_producao')
-      .select('pedido_id, temporaria')
+      .select('pedido_id')
       .eq('id', params.ordemId)
       .maybeSingle();
     if (!ordemPedErr && ordemPed?.pedido_id) {
@@ -322,11 +451,6 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
       return { success: false as const, error: assadeiraOk.error };
     }
     updateData.assadeira_id = assadeiraOk.value;
-
-    const opTemp = Boolean((ordemPed as { temporaria?: boolean | null } | null)?.temporaria);
-    if (opTemporariasAllowedOnServer() && opTemp && params.dataProducao) {
-      updateData.temporaria_expira_em = normalizeToISODate(params.dataProducao);
-    }
 
     const { data, error } = await supabase
       .from('ordens_producao')
@@ -492,75 +616,117 @@ function isProdutosUnidadesLataColumnsMissing(err: unknown): boolean {
   );
 }
 
-/** Linha produto↔receita + metadados de `receitas` (sem embed PostgREST: evita PGRST200 se o hint de FK divergir). */
-type ProdutoReceitaMassaLinkRow = {
-  produto_id: string;
-  quantidade_por_produto: number;
-  tipo?: string | null;
-  receitas?: { tipo?: string; ativo?: boolean | null } | null;
+/** Coluna inexistente ou schema cache — tentar SELECT mais enxuto. */
+function isProdutosSelectColumnError(err: unknown): boolean {
+  if (isProdutosUnidadesLataColumnsMissing(err)) return true;
+  const code = String((err as { code?: string })?.code ?? '');
+  const msg = String((err as { message?: string })?.message ?? '').toLowerCase();
+  return (
+    code === '42703' ||
+    (msg.includes('column') && msg.includes('does not exist')) ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find')
+  );
+}
+
+function normalizeProdutoIdKey(id: string | null | undefined): string {
+  return String(id ?? '').trim().toLowerCase();
+}
+
+const PRODUTO_FILA_SELECT_VARIANTS = [
+  'id, nome, unidade_padrao_id, package_units, box_units, unidades_assadeira, unidades_lata_antiga, unidades_lata_nova',
+  'id, nome, unidade_padrao_id, package_units, box_units, unidades_assadeira',
+  'id, nome, unidade_padrao_id, unidades_assadeira',
+  'id, nome',
+] as const;
+
+const PRODUTO_FILA_IN_CHUNK_SIZE = 80;
+
+type ProdutoJoinRowFila = {
+  nome: string;
+  unidade_padrao_id?: string | null;
+  package_units?: number | null;
+  box_units?: number | null;
+  unidades_assadeira?: number | null;
+  unidades_lata_antiga?: number | null;
+  unidades_lata_nova?: number | null;
+  unidades?: { nome_resumido?: string } | null;
 };
 
-async function loadProdutoReceitasMassaLinkRows(
+async function loadProdutosJoinMapForFila(
   supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
   produtoIds: string[],
-): Promise<{ rows: ProdutoReceitaMassaLinkRow[]; error: unknown | null }> {
-  if (produtoIds.length === 0) return { rows: [], error: null };
+): Promise<{ map: Map<string, ProdutoJoinRowFila>; leituraFalhou: boolean }> {
+  const map = new Map<string, ProdutoJoinRowFila>();
+  const ids = [...new Set(produtoIds.map(normalizeProdutoIdKey).filter(Boolean))];
+  if (ids.length === 0) return { map, leituraFalhou: false };
 
-  const { data: linksRows, error: linksErr } = await supabase
-    .from('produto_receitas')
-    .select('produto_id, quantidade_por_produto, receita_id')
-    .in('produto_id', produtoIds)
-    .eq('ativo', true);
+  let leituraFalhou = false;
 
-  if (linksErr) {
-    return { rows: [], error: linksErr };
+  for (let offset = 0; offset < ids.length; offset += PRODUTO_FILA_IN_CHUNK_SIZE) {
+    const chunk = ids.slice(offset, offset + PRODUTO_FILA_IN_CHUNK_SIZE);
+    let pRows: Record<string, unknown>[] | null = null;
+    let lastErr: unknown = null;
+
+    for (const select of PRODUTO_FILA_SELECT_VARIANTS) {
+      const { data, error } = await supabase.from('produtos').select(select).in('id', chunk);
+      if (!error) {
+        pRows = (data ?? []) as unknown as Record<string, unknown>[];
+        lastErr = null;
+        break;
+      }
+      lastErr = error;
+      if (!isProdutosSelectColumnError(error)) break;
+    }
+
+    if (lastErr) {
+      leituraFalhou = true;
+      console.error(
+        'Erro ao buscar fila (produtos):',
+        JSON.stringify(serializeSupabaseError(lastErr as unknown)),
+      );
+      continue;
+    }
+
+    const uid = [
+      ...new Set(
+        (pRows ?? [])
+          .map((r) => String(r.unidade_padrao_id ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    const unNome = new Map<string, string>();
+    if (uid.length > 0) {
+      const { data: uRows, error: uErr } = await supabase
+        .from('unidades')
+        .select('id, nome_resumido')
+        .in('id', uid);
+      if (!uErr && uRows) {
+        for (const u of uRows as { id: string; nome_resumido?: string | null }[]) {
+          unNome.set(u.id, (u.nome_resumido ?? '').trim());
+        }
+      }
+    }
+
+    for (const pr of pRows ?? []) {
+      const id = normalizeProdutoIdKey(String(pr.id ?? ''));
+      if (!id) continue;
+      const up = String(pr.unidade_padrao_id ?? '').trim() || null;
+      const nr = up ? unNome.get(up) : undefined;
+      map.set(id, {
+        nome: String(pr.nome ?? '').trim() || '—',
+        unidade_padrao_id: up,
+        package_units: (pr.package_units as number | null | undefined) ?? null,
+        box_units: (pr.box_units as number | null | undefined) ?? null,
+        unidades_assadeira: (pr.unidades_assadeira as number | null | undefined) ?? null,
+        unidades_lata_antiga: (pr.unidades_lata_antiga as number | null | undefined) ?? null,
+        unidades_lata_nova: (pr.unidades_lata_nova as number | null | undefined) ?? null,
+        unidades: nr != null && nr !== '' ? { nome_resumido: nr } : { nome_resumido: '' },
+      });
+    }
   }
 
-  const receitaIds = [
-    ...new Set(
-      (linksRows ?? [])
-        .map((r) => String((r as { receita_id?: string | null }).receita_id ?? '').trim())
-        .filter(Boolean),
-    ),
-  ];
-
-  if (receitaIds.length === 0) {
-    const rows: ProdutoReceitaMassaLinkRow[] = (linksRows ?? []).map((link) => {
-      const l = link as { produto_id: string; quantidade_por_produto: number };
-      return {
-        produto_id: l.produto_id,
-        quantidade_por_produto: Number(l.quantidade_por_produto),
-        receitas: null,
-      };
-    });
-    return { rows, error: null };
-  }
-
-  const { data: recRows, error: recErr } = await supabase
-    .from('receitas')
-    .select('id, tipo, ativo')
-    .in('id', receitaIds);
-
-  if (recErr) {
-    return { rows: [], error: recErr };
-  }
-
-  const receitaById = new Map<string, { tipo?: string; ativo?: boolean | null }>();
-  for (const row of recRows ?? []) {
-    const r = row as { id: string; tipo?: string; ativo?: boolean | null };
-    receitaById.set(r.id, { tipo: r.tipo, ativo: r.ativo });
-  }
-
-  const rows: ProdutoReceitaMassaLinkRow[] = (linksRows ?? []).map((link) => {
-    const l = link as { produto_id: string; quantidade_por_produto: number; receita_id: string };
-    return {
-      produto_id: l.produto_id,
-      quantidade_por_produto: Number(l.quantidade_por_produto),
-      receitas: receitaById.get(l.receita_id) ?? null,
-    };
-  });
-
-  return { rows, error: null };
+  return { map, leituraFalhou };
 }
 
 function formatEstoqueResumoTexto(q: Quantidade): string {
@@ -622,17 +788,12 @@ function nomeLataTipoParaOrdem(
 export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const purgeResult = await purgeExpiredTemporaryProductionOrders(supabase);
-  if (!purgeResult.ok) {
-    console.warn('[fila] Limpeza OP temporárias:', purgeResult.error);
-  }
-
   // Sem embed por hint de FK: no schema `interno` o nome da constraint pode não coincidir com o gerado
   // (PGRST200). Buscamos ordens, produtos e pedidos/clientes em consultas separadas e montamos o mesmo formato.
+  // Inclui `concluido`: ordens com saída de embalagem gravada precisam continuar na fila para editar/excluir lançamentos.
   const { data: ordensRows, error } = await supabase
     .from('ordens_producao')
     .select('*')
-    .neq('status', 'concluido')
     .neq('status', 'cancelado');
 
   if (error) {
@@ -651,7 +812,9 @@ export async function getProductionQueue() {
   const ordensTyped = ordensRows as OrdemRowIn[];
 
   const ordemProdutoIds = [
-    ...new Set(ordensTyped.map((r) => String(r.produto_id ?? '').trim()).filter(Boolean)),
+    ...new Set(
+      ordensTyped.map((r) => normalizeProdutoIdKey(String(r.produto_id ?? ''))).filter(Boolean),
+    ),
   ];
   const pedidoIds = [
     ...new Set(
@@ -661,94 +824,8 @@ export async function getProductionQueue() {
     ),
   ];
 
-  type ProdutoJoinRow = {
-    nome: string;
-    package_units?: number | null;
-    box_units?: number | null;
-    unidades_assadeira?: number | null;
-    unidades_lata_antiga?: number | null;
-    unidades_lata_nova?: number | null;
-    unidade_padrao_id?: string | null;
-    unidades?: { nome_resumido?: string } | null;
-    [key: string]: unknown;
-  };
-  const produtosJoin = new Map<string, ProdutoJoinRow>();
-
-  if (ordemProdutoIds.length > 0) {
-    const SELECT_PRODUTOS_COM_LATA =
-      'id, nome, unidade_padrao_id, package_units, box_units, unidades_assadeira, unidades_lata_antiga, unidades_lata_nova';
-    const SELECT_PRODUTOS_SEM_LATA =
-      'id, nome, unidade_padrao_id, package_units, box_units, unidades_assadeira';
-
-    let pRows: unknown[] | null = null;
-    let pErr: unknown = null;
-
-    const firstProd = await supabase
-      .from('produtos')
-      .select(SELECT_PRODUTOS_COM_LATA)
-      .in('id', ordemProdutoIds);
-    pErr = firstProd.error;
-    pRows = firstProd.data as unknown[] | null;
-
-    if (pErr && isProdutosUnidadesLataColumnsMissing(pErr)) {
-      const secondProd = await supabase
-        .from('produtos')
-        .select(SELECT_PRODUTOS_SEM_LATA)
-        .in('id', ordemProdutoIds);
-      pErr = secondProd.error;
-      pRows = secondProd.data as unknown[] | null;
-    }
-
-    if (pErr) {
-      console.error(
-        'Erro ao buscar fila (produtos):',
-        JSON.stringify(serializeSupabaseError(pErr as unknown)),
-      );
-    } else {
-      const uid = [
-        ...new Set(
-          (pRows ?? [])
-            .map((r) => (r as { unidade_padrao_id?: string | null }).unidade_padrao_id)
-            .filter((id): id is string => Boolean(id && String(id).trim())),
-        ),
-      ];
-      const unNome = new Map<string, string>();
-      if (uid.length > 0) {
-        const { data: uRows, error: uErr } = await supabase
-          .from('unidades')
-          .select('id, nome_resumido')
-          .in('id', uid);
-        if (!uErr && uRows) {
-          for (const u of uRows as { id: string; nome_resumido?: string | null }[]) {
-            unNome.set(u.id, (u.nome_resumido ?? '').trim());
-          }
-        }
-      }
-      for (const pr of (pRows ?? []) as {
-        id: string;
-        nome: string;
-        unidade_padrao_id?: string | null;
-        package_units?: number | null;
-        box_units?: number | null;
-        unidades_assadeira?: number | null;
-        unidades_lata_antiga?: number | null;
-        unidades_lata_nova?: number | null;
-      }[]) {
-        const up = pr.unidade_padrao_id?.trim();
-        const nr = up ? unNome.get(up) : undefined;
-        produtosJoin.set(pr.id, {
-          nome: pr.nome,
-          unidade_padrao_id: pr.unidade_padrao_id ?? null,
-          package_units: pr.package_units ?? null,
-          box_units: pr.box_units ?? null,
-          unidades_assadeira: pr.unidades_assadeira ?? null,
-          unidades_lata_antiga: pr.unidades_lata_antiga ?? null,
-          unidades_lata_nova: pr.unidades_lata_nova ?? null,
-          unidades: nr != null && nr !== '' ? { nome_resumido: nr } : { nome_resumido: '' },
-        });
-      }
-    }
-  }
+  const { map: produtosJoin, leituraFalhou: produtosFilaLeituraFalhou } =
+    await loadProdutosJoinMapForFila(supabase, ordemProdutoIds);
 
   const pedidosJoin = new Map<
     string,
@@ -806,7 +883,7 @@ export async function getProductionQueue() {
   };
 
   const data = ordensTyped.map((row) => {
-    const pid = String(row.produto_id ?? '').trim();
+    const pid = normalizeProdutoIdKey(String(row.produto_id ?? ''));
     const pedId =
       row.pedido_id != null && String(row.pedido_id).trim() !== ''
         ? String(row.pedido_id).trim()
@@ -814,6 +891,7 @@ export async function getProductionQueue() {
     return {
       ...row,
       produtos: pid ? produtosJoin.get(pid) ?? null : null,
+      produtos_fila_leitura_falhou: produtosFilaLeituraFalhou,
       pedidos: pedId ? pedidosJoin.get(pedId) ?? { cliente_id: null, clientes: null } : null,
     };
   }) as unknown as OrdemProducaoItem[];
@@ -918,32 +996,56 @@ export async function getProductionQueue() {
   if (produtoIds.length > 0) {
     const { data: paData, error: paError } = await supabase
       .from('produto_assadeiras')
-      .select(
-        `
-        produto_id,
-        unidades_por_assadeira,
-        assadeiras ( id, nome, ordem )
-      `,
-      )
+      .select('produto_id, assadeira_id, unidades_por_assadeira')
       .in('produto_id', produtoIds);
 
     if (paError) {
-      console.error('Erro ao buscar latas por produto (fila):', serializeSupabaseError(paError));
+      console.error(
+        'Erro ao buscar latas por produto (fila):',
+        JSON.stringify(serializeSupabaseError(paError)),
+      );
     } else {
-      for (const row of (paData ?? []) as {
-        produto_id: string;
-        unidades_por_assadeira: number | string | null;
-        assadeiras: { id: string; nome: string; ordem: number } | null;
-      }[]) {
-        const aid = row.assadeiras?.id?.trim();
-        const nome = row.assadeiras?.nome?.trim();
-        if (!aid || !nome) continue;
-        const ordem = row.assadeiras?.ordem ?? 0;
-        const u = Math.round(Number(row.unidades_por_assadeira));
+      const aidSet = new Set<string>();
+      for (const row of paData ?? []) {
+        const aid = String((row as { assadeira_id?: string }).assadeira_id ?? '').trim();
+        if (aid) aidSet.add(aid);
+      }
+      const aids = [...aidSet];
+      const assMeta = new Map<string, { nome: string; ordem: number }>();
+      if (aids.length > 0) {
+        const { data: assRows, error: assQueryErr } = await supabase
+          .from('assadeiras')
+          .select('id, nome, ordem')
+          .in('id', aids);
+        if (assQueryErr) {
+          console.error(
+            'Erro ao buscar nomes de latas (fila):',
+            JSON.stringify(serializeSupabaseError(assQueryErr)),
+          );
+        } else {
+          for (const a of assRows ?? []) {
+            const r = a as { id: string; nome?: string | null; ordem?: number | null };
+            assMeta.set(r.id, { nome: (r.nome ?? '').trim(), ordem: r.ordem ?? 0 });
+          }
+        }
+      }
+
+      for (const row of paData ?? []) {
+        const r = row as {
+          produto_id: string;
+          assadeira_id?: string;
+          unidades_por_assadeira?: number | string | null;
+        };
+        const aid = String(r.assadeira_id ?? '').trim();
+        const meta = assMeta.get(aid);
+        const nome = meta?.nome?.trim();
+        if (!aid || !meta || !nome) continue;
+        const ordem = meta.ordem ?? 0;
+        const u = Math.round(Number(r.unidades_por_assadeira));
         if (!Number.isFinite(u) || u <= 0) continue;
-        const list = linksByProduto.get(row.produto_id) ?? [];
+        const list = linksByProduto.get(r.produto_id) ?? [];
         list.push({ assadeira_id: aid, unidades: u, nome, ordem });
-        linksByProduto.set(row.produto_id, list);
+        linksByProduto.set(r.produto_id, list);
       }
     }
   }
@@ -1023,13 +1125,16 @@ export async function getProductionQueue() {
     .in('ordem_producao_id', orderIds);
 
   type FornoEntradaRow = {
+    id: string;
     ordem_producao_id: string;
+    inicio: string | null;
+    fim: string | null;
     dados_qualidade: unknown;
     qtd_saida: number | null;
   };
   const { data: fornoLogsTodasEntradas } = await supabase
     .from('producao_etapas_log')
-    .select('ordem_producao_id, dados_qualidade, qtd_saida')
+    .select('id, ordem_producao_id, inicio, fim, dados_qualidade, qtd_saida')
     .eq('etapa', 'entrada_forno')
     .in('ordem_producao_id', orderIds);
 
@@ -1040,116 +1145,124 @@ export async function getProductionQueue() {
     fornoLogsByOrdem.set(row.ordem_producao_id, list);
   }
 
-  const { data: saidaFornoLogsConcluidos } = await supabase
+  type SaidaFornoLogRow = {
+    id: string;
+    ordem_producao_id: string;
+    inicio: string | null;
+    fim: string | null;
+    dados_qualidade: unknown;
+    qtd_saida: number | null;
+  };
+  const { data: saidaFornoLogsTodas } = await supabase
     .from('producao_etapas_log')
-    .select('ordem_producao_id, dados_qualidade')
+    .select('id, ordem_producao_id, inicio, fim, dados_qualidade, qtd_saida')
     .eq('etapa', 'saida_forno')
-    .not('fim', 'is', null)
     .in('ordem_producao_id', orderIds);
 
-  const saidaBandejasByOrdem = new Map<string, number>();
-  for (const row of saidaFornoLogsConcluidos ?? []) {
-    const dq = row.dados_qualidade as { bandejas?: number } | null;
-    const b = dq?.bandejas;
-    if (b != null && !Number.isNaN(Number(b))) {
-      const oid = row.ordem_producao_id as string;
-      saidaBandejasByOrdem.set(oid, (saidaBandejasByOrdem.get(oid) || 0) + Number(b));
-    }
+  const saidaFornoLogsByOrdem = new Map<string, SaidaFornoLogRow[]>();
+  for (const row of (saidaFornoLogsTodas ?? []) as SaidaFornoLogRow[]) {
+    const list = saidaFornoLogsByOrdem.get(row.ordem_producao_id) ?? [];
+    list.push(row);
+    saidaFornoLogsByOrdem.set(row.ordem_producao_id, list);
   }
 
-  const { data: entradaEmbalagemLogsConcluidos } = await supabase
+  const saidaBandejasByOrdem = new Map<string, number>();
+  for (const row of saidaFornoLogsTodas ?? []) {
+    if ((row as SaidaFornoLogRow).fim == null) continue;
+    const b = bandejasFromSaidaFornoLog((row as SaidaFornoLogRow).dados_qualidade);
+    if (b <= 0) continue;
+    const oid = row.ordem_producao_id as string;
+    saidaBandejasByOrdem.set(oid, (saidaBandejasByOrdem.get(oid) || 0) + b);
+  }
+
+  type EmbalagemLogRow = {
+    id: string;
+    ordem_producao_id: string;
+    inicio: string | null;
+    fim: string | null;
+    dados_qualidade: unknown;
+    qtd_saida: number | null;
+  };
+  const { data: entradaEmbalagemLogsTodas } = await supabase
     .from('producao_etapas_log')
-    .select('ordem_producao_id, qtd_saida, dados_qualidade')
+    .select('id, ordem_producao_id, inicio, fim, dados_qualidade, qtd_saida')
     .eq('etapa', 'entrada_embalagem')
-    .not('fim', 'is', null)
     .in('ordem_producao_id', orderIds);
+
+  const entradaEmbalagemLogsByOrdem = new Map<string, EmbalagemLogRow[]>();
+  for (const row of (entradaEmbalagemLogsTodas ?? []) as EmbalagemLogRow[]) {
+    const list = entradaEmbalagemLogsByOrdem.get(row.ordem_producao_id) ?? [];
+    list.push(row);
+    entradaEmbalagemLogsByOrdem.set(row.ordem_producao_id, list);
+  }
+
+  const saidaCarrinhoByLogId = new Map<string, string>();
+  for (const row of (saidaFornoLogsTodas ?? []) as SaidaFornoLogRow[]) {
+    const dq = row.dados_qualidade as { numero_carrinho?: string } | null | undefined;
+    saidaCarrinhoByLogId.set(row.id, dq?.numero_carrinho?.trim() || '—');
+  }
 
   const entradaEmbalagemLatasByOrdem = new Map<string, number>();
   /** Um registro concluído na entrada da embalagem = um lote/carrinho contabilizado na fila. */
   const entradaEmbalagemRegistrosByOrdem = new Map<string, number>();
-  for (const row of entradaEmbalagemLogsConcluidos ?? []) {
-    const oid = row.ordem_producao_id as string;
+  const saidaFornoLogIdsNaEmbalagem = new Set<string>();
+  for (const row of entradaEmbalagemLogsTodas ?? []) {
+    const emb = row as EmbalagemLogRow;
+    if (emb.fim == null) continue;
+    const oid = emb.ordem_producao_id;
     entradaEmbalagemRegistrosByOrdem.set(oid, (entradaEmbalagemRegistrosByOrdem.get(oid) || 0) + 1);
-    const dq = row.dados_qualidade as { assadeiras?: number } | null;
-    let latas = 0;
-    if (row.qtd_saida != null && !Number.isNaN(Number(row.qtd_saida))) {
-      latas = Number(row.qtd_saida);
-    } else if (dq?.assadeiras != null && !Number.isNaN(Number(dq.assadeiras))) {
-      latas = Number(dq.assadeiras);
-    }
+    const sid = (emb.dados_qualidade as { saida_forno_log_id?: string } | null)?.saida_forno_log_id;
+    if (sid?.trim()) saidaFornoLogIdsNaEmbalagem.add(sid.trim());
+    const latas = latasFromEntradaEmbalagemLog(emb.dados_qualidade, emb.qtd_saida);
     if (latas <= 0) continue;
     entradaEmbalagemLatasByOrdem.set(oid, (entradaEmbalagemLatasByOrdem.get(oid) || 0) + latas);
   }
 
+  type SaidaEmbLogRow = {
+    id: string;
+    ordem_producao_id: string;
+    inicio: string | null;
+    fim: string | null;
+    dados_qualidade: unknown;
+    qtd_saida: number | null;
+  };
   const { data: saidaEmbalagemLogs } = await supabase
     .from('producao_etapas_log')
-    .select('ordem_producao_id, inicio, dados_qualidade')
+    .select('id, ordem_producao_id, inicio, fim, dados_qualidade, qtd_saida')
     .eq('etapa', 'saida_embalagem')
     .in('ordem_producao_id', orderIds);
 
-  type SaidaEmbLogRow = { ordem_producao_id: string; inicio: string; dados_qualidade: unknown };
-  const saidaEmbalagemCaixasPorOrdem = new Map<string, { inicio: string; caixas: number }>();
-  for (const raw of saidaEmbalagemLogs ?? []) {
-    const row = raw as SaidaEmbLogRow;
-    const oid = String(row.ordem_producao_id ?? '');
-    const inicio = String(row.inicio ?? '');
-    const dq = row.dados_qualidade as { caixas_recebidas?: number } | null;
-    const cr = dq?.caixas_recebidas;
-    if (cr == null || !Number.isFinite(Number(cr))) continue;
-    const caixas = Math.round(Number(cr));
-    const prev = saidaEmbalagemCaixasPorOrdem.get(oid);
-    if (!prev || new Date(inicio).getTime() >= new Date(prev.inicio).getTime()) {
-      saidaEmbalagemCaixasPorOrdem.set(oid, { inicio, caixas });
-    }
+  const saidaEmbalagemLogsByOrdem = new Map<string, SaidaEmbLogRow[]>();
+  for (const row of (saidaEmbalagemLogs ?? []) as SaidaEmbLogRow[]) {
+    const list = saidaEmbalagemLogsByOrdem.get(row.ordem_producao_id) ?? [];
+    list.push(row);
+    saidaEmbalagemLogsByOrdem.set(row.ordem_producao_id, list);
   }
 
-  // Buscar logs de fermentação concluídos (soma de todos os lotes por OP)
-  const { data: fermentacaoLogs } = await supabase
-    .from('producao_etapas_log')
-    .select('id, ordem_producao_id, qtd_saida, dados_qualidade')
-    .eq('etapa', 'fermentacao')
-    .not('fim', 'is', null)
-    .in('ordem_producao_id', orderIds);
+  const saidaEmbalagemCaixasPorOrdem = new Map<string, number>();
+  for (const [oid, logsOrdem] of saidaEmbalagemLogsByOrdem) {
+    let soma = 0;
+    for (const log of logsOrdem) {
+      const dq = log.dados_qualidade as { caixas_recebidas?: number } | null;
+      const cr = dq?.caixas_recebidas;
+      if (cr == null || !Number.isFinite(Number(cr))) continue;
+      soma += Math.round(Number(cr));
+    }
+    if (soma > 0) saidaEmbalagemCaixasPorOrdem.set(oid, soma);
+  }
 
+  const receitasFermentacaoMap = new Map<string, number>();
   type FermentacaoLogRow = {
     id: string;
     ordem_producao_id: string;
     qtd_saida: number | null;
     dados_qualidade: unknown;
+    fim: string | null;
   };
-
-  /** Volume concluído na fermentação: LT se houver unidades_assadeira (+ assadeiras_lt preferencial); senão unidades (qtd_saida). */
-  const fermentacaoVolumeMap = new Map<string, number>();
-  const receitasFermentacaoMap = new Map<string, number>();
-  type CarrinhoFerm = { log_id: string; carrinho: string; latas: number };
-  const fermentacaoCarrinhosMap = new Map<string, CarrinhoFerm[]>();
-  fermentacaoLogs?.forEach((log: FermentacaoLogRow) => {
+  for (const log of (fermentacaoLogsAll ?? []) as FermentacaoLogRow[]) {
+    if (log.fim == null) continue;
     const ordemId = log.ordem_producao_id;
     const row = data.find((i: OrdemProducaoItem) => i.id === ordemId) as OrdemProducaoWithProduto | undefined;
-    const ua = row?.produtos?.unidades_assadeira;
-    const uaNum = ua != null && Number(ua) > 0 ? Number(ua) : null;
-    const dq = log.dados_qualidade as { assadeiras_lt?: number; numero_carrinho?: string } | null | undefined;
-
-    let volume = 0;
-    if (uaNum != null) {
-      const lt = dq?.assadeiras_lt;
-      if (lt != null && !Number.isNaN(Number(lt))) {
-        volume = Number(lt);
-      } else if (log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
-        volume = Number(log.qtd_saida) / uaNum;
-      }
-    } else if (log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
-      volume = Number(log.qtd_saida);
-    }
-
-    fermentacaoVolumeMap.set(ordemId, (fermentacaoVolumeMap.get(ordemId) || 0) + volume);
-
-    const carrinho = dq?.numero_carrinho?.trim() || '—';
-    const entry: CarrinhoFerm = { log_id: log.id, carrinho, latas: volume };
-    const lista = fermentacaoCarrinhosMap.get(ordemId) || [];
-    lista.push(entry);
-    fermentacaoCarrinhosMap.set(ordemId, lista);
-
     if (row && log.qtd_saida != null && !Number.isNaN(Number(log.qtd_saida))) {
       const receitaMassa = receitasMap.get(row.produto_id);
       if (receitaMassa && receitaMassa.quantidade_por_produto > 0) {
@@ -1157,7 +1270,7 @@ export async function getProductionQueue() {
         receitasFermentacaoMap.set(ordemId, (receitasFermentacaoMap.get(ordemId) || 0) + rec);
       }
     }
-  });
+  }
 
   const { data: fornoLogs } = await supabase
     .from('producao_etapas_log')
@@ -1207,10 +1320,11 @@ export async function getProductionQueue() {
     ),
   ];
   const nomeAssadeiraPorId = new Map<string, string>();
+  const buracosPorAssadeiraId = new Map<string, number>();
   if (assadeiraIdsDasOrdens.length > 0) {
     const { data: anRows, error: anErr } = await supabase
       .from('assadeiras')
-      .select('id, nome')
+      .select('id, nome, numero_buracos')
       .in('id', assadeiraIdsDasOrdens);
     if (anErr) {
       console.warn(
@@ -1219,8 +1333,114 @@ export async function getProductionQueue() {
       );
     } else {
       for (const r of anRows ?? []) {
-        const row = r as { id: string; nome: string };
+        const row = r as { id: string; nome: string; numero_buracos?: number };
         nomeAssadeiraPorId.set(row.id, (row.nome ?? '').trim() || '—');
+        const br = Math.round(Number(row.numero_buracos ?? 0));
+        if (br > 0) buracosPorAssadeiraId.set(row.id, br);
+      }
+    }
+  }
+
+  const unidadesPorAssadeiraCadPorChave = new Map<string, number>();
+  const paresProdutoAssadeira = [
+    ...new Set(
+      (data as { produto_id: string; assadeira_id?: string | null }[])
+        .map((r) => {
+          const aid = r.assadeira_id?.trim();
+          if (!aid) return '';
+          return `${r.produto_id}|${aid}`;
+        })
+        .filter(Boolean),
+    ),
+  ];
+  if (paresProdutoAssadeira.length > 0) {
+    const produtoIdsPa = [...new Set(paresProdutoAssadeira.map((k) => k.split('|')[0]!))];
+    const assadeiraIdsPa = [...new Set(paresProdutoAssadeira.map((k) => k.split('|')[1]!))];
+    const { data: paRows, error: paErr } = await supabase
+      .from('produto_assadeiras')
+      .select('produto_id, assadeira_id, unidades_por_assadeira')
+      .in('produto_id', produtoIdsPa)
+      .in('assadeira_id', assadeiraIdsPa);
+    if (paErr) {
+      console.warn('[fila] produto_assadeiras:', JSON.stringify(serializeSupabaseError(paErr)));
+    } else {
+      for (const r of paRows ?? []) {
+        const row = r as {
+          produto_id: string;
+          assadeira_id: string;
+          unidades_por_assadeira?: number;
+        };
+        const ua = Math.round(Number(row.unidades_por_assadeira ?? 0));
+        if (ua > 0) {
+          unidadesPorAssadeiraCadPorChave.set(`${row.produto_id}|${row.assadeira_id}`, ua);
+        }
+      }
+    }
+  }
+
+  const fermentacaoLogIdsNoForno = new Set<string>();
+  for (const row of (fornoLogsComQualidade ?? []) as { dados_qualidade?: unknown }[]) {
+    const dq = row.dados_qualidade as { fermentacao_log_id?: string } | null | undefined;
+    const fid = String(dq?.fermentacao_log_id ?? '').trim();
+    if (fid) fermentacaoLogIdsNoForno.add(fid);
+  }
+
+  const fermCarrinhoByLogId = new Map<string, string>();
+  for (const log of (fermentacaoLogsAll ?? []) as FermentacaoLogRow[]) {
+    const dq = log.dados_qualidade as { numero_carrinho?: string } | null | undefined;
+    fermCarrinhoByLogId.set(log.id, dq?.numero_carrinho?.trim() || '—');
+  }
+
+  // Caixas planejadas (conversão feita na ordem diária, já considerando o tipo de caixa) por OP.
+  // A fila usa isto como meta de caixas na saída de embalagem; o cálculo por box_units do produto
+  // não conhece o tipo de caixa nem converte latas→unidades corretamente.
+  const caixasPlanejadasPorOp = new Map<string, number>();
+  // Observação de produção da ordem diária (ex.: «lavar a lata depois») por OP — destaque nos cards da fila.
+  const observacaoProducaoPorOp = new Map<string, string>();
+  // Observação de embalagem da ordem diária (ex.: «caixa lisa») por OP — destaque nos cards de embalagem.
+  const observacaoEmbalagemPorOp = new Map<string, string>();
+  {
+    const opIds = ordensTyped.map((r) => String(r.id)).filter(Boolean);
+    if (opIds.length > 0) {
+      const { data: diariaItens, error: diariaErr } = await supabase
+        .from('ordens_producao_diarias_itens')
+        .select('ordens_producao_id, caixas_estimadas, observacao_producao, observacao, observacao_embalagem')
+        .in('ordens_producao_id', opIds);
+      if (diariaErr) {
+        console.warn('getProductionQueue caixas_estimadas:', diariaErr.message);
+      } else {
+        for (const r of diariaItens ?? []) {
+          const row = r as {
+            ordens_producao_id?: string | null;
+            caixas_estimadas?: number | null;
+            observacao_producao?: string | null;
+            observacao?: string | null;
+            observacao_embalagem?: string | null;
+          };
+          const opId = String(row.ordens_producao_id ?? '').trim();
+          if (!opId) continue;
+          const cx = Number(row.caixas_estimadas);
+          if (Number.isFinite(cx) && cx > 0) {
+            caixasPlanejadasPorOp.set(opId, Math.round(cx));
+          }
+          if (!observacaoProducaoPorOp.has(opId)) {
+            const obsPro = row.observacao_producao;
+            const obsLegacy = row.observacao;
+            const obs =
+              obsPro != null && String(obsPro).trim() !== ''
+                ? String(obsPro).trim()
+                : obsLegacy != null && String(obsLegacy).trim() !== ''
+                  ? String(obsLegacy).trim()
+                  : '';
+            if (obs) observacaoProducaoPorOp.set(opId, obs);
+          }
+          if (!observacaoEmbalagemPorOp.has(opId)) {
+            const obsEmb = row.observacao_embalagem;
+            if (obsEmb != null && String(obsEmb).trim() !== '') {
+              observacaoEmbalagemPorOp.set(opId, String(obsEmb).trim());
+            }
+          }
+        }
       }
     }
   }
@@ -1231,16 +1451,20 @@ export async function getProductionQueue() {
     const receitaMassa = receitasMap.get(item.produto_id) || null;
     const receitasBatidas = receitasBatidasMap.get(item.id) || 0;
     const receitasFermentacao = receitasFermentacaoMap.get(item.id) || 0;
-    const fermentacao_volume_concluido = fermentacaoVolumeMap.get(item.id) || 0;
     const forno_volume_concluido = fornoVolumeMap.get(item.id) || 0;
-    const fermentacao_carrinhos = fermentacaoCarrinhosMap.get(item.id) || [];
     const qtdMassaFinalizada = receitasBatidas > 0 ? receitasBatidas : null;
 
     // Extrair nome_resumido do join com unidades
     const unidades = produto?.unidades as { nome_resumido?: string } | null;
     const unidadeNomeResumido = unidades?.nome_resumido || null;
 
-    const produtoJoinFaltando = produto == null;
+    const pidNorm = normalizeProdutoIdKey(item.produto_id);
+    const leituraFilaFalhou = Boolean(
+      (item as { produtos_fila_leitura_falhou?: boolean }).produtos_fila_leitura_falhou,
+    );
+    const produtoCargaFilaErro = pidNorm !== '' && produto == null && leituraFilaFalhou;
+    const produtoJoinFaltando =
+      pidNorm === '' || (produto == null && !leituraFilaFalhou);
 
     const latExtra = unidadesLataPorProduto.get(item.produto_id);
     const uaAntiga =
@@ -1286,7 +1510,29 @@ export async function getProductionQueue() {
       }
     }
 
-    const necessidadeConsumo = quantidadePlanejadaParaUnidadesConsumo(item.qtd_planejada, productInfo);
+    const opAssadeiraIdConsumo = (item as { assadeira_id?: string | null }).assadeira_id?.trim() ?? '';
+    const opConsumoInput = {
+      qtd_planejada: item.qtd_planejada,
+      assadeira_id: opAssadeiraIdConsumo || null,
+      numeroBuracosAssadeira: opAssadeiraIdConsumo
+        ? buracosPorAssadeiraId.get(opAssadeiraIdConsumo)
+        : undefined,
+      unidadesPorAssadeiraCadastro: opAssadeiraIdConsumo
+        ? unidadesPorAssadeiraCadPorChave.get(`${item.produto_id}|${opAssadeiraIdConsumo}`)
+        : undefined,
+    };
+    const unidadesPorLataOp = unidadesPorLataResolvidaParaOp(opConsumoInput, productInfo);
+    const unidadesAssadeiraEfetiva =
+      unidadesPorLataOp ?? (produto?.unidades_assadeira != null ? Number(produto.unidades_assadeira) : null);
+    const productInfoComLata: ProductConversionInfo = {
+      ...productInfo,
+      unidades_assadeira: unidadesAssadeiraEfetiva,
+    };
+    const planejado_unidades_consumo = planejadoUnidadesConsumoFromOp(
+      opConsumoInput,
+      productInfoComLata,
+    );
+    const necessidadeConsumo = planejado_unidades_consumo;
     const aProduzirConsumo = Math.max(0, necessidadeConsumo - estoque_unidades_consumo);
     const qtd_a_produzir_planejada = unidadesConsumoParaQuantidadePlanejada(
       aProduzirConsumo,
@@ -1294,9 +1540,37 @@ export async function getProductionQueue() {
     );
 
     const uaForDisp =
-      produto?.unidades_assadeira != null && Number(produto.unidades_assadeira) > 0
-        ? Number(produto.unidades_assadeira)
+      unidadesAssadeiraEfetiva != null && unidadesAssadeiraEfetiva > 0
+        ? unidadesAssadeiraEfetiva
         : null;
+
+    type CarrinhoFerm = {
+      log_id: string;
+      carrinho: string;
+      latas: number;
+      bloqueado_no_forno: boolean;
+      eh_registro_adiantado: boolean;
+      rotulo_exibicao: string;
+    };
+    let fermentacao_volume_concluido = 0;
+    const fermentacao_carrinhos: CarrinhoFerm[] = [];
+    for (const log of (fermentacaoLogsAll ?? []) as FermentacaoLogRow[]) {
+      if (log.ordem_producao_id !== item.id || log.fim == null) continue;
+      const volume = ltFromFermentacaoLog(log.qtd_saida, log.dados_qualidade, uaForDisp);
+      fermentacao_volume_concluido += volume;
+      const dq = log.dados_qualidade as { numero_carrinho?: string } | null | undefined;
+      const carRaw = dq?.numero_carrinho?.trim() || '—';
+      const rotulo = camposRotuloRegistroFila('fermentacao', log.dados_qualidade, carRaw, {
+        latas: volume,
+      });
+      fermentacao_carrinhos.push({
+        log_id: log.id,
+        carrinho: carRaw,
+        latas: volume,
+        bloqueado_no_forno: fermentacaoLogIdsNoForno.has(log.id),
+        ...rotulo,
+      });
+    }
 
     const carrinhos_disponiveis_forno = listCarrinhosDisponiveisForOrdemFromSnapshots(
       item.id,
@@ -1309,11 +1583,179 @@ export async function getProductionQueue() {
       fornoLogsByOrdem.get(item.id) ?? [],
       uaForDisp,
     );
+
+    type EntradaFornoFila = {
+      log_id: string;
+      carrinho: string;
+      latas: number;
+      em_andamento: boolean;
+      max_latas_fermentacao: number;
+      eh_registro_adiantado: boolean;
+      rotulo_exibicao: string;
+    };
+    const entrada_forno_entradas: EntradaFornoFila[] = [];
+    for (const log of fornoLogsByOrdem.get(item.id) ?? []) {
+      const dq = log.dados_qualidade as { fermentacao_log_id?: string } | null | undefined;
+      const fermId = String(dq?.fermentacao_log_id ?? '').trim();
+      const latas = ltFromFornoLogRow(log.qtd_saida, log.dados_qualidade, uaForDisp);
+      const fermLog = fermId
+        ? ((fermentacaoLogsAll ?? []) as FermentacaoLogRow[]).find((l) => l.id === fermId)
+        : undefined;
+      const max_latas_fermentacao = fermLog
+        ? ltFromFermentacaoLog(fermLog.qtd_saida, fermLog.dados_qualidade, uaForDisp)
+        : 0;
+      const carRaw = fermId ? (fermCarrinhoByLogId.get(fermId) ?? '—') : '—';
+      const rotulo = camposRotuloRegistroFila(
+        'entrada_forno',
+        log.dados_qualidade,
+        carRaw,
+        { latas },
+        fermLog?.dados_qualidade,
+      );
+      entrada_forno_entradas.push({
+        log_id: log.id,
+        carrinho: carRaw,
+        latas,
+        em_andamento: log.fim == null,
+        max_latas_fermentacao,
+        ...rotulo,
+      });
+    }
+
     const saida_forno_bandejas_total = saidaBandejasByOrdem.get(item.id) || 0;
+
+    type SaidaFornoFila = {
+      log_id: string;
+      carrinho: string;
+      bandejas: number;
+      em_andamento: boolean;
+      bloqueado_na_embalagem: boolean;
+      eh_registro_adiantado: boolean;
+      rotulo_exibicao: string;
+    };
+    const saida_forno_registros: SaidaFornoFila[] = [];
+    for (const log of saidaFornoLogsByOrdem.get(item.id) ?? []) {
+      const dq = log.dados_qualidade as { numero_carrinho?: string } | null | undefined;
+      const bandejas = bandejasFromSaidaFornoLog(log.dados_qualidade);
+      const carRaw = dq?.numero_carrinho?.trim() || '—';
+      const rotulo = camposRotuloRegistroFila('saida_forno', log.dados_qualidade, carRaw, {
+        bandejas,
+      });
+      saida_forno_registros.push({
+        log_id: log.id,
+        carrinho: carRaw,
+        bandejas,
+        em_andamento: log.fim == null,
+        bloqueado_na_embalagem: saidaFornoLogIdsNaEmbalagem.has(log.id),
+        ...rotulo,
+      });
+    }
+
     const entrada_embalagem_latas_total = entradaEmbalagemLatasByOrdem.get(item.id) || 0;
     const entrada_embalagem_registros_count = entradaEmbalagemRegistrosByOrdem.get(item.id) || 0;
-    const saida_embalagem_caixas_informadas =
-      saidaEmbalagemCaixasPorOrdem.get(item.id)?.caixas ?? null;
+
+    const logsEmbalagemMax: ProductionStepLog[] = [];
+    for (const s of saidaFornoLogsByOrdem.get(item.id) ?? []) {
+      logsEmbalagemMax.push({
+        id: s.id,
+        ordem_producao_id: item.id,
+        etapa: 'saida_forno',
+        fim: s.fim,
+        inicio: s.inicio ?? '',
+        dados_qualidade: s.dados_qualidade,
+        qtd_saida: s.qtd_saida,
+      } as ProductionStepLog);
+    }
+    for (const e of entradaEmbalagemLogsByOrdem.get(item.id) ?? []) {
+      logsEmbalagemMax.push({
+        id: e.id,
+        ordem_producao_id: item.id,
+        etapa: 'entrada_embalagem',
+        fim: e.fim,
+        inicio: e.inicio ?? '',
+        dados_qualidade: e.dados_qualidade,
+        qtd_saida: e.qtd_saida,
+      } as ProductionStepLog);
+    }
+
+    type EntradaEmbFila = {
+      log_id: string;
+      carrinho: string;
+      latas: number;
+      em_andamento: boolean;
+      max_latas_disponivel: number;
+      bloqueado: boolean;
+      eh_registro_adiantado: boolean;
+      rotulo_exibicao: string;
+    };
+    const entrada_embalagem_registros: EntradaEmbFila[] = [];
+    for (const log of entradaEmbalagemLogsByOrdem.get(item.id) ?? []) {
+      const dq = log.dados_qualidade as { saida_forno_log_id?: string; numero_carrinho?: string } | null;
+      const saidaId = String(dq?.saida_forno_log_id ?? '').trim();
+      const latas = latasFromEntradaEmbalagemLog(log.dados_qualidade, log.qtd_saida);
+      const saidaLog = saidaId
+        ? (saidaFornoLogsByOrdem.get(item.id) ?? []).find((s) => s.id === saidaId)
+        : undefined;
+      const dqS = saidaLog?.dados_qualidade as SaidaFornoQualityData | null | undefined;
+      const bloqueado = dqS?.liberacao_carrinho_perda_total === true;
+      const max_latas_disponivel =
+        saidaId && !bloqueado
+          ? maxLatasEditaveisEntradaEmbalagemLog(logsEmbalagemMax, log.id, saidaId, dqS)
+          : 0;
+      const carRaw =
+        dq?.numero_carrinho?.trim() || (saidaId ? (saidaCarrinhoByLogId.get(saidaId) ?? '—') : '—');
+      const rotulo = camposRotuloRegistroFila('entrada_embalagem', log.dados_qualidade, carRaw, {
+        latas,
+      });
+      entrada_embalagem_registros.push({
+        log_id: log.id,
+        carrinho: carRaw,
+        latas,
+        em_andamento: log.fim == null,
+        max_latas_disponivel,
+        bloqueado,
+        ...rotulo,
+      });
+    }
+    type SaidaEmbFila = {
+      log_id: string;
+      caixas: number;
+      em_andamento: boolean;
+      registrado_em: string;
+    };
+    const saida_embalagem_registros: SaidaEmbFila[] = [];
+    const logsSaidaEmbOrdem = [...(saidaEmbalagemLogsByOrdem.get(item.id) ?? [])].sort(
+      (a, b) => new Date(b.inicio ?? 0).getTime() - new Date(a.inicio ?? 0).getTime(),
+    );
+    for (const log of logsSaidaEmbOrdem) {
+      const dq = log.dados_qualidade as { caixas_recebidas?: number } | null;
+      const cr = dq?.caixas_recebidas;
+      if (cr == null || !Number.isFinite(Number(cr))) continue;
+      const caixas = Math.round(Number(cr));
+      const inicioRaw = log.inicio ?? log.fim ?? '';
+      let registrado_em = '—';
+      if (inicioRaw) {
+        try {
+          registrado_em = new Date(inicioRaw).toLocaleString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        } catch {
+          registrado_em = String(inicioRaw);
+        }
+      }
+      saida_embalagem_registros.push({
+        log_id: log.id,
+        caixas,
+        em_andamento: log.fim == null,
+        registrado_em,
+      });
+    }
+
+    const saida_embalagem_caixas_informadas = saidaEmbalagemCaixasPorOrdem.get(item.id) ?? null;
 
     const clienteId = item.pedidos?.cliente_id;
     const somenteLataAntigaCliente = clienteId
@@ -1348,11 +1790,13 @@ export async function getProductionQueue() {
     return {
       ...item,
       produtoJoinFaltando,
+      produtoCargaFilaErro,
       produtos: {
         ...produto,
-        nome: produto?.nome || (produtoJoinFaltando ? 'Produto não encontrado' : 'Produto sem nome'),
+        nome: produto?.nome || (produtoCargaFilaErro ? 'Cadastro temporariamente indisponível' : produtoJoinFaltando ? 'Produto não encontrado' : 'Produto sem nome'),
         unidadeNomeResumido,
         receita_massa: receitaMassa,
+        unidades_assadeira: unidadesAssadeiraEfetiva,
         unidades_lata_antiga: uaAntiga,
         unidades_lata_nova: uaNova,
       },
@@ -1363,15 +1807,23 @@ export async function getProductionQueue() {
       fermentacao_carrinhos,
       carrinhos_disponiveis_forno,
       forno_entrada_latas_total,
+      entrada_forno_entradas,
       saida_forno_bandejas_total,
+      saida_forno_registros,
       entrada_embalagem_latas_total,
+      entrada_embalagem_registros,
       entrada_embalagem_registros_count,
       saida_embalagem_caixas_informadas,
+      saida_embalagem_registros,
       qtd_massa_finalizada: qtdMassaFinalizada,
       estoque_resumo,
       estoque_unidades_consumo,
+      planejado_unidades_consumo,
       qtd_a_produzir_planejada,
       lata_tipo_nome,
+      caixas_planejadas: caixasPlanejadasPorOp.get(String(item.id)) ?? null,
+      observacao_producao: observacaoProducaoPorOp.get(String(item.id)) ?? null,
+      observacao_embalagem: observacaoEmbalagemPorOp.get(String(item.id)) ?? null,
     };
   });
 
@@ -1417,8 +1869,9 @@ type ProdutoRowForAutocomplete = {
   package_units: number | null;
   box_units: number | null;
   unidades_assadeira: number | null;
-  unidades_lata_antiga: number | null;
-  unidades_lata_nova: number | null;
+  /** Ausentes quando a BD ainda não tem migração `unidades_lata_*`. */
+  unidades_lata_antiga?: number | null;
+  unidades_lata_nova?: number | null;
   unidades: { nome_resumido: string } | null;
 };
 
@@ -1476,24 +1929,19 @@ function rowToAutocompleteOption(
       package_units: row.package_units,
       box_units: row.box_units,
       unidades_assadeira: row.unidades_assadeira,
-      unidades_lata_antiga: row.unidades_lata_antiga,
-      unidades_lata_nova: row.unidades_lata_nova,
+      unidades_lata_antiga: row.unidades_lata_antiga ?? null,
+      unidades_lata_nova: row.unidades_lata_nova ?? null,
       receita_massa: receita ?? null,
     },
   };
 }
 
-const PRODUTO_AUTOCOMPLETE_SELECT = `
-  id,
-  nome,
-  codigo,
-  unidade_padrao_id,
-  package_units,
-  box_units,
-  unidades_assadeira,
-  unidades_lata_antiga,
-  unidades_lata_nova
-`;
+/** Com colunas `unidades_lata_*` quando a migração já foi aplicada em `interno.produtos`. */
+const PRODUTO_AUTOCOMPLETE_SELECT_COM_LATA =
+  'id, nome, codigo, unidade_padrao_id, package_units, box_units, unidades_assadeira, unidades_lata_antiga, unidades_lata_nova';
+/** Fallback (42703): mesma ideia que `SELECT_PRODUTOS_SEM_LATA` na fila. */
+const PRODUTO_AUTOCOMPLETE_SELECT_SEM_LATA =
+  'id, nome, codigo, unidade_padrao_id, package_units, box_units, unidades_assadeira';
 
 async function attachUnidadesNomeResumido<
   T extends { id: string; unidade_padrao_id?: string | null },
@@ -1531,18 +1979,45 @@ async function attachUnidadesNomeResumido<
 export async function searchProdutosParaAutocomplete(query: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const q = sanitizeIlikeQuery(query);
-  if (q.length < 1) {
-    return { success: true as const, options: [] as ProdutoAutocompleteOption[] };
-  }
 
-  const pattern = postgrestQuotedValue(`%${q}%`);
-  const { data, error } = await supabase
-    .from('produtos')
-    .select(PRODUTO_AUTOCOMPLETE_SELECT)
-    .eq('ativo', true)
-    .or(`nome.ilike.${pattern},codigo.ilike.${pattern}`)
-    .order('nome', { ascending: true })
-    .limit(25);
+  let first =
+    q.length < 1
+      ? await supabase
+          .from('produtos')
+          .select(PRODUTO_AUTOCOMPLETE_SELECT_COM_LATA)
+          .eq('ativo', true)
+          .order('nome', { ascending: true })
+          .limit(25)
+      : await supabase
+          .from('produtos')
+          .select(PRODUTO_AUTOCOMPLETE_SELECT_COM_LATA)
+          .eq('ativo', true)
+          .or(`nome.ilike.${postgrestQuotedValue(`%${q}%`)},codigo.ilike.${postgrestQuotedValue(`%${q}%`)}`)
+          .order('nome', { ascending: true })
+          .limit(25);
+
+  let data: ProdutoRowForAutocomplete[] | null =
+    (first.data as unknown as ProdutoRowForAutocomplete[] | null) ?? null;
+  let error = first.error;
+  if (error && isProdutosUnidadesLataColumnsMissing(error)) {
+    const second =
+      q.length < 1
+        ? await supabase
+            .from('produtos')
+            .select(PRODUTO_AUTOCOMPLETE_SELECT_SEM_LATA)
+            .eq('ativo', true)
+            .order('nome', { ascending: true })
+            .limit(25)
+        : await supabase
+            .from('produtos')
+            .select(PRODUTO_AUTOCOMPLETE_SELECT_SEM_LATA)
+            .eq('ativo', true)
+            .or(`nome.ilike.${postgrestQuotedValue(`%${q}%`)},codigo.ilike.${postgrestQuotedValue(`%${q}%`)}`)
+            .order('nome', { ascending: true })
+            .limit(25);
+    data = (second.data as unknown as ProdutoRowForAutocomplete[] | null) ?? null;
+    error = second.error;
+  }
 
   if (error) {
     console.error(
@@ -1566,11 +2041,24 @@ export async function getProdutoAutocompleteOptionById(id: string) {
     return { success: true as const, option: null as ProdutoAutocompleteOption | null };
   }
 
-  const { data, error } = await supabase
+  let first = await supabase
     .from('produtos')
-    .select(PRODUTO_AUTOCOMPLETE_SELECT)
+    .select(PRODUTO_AUTOCOMPLETE_SELECT_COM_LATA)
     .eq('id', id)
     .maybeSingle();
+
+  let data: ProdutoRowForAutocomplete | null =
+    (first.data as unknown as ProdutoRowForAutocomplete | null) ?? null;
+  let error = first.error;
+  if (error && isProdutosUnidadesLataColumnsMissing(error)) {
+    const second = await supabase
+      .from('produtos')
+      .select(PRODUTO_AUTOCOMPLETE_SELECT_SEM_LATA)
+      .eq('id', id)
+      .maybeSingle();
+    data = (second.data as unknown as ProdutoRowForAutocomplete | null) ?? null;
+    error = second.error;
+  }
 
   if (error) {
     console.error(
@@ -1633,6 +2121,14 @@ function sanitizeClientesLista(nomes: string[]): string[] {
   return out;
 }
 
+const OBS_ORDEM_DIARIA_LINHA_MAX = 500;
+
+function sanitizeObservacaoLinhaOrdemDiaria(value: string | undefined | null): string | null {
+  const t = String(value ?? '').trim();
+  if (!t) return null;
+  return t.slice(0, OBS_ORDEM_DIARIA_LINHA_MAX);
+}
+
 function parseStatusLinha(
   v: string | undefined,
 ): typeof ORDENS_PRODUCAO_DIARIAS_LINHA_STATUSES[number] | undefined {
@@ -1647,14 +2143,103 @@ function parseStatusLinha(
 
 function isMissingOrdemDiariaTableError(message: string | undefined): boolean {
   const m = String(message ?? '').toLowerCase();
+  /** Coluna em falta (ex.: migração incremental) — não confundir com tabela inexistente. */
+  if (m.includes('column') && m.includes('does not exist')) return false;
   return (
     m.includes('ordens_producao_diarias') &&
     (m.includes('does not exist') || m.includes('schema cache') || m.includes('could not find'))
   );
 }
 
+/** Select de itens falhou por coluna/embed em falta — tentar SELECT mais conservador. */
+function isRetryOrdemDiariaItensSelectError(message: string | undefined): boolean {
+  const m = String(message ?? '').toLowerCase();
+  if (isMissingOrdemDiariaTableError(message)) return false;
+  if (m.includes('42501') || m.includes('permission denied')) return false;
+  return (
+    m.includes('column') ||
+    m.includes('does not exist') ||
+    m.includes('schema cache') ||
+    m.includes('could not find') ||
+    m.includes('pgrst200') ||
+    m.includes('pgrst204') ||
+    m.includes('42703')
+  );
+}
+
+function isMissingTipoCaixaEmbalagemIdColumnError(message: string | undefined): boolean {
+  const m = String(message ?? '').toLowerCase();
+  return (
+    m.includes('tipo_caixa_embalagem_id') &&
+    (m.includes('does not exist') ||
+      m.includes('column') ||
+      m.includes('42703') ||
+      m.includes('schema cache') ||
+      m.includes('could not find'))
+  );
+}
+
+const ORDEM_DIARIA_ITENS_SELECT_COM_TIPO_EMBED = `
+      id,
+      prioridade,
+      produto_id,
+      tipo_lata,
+      latas_planejadas,
+      caixas_estimadas,
+      tipo_caixa_embalagem_id,
+      clientes,
+      data_producao_override,
+      data_etiqueta_override,
+      observacao,
+      observacao_embalagem,
+      observacao_producao,
+      status_linha,
+      ordens_producao_id,
+      ordens_producao ( lote_codigo ),
+      produtos ( nome ),
+      tipos_caixa_embalagem ( id, nome, unidades_por_caixa, clientes ( nome_fantasia ) )
+    `;
+
+const ORDEM_DIARIA_ITENS_SELECT_PADRAO = `
+      id,
+      prioridade,
+      produto_id,
+      tipo_lata,
+      latas_planejadas,
+      caixas_estimadas,
+      tipo_caixa_embalagem_id,
+      clientes,
+      data_producao_override,
+      data_etiqueta_override,
+      observacao,
+      observacao_embalagem,
+      observacao_producao,
+      status_linha,
+      ordens_producao_id,
+      ordens_producao ( lote_codigo ),
+      produtos ( nome )
+    `;
+
+const ORDEM_DIARIA_ITENS_SELECT_MINIMO = `
+      id,
+      prioridade,
+      produto_id,
+      tipo_lata,
+      latas_planejadas,
+      caixas_estimadas,
+      tipo_caixa_embalagem_id,
+      clientes,
+      data_producao_override,
+      data_etiqueta_override,
+      observacao,
+      status_linha,
+      ordens_producao_id,
+      ordens_producao ( lote_codigo ),
+      produtos ( nome )
+    `;
+
 const ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG =
-  'Estrutura da ordem diária ainda não está disponível no banco. Aplique a migração sql/MIGRACAO_OFICIAL_ORDEM_DIARIA_OP_INTERNO.sql.';
+  'Ordem diária: as tabelas interno.ordens_producao_diarias (e itens) não existem neste banco. Crie-as com o script SQL do repositório (pasta sql/).';
 
 const ORDEM_DIARIA_PERMISSION_MSG =
   'Permissão negada nas tabelas da ordem diária (Postgres 42501). No Supabase → SQL Editor, execute o ficheiro sql/PATCH_GRANT_ORDEM_DIARIA_INTERNO.sql no mesmo projecto do SUPABASE_URL, depois recarregue esta página.';
@@ -1687,7 +2272,10 @@ async function fetchOrdemDiariaHeaderDates(
 /** Cria o cabecalho da ordem planejada para um dia (`data_producao` única). */
 export async function createOrdemProducaoDiaria(
   input: CreateOrdemProducaoDiariaInput,
-): Promise<{ success: true; ordemId: string } | { success: false; error: string }> {
+): Promise<
+  | { success: true; ordemId: string; alreadyExisted?: boolean }
+  | { success: false; error: string }
+> {
   const dataProducao = normalizeOrdemDiariaDate(input.dataProducao);
   if (!dataProducao) {
     return { success: false, error: 'Data de produção inválida.' };
@@ -1716,6 +2304,17 @@ export async function createOrdemProducaoDiaria(
       };
     }
     if ((error as { code?: string }).code === '23505') {
+      const { data: existing, error: selErr } = await supabase
+        .from('ordens_producao_diarias')
+        .select('id')
+        .eq('data_producao', dataProducao)
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!selErr && existing?.id) {
+        revalidatePath(PATH_PRODUCAO_ORDEM_DIARIA);
+        return { success: true, ordemId: existing.id, alreadyExisted: true };
+      }
       return { success: false, error: 'Já existe ordem para esta data de produção.' };
     }
     console.error('createOrdemProducaoDiaria', serializeSupabaseError(error));
@@ -1726,18 +2325,175 @@ export async function createOrdemProducaoDiaria(
   return { success: true, ordemId: data!.id };
 }
 
+async function resolveCaixasEstimadasParaOrdemDiariaItem(
+  supabase: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>,
+  args: {
+    produtoId: string;
+    tipoLataAssadeiraId: string;
+    latasPlanejadas: number;
+    caixasInformadasCliente: number;
+    tipoCaixaEmbalagemId?: string | null;
+  },
+): Promise<number> {
+  let numeroBuracos = 0;
+  let unidadesPorAssadeiraCad = 0;
+  const { data: paFull } = await supabase
+    .from('produto_assadeiras')
+    .select('unidades_por_assadeira')
+    .eq('produto_id', args.produtoId)
+    .eq('assadeira_id', args.tipoLataAssadeiraId)
+    .maybeSingle();
+  unidadesPorAssadeiraCad =
+    Math.round(Number((paFull as { unidades_por_assadeira?: number })?.unidades_por_assadeira ?? 0)) || 0;
+  const { data: assFull } = await supabase
+    .from('assadeiras')
+    .select('numero_buracos')
+    .eq('id', args.tipoLataAssadeiraId)
+    .maybeSingle();
+  numeroBuracos =
+    Math.round(Number((assFull as { numero_buracos?: number })?.numero_buracos ?? 0)) || 0;
+
+  const { data: pr } = await supabase
+    .from('produtos')
+    .select('box_units')
+    .eq('id', args.produtoId)
+    .maybeSingle();
+  let boxUnits: number | null = null;
+  const bu = (pr as { box_units?: number | null })?.box_units;
+  if (bu != null && Number(bu) > 0) boxUnits = Math.round(Number(bu));
+
+  let unidadesPorCaixa: number | null = null;
+  const tipoId = args.tipoCaixaEmbalagemId?.trim();
+  if (tipoId) {
+    const { data: tipoRow, error: tipoErr } = await supabase
+      .from('tipos_caixa_embalagem')
+      .select('unidades_por_caixa, ativo')
+      .eq('id', tipoId)
+      .maybeSingle();
+    const tipoMsg = String(tipoErr?.message ?? '').toLowerCase();
+    const tipoMissing =
+      tipoErr &&
+      (tipoMsg.includes('does not exist') || tipoMsg.includes('schema cache') || tipoMsg.includes('could not find'));
+    if (!tipoErr && tipoRow && (tipoRow as { ativo?: boolean }).ativo !== false) {
+      const uTipo = Math.round(Number((tipoRow as { unidades_por_caixa?: number }).unidades_por_caixa ?? 0));
+      let boxOv: number | null = null;
+      const { data: ovRow, error: ovErr } = await supabase
+        .from('produtos_tipos_caixa_embalagem')
+        .select('box_units_override')
+        .eq('produto_id', args.produtoId)
+        .eq('tipo_caixa_embalagem_id', tipoId)
+        .maybeSingle();
+      const ovMsg = String(ovErr?.message ?? '').toLowerCase();
+      const ovMissing =
+        ovErr &&
+        (ovMsg.includes('does not exist') || ovMsg.includes('schema cache') || ovMsg.includes('could not find'));
+      if (!ovErr && ovRow) {
+        const raw = (ovRow as { box_units_override?: number | null }).box_units_override;
+        if (raw != null && Number(raw) > 0) boxOv = Math.round(Number(raw));
+      } else if (ovErr && !ovMissing) {
+        console.warn('resolveCaixasEstimadas produtos_tipos_caixa_embalagem', ovErr.message);
+      }
+      const uEff = boxOv ?? (uTipo > 0 ? uTipo : null);
+      if (uEff != null && uEff > 0) unidadesPorCaixa = uEff;
+    } else if (tipoErr && !tipoMissing) {
+      console.warn('resolveCaixasEstimadas tipos_caixa_embalagem', tipoErr.message);
+    }
+  }
+
+  const hasCaixa =
+    (unidadesPorCaixa != null && unidadesPorCaixa > 0) || (boxUnits != null && boxUnits > 0);
+  if (!hasCaixa) {
+    return Math.max(0, Math.round(args.caixasInformadasCliente));
+  }
+
+  return estimateCaixasFromLatas({
+    latas: args.latasPlanejadas,
+    numeroBuracosAssadeira: numeroBuracos,
+    unidadesPorAssadeiraCadastro: unidadesPorAssadeiraCad,
+    unidadesPorCaixa,
+    boxUnits: unidadesPorCaixa != null && unidadesPorCaixa > 0 ? null : boxUnits,
+  });
+}
+
+/** Preview na UI: unidades por caixa efetivas (override produto×tipo → tipo → só produto.box_units). */
+export async function getUnidadesCaixaPreviewOrdemDiaria(
+  produtoId: string,
+  tipoCaixaEmbalagemId: string | null,
+): Promise<
+  | { success: true; unidadesPorCaixa: number | null; boxUnitsFallback: number | null }
+  | { success: false; error: string }
+> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const pid = produtoId?.trim();
+  if (!pid) return { success: false, error: 'Produto inválido.' };
+  const { data: pr } = await supabase.from('produtos').select('box_units').eq('id', pid).maybeSingle();
+  let boxUnitsFallback: number | null = null;
+  const bu = (pr as { box_units?: number | null })?.box_units;
+  if (bu != null && Number(bu) > 0) boxUnitsFallback = Math.round(Number(bu));
+
+  const tid = tipoCaixaEmbalagemId?.trim();
+  if (!tid) {
+    return { success: true, unidadesPorCaixa: null, boxUnitsFallback };
+  }
+
+  const { data: tipoRow, error: tipoErr } = await supabase
+    .from('tipos_caixa_embalagem')
+    .select('unidades_por_caixa, ativo')
+    .eq('id', tid)
+    .maybeSingle();
+  const tipoMsg = String(tipoErr?.message ?? '').toLowerCase();
+  const tipoMissing =
+    tipoErr &&
+    (tipoMsg.includes('does not exist') || tipoMsg.includes('schema cache') || tipoMsg.includes('could not find'));
+  if (tipoErr && !tipoMissing) {
+    return { success: false, error: tipoErr.message };
+  }
+  if (!tipoRow || (tipoRow as { ativo?: boolean }).ativo === false) {
+    return { success: true, unidadesPorCaixa: null, boxUnitsFallback };
+  }
+
+  const uTipo = Math.round(Number((tipoRow as { unidades_por_caixa?: number }).unidades_por_caixa ?? 0));
+  let boxOv: number | null = null;
+  const { data: ovRow, error: ovErr } = await supabase
+    .from('produtos_tipos_caixa_embalagem')
+    .select('box_units_override')
+    .eq('produto_id', pid)
+    .eq('tipo_caixa_embalagem_id', tid)
+    .maybeSingle();
+  const ovMsg = String(ovErr?.message ?? '').toLowerCase();
+  const ovMissing =
+    ovErr && (ovMsg.includes('does not exist') || ovMsg.includes('schema cache') || ovMsg.includes('could not find'));
+  if (!ovErr && ovRow) {
+    const raw = (ovRow as { box_units_override?: number | null }).box_units_override;
+    if (raw != null && Number(raw) > 0) boxOv = Math.round(Number(raw));
+  } else if (ovErr && !ovMissing) {
+    return { success: false, error: ovErr.message };
+  }
+
+  const uEff = boxOv ?? (uTipo > 0 ? uTipo : null);
+  if (uEff != null && uEff > 0) {
+    return { success: true, unidadesPorCaixa: uEff, boxUnitsFallback: null };
+  }
+  return { success: true, unidadesPorCaixa: null, boxUnitsFallback };
+}
+
 export type UpsertOrdemProducaoItemInput = {
   ordemId: string;
   itemId?: string;
   prioridade?: number;
   produtoId: string;
-  tipoLata: OrdemProducaoTipoLata;
+  tipoLata: OrdemProducaoLataSelecao;
   latasPlanejadas: number;
   caixasEstimadas: number;
   clientes: string[];
   dataProducaoOverride?: string | null;
   dataEtiquetaOverride?: string | null;
-  observacao?: string | null;
+  /** Notas para embalagem. */
+  observacaoEmbalagem?: string | null;
+  /** Notas para produção. */
+  observacaoProducao?: string | null;
+  /** Tipo de caixa (cadastro por cliente) para conversão latas → caixas. */
+  tipoCaixaEmbalagemId?: string | null;
   statusLinha?: string;
 };
 
@@ -1748,20 +2504,76 @@ export async function upsertOrdemProducaoItem(
   if (!ordemId) return { success: false, error: 'Ordem inválida.' };
   const produtoId = input.produtoId?.trim();
   if (!produtoId) return { success: false, error: 'Produto inválido.' };
-  const tipoLata = input.tipoLata;
-  if (!(ORDEM_PRODUCAO_TIPOS_LATA as readonly string[]).includes(tipoLata)) {
-    return { success: false, error: 'Tipo de lata inválido.' };
+  const tipoLataRaw = String(input.tipoLata ?? '').trim();
+  if (!tipoLataRaw) return { success: false, error: 'Lata obrigatória.' };
+  const tipoLower = tipoLataRaw.toLowerCase();
+  if (tipoLower === 'antiga' || tipoLower === 'nova' || tipoLower === 'outra') {
+    return {
+      success: false,
+      error: 'Selecione uma lata no cadastro do produto (Produtos → Latas). Os valores antiga/nova/outra deixaram de ser usados.',
+    };
   }
+  const uuidOk =
+    tipoLataRaw.length === 36 &&
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(tipoLataRaw);
+  if (!uuidOk) {
+    return { success: false, error: 'Identificador de lata inválido. Escolha uma opção na lista de latas do produto.' };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data: paLinha, error: paLinhaErr } = await supabase
+    .from('produto_assadeiras')
+    .select('id')
+    .eq('produto_id', produtoId)
+    .eq('assadeira_id', tipoLataRaw)
+    .maybeSingle();
+  if (paLinhaErr) {
+    return { success: false, error: paLinhaErr.message };
+  }
+  if (!paLinha) {
+    return {
+      success: false,
+      error: 'A lata escolhida não está cadastrada para este produto.',
+    };
+  }
+
+  const tipoLata = tipoLataRaw;
   const latasPlanejadas = Math.round(Number(input.latasPlanejadas));
   if (!Number.isFinite(latasPlanejadas) || latasPlanejadas < 0) {
     return { success: false, error: 'Latas planejadas inválidas.' };
   }
-  const caixasEstimadas = Math.round(Number(input.caixasEstimadas));
+  const caixasInformadas = Math.round(Number(input.caixasEstimadas));
+  if (!Number.isFinite(caixasInformadas) || caixasInformadas < 0) {
+    return { success: false, error: 'Caixas estimadas inválidas.' };
+  }
+  const tipoCaixaEmbalagemIdNorm = input.tipoCaixaEmbalagemId?.trim() || null;
+  if (tipoCaixaEmbalagemIdNorm) {
+    const { data: tOk, error: tErr } = await supabase
+      .from('tipos_caixa_embalagem')
+      .select('id')
+      .eq('id', tipoCaixaEmbalagemIdNorm)
+      .eq('ativo', true)
+      .maybeSingle();
+    if (tErr) {
+      const tm = String(tErr.message ?? '').toLowerCase();
+      if (!tm.includes('does not exist') && !tm.includes('schema cache') && !tm.includes('could not find')) {
+        return { success: false, error: tErr.message };
+      }
+    } else if (!tOk) {
+      return { success: false, error: 'Tipo de caixa inválido ou inativo.' };
+    }
+  }
+  const caixasEstimadas = await resolveCaixasEstimadasParaOrdemDiariaItem(supabase, {
+    produtoId,
+    tipoLataAssadeiraId: tipoLata,
+    latasPlanejadas,
+    caixasInformadasCliente: caixasInformadas,
+    tipoCaixaEmbalagemId: tipoCaixaEmbalagemIdNorm,
+  });
   if (!Number.isFinite(caixasEstimadas) || caixasEstimadas < 0) {
     return { success: false, error: 'Caixas estimadas inválidas.' };
   }
-
-  const supabase = supabaseClientFactory.createServiceRoleClient();
 
   let statusLinha: (typeof ORDENS_PRODUCAO_DIARIAS_LINHA_STATUSES)[number] = 'rascunho';
   if (
@@ -1774,7 +2586,8 @@ export async function upsertOrdemProducaoItem(
     statusLinha = s;
   }
   const clientesJson = sanitizeClientesLista(input.clientes ?? []) as unknown as Json;
-  const obs = input.observacao?.trim() ? input.observacao.trim().slice(0, 500) : null;
+  const obsEmb = sanitizeObservacaoLinhaOrdemDiaria(input.observacaoEmbalagem);
+  const obsPro = sanitizeObservacaoLinhaOrdemDiaria(input.observacaoProducao);
 
   const rProd = parseOptionalOrdemDiariaDate(
     input.dataProducaoOverride,
@@ -1797,25 +2610,31 @@ export async function upsertOrdemProducaoItem(
   if (itemId) {
     const updateRow: {
       produto_id: string;
-      tipo_lata: OrdemProducaoTipoLata;
+      tipo_lata: string;
       latas_planejadas: number;
       caixas_estimadas: number;
       clientes: Json;
+      observacao_embalagem: string | null;
+      observacao_producao: string | null;
       observacao: string | null;
       status_linha: (typeof ORDENS_PRODUCAO_DIARIAS_LINHA_STATUSES)[number];
       updated_at: string;
       prioridade?: number;
       data_producao_override?: string | null;
       data_etiqueta_override?: string | null;
+      tipo_caixa_embalagem_id?: string | null;
     } = {
       produto_id: produtoId,
       tipo_lata: tipoLata,
       latas_planejadas: latasPlanejadas,
       caixas_estimadas: caixasEstimadas,
       clientes: clientesJson,
-      observacao: obs,
+      observacao_embalagem: obsEmb,
+      observacao_producao: obsPro,
+      observacao: obsPro,
       status_linha: statusLinha,
       updated_at: new Date().toISOString(),
+      tipo_caixa_embalagem_id: tipoCaixaEmbalagemIdNorm,
     };
     if (input.prioridade !== undefined) {
       const p = Math.round(Number(input.prioridade));
@@ -1831,11 +2650,24 @@ export async function upsertOrdemProducaoItem(
       updateRow.data_etiqueta_override = dataEtiOverrideResolved;
     }
 
-    const { error: upErr } = await supabase
-      .from('ordens_producao_diarias_itens')
-      .update(updateRow)
-      .eq('id', itemId)
-      .eq('ordem_diaria_id', ordemId);
+    let upErr = (
+      await supabase
+        .from('ordens_producao_diarias_itens')
+        .update(updateRow)
+        .eq('id', itemId)
+        .eq('ordem_diaria_id', ordemId)
+    ).error;
+
+    if (upErr && isMissingTipoCaixaEmbalagemIdColumnError(upErr.message)) {
+      const { tipo_caixa_embalagem_id: _omitTc, ...updateRowSemTipo } = updateRow;
+      upErr = (
+        await supabase
+          .from('ordens_producao_diarias_itens')
+          .update(updateRowSemTipo)
+          .eq('id', itemId)
+          .eq('ordem_diaria_id', ordemId)
+      ).error;
+    }
 
     if (upErr) {
       if (isMissingOrdemDiariaTableError(upErr.message)) {
@@ -1945,31 +2777,43 @@ export async function upsertOrdemProducaoItem(
     tipo_lata: tipoLata,
     latas_planejadas: latasPlanejadas,
     caixas_estimadas: caixasEstimadas,
+    tipo_caixa_embalagem_id: tipoCaixaEmbalagemIdNorm,
     clientes: clientesJson,
     data_producao_override: dataProdOverrideResolved ?? null,
     data_etiqueta_override: dataEtiOverrideResolved ?? null,
-    observacao: obs,
+    observacao_embalagem: obsEmb,
+    observacao_producao: obsPro,
+    observacao: obsPro,
     status_linha: statusLinha,
   };
 
-  const { data: inserted, error: insErr } = await supabase
+  let insertRes = await supabase
     .from('ordens_producao_diarias_itens')
     .insert(insertRow)
     .select('id')
     .single();
 
-  if (insErr) {
-    if (isMissingOrdemDiariaTableError(insErr.message)) {
+  if (insertRes.error && isMissingTipoCaixaEmbalagemIdColumnError(insertRes.error.message)) {
+    const { tipo_caixa_embalagem_id: _omitTcI, ...insertRowSemTipo } = insertRow;
+    insertRes = await supabase
+      .from('ordens_producao_diarias_itens')
+      .insert(insertRowSemTipo)
+      .select('id')
+      .single();
+  }
+
+  if (insertRes.error) {
+    if (isMissingOrdemDiariaTableError(insertRes.error.message)) {
       return {
         success: false,
         error: ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG,
       };
     }
-    console.error('upsertOrdemProducaoItem insert', serializeSupabaseError(insErr));
-    return { success: false, error: insErr.message };
+    console.error('upsertOrdemProducaoItem insert', serializeSupabaseError(insertRes.error));
+    return { success: false, error: insertRes.error.message };
   }
 
-  const newItemId = inserted!.id;
+  const newItemId = (insertRes.data as { id: string }).id;
   const hdrIns = await fetchOrdemDiariaHeaderDates(supabase, ordemId);
   if (!hdrIns.ok) {
     await supabase.from('ordens_producao_diarias_itens').delete().eq('id', newItemId);
@@ -2101,13 +2945,14 @@ export async function publishOrdemProducao(
   if (!oid) return { success: false, error: 'Ordem inválida.' };
 
   const supabase = supabaseClientFactory.createServiceRoleClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ordens_producao_diarias')
     .update({
       status: 'pronto',
       updated_at: new Date().toISOString(),
     })
-    .eq('id', oid);
+    .eq('id', oid)
+    .select('id');
 
   if (error) {
     if (isMissingOrdemDiariaTableError(error.message)) {
@@ -2120,6 +2965,15 @@ export async function publishOrdemProducao(
     return { success: false, error: error.message };
   }
 
+  if (!data?.length) {
+    return {
+      success: false,
+      error:
+        'Não foi possível marcar o dia: a ordem diária não foi encontrada ou não houve alteração. Recarregue a página e tente de novo.',
+    };
+  }
+
+  revalidatePath(PATH_PRODUCAO_ORDEM_DIARIA, 'layout');
   revalidatePath(PATH_PRODUCAO_ORDEM_DIARIA);
   return { success: true };
 }
@@ -2132,10 +2986,14 @@ export type OrdemProducaoDiariaItemView = {
   tipoLata: string;
   latasPlanejadas: number;
   caixasEstimadas: number;
+  tipoCaixaEmbalagemId: string | null;
+  /** Ex.: «Caixa especial (Damião)». */
+  tipoCaixaResumo: string | null;
   clientes: string[];
   dataProducaoOverride: string | null;
   dataEtiquetaOverride: string | null;
-  observacao: string | null;
+  observacaoEmbalagem: string | null;
+  observacaoProducao: string | null;
   statusLinha: string;
   ordensProducaoId: string | null;
   loteCodigo: string | null;
@@ -2149,6 +3007,34 @@ export type OrdemProducaoDiariaView = {
   itens: OrdemProducaoDiariaItemView[];
 };
 
+/**
+ * Resumo de latas em uso vs. estoque por tipo de assadeira para a ordem diária.
+ * A razão (em uso ÷ disponível) sinaliza quando será necessário lavar/reutilizar latas no dia.
+ */
+export async function getLatasUsoResumoOrdemDiaria(
+  itens: ItemLataUso[],
+): Promise<LataUsoTipoResumo[]> {
+  const ids = [...new Set(itens.map((i) => (i.tipoLata ?? '').trim()).filter(Boolean))];
+  if (ids.length === 0) return [];
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('assadeiras')
+    .select('id, nome, quantidade_latas')
+    .in('id', ids);
+  if (error) return montarLatasUsoResumo(itens, new Map());
+
+  const estoque = new Map<string, AssadeiraEstoqueInfo>();
+  for (const r of data ?? []) {
+    const row = r as { id: string; nome?: string | null; quantidade_latas?: number | null };
+    estoque.set(row.id, {
+      nome: (row.nome ?? '').trim(),
+      quantidadeLatas: Math.max(0, Math.round(Number(row.quantidade_latas) || 0)),
+    });
+  }
+  return montarLatasUsoResumo(itens, estoque);
+}
+
 /** Carrega a ordem diária por data (YYYY-MM-DD), com itens ordenados por prioridade. */
 export async function getOrdemProducaoDiariaByDate(
   dataProducao: string,
@@ -2157,46 +3043,15 @@ export async function getOrdemProducaoDiariaByDate(
   if (!date) {
     return { success: false, error: 'Data inválida.' };
   }
-  // #region agent log
-  {
-    const sr = process.env.SERVICE_ROLE ?? '';
-    const an = process.env.SUPABASE_ANON_KEY ?? '';
-    agentDebugLogOrdemDiaria({
-      hypothesisId: 'B',
-      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:entry',
-      message: 'env_fingerprint',
-      data: {
-        date,
-        serviceRoleLen: sr.length,
-        anonKeyLen: an.length,
-        serviceRolePresent: sr.length > 0,
-        keysIdentical: sr.length > 0 && sr === an,
-        vercelEnv: process.env.VERCEL_ENV ?? null,
-      },
-    });
-  }
-  // #endregion
   const supabase = supabaseClientFactory.createServiceRoleClient();
-  const { data: header, error: headErr } = await supabase
+  const { data: headerRows, error: headErr } = await supabase
     .from('ordens_producao_diarias')
     .select('id, data_producao, data_etiqueta_default, status')
     .eq('data_producao', date)
-    .maybeSingle();
+    .order('id', { ascending: true })
+    .limit(1);
 
   if (headErr) {
-    // #region agent log
-    agentDebugLogOrdemDiaria({
-      hypothesisId: 'A',
-      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:header_err',
-      message: 'header_query_failed',
-      data: {
-        code: (headErr as { code?: string }).code ?? null,
-        msg: headErr.message,
-        details: (headErr as { details?: string }).details ?? null,
-        hint: (headErr as { hint?: string }).hint ?? null,
-      },
-    });
-    // #endregion
     if (isMissingOrdemDiariaTableError(headErr.message)) {
       return {
         success: false,
@@ -2213,63 +3068,53 @@ export async function getOrdemProducaoDiariaByDate(
     console.error('getOrdemProducaoDiariaByDate header', serializeSupabaseError(headErr));
     return { success: false, error: headErr.message };
   }
+  const header = headerRows?.[0];
   if (!header) {
-    // #region agent log
-    agentDebugLogOrdemDiaria({
-      hypothesisId: 'C',
-      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:no_header',
-      message: 'header_empty_ok',
-      data: { date },
-    });
-    // #endregion
     return { success: true, data: null };
   }
 
-  const { data: itensRows, error: itensErr } = await supabase
-    .from('ordens_producao_diarias_itens')
-    .select(`
-      id,
-      prioridade,
-      produto_id,
-      tipo_lata,
-      latas_planejadas,
-      caixas_estimadas,
-      clientes,
-      data_producao_override,
-      data_etiqueta_override,
-      observacao,
-      status_linha,
-      ordens_producao_id,
-      ordens_producao ( lote_codigo ),
-      produtos ( nome )
-    `)
-    .eq('ordem_diaria_id', header.id)
-    .order('prioridade', { ascending: true });
+  const itensSelects = [
+    ORDEM_DIARIA_ITENS_SELECT_COM_TIPO_EMBED,
+    ORDEM_DIARIA_ITENS_SELECT_PADRAO,
+    ORDEM_DIARIA_ITENS_SELECT_MINIMO,
+  ];
+  let itensRows: unknown[] | null = null;
+  let itensErr: { message: string; code?: string } | null = null;
 
-  if (itensErr) {
-    // #region agent log
-    agentDebugLogOrdemDiaria({
-      hypothesisId: 'C',
-      location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:itens_err',
-      message: 'itens_query_failed',
-      data: {
-        headerId: header.id,
-        code: (itensErr as { code?: string }).code ?? null,
-        msg: itensErr.message,
-        details: (itensErr as { details?: string }).details ?? null,
-      },
-    });
-    // #endregion
-    if (isMissingOrdemDiariaTableError(itensErr.message)) {
+  for (let si = 0; si < itensSelects.length; si++) {
+    const fragment = itensSelects[si]!;
+    const { data, error } = await supabase
+      .from('ordens_producao_diarias_itens')
+      .select(fragment.trim())
+      .eq('ordem_diaria_id', header.id)
+      .order('prioridade', { ascending: true });
+    if (!error) {
+      itensRows = data ?? [];
+      itensErr = null;
+      break;
+    }
+    itensErr = error;
+    if (isMissingOrdemDiariaTableError(error.message)) {
       return {
         success: false,
         error: ORDEM_DIARIA_ESTRUTURA_FALTANDO_MSG,
       };
     }
+    if (si < itensSelects.length - 1 && isRetryOrdemDiariaItensSelectError(error.message)) {
+      console.warn(
+        `[getOrdemProducaoDiariaByDate] select itens: retentativa ${si + 2}/${itensSelects.length}`,
+        error.message,
+      );
+      continue;
+    }
+    break;
+  }
+
+  if (itensErr) {
     const itensCode = (itensErr as { code?: string }).code;
     if (
       itensCode === '42501' ||
-      itensErr.message.toLowerCase().includes('permission denied')
+      String(itensErr.message ?? '').toLowerCase().includes('permission denied')
     ) {
       return { success: false, error: ORDEM_DIARIA_PERMISSION_MSG };
     }
@@ -2284,17 +3129,34 @@ export async function getOrdemProducaoDiariaByDate(
     tipo_lata: string;
     latas_planejadas: number;
     caixas_estimadas: number;
+    tipo_caixa_embalagem_id?: string | null;
     clientes: unknown;
     data_producao_override: string | null;
     data_etiqueta_override: string | null;
     observacao: string | null;
+    observacao_embalagem?: string | null;
+    observacao_producao?: string | null;
     status_linha: string | null;
     ordens_producao_id: string | null;
     ordens_producao: { lote_codigo: string | null } | { lote_codigo: string | null }[] | null;
     produtos: { nome?: string | null } | null;
+    tipos_caixa_embalagem?:
+      | {
+          id?: string;
+          nome?: string | null;
+          unidades_por_caixa?: number | null;
+          clientes?: { nome_fantasia?: string | null } | { nome_fantasia?: string | null }[] | null;
+        }
+      | {
+          id?: string;
+          nome?: string | null;
+          unidades_por_caixa?: number | null;
+          clientes?: { nome_fantasia?: string | null } | { nome_fantasia?: string | null }[] | null;
+        }[]
+      | null;
   };
 
-  const itens: OrdemProducaoDiariaItemView[] = (itensRows ?? []).map((row) => {
+  let itens: OrdemProducaoDiariaItemView[] = (itensRows ?? []).map((row) => {
     const r = row as DiariaItemRow;
     const clientes = Array.isArray(r.clientes)
       ? r.clientes.map((x) => String(x)).filter(Boolean)
@@ -2305,6 +3167,27 @@ export async function getOrdemProducaoDiariaByDate(
     const rawLote = opOne?.lote_codigo;
     const loteCodigo =
       rawLote != null && String(rawLote).trim() !== '' ? String(rawLote).trim() : null;
+    const tcIdRaw = r.tipo_caixa_embalagem_id;
+    const tipoCaixaEmbalagemId =
+      tcIdRaw != null && String(tcIdRaw).trim() !== '' ? String(tcIdRaw).trim() : null;
+    const tcEmb = r.tipos_caixa_embalagem;
+    const tcOne = Array.isArray(tcEmb) ? tcEmb[0] : tcEmb;
+    let tipoCaixaResumo: string | null = null;
+    if (tcOne?.nome != null && String(tcOne.nome).trim() !== '') {
+      const cn = tcOne.clientes;
+      const c1 = Array.isArray(cn) ? cn[0] : cn;
+      const clienteNome = String(c1?.nome_fantasia ?? '').trim();
+      tipoCaixaResumo = clienteNome
+        ? `${String(tcOne.nome).trim()} (${clienteNome})`
+        : String(tcOne.nome).trim();
+    }
+    const embRaw = r.observacao_embalagem != null ? String(r.observacao_embalagem).trim() : '';
+    const proRaw =
+      r.observacao_producao != null && String(r.observacao_producao).trim() !== ''
+        ? String(r.observacao_producao).trim()
+        : r.observacao != null && String(r.observacao).trim() !== ''
+          ? String(r.observacao).trim()
+          : '';
     return {
       id: r.id,
       prioridade: Number(r.prioridade ?? 0),
@@ -2313,24 +3196,18 @@ export async function getOrdemProducaoDiariaByDate(
       tipoLata: r.tipo_lata,
       latasPlanejadas: Number(r.latas_planejadas ?? 0),
       caixasEstimadas: Number(r.caixas_estimadas ?? 0),
+      tipoCaixaEmbalagemId,
+      tipoCaixaResumo,
       clientes,
       dataProducaoOverride: r.data_producao_override,
       dataEtiquetaOverride: r.data_etiqueta_override,
-      observacao: r.observacao,
+      observacaoEmbalagem: embRaw || null,
+      observacaoProducao: proRaw || null,
       statusLinha: r.status_linha ?? 'rascunho',
       ordensProducaoId: r.ordens_producao_id ?? null,
       loteCodigo,
     };
   });
-
-  // #region agent log
-  agentDebugLogOrdemDiaria({
-    hypothesisId: 'verify',
-    location: 'producao-actions.ts:getOrdemProducaoDiariaByDate:success',
-    message: 'load_complete',
-    data: { headerId: header.id, itemCount: itens.length },
-  });
-  // #endregion
 
   return {
     success: true,

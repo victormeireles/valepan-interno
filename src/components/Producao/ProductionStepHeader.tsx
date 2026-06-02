@@ -14,6 +14,8 @@ interface ProductionStepHeaderProps {
   dense?: boolean;
   /** Link “Voltar” no canto superior esquerdo (ex.: fila da estação) */
   backHref?: string;
+  /** Se definido, o voltar vira botão (ex.: fechar overlay no modal da fila). Tem prioridade sobre `backHref`. */
+  onBackClick?: () => void;
   backLabel?: string;
 }
 
@@ -24,6 +26,7 @@ export default function ProductionStepHeader({
   showLoteProdutoSubtitle = true,
   dense = false,
   backHref,
+  onBackClick,
   backLabel = 'Voltar',
 }: ProductionStepHeaderProps) {
   const pad = dense
@@ -46,7 +49,14 @@ export default function ProductionStepHeader({
   return (
     <div className={pad}>
       <div className="flex items-start gap-2 sm:gap-3">
-        {backHref ? (
+        {onBackClick ? (
+          <button type="button" onClick={onBackClick} className={backBtnClass} aria-label={backLabel}>
+            <span className="material-icons text-lg leading-none sm:text-xl" aria-hidden>
+              arrow_back
+            </span>
+            <span className="hidden sm:inline">{backLabel}</span>
+          </button>
+        ) : backHref ? (
           <Link href={backHref} className={backBtnClass} aria-label={backLabel}>
             <span className="material-icons text-lg leading-none sm:text-xl" aria-hidden>
               arrow_back

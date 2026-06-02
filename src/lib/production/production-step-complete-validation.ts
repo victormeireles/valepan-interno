@@ -26,10 +26,12 @@ export function validateCompleteProductionStepQuality(
       if (!car) {
         return { ok: false, error: 'Informe o número do carrinho para concluir a fermentação.' };
       }
-      if (d.assadeiras_lt != null) {
-        if (!Number.isFinite(d.assadeiras_lt) || d.assadeiras_lt < 0) {
-          return { ok: false, error: 'Quantidade de latas (assadeiras) inválida.' };
-        }
+      if (d.assadeiras_lt == null || !Number.isFinite(Number(d.assadeiras_lt))) {
+        return { ok: false, error: 'Informe a quantidade de latas (LT) produzidas.' };
+      }
+      const lt = Math.round(Number(d.assadeiras_lt));
+      if (lt < 1) {
+        return { ok: false, error: 'Informe pelo menos 1 lata (LT).' };
       }
       return { ok: true };
     }

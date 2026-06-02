@@ -1,13 +1,21 @@
 'use client';
 
 import VolumeTriploProgressoBar from '@/components/Producao/VolumeTriploProgressoBar';
+import FilaEntradaFornoRegistrosEditor from '@/components/Producao/queue/FilaEntradaFornoRegistrosEditor';
+import FilaOrdemProducaoProgressBar from '@/components/Producao/queue/FilaOrdemProducaoProgressBar';
 import type { ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
+import { BTN_ADIANTAR_SECONDARY_INLINE } from '@/components/Producao/queue/fila-adiantar-etapas-ui';
 import {
   filaGrupoEntradaFornoEstadoVisual,
   fornoGroupProgressMetrics,
+  filaEtapaGrupoProgressoRelativoPct,
+  labelConfirmarEtapasNaFila,
+  ordemAdiantarEtapasComoSecundarioNaFila,
+  ordemFaltaPreRequisitosNaEtapaFila,
+  ordemMostrarConfirmarEtapasNaFila,
+  ordemPreRequisitosAtendidosParaTrabalharNaEtapa,
   type FilaGrupoProdutoEstadoVisual,
 } from '@/components/Producao/queue/production-queue-metrics';
-import { etapaPathForOrdem } from '@/lib/production/production-station-routes';
 
 function shellGrupoForno(estado: FilaGrupoProdutoEstadoVisual, joinFaltando: boolean): string {
   if (joinFaltando) return 'border-rose-200 bg-rose-50/30';
@@ -54,17 +62,21 @@ interface Props {
   fornoGroups: Array<{ produto_id: string; orders: ProductionQueueItem[] }>;
   expandedFornoProdutoId: string | null;
   setExpandedFornoProdutoId: (id: string | null) => void;
-  router: { push: (href: string) => void };
   /** Lista ativa vs secção de grupos já completos na etapa. */
   filaSecao?: 'active' | 'prontos';
+  etapaFila: 'entrada_forno';
+  onOpenPreRequisitoSync: (item: ProductionQueueItem) => void;
+  onRefresh: () => void;
 }
 
 export default function ProductionQueueFornoGroups({
   fornoGroups,
   expandedFornoProdutoId,
   setExpandedFornoProdutoId,
-  router,
   filaSecao = 'active',
+  etapaFila,
+  onOpenPreRequisitoSync,
+  onRefresh,
 }: Props) {
   return (
     <>
@@ -79,6 +91,10 @@ export default function ProductionQueueFornoGroups({
         });
         const shell = shellGrupoForno(estadoGrupo, joinFaltando);
         const selo = seloGrupoForno(estadoGrupo);
+        const obsProducao =
+          orders.length === 1 && orders[0].observacao_producao
+            ? orders[0].observacao_producao.trim()
+            : '';
 
         return (
           <div
@@ -91,67 +107,125 @@ export default function ProductionQueueFornoGroups({
               className="flex w-full min-h-[52px] items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-white/40 active:bg-white/55 sm:min-h-[48px] sm:gap-2 sm:py-2.5"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-snug text-gray-900 sm:leading-tight">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="min-w-0 max-w-[42%] shrink truncate text-sm font-semibold leading-snug text-gray-900 sm:max-w-[46%] sm:leading-tight">
                     {prodNome}
                   </h3>
+                  {!joinFaltando && (
+                    <FilaOrdemProducaoProgressBar
+                      pct={filaEtapaGrupoProgressoRelativoPct(orders, 'entrada_forno')}
+                      className="basis-0"
+                    />
+                  )}
                   {selo && <span className={selo.cn}>{selo.label}</span>}
                 </div>
                 <p className="mt-0.5 truncate text-xs leading-tight text-gray-500">
-                  {orders.length} OP · entrada forno
+                  {orders.length === 1
+                    ? [orders[0].lote_codigo, orders[0].lata_tipo_nome ? `(${orders[0].lata_tipo_nome})` : null]
+                        .filter(Boolean)
+                        .join(' ') || 'entrada forno'
+                    : `${orders.length} OP · entrada forno`}
                 </p>
+                {obsProducao && !joinFaltando && !exp && (
+                  <span
+                    className="mt-1 block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold leading-tight text-amber-900"
+                    title={`Observação da produção: ${obsProducao}`}
+                  >
+                    <span className="font-bold uppercase tracking-wide text-amber-700">
+                      Obs. produção
+                    </span>{' '}
+                    {obsProducao}
+                  </span>
+                )}
               </div>
               <span className="material-icons shrink-0 text-xl text-gray-400" aria-hidden>
                 {exp ? 'expand_less' : 'expand_more'}
               </span>
             </button>
             {exp && (
-              <div className="border-t border-gray-100 px-2.5 pb-2 sm:px-3 sm:pb-2">
-                <div className="pt-2 sm:pt-2">
-                  <VolumeTriploProgressoBar
-                    variant="compact"
-                    meta={g.meta}
-                    etapaAnterior={g.fermentacao}
-                    etapaAtual={g.forno}
-                    unidadeCurta={g.unidadeCurta}
-                    unidadesPorAssadeira={g.unidadesPorAssadeira}
-                    statsColumnOrder={['atual', 'anterior', 'meta']}
-                    labels={{
-                      unitLine: '',
-                      meta: 'Ordem de produção de hoje',
-                      etapaAnterior: 'Volume na etapa anterior (Fermentação)',
-                      etapaAtual: 'Entrada no forno',
-                      compactAnterior: 'Ferm.',
-                      compactAtual: 'Entrada',
-                      footer: null,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            {exp && (
-              <div className="border-t border-gray-100 bg-slate-50/60 px-2.5 py-2 sm:px-3 sm:py-2.5">
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    title="Registrar entrada no forno"
-                    onClick={() => {
-                      const target = orders.find((o) => !o.produtoJoinFaltando) ?? null;
-                      if (target) {
-                        router.push(etapaPathForOrdem(target.id, 'entrada_forno'));
-                      }
-                    }}
-                    disabled={joinFaltando}
-                    className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold leading-none ${
-                      joinFaltando
-                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 active:bg-gray-100'
-                    }`}
-                  >
-                    <span className="material-icons text-base leading-none sm:text-sm">local_fire_department</span>
-                    Registrar entrada
-                  </button>
-                </div>
+              <div className="border-t border-gray-100 bg-slate-50/40 px-2.5 py-2 sm:px-3 sm:py-2.5">
+                <VolumeTriploProgressoBar
+                  variant="compact"
+                  meta={g.meta}
+                  etapaAnterior={g.fermentacao}
+                  etapaAtual={g.forno}
+                  unidadeCurta={g.unidadeCurta}
+                  unidadesPorAssadeira={g.unidadesPorAssadeira}
+                  statsColumnOrder={['atual', 'anterior', 'meta']}
+                  labels={{
+                    unitLine: '',
+                    meta: 'Ordem de produção de hoje',
+                    etapaAnterior: 'Volume na etapa anterior (Fermentação)',
+                    etapaAtual: 'Entrada no forno',
+                    compactAnterior: 'Ferm.',
+                    compactAtual: 'Entrada',
+                    footer: null,
+                  }}
+                />
+                {obsProducao && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                      Observação da produção
+                      {orders[0].lata_tipo_nome ? ` · ${orders[0].lata_tipo_nome}` : ''}
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-line text-xs font-semibold text-amber-900">
+                      {obsProducao}
+                    </p>
+                  </div>
+                )}
+                <ul className="mt-3 space-y-1.5">
+                  {orders.map((o) => {
+                    const bloqueada =
+                      !o.produtoJoinFaltando && ordemFaltaPreRequisitosNaEtapaFila(o, etapaFila);
+                    const mostrarAdiantar =
+                      !o.produtoJoinFaltando && ordemMostrarConfirmarEtapasNaFila(o, etapaFila);
+                    const adiantarSecundario = ordemAdiantarEtapasComoSecundarioNaFila(o, etapaFila);
+                    const labelAdiantar = labelConfirmarEtapasNaFila(o, etapaFila);
+                    const entradas = o.entrada_forno_entradas ?? [];
+                    const ua = o.produtos.unidades_assadeira ?? null;
+                    return (
+                      <li
+                        key={o.id}
+                        className="space-y-2 rounded-lg border border-slate-200/90 bg-white/90 px-2 py-2 sm:px-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-slate-800">{o.lote_codigo}</span>
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {mostrarAdiantar && bloqueada ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenPreRequisitoSync(o)}
+                                className="rounded-md border border-violet-400 bg-violet-700 px-2 py-1 text-xs font-semibold text-white hover:bg-violet-800"
+                              >
+                                {labelAdiantar}
+                              </button>
+                            ) : adiantarSecundario ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenPreRequisitoSync(o)}
+                                className={BTN_ADIANTAR_SECONDARY_INLINE}
+                              >
+                                {labelAdiantar}
+                              </button>
+                            ) : entradas.length > 0 ? (
+                              <span className="text-[10px] text-slate-500">
+                                {entradas.length} entrada{entradas.length === 1 ? '' : 's'}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        {!bloqueada || entradas.length > 0 ? (
+                          <FilaEntradaFornoRegistrosEditor
+                            ordemProducaoId={o.id}
+                            entradas={entradas}
+                            unidadesAssadeira={ua}
+                            onRefresh={onRefresh}
+                          />
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
           </div>

@@ -1,34 +1,37 @@
-import { describe, it, expect } from 'vitest';
-import {
-  resolveAssadeiraIdForTipoLata,
-  type AssadeiraCandidato,
-  type ProdutoUnidadesLataMeta,
-} from './ordem-producao-assadeira';
+import { describe, expect, it } from 'vitest';
+import { resolveAssadeiraIdFromLataSelecao, type AssadeiraCandidato } from './ordem-producao-assadeira';
 
-const meta: ProdutoUnidadesLataMeta = {
-  unidades_assadeira: 10,
+const meta = {
+  unidades_assadeira: 12,
   unidades_lata_antiga: 12,
   unidades_lata_nova: 14,
 };
 
 const candidatos: AssadeiraCandidato[] = [
-  { assadeira_id: 'a-ant', unidades_por_assadeira: 12 },
-  { assadeira_id: 'a-nov', unidades_por_assadeira: 14 },
-  { assadeira_id: 'a-out', unidades_por_assadeira: 20 },
+  { assadeira_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', unidades_por_assadeira: 12 },
+  { assadeira_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', unidades_por_assadeira: 14 },
+  { assadeira_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', unidades_por_assadeira: 16 },
 ];
 
-describe('resolveAssadeiraIdForTipoLata', () => {
-  it('antiga: escolhe assadeira com unidades da lata antiga', () => {
-    expect(resolveAssadeiraIdForTipoLata('antiga', meta, candidatos)).toBe('a-ant');
+describe('resolveAssadeiraIdFromLataSelecao', () => {
+  it('UUID presente nos candidatos: devolve o mesmo id', () => {
+    expect(resolveAssadeiraIdFromLataSelecao('cccccccc-cccc-cccc-cccc-cccccccccccc', meta, candidatos)).toBe(
+      'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    );
   });
-  it('nova: escolhe assadeira com unidades da lata nova', () => {
-    expect(resolveAssadeiraIdForTipoLata('nova', meta, candidatos)).toBe('a-nov');
+
+  it('vazio ou desconhecido: primeira candidata', () => {
+    expect(resolveAssadeiraIdFromLataSelecao('', meta, candidatos)).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(resolveAssadeiraIdFromLataSelecao('não-é-uuid-nem-candidato', meta, candidatos)).toBe(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    );
   });
-  it('outra: escolhe candidato que não é só antiga nem só nova', () => {
-    expect(resolveAssadeiraIdForTipoLata('outra', meta, candidatos)).toBe('a-out');
-  });
-  it('fallback: uma única candidata', () => {
-    const one = [{ assadeira_id: 'only', unidades_por_assadeira: 99 }];
-    expect(resolveAssadeiraIdForTipoLata('antiga', meta, one)).toBe('only');
+
+  it('um único candidato', () => {
+    const one = [candidatos[0]!];
+    expect(resolveAssadeiraIdFromLataSelecao('', meta, one)).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(resolveAssadeiraIdFromLataSelecao('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', meta, one)).toBe(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    );
   });
 });

@@ -7,19 +7,10 @@ function fmtQuant(n: number) {
   });
 }
 
-function hintFaltamEntrada(meta: number, entrada: number): string | null {
-  if (meta <= 0) return null;
-  const faltam = Math.max(0, meta - entrada);
-  if (faltam < 1e-6) return 'Meta da fila atingida na entrada da embalagem';
-  const palavra = Math.abs(faltam - 1) < 0.06 ? 'lata' : 'latas';
-  return `Faltam ${fmtQuant(faltam)} ${palavra}`;
-}
-
 type FilaEntradaEmbalagemHeaderProps = {
   meta: number;
   saidaForno: number;
   entradaEmbalagem: number;
-  unidadesPorAssadeiraHomogenea: number | null;
   onIniciar: () => void;
 };
 
@@ -30,20 +21,15 @@ export default function FilaEntradaEmbalagemHeader({
   meta,
   saidaForno,
   entradaEmbalagem,
-  unidadesPorAssadeiraHomogenea,
   onIniciar,
 }: FilaEntradaEmbalagemHeaderProps) {
   const pct = meta > 0 ? Math.min(100, (entradaEmbalagem / meta) * 100) : entradaEmbalagem > 0 ? 100 : 0;
-
-  const hintFaltam = hintFaltamEntrada(meta, entradaEmbalagem);
+  const podeIniciarCarrinho = saidaForno > 0;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
       <div className="mb-2 sm:mb-3">
         <p className="text-xs font-semibold text-slate-900 sm:text-sm">Entrada na embalagem — fila geral</p>
-        {hintFaltam && (
-          <p className="mt-1 text-[10px] font-medium text-slate-700 sm:text-xs">{hintFaltam}</p>
-        )}
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
@@ -61,9 +47,14 @@ export default function FilaEntradaEmbalagemHeader({
         <button
           type="button"
           onClick={onIniciar}
-          title="Abrir busca de carrinhos da saída do forno"
+          disabled={!podeIniciarCarrinho}
+          title={podeIniciarCarrinho ? 'Registrar entrada de carrinho' : 'Registre a saída do forno antes'}
           aria-label="Iniciar entrada na embalagem"
-          className="inline-flex shrink-0 items-center gap-1 rounded-xl border-2 border-emerald-300 bg-gradient-to-b from-emerald-50 to-teal-50 px-2.5 py-2 text-xs font-bold text-emerald-900 shadow-sm transition-colors hover:from-emerald-100 hover:to-teal-100 sm:gap-1.5 sm:rounded-2xl sm:px-3 sm:py-2.5 sm:text-sm"
+          className={`inline-flex shrink-0 items-center gap-1 rounded-xl border-2 px-2.5 py-2 text-xs font-bold shadow-sm transition-colors sm:gap-1.5 sm:rounded-2xl sm:px-3 sm:py-2.5 sm:text-sm ${
+            podeIniciarCarrinho
+              ? 'border-emerald-300 bg-gradient-to-b from-emerald-50 to-teal-50 text-emerald-900 hover:from-emerald-100 hover:to-teal-100'
+              : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+          }`}
         >
           <span className="material-icons text-lg leading-none sm:text-2xl" aria-hidden>
             play_circle_outline

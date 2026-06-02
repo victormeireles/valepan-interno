@@ -7,6 +7,7 @@ import { ProductionStepRepository } from '@/data/production/ProductionStepReposi
 import { ProductionOrderRepository } from '@/data/production/ProductionOrderRepository';
 import { ProductionMassaManager } from '@/domain/production/ProductionMassaManager';
 import { ProductionStepLogManager } from '@/domain/production/ProductionStepLogManager';
+import { resolveOrdemProducaoOperacionalId } from '@/lib/production/ordem-producao-op-sync';
 import { CreateMassaLoteInput, UpdateMassaLoteInput } from '@/domain/types/producao-massa';
 
 /**
@@ -117,7 +118,11 @@ export async function getMassaLotesByOrder(ordemProducaoId: string) {
   );
 
   try {
-    const lotes = await massaManager.getLotesByOrderId(ordemProducaoId);
+    const resolved = await resolveOrdemProducaoOperacionalId(supabase, ordemProducaoId);
+    if ('error' in resolved) {
+      return { success: false, error: resolved.error };
+    }
+    const lotes = await massaManager.getLotesByOrderId(resolved.opId);
     return { success: true, data: lotes };
   } catch (error) {
     console.error('Erro ao buscar lotes:', error);
@@ -211,13 +216,19 @@ export async function ensureMassaStepLog(ordemProducaoId: string, usuarioId?: st
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
+    const resolved = await resolveOrdemProducaoOperacionalId(supabase, ordemProducaoId);
+    if ('error' in resolved) {
+      return { success: false as const, error: resolved.error };
+    }
+    const opId = resolved.opId;
+
     console.log('[ensureMassaStepLog] 🔍 Verificando log de etapa massa existente...', {
-      ordem_producao_id: ordemProducaoId,
+      ordem_producao_id: opId,
       usuario_id: usuarioId,
     });
 
     // Verifica se já existe log de massa em andamento
-    const log = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    const log = await stepRepository.findLastByOrderAndStep(opId, 'massa');
     console.log('[ensureMassaStepLog] Log encontrado:', {
       log_id: log?.id,
       tem_fim: !!log?.fim,
@@ -238,7 +249,7 @@ export async function ensureMassaStepLog(ordemProducaoId: string, usuarioId?: st
     // Cria novo log de etapa massa
     // Nota: Campos de massa são NULL na criação inicial, serão preenchidos quando um lote for criado
     const createInput = {
-      ordem_producao_id: ordemProducaoId,
+      ordem_producao_id: opId,
       etapa: 'massa' as const,
       usuario_id: usuarioId,
       qtd_saida: 0, // Será atualizado quando lotes forem criados
@@ -272,7 +283,7 @@ export async function ensureMassaStepLog(ordemProducaoId: string, usuarioId?: st
       usuario_id: usuarioId,
     });
     return {
-      success: false,
+      success: false as const,
       error: error instanceof Error ? error.message : 'Erro ao garantir log de etapa massa',
     };
   }
@@ -290,20 +301,26 @@ export async function ensureMassaStepLogForNewLote(ordemProducaoId: string, usua
   const stepManager = new ProductionStepLogManager(stepRepository, orderRepository);
 
   try {
-    const lastMassa = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    const resolved = await resolveOrdemProducaoOperacionalId(supabase, ordemProducaoId);
+    if ('error' in resolved) {
+      return { success: false as const, error: resolved.error };
+    }
+    const opId = resolved.opId;
+
+    const lastMassa = await stepRepository.findLastByOrderAndStep(opId, 'massa');
     if (lastMassa && !lastMassa.fim && lastMassa.receita_id) {
       await stepRepository.update(lastMassa.id, {
         fim: new Date().toISOString(),
       });
     }
 
-    const log = await stepRepository.findLastByOrderAndStep(ordemProducaoId, 'massa');
+    const log = await stepRepository.findLastByOrderAndStep(opId, 'massa');
     if (log && !log.fim) {
       return { success: true as const, data: log };
     }
 
     const newLog = await stepManager.startStep({
-      ordem_producao_id: ordemProducaoId,
+      ordem_producao_id: opId,
       etapa: 'massa',
       usuario_id: usuarioId,
       qtd_saida: 0,

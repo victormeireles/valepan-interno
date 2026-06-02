@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { getProductionStepLogs, registerSaidaForno } from '@/app/actions/producao-etapas-actions';
+import SaidaFornoCarrinhoField from '@/components/Producao/SaidaFornoCarrinhoField';
 import { ProductionStepLog, SaidaFornoQualityData } from '@/domain/types/producao-etapas';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
@@ -15,6 +16,7 @@ import { getQuantityByStation } from '@/lib/utils/production-conversions';
 import { sumLatasFromFornoLogRows } from '@/lib/utils/forno-volume';
 import { sumBandejasSaidaFornoConcluida } from '@/lib/utils/saida-forno-volume';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
+import { rotuloExibicaoRegistroFila } from '@/lib/production/registro-adiantado-fila';
 import {
   FORM_SECTION_TITLE,
   FORM_FIELD_LABEL,
@@ -27,6 +29,7 @@ interface SaidaFornoStepClientProps {
     id: string;
     lote_codigo: string;
     qtd_planejada: number;
+    planejadoUnidadesConsumo?: number;
     produto: {
       id: string;
       nome: string;
@@ -53,7 +56,6 @@ export default function SaidaFornoStepClient({
   const [modalStep, setModalStep] = useState<'form' | 'nextChoice'>('form');
   const [carrinhoField, setCarrinhoField] = useState('');
   const [bandejasField, setBandejasField] = useState(String(DEFAULT_BANDEJAS_SAIDA));
-
   const unidadesAssadeira = ordemProducao.produto.unidades_assadeira ?? null;
   const uaOk = unidadesAssadeira != null && unidadesAssadeira > 0 ? unidadesAssadeira : null;
 
@@ -93,7 +95,12 @@ export default function SaidaFornoStepClient({
   const entradaLt = sumLatasFromFornoLogRows(fornoRows, uaOk);
   const saidaBandejasLt = sumBandejasSaidaFornoConcluida(logs);
   const metaSaida =
-    getQuantityByStation('saida_forno', ordemProducao.qtd_planejada, productInfo).value || 0;
+    getQuantityByStation(
+      'saida_forno',
+      ordemProducao.qtd_planejada,
+      productInfo,
+      ordemProducao.planejadoUnidadesConsumo,
+    ).value || 0;
 
   const registrosSaida = useMemo(
     () =>
@@ -176,6 +183,7 @@ export default function SaidaFornoStepClient({
         produtoNome={ordemProducao.produto.nome}
         backHref={filaUrlForProductionStep('saida_forno')}
         denseHeader
+        registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'saida_forno' }}
         {...PRODUCTION_STEP_DENSE_SHELL}
       >
         <div className="flex justify-center py-12">
@@ -192,6 +200,7 @@ export default function SaidaFornoStepClient({
       produtoNome={ordemProducao.produto.nome}
       backHref={filaUrlForProductionStep('saida_forno')}
       denseHeader
+      registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'saida_forno' }}
       {...PRODUCTION_STEP_DENSE_SHELL}
     >
       <div className="space-y-2">
@@ -202,18 +211,8 @@ export default function SaidaFornoStepClient({
           saidaForno={saidaBandejasLt}
           unidadesPorAssadeiraHomogenea={uaOk}
           onNovoCarrinho={abrirModal}
-          novoCarrinhoDisabled={entradaLt <= 0}
-          novoCarrinhoTitle={
-            entradaLt <= 0 ? 'Registre primeiro a entrada no forno para esta ordem' : undefined
-          }
+          novoCarrinhoDisabled={false}
         />
-
-        {entradaLt <= 0 && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-xs text-amber-950 sm:text-sm">
-            Sem entrada no forno nesta ordem.
-            <span className="sr-only"> Use a etapa Entrada do Forno antes.</span>
-          </div>
-        )}
 
         <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <p className={FORM_SECTION_TITLE}>Histórico</p>
@@ -223,11 +222,17 @@ export default function SaidaFornoStepClient({
             <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 overflow-hidden">
               {registrosSaida.map((log) => {
                 const dq = log.dados_qualidade as SaidaFornoQualityData | null;
+                const car = dq?.numero_carrinho?.trim() || '—';
+                const bandejasN =
+                  dq?.bandejas != null && Number.isFinite(Number(dq.bandejas))
+                    ? Math.round(Number(dq.bandejas))
+                    : undefined;
+                const rotulo = rotuloExibicaoRegistroFila('saida_forno', dq, car, { bandejas: bandejasN });
                 return (
                   <li key={log.id} className="flex flex-col gap-0.5 bg-white px-2.5 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-medium text-slate-800 sm:text-sm">
-                        Carrinho <strong>{dq?.numero_carrinho?.trim() || '—'}</strong>
+                        <strong>{rotulo}</strong>
                       </span>
                       <span className="text-[11px] text-slate-500 sm:text-xs">{log.fim ? formatFim(log.fim) : ''}</span>
                     </div>
@@ -288,20 +293,12 @@ export default function SaidaFornoStepClient({
                 <h2 id="modal-saida-forno-titulo" className="text-base font-bold text-slate-900 sm:text-lg">
                   Saída do forno
                 </h2>
-                <div className="space-y-1">
-                  <label className={FORM_FIELD_LABEL} htmlFor="input-carrinho-saida">
-                    Carrinho
-                  </label>
-                  <input
-                    id="input-carrinho-saida"
-                    type="text"
-                    autoComplete="off"
-                    value={carrinhoField}
-                    onChange={(e) => setCarrinhoField(e.target.value)}
-                    className={INPUT_COMPACT_LINE}
-                    placeholder="ex.: 12"
-                  />
-                </div>
+                <SaidaFornoCarrinhoField
+                  id="input-carrinho-saida"
+                  value={carrinhoField}
+                  onChange={setCarrinhoField}
+                  disabled={loading}
+                />
                 <div className="space-y-1">
                   <label className={FORM_FIELD_LABEL} htmlFor="input-bandejas-saida">
                     Bandejas (LT)
@@ -325,8 +322,7 @@ export default function SaidaFornoStepClient({
                   <button
                     type="button"
                     onClick={() => void confirmarRegistro()}
-                    disabled={loading || entradaLt <= 0}
-                    title={entradaLt <= 0 ? 'Sem entrada no forno registrada' : undefined}
+                    disabled={loading}
                     className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
                   >
                     {loading ? (

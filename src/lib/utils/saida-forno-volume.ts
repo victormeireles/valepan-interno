@@ -4,6 +4,19 @@ import type {
   SaidaFornoQualityData,
 } from '@/domain/types/producao-etapas';
 
+/** Teto operacional por carrinho na saída do forno (1 bandeja = 1 LT). */
+export const MAX_BANDEJAS_SAIDA_FORNO = 20;
+
+/** Bandejas (LT) de um log de saída do forno. */
+export function bandejasFromSaidaFornoLog(dados_qualidade: unknown): number {
+  const dq = dados_qualidade as SaidaFornoQualityData | null;
+  const b = dq?.bandejas;
+  if (b != null && Number.isFinite(Number(b)) && Number(b) > 0) {
+    return Number(b);
+  }
+  return 0;
+}
+
 /** Soma latas registradas na entrada do forno (todos os logs etapa=entrada_forno com assadeiras_lt). */
 export function sumLatasEntradaForno(logs: ProductionStepLog[]): number {
   let s = 0;
@@ -21,9 +34,7 @@ export function sumBandejasSaidaFornoConcluida(logs: ProductionStepLog[]): numbe
   let s = 0;
   for (const l of logs) {
     if (l.etapa !== 'saida_forno' || l.fim == null) continue;
-    const dq = l.dados_qualidade as SaidaFornoQualityData | null;
-    const b = dq?.bandejas;
-    if (b != null && !Number.isNaN(Number(b))) s += Number(b);
+    s += bandejasFromSaidaFornoLog(l.dados_qualidade);
   }
   return s;
 }

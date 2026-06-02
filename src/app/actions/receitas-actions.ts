@@ -1,10 +1,11 @@
 'use server';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 import { Database } from '@/types/database';
 
-type TipoReceita = Database['public']['Enums']['tipo_receita'];
+type TipoReceita = Database['interno']['Enums']['tipo_receita'];
 
 export interface ReceitaIngredienteInput {
   id?: string;
@@ -49,7 +50,7 @@ export interface ReceitaWithRelations {
   }>;
   produto_receitas: Array<{
     id: string;
-    tipo: TipoReceita;
+    tipo?: TipoReceita;
     quantidade_por_produto: number;
     ativo: boolean;
     produtos: {
@@ -57,6 +58,92 @@ export interface ReceitaWithRelations {
       nome: string;
     } | null;
   }>;
+}
+
+type ReceitaIngredienteDetalhe = ReceitaWithRelations['receita_ingredientes'][number];
+
+/**
+ * Ingredientes + insumo/unidade sem embed PostgREST (PGRST200 no schema `interno`).
+ */
+async function loadReceitaIngredientesDetalhados(
+  supabase: SupabaseClient<Database>,
+  receitaId: string,
+): Promise<ReceitaIngredienteDetalhe[]> {
+  const { data: rows, error } = await supabase
+    .from('receita_ingredientes')
+    .select('id, quantidade_padrao, insumo_id')
+    .eq('receita_id', receitaId);
+
+  if (error) {
+    console.error('[loadReceitaIngredientesDetalhados]', error);
+    return [];
+  }
+  if (!rows?.length) return [];
+
+  const insumoIds = [...new Set(rows.map((r) => r.insumo_id).filter(Boolean))] as string[];
+  if (insumoIds.length === 0) {
+    return rows.map((r) => ({
+      id: r.id,
+      quantidade_padrao: r.quantidade_padrao,
+      insumo_id: r.insumo_id,
+      insumos: null,
+    }));
+  }
+
+  const { data: insumosRows, error: insError } = await supabase
+    .from('insumos')
+    .select('id, nome, unidade_id')
+    .in('id', insumoIds);
+
+  if (insError) {
+    console.error('[loadReceitaIngredientesDetalhados] insumos', insError);
+    return rows.map((r) => ({
+      id: r.id,
+      quantidade_padrao: r.quantidade_padrao,
+      insumo_id: r.insumo_id,
+      insumos: null,
+    }));
+  }
+
+  const unidadeIds = [
+    ...new Set((insumosRows ?? []).map((i) => i.unidade_id).filter(Boolean)),
+  ] as string[];
+
+  const unidadesMap = new Map<
+    string,
+    { id: string; nome: string; nome_resumido: string; codigo: string }
+  >();
+  if (unidadeIds.length > 0) {
+    const { data: unRows, error: unError } = await supabase
+      .from('unidades')
+      .select('id, nome, nome_resumido, codigo')
+      .in('id', unidadeIds);
+    if (unError) {
+      console.error('[loadReceitaIngredientesDetalhados] unidades', unError);
+    } else {
+      for (const u of unRows ?? []) {
+        unidadesMap.set(u.id, u);
+      }
+    }
+  }
+
+  const insumosMap = new Map<string, NonNullable<ReceitaIngredienteDetalhe['insumos']>>();
+  for (const ins of insumosRows ?? []) {
+    const unidade = ins.unidade_id ? (unidadesMap.get(ins.unidade_id) ?? null) : null;
+    insumosMap.set(ins.id, {
+      id: ins.id,
+      nome: ins.nome,
+      unidade_id: ins.unidade_id,
+      unidades: unidade,
+    });
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    quantidade_padrao: r.quantidade_padrao,
+    insumo_id: r.insumo_id,
+    insumos: r.insumo_id ? (insumosMap.get(r.insumo_id) ?? null) : null,
+  }));
 }
 
 const RECEITAS_PATH = '/receitas';
@@ -68,15 +155,15 @@ export async function getReceitas(includeInactive = false) {
     .from('receitas')
     .select(`
       *,
-      receita_ingredientes (
+      receita_ingredientes!receita_ingredientes_receita_id_fkey (
         id,
         quantidade_padrao,
         insumo_id,
-        insumos (
+        insumos!receita_ingredientes_insumo_id_fkey (
           id,
           nome,
           unidade_id,
-          unidades (
+          unidades!insumos_unidade_id_fkey (
             id,
             nome,
             nome_resumido,
@@ -84,16 +171,14 @@ export async function getReceitas(includeInactive = false) {
           )
         )
       ),
-      produto_receitas (
+      produto_receitas!produto_receitas_receita_id_fkey (
         id,
+        tipo,
         quantidade_por_produto,
         ativo,
-        produtos (
+        produtos!produto_receitas_produto_id_fkey (
           id,
           nome
-        ),
-        receitas (
-          tipo
         )
       )
     `)
@@ -106,7 +191,14 @@ export async function getReceitas(includeInactive = false) {
   const { data, error } = await query;
 
   if (error) {
-    console.error('Erro ao buscar receitas:', error);
+    const pe = error as { message?: string; code?: string; details?: string; hint?: string };
+    console.error(
+      '[getReceitas]',
+      pe?.code ?? 'no-code',
+      pe?.message ?? String(error),
+      pe?.details ? `details=${pe.details}` : '',
+      pe?.hint ? `hint=${pe.hint}` : '',
+    );
     return [];
   }
 
@@ -116,48 +208,27 @@ export async function getReceitas(includeInactive = false) {
 export async function getReceitaDetalhes(id: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const { data, error } = await supabase
-    .from('receitas')
-    .select(`
-      *,
-      receita_ingredientes (
-        id,
-        quantidade_padrao,
-        insumo_id,
-        insumos (
-          id,
-          nome,
-          unidade_id,
-          unidades (
-            id,
-            nome,
-            nome_resumido,
-            codigo
-          )
-        )
-      ),
-      produto_receitas (
-        id,
-        quantidade_por_produto,
-        ativo,
-        produtos (
-          id,
-          nome
-        ),
-        receitas (
-          tipo
-        )
-      )
-    `)
-    .eq('id', id)
-    .single();
+  const { data: receita, error } = await supabase.from('receitas').select('*').eq('id', id).single();
 
-  if (error) {
-    console.error('Erro ao buscar receita:', error);
+  if (error || !receita) {
+    const pe = error as { message?: string; code?: string; details?: string; hint?: string } | null;
+    console.error(
+      '[getReceitaDetalhes]',
+      pe?.code ?? 'no-code',
+      pe?.message ?? String(error),
+      pe?.details ? `details=${pe.details}` : '',
+      pe?.hint ? `hint=${pe.hint}` : '',
+    );
     return null;
   }
 
-  return data as unknown as ReceitaWithRelations;
+  const receita_ingredientes = await loadReceitaIngredientesDetalhados(supabase, id);
+
+  return {
+    ...receita,
+    receita_ingredientes,
+    produto_receitas: [],
+  } as unknown as ReceitaWithRelations;
 }
 
 export async function createReceita(payload: ReceitaInput) {

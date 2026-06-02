@@ -3,6 +3,7 @@ import type {
   FornoQualityData,
   ProductionStepLog,
 } from '@/domain/types/producao-etapas';
+import { ltFromFermentacaoLog } from '@/lib/utils/fermentacao-progresso';
 
 /**
  * Milissegundos para ordenação FIFO: cadastro do carrinho na fermentação, senão `inicio` do log, senão `fim`.
@@ -74,13 +75,7 @@ function totalLtFerm(
   dados_qualidade: unknown,
   ua: number | null,
 ): number {
-  const dq = dados_qualidade as FermentacaoQualityData | null;
-  const lt = dq?.assadeiras_lt;
-  if (lt != null && !Number.isNaN(Number(lt)) && Number(lt) > 0) return Number(lt);
-  if (ua != null && ua > 0 && qtd_saida != null && !Number.isNaN(Number(qtd_saida))) {
-    return Number(qtd_saida) / ua;
-  }
-  return 0;
+  return ltFromFermentacaoLog(qtd_saida, dados_qualidade, ua);
 }
 
 /** Já existe qualquer registro de forno vinculado a este log de fermentação → carrinho encerrado nesta etapa. */

@@ -458,6 +458,125 @@ export type Database = {
         }
         Relationships: []
       }
+      embalagens_cadastro: {
+        Row: {
+          id: string
+          nome: string
+          tipo_cliente: string
+          unidades_por_caixa: number
+          ativo: boolean
+          observacao: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          tipo_cliente: string
+          unidades_por_caixa: number
+          ativo?: boolean
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          tipo_cliente?: string
+          unidades_por_caixa?: number
+          ativo?: boolean
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      produtos_tipos_caixa_embalagem: {
+        Row: {
+          id: string
+          produto_id: string
+          tipo_caixa_embalagem_id: string
+          box_units_override: number | null
+          package_units_override: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          produto_id: string
+          tipo_caixa_embalagem_id: string
+          box_units_override?: number | null
+          package_units_override?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          produto_id?: string
+          tipo_caixa_embalagem_id?: string
+          box_units_override?: number | null
+          package_units_override?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produtos_tipos_caixa_embalagem_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produtos_tipos_caixa_embalagem_tipo_caixa_embalagem_id_fkey"
+            columns: ["tipo_caixa_embalagem_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_caixa_embalagem"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_caixa_embalagem: {
+        Row: {
+          id: string
+          cliente_id: string
+          nome: string
+          unidades_por_caixa: number
+          ativo: boolean
+          observacao: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cliente_id: string
+          nome: string
+          unidades_por_caixa: number
+          ativo?: boolean
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cliente_id?: string
+          nome?: string
+          unidades_por_caixa?: number
+          ativo?: boolean
+          observacao?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_caixa_embalagem_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       enderecos_entrega: {
         Row: {
           cep: string | null
@@ -769,8 +888,12 @@ export type Database = {
           data_producao_override: string | null
           data_etiqueta_override: string | null
           observacao: string | null
+          observacao_embalagem: string | null
+          observacao_producao: string | null
           status_linha: string
           ordens_producao_id: string | null
+          embalagem_cadastro_id: string | null
+          tipo_caixa_embalagem_id: string | null
           created_at: string | null
           updated_at: string | null
         }
@@ -786,8 +909,12 @@ export type Database = {
           data_producao_override?: string | null
           data_etiqueta_override?: string | null
           observacao?: string | null
+          observacao_embalagem?: string | null
+          observacao_producao?: string | null
           status_linha?: string
           ordens_producao_id?: string | null
+          embalagem_cadastro_id?: string | null
+          tipo_caixa_embalagem_id?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -803,8 +930,12 @@ export type Database = {
           data_producao_override?: string | null
           data_etiqueta_override?: string | null
           observacao?: string | null
+          observacao_embalagem?: string | null
+          observacao_producao?: string | null
           status_linha?: string
           ordens_producao_id?: string | null
+          embalagem_cadastro_id?: string | null
+          tipo_caixa_embalagem_id?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -828,6 +959,20 @@ export type Database = {
             columns: ["ordens_producao_id"]
             isOneToOne: false
             referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_diarias_itens_embalagem_cadastro_id_fkey"
+            columns: ["embalagem_cadastro_id"]
+            isOneToOne: false
+            referencedRelation: "embalagens_cadastro"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_diarias_itens_tipo_caixa_embalagem_id_fkey"
+            columns: ["tipo_caixa_embalagem_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_caixa_embalagem"
             referencedColumns: ["id"]
           },
         ]

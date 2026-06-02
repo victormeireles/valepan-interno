@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS interno.ordens_producao_diarias_itens (
   ordem_diaria_id uuid NOT NULL REFERENCES interno.ordens_producao_diarias (id) ON DELETE CASCADE,
   prioridade integer NOT NULL DEFAULT 1,
   produto_id uuid NOT NULL REFERENCES interno.produtos (id),
-  tipo_lata text NOT NULL CHECK (tipo_lata IN ('antiga', 'nova', 'outra')),
+  tipo_lata text NOT NULL CHECK (
+    char_length(tipo_lata) = 36
+    AND tipo_lata ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  ),
   latas_planejadas integer NOT NULL DEFAULT 0,
   caixas_estimadas integer NOT NULL DEFAULT 0,
   clientes jsonb NOT NULL DEFAULT '[]'::jsonb,

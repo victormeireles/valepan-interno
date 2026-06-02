@@ -5,10 +5,9 @@ import {
   createAssadeira,
   getAssadeiras,
   updateAssadeira,
+  updateAssadeirasBulk,
   type AssadeiraRow,
 } from '@/app/actions/assadeiras-actions';
-import { parseOptionalDiametroBuracosMm } from '@/lib/utils/assadeira-diametro';
-
 type GerenciarAssadeirasModalProps = {
   open: boolean;
   onClose: () => void;
@@ -31,11 +30,15 @@ export default function GerenciarAssadeirasModal({
   const [novaLataAberta, setNovaLataAberta] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [novaNome, setNovaNome] = useState('');
-  const [novaNumeroBuracos, setNovaNumeroBuracos] = useState('0');
+  const [novaNumeroBuracos, setNovaNumeroBuracos] = useState('');
   const [novaQuantidadeLatas, setNovaQuantidadeLatas] = useState('');
-  const [novaDiametroBuracos, setNovaDiametroBuracos] = useState('');
   const [novaDescricao, setNovaDescricao] = useState('');
   const [busca, setBusca] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBuracos, setBulkBuracos] = useState('');
+  const [bulkQtdLatas, setBulkQtdLatas] = useState('');
+  const [bulkAtivo, setBulkAtivo] = useState<'keep' | 'true' | 'false'>('keep');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -64,12 +67,15 @@ export default function GerenciarAssadeirasModal({
       setNovaLataAberta(false);
       setEditingId(null);
       setNovaNome('');
-      setNovaNumeroBuracos('0');
+      setNovaNumeroBuracos('');
       setNovaQuantidadeLatas('');
-      setNovaDiametroBuracos('');
       setNovaDescricao('');
       setBusca('');
       setMsg(null);
+      setSelectedIds(new Set());
+      setBulkBuracos('');
+      setBulkQtdLatas('');
+      setBulkAtivo('keep');
     }
   }, [open, startInCreateMode]);
 
@@ -82,6 +88,77 @@ export default function GerenciarAssadeirasModal({
       return nome.includes(q) || desc.includes(q);
     });
   }, [list, busca]);
+
+  const toggleSelecionada = (id: string) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const marcarFiltradas = () => {
+    setSelectedIds(new Set(filtrados.map((a) => a.id)));
+  };
+
+  const desmarcarTodas = () => setSelectedIds(new Set());
+
+  const aplicarEmMassa = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) {
+      setMsg({ type: 'err', text: 'Marque ao menos uma lata na lista.' });
+      return;
+    }
+    const payload: Parameters<typeof updateAssadeirasBulk>[0] = { ids };
+    const bRaw = bulkBuracos.trim();
+    if (bRaw !== '') {
+      const b = parseInt(bRaw, 10);
+      if (!Number.isFinite(b) || b < 0) {
+        setMsg({ type: 'err', text: 'N.º de buracos inválido (inteiro ≥ 0).' });
+        return;
+      }
+      payload.numeroBuracos = b;
+    }
+    const qRaw = bulkQtdLatas.trim();
+    if (qRaw !== '') {
+      const q = parseInt(qRaw, 10);
+      if (!Number.isFinite(q) || q < 0) {
+        setMsg({ type: 'err', text: 'Quantidade de latas inválida (inteiro ≥ 0).' });
+        return;
+      }
+      payload.quantidadeLatas = q;
+    }
+    if (bulkAtivo === 'true') payload.ativo = true;
+    if (bulkAtivo === 'false') payload.ativo = false;
+
+    if (
+      payload.numeroBuracos === undefined &&
+      payload.quantidadeLatas === undefined &&
+      payload.ativo === undefined
+    ) {
+      setMsg({
+        type: 'err',
+        text: 'Preencha buracos e/ou quantidade de latas, ou escolha ativar/desativar.',
+      });
+      return;
+    }
+
+    setMsg(null);
+    setBulkSaving(true);
+    const r = await updateAssadeirasBulk(payload);
+    setBulkSaving(false);
+    if (!r.success) {
+      setMsg({ type: 'err', text: r.error });
+      return;
+    }
+    setSelectedIds(new Set());
+    setBulkBuracos('');
+    setBulkQtdLatas('');
+    setBulkAtivo('keep');
+    await refresh({ clearMsg: false });
+    setMsg({ type: 'ok', text: `Atualizadas ${r.count} lata(s).` });
+  };
 
   const refresh = async (opts?: { clearMsg?: boolean }) => {
     const clearMsg = opts?.clearMsg !== false;
@@ -99,8 +176,6 @@ export default function GerenciarAssadeirasModal({
     e.preventDefault();
     setMsg(null);
     setSavingId('new');
-    const nb = parseInt(novaNumeroBuracos, 10);
-    const nbOk = Number.isFinite(nb) ? nb : 0;
     const qlRaw = novaQuantidadeLatas.trim();
     const qlParsed = parseInt(qlRaw, 10);
     if (qlRaw === '' || !Number.isFinite(qlParsed) || qlParsed < 0) {
@@ -108,14 +183,21 @@ export default function GerenciarAssadeirasModal({
       setSavingId(null);
       return;
     }
+    const nbRaw = novaNumeroBuracos.trim();
+    const nb = parseInt(nbRaw, 10);
+    if (nbRaw === '' || !Number.isFinite(nb) || nb < 0) {
+      setMsg({ type: 'err', text: 'Informe o número de buracos (inteiro ≥ 0).' });
+      setSavingId(null);
+      return;
+    }
     const res = await createAssadeira({
       nome: novaNome,
       codigo: null,
       ordem: 0,
-      numeroBuracos: nbOk,
+      numeroBuracos: nb,
       quantidadeLatas: qlParsed,
       descricao: novaDescricao.trim() || null,
-      diametroBuracosMm: parseOptionalDiametroBuracosMm(novaDiametroBuracos),
+      diametroBuracosMm: null,
     });
     setSavingId(null);
     if (!res.success) {
@@ -123,9 +205,8 @@ export default function GerenciarAssadeirasModal({
       return;
     }
     setNovaNome('');
-    setNovaNumeroBuracos('0');
+    setNovaNumeroBuracos('');
     setNovaQuantidadeLatas('');
-    setNovaDiametroBuracos('');
     setNovaDescricao('');
     setNovaLataAberta(false);
     await refresh();
@@ -139,9 +220,8 @@ export default function GerenciarAssadeirasModal({
     }
     setNovaLataAberta(false);
     setNovaNome('');
-    setNovaNumeroBuracos('0');
+    setNovaNumeroBuracos('');
     setNovaQuantidadeLatas('');
-    setNovaDiametroBuracos('');
     setNovaDescricao('');
     setMsg(null);
   };
@@ -159,7 +239,7 @@ export default function GerenciarAssadeirasModal({
       }}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-3xl max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-4xl max-h-[90vh] flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-100 shrink-0">
@@ -203,6 +283,21 @@ export default function GerenciarAssadeirasModal({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
+                  N.º de buracos <span className="text-rose-600">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  required
+                  className="w-full max-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  value={novaNumeroBuracos}
+                  onChange={(e) => setNovaNumeroBuracos(e.target.value)}
+                />
+                <p className="mt-1 text-[11px] text-gray-500">Unidades por lata na ordem de produção.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
                   Quantidade de latas <span className="text-rose-600">*</span>
                 </label>
                 <input
@@ -213,30 +308,6 @@ export default function GerenciarAssadeirasModal({
                   className="w-full max-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   value={novaQuantidadeLatas}
                   onChange={(e) => setNovaQuantidadeLatas(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Número de buracos</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  className="w-full max-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  value={novaNumeroBuracos}
-                  onChange={(e) => setNovaNumeroBuracos(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Diâmetro dos buracos (mm)
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className="w-full max-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  value={novaDiametroBuracos}
-                  onChange={(e) => setNovaDiametroBuracos(e.target.value)}
-                  placeholder="Opcional"
                 />
               </div>
               <div>
@@ -295,6 +366,82 @@ export default function GerenciarAssadeirasModal({
                 />
               </div>
 
+              <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-gray-900">Edição em massa</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={marcarFiltradas}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Marcar listagem ({filtrados.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={desmarcarTodas}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Desmarcar
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600">
+                  Marque as latas na lista. Só os campos que você preencher abaixo serão gravados em todas as
+                  selecionadas.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="block text-xs font-medium text-gray-600">
+                    N.º buracos (opcional)
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Ex.: 20"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+                      value={bulkBuracos}
+                      onChange={(e) => setBulkBuracos(e.target.value)}
+                      disabled={bulkSaving}
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-gray-600">
+                    Quantidade latas (opcional)
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+                      value={bulkQtdLatas}
+                      onChange={(e) => setBulkQtdLatas(e.target.value)}
+                      disabled={bulkSaving}
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-gray-600 sm:col-span-2 lg:col-span-1">
+                    Ativo
+                    <select
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+                      value={bulkAtivo}
+                      onChange={(e) => setBulkAtivo(e.target.value as 'keep' | 'true' | 'false')}
+                      disabled={bulkSaving}
+                    >
+                      <option value="keep">Não alterar</option>
+                      <option value="true">Ativar todas</option>
+                      <option value="false">Desativar todas</option>
+                    </select>
+                  </label>
+                  <div className="flex items-end sm:col-span-2 lg:col-span-1">
+                    <button
+                      type="button"
+                      disabled={bulkSaving || selectedIds.size === 0}
+                      onClick={() => void aplicarEmMassa()}
+                      className="w-full rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                    >
+                      {bulkSaving ? 'Aplicando…' : `Aplicar (${selectedIds.size})`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white max-h-[min(52vh,420px)] overflow-y-auto">
                 {filtrados.length === 0 && (
                   <li className="text-sm text-center text-gray-500 py-8 px-3">
@@ -305,10 +452,23 @@ export default function GerenciarAssadeirasModal({
                 )}
                 {filtrados.map((a) => {
                   const expandido = editingId === a.id;
+                  const marcada = selectedIds.has(a.id);
                   return (
                     <li key={`${a.id}-${a.updated_at}`}>
                       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                        <span className="min-w-0 truncate text-sm font-medium text-gray-900">{a.nome}</span>
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-blue-600 shrink-0"
+                            checked={marcada}
+                            onChange={() => toggleSelecionada(a.id)}
+                            aria-label={`Selecionar ${a.nome}`}
+                          />
+                          <span className="min-w-0 truncate text-sm font-medium text-gray-900">{a.nome}</span>
+                          <span className="hidden shrink-0 text-xs text-gray-500 sm:inline tabular-nums">
+                            {a.numero_buracos ?? 0} bur. · {a.quantidade_latas ?? 0} qtd.
+                          </span>
+                        </label>
                         <button
                           type="button"
                           onClick={() => {
@@ -367,9 +527,6 @@ function AssadeiraCardModal({
   const [nome, setNome] = useState(row.nome);
   const [numeroBuracos, setNumeroBuracos] = useState(String(row.numero_buracos ?? 0));
   const [quantidadeLatas, setQuantidadeLatas] = useState(String(row.quantidade_latas ?? 0));
-  const [diametroBuracos, setDiametroBuracos] = useState(
-    row.diametro_buracos_mm != null ? String(row.diametro_buracos_mm) : '',
-  );
   const [descricao, setDescricao] = useState(row.descricao ?? '');
   const [ativo, setAtivo] = useState(row.ativo);
   const [savingLocal, setSavingLocal] = useState(false);
@@ -378,7 +535,6 @@ function AssadeiraCardModal({
     setNome(row.nome);
     setNumeroBuracos(String(row.numero_buracos ?? 0));
     setQuantidadeLatas(String(row.quantidade_latas ?? 0));
-    setDiametroBuracos(row.diametro_buracos_mm != null ? String(row.diametro_buracos_mm) : '');
     setDescricao(row.descricao ?? '');
     setAtivo(row.ativo);
   }, [row.id, row.updated_at]);
@@ -394,16 +550,24 @@ function AssadeiraCardModal({
       onErro('Informe a quantidade de latas (número inteiro ≥ 0).');
       return false;
     }
-    const nb = parseInt(numeroBuracos, 10);
+    const nbRaw = numeroBuracos.trim();
+    const nb = parseInt(nbRaw, 10);
+    if (nbRaw === '' || !Number.isFinite(nb) || nb < 0) {
+      onErro('Informe o número de buracos (inteiro ≥ 0).');
+      return false;
+    }
     const res = await updateAssadeira({
       id: row.id,
       nome,
       codigo: row.codigo?.trim() ? row.codigo.trim() : null,
       ordem: row.ordem,
-      numeroBuracos: Number.isFinite(nb) ? nb : 0,
+      numeroBuracos: nb,
       quantidadeLatas: ql,
       descricao: descricao.trim() || null,
-      diametroBuracosMm: parseOptionalDiametroBuracosMm(diametroBuracos),
+      diametroBuracosMm:
+        row.diametro_buracos_mm != null && Number.isFinite(Number(row.diametro_buracos_mm))
+          ? Number(row.diametro_buracos_mm)
+          : null,
       ativo,
     });
     if (!res.success) {
@@ -411,7 +575,7 @@ function AssadeiraCardModal({
       return false;
     }
     return true;
-  }, [row.id, row.codigo, row.ordem, nome, numeroBuracos, quantidadeLatas, descricao, diametroBuracos, ativo, onErro]);
+  }, [row.id, row.codigo, row.ordem, row.diametro_buracos_mm, nome, numeroBuracos, quantidadeLatas, descricao, ativo, onErro]);
 
   const handleSalvar = async () => {
     setSavingLocal(true);
@@ -437,19 +601,22 @@ function AssadeiraCardModal({
             disabled={savingLocal}
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Número de buracos</label>
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            N.º de buracos (unidades por lata na ordem) <span className="text-rose-600">*</span>
+          </label>
           <input
             type="number"
             min={0}
             step={1}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            required
+            className="w-full max-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
             value={numeroBuracos}
             onChange={(e) => setNumeroBuracos(e.target.value)}
             disabled={savingLocal}
           />
         </div>
-        <div>
+        <div className="sm:col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Quantidade de latas <span className="text-rose-600">*</span>
           </label>
@@ -458,22 +625,10 @@ function AssadeiraCardModal({
             min={0}
             step={1}
             required
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            className="w-full max-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm"
             value={quantidadeLatas}
             onChange={(e) => setQuantidadeLatas(e.target.value)}
             disabled={savingLocal}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Diâmetro dos buracos (mm)</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-            value={diametroBuracos}
-            onChange={(e) => setDiametroBuracos(e.target.value)}
-            disabled={savingLocal}
-            placeholder="Opcional"
           />
         </div>
         <div className="sm:col-span-2">

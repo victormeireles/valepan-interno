@@ -1,6 +1,12 @@
 'use server';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import {
+  ensureAssadeirasExistForProdutoAssadeirasSave,
+  normalizeAssadeiraUuid,
+  syncPublicProdutoAssadeirasLinksToInterno,
+} from '@/lib/catalog/assadeiras-catalog';
 import { revalidatePath } from 'next/cache';
 
 const PATH = '/produtos/latas';
@@ -8,8 +14,20 @@ const PATH = '/produtos/latas';
 function serializeSupabaseError(error: unknown): Record<string, unknown> {
   if (error == null) return { kind: 'null' };
   if (typeof error !== 'object') return { kind: typeof error, value: String(error) };
+  if (error instanceof Error) {
+    const x = error as Error & { code?: string; details?: string; hint?: string };
+    return {
+      kind: 'Error',
+      name: x.name,
+      message: x.message,
+      code: x.code,
+      details: x.details,
+      hint: x.hint,
+    };
+  }
   const o = error as Record<string, unknown>;
   return {
+    kind: 'object',
     message: o.message,
     code: o.code,
     details: o.details,
@@ -19,7 +37,21 @@ function serializeSupabaseError(error: unknown): Record<string, unknown> {
 }
 
 function logSupabaseError(context: string, error: unknown): void {
-  console.error(context, serializeSupabaseError(error));
+  console.error(`${context} ${JSON.stringify(serializeSupabaseError(error))}`);
+}
+
+function mensagemErroFkAssadeira(error: { message?: string; code?: string }): string | null {
+  const msg = error.message ?? '';
+  if (error.code !== '23503' && !msg.includes('violates foreign key constraint')) {
+    return null;
+  }
+  if (msg.includes('produto_assadeiras_produto_id_fkey')) {
+    return 'Produto não encontrado no banco. Atualize a página (F5) e tente novamente.';
+  }
+  if (msg.includes('produto_assadeiras_assadeira_id_fkey') || msg.includes('assadeira_id_fkey')) {
+    return 'A lata não está sincronizada no catálogo do banco. Atualize a página (F5) e salve de novo.';
+  }
+  return 'Não foi possível gravar o vínculo com a lata. Atualize a página (F5) e tente novamente.';
 }
 
 export type VinculoProdutoAssadeira = {
@@ -57,25 +89,63 @@ async function fetchProdutoAssadeirasLinks(
     return new Map();
   }
 
-  const { data, error } = await supabase
+  /** Dois pedidos simples evitam falhas do PostgREST com resource embed no schema `interno`. */
+  let client: SupabaseClient = supabase as unknown as SupabaseClient;
+  let { data: paRows, error: paErr } = await client
     .from('produto_assadeiras')
-    .select(
-      `
-      produto_id,
-      unidades_por_assadeira,
-      assadeiras ( id, nome, ordem )
-    `,
-    )
+    .select('produto_id, assadeira_id, unidades_por_assadeira')
     .in('produto_id', produtoIds);
 
-  if (error) {
-    logSupabaseError('getProdutosLatas produto_assadeiras', error);
-    return null;
+  if (paErr) {
+    const pub = supabaseClientFactory.createServiceRolePublicClient();
+    const retry = await pub
+      .from('produto_assadeiras')
+      .select('produto_id, assadeira_id, unidades_por_assadeira')
+      .in('produto_id', produtoIds);
+    if (retry.error) {
+      logSupabaseError('getProdutosLatas produto_assadeiras', retry.error);
+      return null;
+    }
+    paRows = retry.data;
+    paErr = null;
+    client = pub;
+  }
+
+  const rows = paRows ?? [];
+  const assadeiraIds = [...new Set(rows.map((r) => r.assadeira_id).filter(Boolean))] as string[];
+
+  const assMap = new Map<string, { id: string; nome: string; ordem: number }>();
+  if (assadeiraIds.length > 0) {
+    let { data: assRows, error: assErr } = await client
+      .from('assadeiras')
+      .select('id, nome, ordem')
+      .in('id', assadeiraIds);
+
+    const pubCatalog = supabaseClientFactory.createServiceRolePublicClient();
+    if (assErr && client !== pubCatalog) {
+      const r2 = await pubCatalog
+        .from('assadeiras')
+        .select('id, nome, ordem')
+        .in('id', assadeiraIds);
+      if (!r2.error) {
+        assRows = r2.data;
+        assErr = null;
+        client = pubCatalog;
+      }
+    }
+
+    if (assErr) {
+      logSupabaseError('getProdutosLatas assadeiras', assErr);
+      return null;
+    }
+    for (const a of assRows ?? []) {
+      assMap.set(a.id, { id: a.id, nome: a.nome, ordem: a.ordem });
+    }
   }
 
   const map = new Map<string, VinculoProdutoAssadeira[]>();
-  for (const row of data ?? []) {
-    const a = row.assadeiras as { id: string; nome: string; ordem: number } | null;
+  for (const row of rows) {
+    const a = assMap.get(row.assadeira_id);
     if (!a) continue;
     const list = map.get(row.produto_id) ?? [];
     list.push({
@@ -133,6 +203,7 @@ export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
       }
       const minimalRows = (minimal.data ?? []) as ProdutoLatasDbPartial[];
       const idsM = minimalRows.map((r) => r.id);
+      await syncPublicProdutoAssadeirasLinksToInterno(supabase, idsM);
       const linksMapM = await fetchProdutoAssadeirasLinks(supabase, idsM);
       return minimalRows.map((row) => ({
         id: row.id,
@@ -148,6 +219,7 @@ export async function getProdutosLatas(): Promise<ProdutoLatasRow[]> {
 
   const rows = (data ?? []) as ProdutoLatasDbPartial[];
   const ids = rows.map((r) => r.id);
+  await syncPublicProdutoAssadeirasLinksToInterno(supabase, ids);
   const linksMap = await fetchProdutoAssadeirasLinks(supabase, ids);
 
   return rows.map((row) => {
@@ -177,10 +249,18 @@ export async function saveProdutoLatasPermitidas(input: {
   const seen = new Set<string>();
   const limpos: { assadeiraId: string; unidadesPorAssadeira: number }[] = [];
   for (const v of input.vinculos) {
-    if (seen.has(v.assadeiraId)) {
+    const assadeiraId = normalizeAssadeiraUuid(v.assadeiraId);
+    if (!assadeiraId) {
+      return {
+        success: false,
+        error:
+          'Identificador de lata inválido. Atualize a página (F5) e selecione novamente as latas no cadastro.',
+      };
+    }
+    if (seen.has(assadeiraId)) {
       return { success: false, error: 'Assadeira duplicada na lista.' };
     }
-    seen.add(v.assadeiraId);
+    seen.add(assadeiraId);
     const u = Math.round(v.unidadesPorAssadeira);
     if (!Number.isFinite(u) || u <= 0) {
       return {
@@ -188,7 +268,7 @@ export async function saveProdutoLatasPermitidas(input: {
         error: 'Informe um número inteiro maior que zero nas unidades por assadeira selecionada.',
       };
     }
-    limpos.push({ assadeiraId: v.assadeiraId, unidadesPorAssadeira: u });
+    limpos.push({ assadeiraId, unidadesPorAssadeira: u });
   }
 
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -210,6 +290,14 @@ export async function saveProdutoLatasPermitidas(input: {
   }
 
   if (limpos.length > 0) {
+    const ensured = await ensureAssadeirasExistForProdutoAssadeirasSave(
+      supabase,
+      limpos.map((v) => v.assadeiraId),
+    );
+    if (!ensured.ok) {
+      return { success: false, error: ensured.error };
+    }
+
     const { error: insErr } = await supabase.from('produto_assadeiras').insert(
       limpos.map((v) => ({
         produto_id: input.produtoId,
@@ -220,7 +308,10 @@ export async function saveProdutoLatasPermitidas(input: {
 
     if (insErr) {
       logSupabaseError('saveProdutoLatasPermitidas insert', insErr);
-      return { success: false, error: insErr.message };
+      return {
+        success: false,
+        error: mensagemErroFkAssadeira(insErr) ?? insErr.message,
+      };
     }
   }
 
@@ -228,21 +319,21 @@ export async function saveProdutoLatasPermitidas(input: {
   if (limpos.length > 0) {
     const { data: paRows, error: paErr } = await supabase
       .from('produto_assadeiras')
-      .select(
-        `
-        unidades_por_assadeira,
-        assadeiras ( ordem )
-      `,
-      )
+      .select('assadeira_id, unidades_por_assadeira')
       .eq('produto_id', input.produtoId);
 
     if (!paErr && paRows?.length) {
-      const sorted = [...paRows].sort((a, b) => {
-        const oa = (a.assadeiras as { ordem: number } | null)?.ordem ?? 0;
-        const ob = (b.assadeiras as { ordem: number } | null)?.ordem ?? 0;
-        return oa - ob;
-      });
-      primary = sorted[0]?.unidades_por_assadeira ?? null;
+      const ids = [...new Set(paRows.map((r) => r.assadeira_id))];
+      const { data: ordRows, error: ordErr } = await supabase.from('assadeiras').select('id, ordem').in('id', ids);
+      if (!ordErr && ordRows?.length) {
+        const ordMap = new Map(ordRows.map((r) => [r.id, r.ordem ?? 0]));
+        const sorted = [...paRows].sort((a, b) => {
+          const oa = ordMap.get(a.assadeira_id) ?? 0;
+          const ob = ordMap.get(b.assadeira_id) ?? 0;
+          return oa - ob;
+        });
+        primary = sorted[0]?.unidades_por_assadeira ?? null;
+      }
     }
   }
 

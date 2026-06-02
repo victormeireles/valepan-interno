@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ComponentProps } from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteMassaLote, getMassaLotesByOrder } from '@/app/actions/producao-massa-actions';
-import { getMasseiras } from '@/app/actions/producao-etapas-actions';
+import { getMasseiras, getProductionOrderWithProduct } from '@/app/actions/producao-etapas-actions';
 import { MassaLote } from '@/domain/types/producao-massa';
 import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
+import { getQuantityByStation } from '@/lib/utils/production-conversions';
+import { pedirConfirmacaoSeMassaMetaAtingida } from '@/lib/production/massa-novo-lote-confirm';
+import MassaStepClient from '@/app/producao/etapas/[ordemId]/massa/MassaStepClient';
 
 interface MassaLotesModalProps {
   isOpen: boolean;
@@ -13,12 +16,16 @@ interface MassaLotesModalProps {
   ordemProducaoId: string;
   produtoNome: string;
   loteCodigo: string;
+  /** Ao abrir, ir direto ao formulário de novo lote (fila: botão «Novo lote»). */
+  autoOpenNewLote?: boolean;
 }
 
 interface Masseira {
   id: string;
   nome: string;
 }
+
+type InlineMassaOrdem = ComponentProps<typeof MassaStepClient>['ordemProducao'];
 
 function minutosInteiroDoDecimal(decimal: number): number {
   if (!Number.isFinite(decimal) || decimal <= 0) return 0;
@@ -31,12 +38,26 @@ export default function MassaLotesModal({
   ordemProducaoId,
   produtoNome,
   loteCodigo,
+  autoOpenNewLote = false,
 }: MassaLotesModalProps) {
   const router = useRouter();
   const [lotes, setLotes] = useState<MassaLote[]>([]);
   const [masseiras, setMasseiras] = useState<Masseira[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [inlineOrdem, setInlineOrdem] = useState<InlineMassaOrdem | null>(null);
+  const [inlineOrdemLoading, setInlineOrdemLoading] = useState(false);
+  const [inlineOrdemError, setInlineOrdemError] = useState<string | null>(null);
+  const newLoteRequestGen = useRef(0);
+
+  useEffect(() => {
+    if (!isOpen) {
+      newLoteRequestGen.current += 1;
+      setInlineOrdem(null);
+      setInlineOrdemLoading(false);
+      setInlineOrdemError(null);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -74,10 +95,53 @@ export default function MassaLotesModal({
     onClose();
   };
 
-  const handleNewLote = () => {
-    router.push(`/producao/etapas/${ordemProducaoId}/massa`);
-    onClose();
+  const handleNewLote = (opts?: { skipMetaConfirm?: boolean }) => {
+    const requestId = ++newLoteRequestGen.current;
+    setInlineOrdemError(null);
+    setInlineOrdemLoading(true);
+    void (async () => {
+      try {
+        const res = await getProductionOrderWithProduct(ordemProducaoId);
+        if (requestId !== newLoteRequestGen.current) return;
+        if (!res.success || !res.data) {
+          setInlineOrdemError(res.error || 'Não foi possível carregar a ordem.');
+          return;
+        }
+        const ordem = res.data as unknown as InlineMassaOrdem;
+        const batidas = lotes.reduce((s, l) => s + (l.receitas_batidas ?? 0), 0);
+        const qInfo = getQuantityByStation(
+          'massa',
+          ordem.qtd_planejada,
+          {
+            unidadeNomeResumido: ordem.produto.unidadeNomeResumido,
+            unidades_assadeira: ordem.produto.unidades_assadeira ?? null,
+            box_units: ordem.produto.box_units ?? null,
+            receita_massa: ordem.produto.receita_massa ?? null,
+          },
+          ordem.planejadoUnidadesConsumo,
+        );
+        const necessarias = qInfo.receitas?.value ?? 0;
+        if (
+          !opts?.skipMetaConfirm &&
+          !pedirConfirmacaoSeMassaMetaAtingida(batidas, necessarias)
+        ) {
+          return;
+        }
+        setInlineOrdem(ordem);
+      } finally {
+        if (requestId === newLoteRequestGen.current) {
+          setInlineOrdemLoading(false);
+        }
+      }
+    })();
   };
+
+  useEffect(() => {
+    if (isOpen && autoOpenNewLote && !inlineOrdem) {
+      handleNewLote({ skipMetaConfirm: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, autoOpenNewLote, ordemProducaoId]);
 
   const handleDeleteLote = async (loteId: string) => {
     const ok = window.confirm(
@@ -101,14 +165,30 @@ export default function MassaLotesModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !inlineOrdem) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 p-0 sm:items-center sm:p-3">
-      <div className="flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+    <>
+      {inlineOrdem && (
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-100/95 sm:pb-4">
+          <MassaStepClient
+            ordemProducao={inlineOrdem}
+            embedFromFilaModalNewLote
+            onExitToFila={() => {
+              setInlineOrdem(null);
+              onClose();
+              router.refresh();
+            }}
+          />
+        </div>
+      )}
+
+      {isOpen && !inlineOrdem ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/45 p-0 sm:items-center sm:p-3">
+          <div className="flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-gray-200 bg-gray-50/90 px-3 py-2.5 sm:px-4">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold leading-tight text-gray-900">Massa — lotes</h2>
+            <h2 className="truncate text-sm font-semibold leading-tight text-gray-900">Registrar lotes de massa</h2>
             <p className="truncate text-[11px] leading-snug text-gray-600">
               <span className="font-mono text-gray-700">{loteCodigo}</span>
               <span className="text-gray-400"> · </span>
@@ -126,6 +206,11 @@ export default function MassaLotesModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 sm:px-4 sm:py-3">
+          {inlineOrdemError && (
+            <p className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] text-rose-900 sm:text-xs">
+              {inlineOrdemError}
+            </p>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600" />
@@ -134,8 +219,8 @@ export default function MassaLotesModal({
             <>
               {lotes.length > 0 ? (
                 <div className="mb-3 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                    Lotes ({lotes.length})
+                  <p className="text-xs font-semibold text-gray-600">
+                    Lotes registrados ({lotes.length})
                   </p>
                   {lotes.map((lote) => {
                     const masseira = lote.masseira_id ? masseiras.find((m) => m.id === lote.masseira_id) : null;
@@ -183,9 +268,9 @@ export default function MassaLotesModal({
                             <button
                               type="button"
                               onClick={() => handleEditLote(lote.id)}
-                              className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                             >
-                              Abrir
+                              Editar
                             </button>
                             <button
                               type="button"
@@ -209,22 +294,41 @@ export default function MassaLotesModal({
               ) : (
                 <div className="mb-3 py-4 text-center">
                   <span className="material-icons mb-1 text-2xl text-gray-300">inventory_2</span>
-                  <p className="text-xs text-gray-600">Nenhum lote ainda</p>
+                  <p className="text-xs text-gray-600">Nenhum lote registrado</p>
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={handleNewLote}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-black"
-              >
-                <span className="material-icons text-base leading-none">add</span>
-                {lotes.length === 0 ? 'Novo lote' : 'Novo lote'}
-              </button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={inlineOrdemLoading}
+                  onClick={handleNewLote}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-black disabled:opacity-60"
+                >
+                  <span className="material-icons text-base leading-none">add</span>
+                  {inlineOrdemLoading ? 'A abrir…' : 'Novo lote'}
+                </button>
+                <button
+                  type="button"
+                  disabled={lotes.length === 0}
+                  onClick={() => {
+                    const sorted = [...lotes].sort(
+                      (a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+                    );
+                    if (sorted[0]) handleEditLote(sorted[0].id);
+                  }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="material-icons text-base leading-none">edit</span>
+                  Editar último
+                </button>
+              </div>
             </>
           )}
         </div>
-      </div>
-    </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

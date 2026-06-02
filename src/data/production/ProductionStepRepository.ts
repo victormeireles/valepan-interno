@@ -4,6 +4,9 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { ensurePublicOrdemForEtapasLogFk } from '@/lib/production/ensure-public-ordem-for-etapas-fk';
+import { resolveOrdemProducaoOperacionalId } from '@/lib/production/ordem-producao-op-sync';
 import { Database, Json } from '@/types/database';
 import {
   ProductionStepLog,
@@ -88,8 +91,37 @@ export class ProductionStepRepository {
     // Eles serão preenchidos quando um lote de massa for criado através do ProductionMassaManager.createLote.
     // A validação dos campos de massa acontece na camada de domínio quando o lote é criado/atualizado.
 
+    const rawOrdemId = input.ordem_producao_id?.trim();
+    if (!rawOrdemId) {
+      throw new Error('ordem_producao_id é obrigatório para criar log de etapa');
+    }
+
+    const resolved = await resolveOrdemProducaoOperacionalId(this.supabase, rawOrdemId);
+    if ('error' in resolved) {
+      throw new Error(resolved.error);
+    }
+    const ordemId = resolved.opId;
+
+    const { data: opInternoRow } = await this.supabase
+      .from('ordens_producao')
+      .select('id')
+      .eq('id', ordemId)
+      .maybeSingle();
+    const publicSupabase = supabaseClientFactory.createServiceRolePublicClient();
+    const { data: opPublicRow } = await publicSupabase
+      .from('ordens_producao')
+      .select('id')
+      .eq('id', ordemId)
+      .maybeSingle();
+    const existsInterno = Boolean(opInternoRow?.id);
+    const existsPublic = Boolean((opPublicRow as { id?: string } | null)?.id);
+
+    if (existsInterno && !existsPublic) {
+      await ensurePublicOrdemForEtapasLogFk(this.supabase, publicSupabase, ordemId);
+    }
+
     const insertData: ProductionStepLogInsert = {
-      ordem_producao_id: input.ordem_producao_id,
+      ordem_producao_id: ordemId,
       etapa: input.etapa,
       usuario_id: input.usuario_id || null,
       qtd_entrada: input.qtd_entrada || null,
@@ -108,11 +140,20 @@ export class ProductionStepRepository {
       ph_massa: input.ph_massa !== undefined ? input.ph_massa : null,
     };
 
-    const { data, error } = await this.supabase
-      .from('producao_etapas_log')
-      .insert(insertData)
-      .select()
-      .single();
+    const attemptInsert = () =>
+      this.supabase.from('producao_etapas_log').insert(insertData).select().single();
+
+    let { data, error } = await attemptInsert();
+
+    if (
+      error?.code === '23503' &&
+      String(error.message).includes('producao_etapas_log_ordem_producao_id_fkey')
+    ) {
+      await ensurePublicOrdemForEtapasLogFk(this.supabase, publicSupabase, ordemId);
+      const retry = await attemptInsert();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[ProductionStepRepository.create] ❌ Erro ao criar:', {
@@ -122,6 +163,16 @@ export class ProductionStepRepository {
         error_hint: error.hint,
         insertData: JSON.stringify(insertData, null, 2),
       });
+      if (
+        error.code === '23503' &&
+        String(error.message).includes('producao_etapas_log_ordem_producao_id_fkey')
+      ) {
+        throw new Error(
+          existsInterno && !existsPublic
+            ? 'A ordem existe em interno.ordens_producao, mas a foreign key de producao_etapas_log ainda aponta para public.ordens_producao. Execute no Supabase SQL Editor o script sql/PATCH_FK_PRODUCAO_ETAPAS_LOG_ORDEM_INTERNO.sql e tente novamente.'
+            : `Erro ao criar log de etapa: ${error.message}`,
+        );
+      }
       throw new Error(`Erro ao criar log de etapa: ${error.message}`);
     }
 

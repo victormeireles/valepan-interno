@@ -140,10 +140,26 @@ export default function FilaModalEntradaEmbalagem({
                               : 'border-slate-100 bg-slate-50/80 hover:border-slate-200 hover:bg-white'
                       }`}
                     >
-                      <p className="font-bold text-slate-900 text-base">Carrinho {row.numero_carrinho}</p>
+                      <p className="font-bold text-slate-900 text-base">
+                        {row.rotulo_exibicao ??
+                          (row.eh_registro_adiantado
+                            ? `Saída do forno adiantada · ${row.latas_disponiveis} LT`
+                            : `Carrinho ${row.numero_carrinho}`)}
+                      </p>
                       <p className="mt-0.5 truncate text-xs text-slate-600">
                         {row.produto_nome} · <span className="font-mono">{row.lote_codigo}</span>
                       </p>
+                      {row.observacao_embalagem && (
+                        <p
+                          className="mt-1 flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100/80 px-1.5 py-0.5 text-[11px] font-medium leading-tight text-amber-900"
+                          title={`Obs. embalagem: ${row.observacao_embalagem}`}
+                        >
+                          <span className="material-icons shrink-0 text-[13px] leading-none text-amber-600" aria-hidden>
+                            sticky_note_2
+                          </span>
+                          <span className="min-w-0 truncate">{row.observacao_embalagem}</span>
+                        </p>
+                      )}
                       {esperaLabel && (
                         <p
                           className={`mt-1 text-xs font-medium ${
@@ -164,7 +180,13 @@ export default function FilaModalEntradaEmbalagem({
         {selecionado && (
           <div className="border-t border-slate-100 p-5 space-y-3 bg-slate-50/90 shrink-0">
             <p className="text-sm text-slate-700">
-              Carrinho <strong>{selecionado.numero_carrinho}</strong> — quantas latas entram na embalagem?
+              <strong>
+                {selecionado.rotulo_exibicao ??
+                  (selecionado.eh_registro_adiantado
+                    ? `Saída do forno adiantada · ${selecionado.latas_disponiveis} LT`
+                    : `Carrinho ${selecionado.numero_carrinho}`)}
+              </strong>{' '}
+              — quantas latas entram na embalagem?
             </p>
             <BandejasStepper
               id="latas-fila-embalagem"

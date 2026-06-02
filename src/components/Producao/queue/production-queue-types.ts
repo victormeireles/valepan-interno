@@ -1,3 +1,60 @@
+/** Saída de embalagem já registada (lista na fila expandida por OP). */
+export type FilaSaidaEmbalagemRegistroRow = {
+  log_id: string;
+  caixas: number;
+  em_andamento: boolean;
+  /** Horário do lançamento (exibição). */
+  registrado_em: string;
+};
+
+/** Entrada na embalagem já registada (lista na fila expandida por OP). */
+export type FilaEntradaEmbalagemRegistroRow = {
+  log_id: string;
+  carrinho: string;
+  latas: number;
+  em_andamento: boolean;
+  /** Máximo de LT editável (saldo da saída do forno vinculada). */
+  max_latas_disponivel: number;
+  bloqueado?: boolean;
+  eh_registro_adiantado?: boolean;
+  rotulo_exibicao?: string;
+};
+
+/** Saída do forno já registada (lista na fila expandida por OP). */
+export type FilaSaidaFornoRegistroRow = {
+  log_id: string;
+  carrinho: string;
+  bandejas: number;
+  em_andamento: boolean;
+  /** True quando já existe entrada na embalagem vinculada a este log. */
+  bloqueado_na_embalagem?: boolean;
+  eh_registro_adiantado?: boolean;
+  rotulo_exibicao?: string;
+};
+
+/** Entrada no forno já registada (lista na fila expandida por OP). */
+export type FilaEntradaFornoRegistroRow = {
+  log_id: string;
+  carrinho: string;
+  latas: number;
+  em_andamento: boolean;
+  /** Teto de LT conforme fermentação vinculada (0 = sem teto). */
+  max_latas_fermentacao: number;
+  eh_registro_adiantado?: boolean;
+  rotulo_exibicao?: string;
+};
+
+/** Carrinho já registado na fermentação (lista na fila expandida). */
+export type FilaFermentacaoCarrinhoRow = {
+  log_id: string;
+  carrinho: string;
+  latas: number;
+  /** True quando já existe entrada no forno vinculada a este log. */
+  bloqueado_no_forno?: boolean;
+  eh_registro_adiantado?: boolean;
+  rotulo_exibicao?: string;
+};
+
 /** Carrinho disponível na fila (dados agregados do servidor + ordem). */
 export interface CarrinhoFilaForno {
   log_id: string;
@@ -34,7 +91,15 @@ export interface ProductionQueueItem {
   saida_forno_bandejas_total?: number;
   /** Latas já registradas na entrada da embalagem (logs concluídos). */
   entrada_embalagem_latas_total?: number;
-  fermentacao_carrinhos?: Array<{ log_id: string; carrinho: string; latas: number }>;
+  /** Quantidade de registros concluídos na entrada da embalagem (lotes/carrinhos). */
+  entrada_embalagem_registros_count?: number;
+  /** Soma das caixas informadas em todos os lançamentos de saída de embalagem. */
+  saida_embalagem_caixas_informadas?: number | null;
+  saida_embalagem_registros?: FilaSaidaEmbalagemRegistroRow[];
+  fermentacao_carrinhos?: FilaFermentacaoCarrinhoRow[];
+  entrada_forno_entradas?: FilaEntradaFornoRegistroRow[];
+  saida_forno_registros?: FilaSaidaFornoRegistroRow[];
+  entrada_embalagem_registros?: FilaEntradaEmbalagemRegistroRow[];
   carrinhos_disponiveis_forno?: Array<{
     log_id: string;
     carrinho: string;
@@ -50,6 +115,8 @@ export interface ProductionQueueItem {
   lata_tipo_nome?: string | null;
   /** True quando o join com a tabela produtos falhou (ex.: produto removido). */
   produtoJoinFaltando?: boolean;
+  /** True quando a leitura em lote de `produtos` na fila falhou (produto pode existir no cadastro). */
+  produtoCargaFilaErro?: boolean;
   produtos: {
     nome: string;
     unidadeNomeResumido: string | null;
@@ -70,10 +137,27 @@ export interface ProductionQueueItem {
       somente_lata_antiga?: boolean | null;
     };
   } | null;
-  /** Texto curto do estoque na planilha (cliente + produto), quando encontrado. */
+  /** Texto curto do resumo de estoque (cliente + produto), quando encontrado. */
   estoque_resumo?: string | null;
-  /** Unidades de consumo já convertidas a partir da planilha (para conferência). */
+  /** Unidades de consumo já convertidas a partir do estoque (para conferência). */
   estoque_unidades_consumo?: number;
+  /** Demanda planejada em unidades (latas×buracos quando OP tem lata). */
+  planejado_unidades_consumo?: number;
+  /**
+   * Caixas planejadas conforme a ordem diária (já considerando o tipo de caixa escolhido).
+   * Fonte de verdade da meta de caixas na saída de embalagem.
+   */
+  caixas_planejadas?: number | null;
+  /**
+   * Observação de produção escrita na ordem diária (ex.: «lavar a lata depois»).
+   * Exibida em destaque nos cards da fila de massa e fermentação.
+   */
+  observacao_producao?: string | null;
+  /**
+   * Observação de embalagem escrita na ordem diária (ex.: «caixa lisa»).
+   * Exibida em destaque nos cards da fila de entrada e saída de embalagem.
+   */
+  observacao_embalagem?: string | null;
   /**
    * Quantidade a exibir no planejamento: max(0, necessidade OP − estoque), na unidade cadastral.
    * A OP em base continua em {@link qtd_planejada}.

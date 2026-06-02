@@ -1,7 +1,7 @@
 /**
  * Decide se um vínculo produto↔receita representa a receita de MASSA do produto.
- * No modelo multitipo, `produto_receitas.tipo` é a fonte de verdade quando existir;
- * caso contrário usa-se `receitas.tipo` (compatível com bases antigas).
+ * Tipo efetivo: `produto_receitas.tipo` quando for "massa"; senão `receitas.tipo`.
+ * Se o vínculo tiver outro tipo mas a receita for massa, aceita (cadastros legados/inconsistentes).
  */
 export function isVinculoReceitaMassaAtiva(pr: {
   tipo?: string | null;
@@ -11,9 +11,18 @@ export function isVinculoReceitaMassaAtiva(pr: {
   if (receita?.ativo === false) {
     return false;
   }
-  const linkTipo = pr.tipo;
-  if (linkTipo != null && linkTipo !== '') {
-    return linkTipo === 'massa';
+
+  const linkTipo = pr.tipo?.trim().toLowerCase();
+  const receitaTipo = receita?.tipo?.trim().toLowerCase();
+
+  if (linkTipo === 'massa') {
+    return true;
   }
-  return receita?.tipo === 'massa';
+  if (receitaTipo === 'massa') {
+    return true;
+  }
+  if (linkTipo != null && linkTipo !== '') {
+    return false;
+  }
+  return false;
 }

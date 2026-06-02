@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { OrdemProducaoTipoLata } from '@/domain/types/ordem-producao';
+import type { OrdemProducaoLataSelecao } from '@/domain/types/ordem-producao';
 import {
-  resolveAssadeiraIdForTipoLata,
+  resolveAssadeiraIdFromLataSelecao,
   type AssadeiraCandidato,
   type ProdutoUnidadesLataMeta,
 } from '@/lib/production/ordem-producao-assadeira';
@@ -48,21 +48,152 @@ export type DiariaHeaderDates = {
   dataEtiquetaDefault: string;
 };
 
+async function fetchOrdemDiariaHeaderDatesForResolve(
+  supabase: SupabaseClient<Database>,
+  ordemDiariaId: string,
+): Promise<{ ok: true; header: DiariaHeaderDates } | { ok: false; error: string }> {
+  const { data: h, error } = await supabase
+    .from('ordens_producao_diarias')
+    .select('data_producao, data_etiqueta_default')
+    .eq('id', ordemDiariaId)
+    .maybeSingle();
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  if (!h) {
+    return { ok: false, error: 'Ordem diária não encontrada.' };
+  }
+  return {
+    ok: true,
+    header: {
+      dataProducao: normalizeToISODate(String(h.data_producao)),
+      dataEtiquetaDefault: normalizeToISODate(String(h.data_etiqueta_default)),
+    },
+  };
+}
+
+/**
+ * Garante o UUID de `interno.ordens_producao` usado em `producao_etapas_log.ordem_producao_id`.
+ * Aceita id da OP ou id da linha em `ordens_producao_diarias_itens`; cria/liga OP se a linha ainda não tiver.
+ */
+export async function resolveOrdemProducaoOperacionalId(
+  supabase: SupabaseClient<Database>,
+  rawId: string,
+): Promise<{ opId: string } | { error: string }> {
+  const id = rawId?.trim();
+  if (!id) {
+    return { error: 'ID da ordem inválido.' };
+  }
+
+  const { data: opDirect, error: opErr } = await supabase
+    .from('ordens_producao')
+    .select('id')
+    .eq('id', id)
+    .maybeSingle();
+  if (opErr) {
+    return { error: opErr.message };
+  }
+  if (opDirect?.id) {
+    return { opId: opDirect.id };
+  }
+
+  const { data: item, error: itemErr } = await supabase
+    .from('ordens_producao_diarias_itens')
+    .select(
+      'id, ordem_diaria_id, prioridade, produto_id, tipo_lata, latas_planejadas, data_producao_override, ordens_producao_id',
+    )
+    .eq('id', id)
+    .maybeSingle();
+  if (itemErr) {
+    return { error: itemErr.message };
+  }
+  if (!item) {
+    return { error: 'Ordem de produção não encontrada.' };
+  }
+
+  const linkedId = item.ordens_producao_id?.trim() ?? '';
+  if (linkedId) {
+    const { data: linked, error: linkErr } = await supabase
+      .from('ordens_producao')
+      .select('id')
+      .eq('id', linkedId)
+      .maybeSingle();
+    if (linkErr) {
+      return { error: linkErr.message };
+    }
+    if (linked?.id) {
+      return { opId: linked.id };
+    }
+    await supabase
+      .from('ordens_producao_diarias_itens')
+      .update({ ordens_producao_id: null, updated_at: new Date().toISOString() })
+      .eq('id', item.id);
+  }
+
+  const hdr = await fetchOrdemDiariaHeaderDatesForResolve(supabase, item.ordem_diaria_id);
+  if (!hdr.ok) {
+    return { error: hdr.error };
+  }
+
+  const created = await insertOrdemProducaoForDiariaItem({
+    supabase,
+    header: hdr.header,
+    itemId: item.id,
+    prioridade: Number(item.prioridade ?? 1),
+    produtoId: item.produto_id,
+    tipoLata: item.tipo_lata,
+    latasPlanejadas: Number(item.latas_planejadas ?? 0),
+    dataProducaoOverride: item.data_producao_override,
+  });
+  if ('error' in created) {
+    return { error: created.error };
+  }
+  return { opId: created.opId };
+}
+
+const META_VAZIA: ProdutoUnidadesLataMeta = {
+  unidades_assadeira: null,
+  unidades_lata_antiga: null,
+  unidades_lata_nova: null,
+};
+
+/**
+ * Metadados do produto para resolução de lata. A resolução por UUID usa só `produto_assadeiras`;
+ * aqui pedimos o mínimo em `produtos` e toleramos BD sem colunas opcionais de lata.
+ */
 export async function fetchProdutoMetaForAssadeira(
   supabase: SupabaseClient<Database>,
   produtoId: string,
 ): Promise<ProdutoUnidadesLataMeta | null> {
+  const pid = produtoId?.trim();
+  if (!pid) return null;
+
   const { data, error } = await supabase
     .from('produtos')
-    .select('unidades_assadeira, unidades_lata_antiga, unidades_lata_nova')
-    .eq('id', produtoId)
+    .select('id, unidades_assadeira')
+    .eq('id', pid)
     .maybeSingle();
-  if (error || !data) return null;
-  return {
-    unidades_assadeira: data.unidades_assadeira ?? null,
-    unidades_lata_antiga: data.unidades_lata_antiga ?? null,
-    unidades_lata_nova: data.unidades_lata_nova ?? null,
-  };
+
+  if (!error && data) {
+    return {
+      unidades_assadeira: data.unidades_assadeira ?? null,
+      unidades_lata_antiga: null,
+      unidades_lata_nova: null,
+    };
+  }
+
+  if (error) {
+    const { data: idOnly, error: err2 } = await supabase
+      .from('produtos')
+      .select('id')
+      .eq('id', pid)
+      .maybeSingle();
+    if (!err2 && idOnly) {
+      return { ...META_VAZIA };
+    }
+  }
+
+  return null;
 }
 
 export async function fetchAssadeiraCandidatos(
@@ -102,7 +233,7 @@ export async function insertOrdemProducaoForDiariaItem(input: {
   itemId: string;
   prioridade: number;
   produtoId: string;
-  tipoLata: OrdemProducaoTipoLata;
+  tipoLata: OrdemProducaoLataSelecao;
   latasPlanejadas: number;
   dataProducaoOverride: string | null;
 }): Promise<{ opId: string } | { error: string }> {
@@ -111,10 +242,18 @@ export async function insertOrdemProducaoForDiariaItem(input: {
       ? normalizeToISODate(input.dataProducaoOverride)
       : normalizeToISODate(input.header.dataProducao);
 
-  const meta = await fetchProdutoMetaForAssadeira(input.supabase, input.produtoId);
-  if (!meta) return { error: 'Produto não encontrado para resolver lata.' };
+  let meta = await fetchProdutoMetaForAssadeira(input.supabase, input.produtoId);
   const candidatos = await fetchAssadeiraCandidatos(input.supabase, input.produtoId);
-  const assadeiraId = resolveAssadeiraIdForTipoLata(input.tipoLata, meta, candidatos);
+  if (!meta && candidatos.length > 0) {
+    meta = { ...META_VAZIA };
+  }
+  if (!meta) {
+    return { error: 'Produto não encontrado para resolver lata.' };
+  }
+  const assadeiraId = resolveAssadeiraIdFromLataSelecao(input.tipoLata, meta, candidatos);
+  if (!assadeiraId) {
+    return { error: 'Nenhuma lata cadastrada para este produto (produto_assadeiras).' };
+  }
 
   const lote = await generateLoteCodigoForDataProducao(input.supabase, dataProducaoOp);
 
@@ -161,7 +300,7 @@ export async function updateOrdemProducaoForDiariaItem(input: {
   header: DiariaHeaderDates;
   prioridade: number;
   produtoId: string;
-  tipoLata: OrdemProducaoTipoLata;
+  tipoLata: OrdemProducaoLataSelecao;
   latasPlanejadas: number;
   dataProducaoOverride: string | null;
 }): Promise<{ ok: true } | { error: string }> {
@@ -183,10 +322,18 @@ export async function updateOrdemProducaoForDiariaItem(input: {
       ? normalizeToISODate(input.dataProducaoOverride)
       : normalizeToISODate(input.header.dataProducao);
 
-  const meta = await fetchProdutoMetaForAssadeira(input.supabase, input.produtoId);
-  if (!meta) return { error: 'Produto não encontrado.' };
+  let meta = await fetchProdutoMetaForAssadeira(input.supabase, input.produtoId);
   const candidatos = await fetchAssadeiraCandidatos(input.supabase, input.produtoId);
-  const assadeiraId = resolveAssadeiraIdForTipoLata(input.tipoLata, meta, candidatos);
+  if (!meta && candidatos.length > 0) {
+    meta = { ...META_VAZIA };
+  }
+  if (!meta) {
+    return { error: 'Produto não encontrado.' };
+  }
+  const assadeiraId = resolveAssadeiraIdFromLataSelecao(input.tipoLata, meta, candidatos);
+  if (!assadeiraId) {
+    return { error: 'Nenhuma lata cadastrada para este produto (produto_assadeiras).' };
+  }
 
   const { error } = await input.supabase
     .from('ordens_producao')

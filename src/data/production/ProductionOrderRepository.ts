@@ -7,9 +7,9 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { ProductionOrderStatus } from '@/domain/types/producao-etapas';
 
-type ProductionOrderRow = Database['public']['Tables']['ordens_producao']['Row'];
-type ProductionOrderInsert = Database['public']['Tables']['ordens_producao']['Insert'];
-type ProductionOrderUpdate = Database['public']['Tables']['ordens_producao']['Update'];
+type ProductionOrderRow = Database['interno']['Tables']['ordens_producao']['Row'];
+type ProductionOrderInsert = Database['interno']['Tables']['ordens_producao']['Insert'];
+type ProductionOrderUpdate = Database['interno']['Tables']['ordens_producao']['Update'];
 
 export interface ProductionOrder {
   id: string;
@@ -17,6 +17,8 @@ export interface ProductionOrder {
   pedido_id: string | null;
   produto_id: string;
   qtd_planejada: number;
+  /** Lata da ordem diária; quando presente, `qtd_planejada` costuma ser número de latas. */
+  assadeira_id: string | null;
   prioridade: number;
   status: ProductionOrderStatus;
   data_producao: string | null;
@@ -217,6 +219,7 @@ export class ProductionOrderRepository {
       pedido_id: row.pedido_id,
       produto_id: row.produto_id,
       qtd_planejada: Number(row.qtd_planejada),
+      assadeira_id: row.assadeira_id ?? null,
       prioridade: row.prioridade || 0,
       status: (row.status || 'planejado') as ProductionOrderStatus,
       data_producao: row.data_producao,

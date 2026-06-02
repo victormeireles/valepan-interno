@@ -17,6 +17,8 @@ import {
   FORM_SECTION_TITLE,
   INPUT_COMPACT_LINE,
 } from '@/components/Producao/production-step-form-classes';
+import StepRegistrosDrawer from '@/components/Producao/StepRegistrosDrawer';
+import { formatarLinhaListaRegistroFila } from '@/lib/production/registro-adiantado-fila';
 
 type Props = {
   ordemProducaoId: string;
@@ -73,7 +75,11 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
   const filtrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return lista;
-    return lista.filter((row) => row.numero_carrinho.toLowerCase().includes(q));
+    return lista.filter(
+      (row) =>
+        row.numero_carrinho.toLowerCase().includes(q) ||
+        (row.rotulo_exibicao?.toLowerCase().includes(q) ?? false),
+    );
   }, [lista, busca]);
 
   const maxParaSelecionado = selected
@@ -148,13 +154,18 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
   return (
     <>
       <div className={`${CARD_FORM_BLOCK} mt-2 border-slate-200`}>
-        <p className={FORM_SECTION_TITLE}>Entrada na embalagem</p>
-        <p className="text-xs text-slate-500 sm:text-sm">
-          {produtoNome}
-          <span className="sr-only">
-            Novo abre carrinhos da saída do forno; informe latas. Saldo do carrinho atualiza após registrar.
-          </span>
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className={FORM_SECTION_TITLE}>Entrada na embalagem</p>
+            <p className="text-xs text-slate-500 sm:text-sm">
+              {produtoNome}
+              <span className="sr-only">
+                Novo abre carrinhos da saída do forno; informe latas. Saldo do carrinho atualiza após registrar.
+              </span>
+            </p>
+          </div>
+          <StepRegistrosDrawer ordemProducaoId={ordemProducaoId} etapa="entrada_embalagem" />
+        </div>
 
         <div>
           <button
@@ -242,7 +253,11 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
                         >
                           <div className="flex justify-between gap-2">
                             <span className="text-xs font-semibold text-slate-900 sm:text-sm">
-                              Carrinho {row.numero_carrinho}
+                              {formatarLinhaListaRegistroFila({
+                                rotuloExibicao: row.rotulo_exibicao ?? `Carrinho ${row.numero_carrinho}`,
+                                ehRegistroAdiantado: row.eh_registro_adiantado ?? false,
+                                latas: row.latas_saida,
+                              })}
                             </span>
                             <span className="text-[11px] text-slate-500 tabular-nums sm:text-xs">
                               {fmtDataHora(row.saida_fim)}
@@ -251,6 +266,17 @@ export default function EntradaEmbalagemStepClient({ ordemProducaoId, produtoNom
                           <p className="mt-0.5 text-[11px] text-slate-600 sm:text-xs">
                             Saída {row.latas_saida} LT · disp. <strong>{row.latas_disponiveis}</strong>
                           </p>
+                          {row.observacao_embalagem && (
+                            <p
+                              className="mt-1 flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium leading-tight text-amber-900"
+                              title={`Obs. embalagem: ${row.observacao_embalagem}`}
+                            >
+                              <span className="material-icons shrink-0 text-[13px] leading-none text-amber-600" aria-hidden>
+                                sticky_note_2
+                              </span>
+                              <span className="min-w-0 truncate">{row.observacao_embalagem}</span>
+                            </p>
+                          )}
                         </button>
                       </li>
                     );

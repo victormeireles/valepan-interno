@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   createMassaLote,
@@ -17,6 +17,7 @@ import {
 import { getReceitaDetalhes } from '@/app/actions/receitas-actions';
 import { getQuantityByStation } from '@/lib/utils/production-conversions';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
+import { pedirConfirmacaoSeMassaMetaAtingida } from '@/lib/production/massa-novo-lote-confirm';
 import { MassaLote } from '@/domain/types/producao-massa';
 import {
   formatNumberWithThousands,
@@ -25,6 +26,7 @@ import {
   parseReceitasBatidasInput,
 } from '@/lib/utils/number-utils';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
+import OrdemDestaqueLataObs from '@/components/Producao/OrdemDestaqueLataObs';
 import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
 import PhotoUploader from '@/components/PhotoUploader';
@@ -42,6 +44,12 @@ interface MassaStepClientProps {
     id: string;
     lote_codigo: string;
     qtd_planejada: number;
+    /** Unidades de consumo (latas×buracos quando OP tem lata). */
+    planejadoUnidadesConsumo?: number;
+    /** Nome da lata (assadeira) da ordem — destaque no topo da etapa. */
+    tipoLataNome?: string | null;
+    /** Observação de produção da ordem (ex.: lavar a lata depois) — destaque no topo. */
+    observacaoProducao?: string | null;
     produto: {
       id: string;
       nome: string;
@@ -49,11 +57,21 @@ interface MassaStepClientProps {
       unidades_assadeira?: number | null;
       box_units?: number | null;
       receita_massa?: {
+        receita_id?: string;
+        receita_nome?: string | null;
+        receita_codigo?: string | null;
         quantidade_por_produto: number;
       } | null;
     };
   };
   initialLoteId?: string;
+  /**
+   * Quando true (fluxo a partir do modal «Continuar massa» na fila), abre direto o formulário de novo lote
+   * com template do último lote — evita `router.push` e a sensação de «reinício» da página.
+   */
+  embedFromFilaModalNewLote?: boolean;
+  /** Fecha o overlay e o modal da fila, voltando à tela inicial da estação massa. */
+  onExitToFila?: () => void;
 }
 
 interface Masseira {
@@ -154,6 +172,11 @@ function bumpPhCampo(current: string, delta: number): string {
   return numberToDecimalCampoPtBr(clamped, 2);
 }
 
+function minutosInteiroDoDecimal(decimal: number): number {
+  if (!Number.isFinite(decimal) || decimal <= 0) return 0;
+  return Math.max(0, Math.round(decimal));
+}
+
 /** id da masseira chamada "1" / "Masseira 1" no cadastro (novo 1º lote). */
 function findMasseira1Id(masseiras: { id: string; nome: string }[]): string | null {
   const norm = (s: string) => s.trim().toLowerCase();
@@ -166,9 +189,14 @@ function findMasseira1Id(masseiras: { id: string; nome: string }[]): string | nu
   return byPrefix?.id ?? null;
 }
 
+/** Bloqueia submits paralelos da mesma OP (ex.: remount após refresh durante o save). */
+const massaSubmitLockByOrdem = new Set<string>();
+
 export default function MassaStepClient({
   ordemProducao,
   initialLoteId,
+  embedFromFilaModalNewLote = false,
+  onExitToFila,
 }: MassaStepClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -192,7 +220,8 @@ export default function MassaStepClient({
   const [temperaturaInput, setTemperaturaInput] = useState<string>(DEFAULT_TEMPERATURA_CAMPO);
   /** pH opcional — texto para permitir vírgula */
   const [phMassa, setPhMassa] = useState<string>(DEFAULT_PH_CAMPO);
-  const [texturaOk, setTexturaOk] = useState(false);
+  /** Textura gravada no lote (sem UI por agora: novo lote = «ok»; edição mantém valor do lote). */
+  const [texturaLote, setTexturaLote] = useState<'ok' | 'rasga'>('ok');
   const [etapasLogId, setEtapasLogId] = useState<string>('');
   /** Após salvar um lote novo, pergunta se quer outro do mesmo produto antes de ir à fila */
   const [perguntaOutroLoteAposCriar, setPerguntaOutroLoteAposCriar] = useState(false);
@@ -202,6 +231,8 @@ export default function MassaStepClient({
   /** Reinicia o PhotoUploader ao cancelar / após envio. */
   const [photoUploaderKey, setPhotoUploaderKey] = useState(0);
   const errorAlertRef = useRef<HTMLDivElement>(null);
+  const submitInFlightRef = useRef(false);
+  const submitSeqRef = useRef(0);
   /** Evita sobrescrever ingredientes vindos do último lote (template) quando receitaId dispara o efeito */
   const skipIngredientReloadFromReceitaRef = useRef(false);
   /** Evita rescalar ingredientes por receitasBatidas logo após copiar quantidades do último lote */
@@ -288,9 +319,9 @@ export default function MassaStepClient({
         : DEFAULT_TEMPERATURA_CAMPO,
     );
     if (opts?.asTemplate) {
-      setTexturaOk(false);
+      setTexturaLote('ok');
     } else {
-      setTexturaOk(lote.textura === 'ok');
+      setTexturaLote(lote.textura === 'ok' ? 'ok' : 'rasga');
     }
     if (lote.tempo_lenta != null && !Number.isNaN(lote.tempo_lenta)) {
       setTempoLentaMin(decimalMinutosParaInteiro(lote.tempo_lenta));
@@ -381,16 +412,18 @@ export default function MassaStepClient({
 
       if (initialLoteId) {
         logResult = await ensureMassaStepLog(ordemProducao.id);
-      } else if (lotesData.length > 0) {
-        // Já existe lote salvo: formulário para próximo lote — não criar log na BD até gravar dados válidos
-        setShowForm(true);
+      } else if (embedFromFilaModalNewLote && lotesData.length > 0) {
+        setEtapasLogId('');
         const sorted = [...lotesData].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         );
-        const ultimo = sorted[0];
-        if (ultimo) {
-          await loadLoteForEdit(ultimo, { asTemplate: true });
+        if (sorted[0]) {
+          await loadLoteForEdit(sorted[0], { asTemplate: true });
         }
+        setShowForm(true);
+      } else if (lotesData.length > 0) {
+        /* Há lotes gravados: mostrar primeiro o resumo com Editar / Novo — evita parecer que só dá para «continuar» outro lote. */
+        setShowForm(false);
       } else {
         logResult = await ensureMassaStepLog(ordemProducao.id);
         setShowForm(true);
@@ -413,21 +446,45 @@ export default function MassaStepClient({
         setShowForm(true);
       }
 
-      // Buscar receitas de massa vinculadas ao produto
+      // Buscar receitas de massa vinculadas ao produto (ou usar só a da ordem vinda do servidor)
       const receitasResult = await getReceitasMassaByProduto(ordemProducao.produto.id);
-      if (receitasResult.success && receitasResult.data) {
-        const receitasMapeadas = receitasResult.data
+      const rm = ordemProducao.produto.receita_massa;
+      let receitasMapeadas: { id: string; nome: string; codigo: string }[] = [];
+      if (receitasResult.success && receitasResult.data && receitasResult.data.length > 0) {
+        receitasMapeadas = receitasResult.data
           .filter((r): r is { id: string; nome: string; codigo: string | null; tipo: string } => r !== null && r !== undefined)
           .map((r) => ({
             id: r.id,
             nome: r.nome,
             codigo: r.codigo || '',
           }));
-        setReceitas(receitasMapeadas);
-        // Só pré-seleciona receita única no 1º lote; edição/template já definem receitaId
-        if (receitasMapeadas.length === 1 && !initialLoteId && lotesData.length === 0) {
-          setReceitaId(receitasMapeadas[0].id);
+      } else if (rm?.receita_id?.trim()) {
+        const idRm = rm.receita_id.trim();
+        receitasMapeadas = [
+          {
+            id: idRm,
+            nome: (rm.receita_nome ?? '').trim() || 'Receita do produto',
+            codigo: (rm.receita_codigo ?? '').trim(),
+          },
+        ];
+      }
+      setReceitas(receitasMapeadas);
+      /** Pré-seleção: receita ativa do cadastro; senão primeira opção (nome) quando há várias.
+       * Não sobrescreve edição por `initialLoteId` nem template do último lote (modal / lista). */
+      const skipAutoReceita =
+        Boolean(initialLoteId) || (embedFromFilaModalNewLote && lotesData.length > 0);
+      if (!skipAutoReceita && receitasMapeadas.length > 0) {
+        const preferred = rm?.receita_id?.trim();
+        const sorted = [...receitasMapeadas].sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+        );
+        let chosen = '';
+        if (preferred && receitasMapeadas.some((r) => r.id === preferred)) {
+          chosen = preferred;
+        } else {
+          chosen = sorted[0]?.id ?? '';
         }
+        if (chosen) setReceitaId(chosen);
       }
 
       // Buscar masseiras
@@ -439,7 +496,71 @@ export default function MassaStepClient({
     };
 
     loadData();
-  }, [ordemProducao.id, ordemProducao.produto.id, initialLoteId, loadLoteForEdit]);
+  }, [
+    ordemProducao.id,
+    ordemProducao.produto.id,
+    ordemProducao.produto.receita_massa?.receita_id,
+    ordemProducao.produto.receita_massa?.receita_nome,
+    ordemProducao.produto.receita_massa?.receita_codigo,
+    initialLoteId,
+    embedFromFilaModalNewLote,
+    loadLoteForEdit,
+  ]);
+
+  /** Se a lista de receitas chegar depois ou o servidor não enviou preferida, garante uma opção selecionada. */
+  useEffect(() => {
+    if (editingLoteId) return;
+    if (initialLoteId) return;
+    if (embedFromFilaModalNewLote && lotes.length > 0) return;
+    if (receitaId) return;
+
+    const preferred = ordemProducao.produto.receita_massa?.receita_id?.trim();
+    if (receitas.length > 0) {
+      const sorted = [...receitas].sort((a, b) =>
+        a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+      );
+      const fallbackFirst = sorted[0]?.id ?? '';
+      const chosen =
+        preferred && receitas.some((r) => r.id === preferred) ? preferred : fallbackFirst;
+      if (chosen) setReceitaId(chosen);
+      return;
+    }
+    if (preferred) setReceitaId(preferred);
+  }, [
+    receitas,
+    receitaId,
+    editingLoteId,
+    initialLoteId,
+    embedFromFilaModalNewLote,
+    lotes.length,
+    ordemProducao.produto.receita_massa?.receita_id,
+  ]);
+
+  const receitaResumoNovoLote = useMemo(() => {
+    if (editingLoteId) return null;
+    const idEff =
+      receitaId.trim() || ordemProducao.produto.receita_massa?.receita_id?.trim() || '';
+    if (!idEff) return null;
+    const row = receitas.find((r) => r.id === idEff);
+    if (row) {
+      const c = row.codigo?.trim();
+      const n = row.nome?.trim();
+      return [c, n].filter(Boolean).join(' · ') || idEff;
+    }
+    const rm = ordemProducao.produto.receita_massa;
+    if (rm?.receita_id?.trim() === idEff) {
+      const bits = [rm.receita_codigo?.trim(), rm.receita_nome?.trim()].filter(Boolean);
+      if (bits.length) return bits.join(' · ');
+    }
+    return `Receita (${idEff.slice(0, 8)}…)`;
+  }, [
+    editingLoteId,
+    receitaId,
+    receitas,
+    ordemProducao.produto.receita_massa?.receita_id,
+    ordemProducao.produto.receita_massa?.receita_nome,
+    ordemProducao.produto.receita_massa?.receita_codigo,
+  ]);
 
   // Carregar ingredientes quando receita for selecionada
   useEffect(() => {
@@ -550,12 +671,17 @@ export default function MassaStepClient({
   // Calcular receitas já batidas
   const receitasJaBatidas = lotes.reduce((sum, lote) => sum + lote.receitas_batidas, 0);
 
-  const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
-    unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
-    unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
-    box_units: ordemProducao.produto.box_units || null,
-    receita_massa: ordemProducao.produto.receita_massa,
-  });
+  const quantityInfo = getQuantityByStation(
+    'massa',
+    ordemProducao.qtd_planejada,
+    {
+      unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
+      unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
+      box_units: ordemProducao.produto.box_units || null,
+      receita_massa: ordemProducao.produto.receita_massa,
+    },
+    ordemProducao.planejadoUnidadesConsumo,
+  );
 
   const receitasNecessarias = quantityInfo.receitas?.value || 0;
   const receitasRestantes = Math.max(0, receitasNecessarias - receitasJaBatidas);
@@ -574,10 +700,10 @@ export default function MassaStepClient({
     setMasseiraId('');
     setReceitasBatidas(0);
     setReceitasBatidasField('');
+    setTexturaLote('ok');
     setTempoLentaMin(0);
     setTempoRapidaMin(0);
     setTemperaturaInput(DEFAULT_TEMPERATURA_CAMPO);
-    setTexturaOk(false);
     setPhMassa(DEFAULT_PH_CAMPO);
     setLotePhotoFile(null);
     setPhotoUploaderKey((k) => k + 1);
@@ -585,6 +711,9 @@ export default function MassaStepClient({
 
   /** Abre o formulário de novo lote com os mesmos dados do último lote (ex.: após cancelar) */
   const startNewLoteFromList = async (): Promise<boolean> => {
+    if (!pedirConfirmacaoSeMassaMetaAtingida(receitasJaBatidas, receitasNecessarias)) {
+      return false;
+    }
     setError(null);
     /** Log de etapa só é criado ao gravar um lote válido — evita stub vazio na base. */
     setEtapasLogId('');
@@ -598,10 +727,37 @@ export default function MassaStepClient({
     return true;
   };
 
+  const finalizeSuccessAfterSave = async (
+    savedAsNew: boolean,
+    fotoWarning: string | null,
+    submitSeq: number,
+  ) => {
+    const lotesResult = await getMassaLotesByOrder(ordemProducao.id);
+    if (submitSeq !== submitSeqRef.current) return;
+    if (lotesResult.success && lotesResult.data) {
+      setLotes(lotesResult.data);
+    }
+    cancelForm();
+    setError(null);
+    if (fotoWarning) {
+      setError(`Lote salvo, mas a foto não foi anexada: ${fotoWarning}`);
+    }
+    router.refresh();
+    if (savedAsNew) {
+      setPerguntaOutroLoteAposCriar(true);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitInFlightRef.current || massaSubmitLockByOrdem.has(ordemProducao.id)) return;
+    submitInFlightRef.current = true;
+    massaSubmitLockByOrdem.add(ordemProducao.id);
+    const submitSeq = ++submitSeqRef.current;
     setError(null);
     setLoading(true);
+    let saveCompleted = false;
+    let fotoWarning: string | null = null;
 
       try {
       const receitasParaSalvar =
@@ -610,8 +766,24 @@ export default function MassaStepClient({
         throw new Error('Informe a quantidade de receitas (mínimo 0,5), usando vírgula para decimais.');
       }
 
-      if (!editingLoteId && (!receitaId || !String(receitaId).trim())) {
-        throw new Error('Selecione a receita de massa.');
+      let receitaIdParaSalvar = receitaId.trim();
+      if (!receitaIdParaSalvar && receitas.length > 0) {
+        const preferred = ordemProducao.produto.receita_massa?.receita_id?.trim();
+        const sorted = [...receitas].sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+        );
+        receitaIdParaSalvar =
+          preferred && receitas.some((r) => r.id === preferred)
+            ? preferred
+            : (sorted[0]?.id ?? '');
+      }
+      if (!receitaIdParaSalvar && ordemProducao.produto.receita_massa?.receita_id?.trim()) {
+        receitaIdParaSalvar = ordemProducao.produto.receita_massa.receita_id.trim();
+      }
+      if (!editingLoteId && !receitaIdParaSalvar) {
+        throw new Error(
+          'Não há receita de massa configurada para este produto. Cadastre uma receita de massa no produto.',
+        );
       }
 
       const temperaturaMedida = parseDecimalCampoPtBr(temperaturaInput);
@@ -676,7 +848,7 @@ export default function MassaStepClient({
         result = await updateMassaLote(editingLoteId, {
           receitas_batidas: receitasParaSalvar,
           temperatura_final: temperaturaMedida,
-          textura: texturaOk ? 'ok' : 'rasga',
+          textura: texturaLote,
           tempo_lenta: Math.max(0, Math.floor(tempoLentaMin)),
           tempo_rapida: Math.max(0, Math.floor(tempoRapidaMin)),
           ph_massa: phParsed,
@@ -686,11 +858,11 @@ export default function MassaStepClient({
         // Cria novo lote
         result = await createMassaLote({
           producao_etapas_log_id: logId,
-          receita_id: receitaId,
+          receita_id: receitaIdParaSalvar,
           masseira_id: masseiraId || null,
           receitas_batidas: receitasParaSalvar,
           temperatura_final: temperaturaMedida,
-          textura: texturaOk ? 'ok' : 'rasga',
+          textura: texturaLote,
           tempo_lenta: Math.max(0, Math.floor(tempoLentaMin)),
           tempo_rapida: Math.max(0, Math.floor(tempoRapidaMin)),
           ph_massa: phParsed,
@@ -702,10 +874,10 @@ export default function MassaStepClient({
         throw new Error(result.error || 'Erro ao salvar lote');
       }
 
+      saveCompleted = true;
       const savedLote = result.data;
       const targetLogId = savedLote.id;
 
-      let fotoWarning: string | null = null;
       if (lotePhotoFile) {
         try {
           const fd = new FormData();
@@ -730,27 +902,20 @@ export default function MassaStepClient({
         }
       }
 
-      // Recarrega lotes
-      const lotesResult = await getMassaLotesByOrder(ordemProducao.id);
-      if (lotesResult.success && lotesResult.data) {
-        setLotes(lotesResult.data);
+      if (submitSeq !== submitSeqRef.current) {
+        if (saveCompleted) {
+          await finalizeSuccessAfterSave(!editingLoteId, fotoWarning, submitSeq);
+        }
+        return;
       }
 
-      // Limpa formulário
-      cancelForm();
-
-      if (fotoWarning) {
-        setError(`Lote salvo, mas a foto não foi anexada: ${fotoWarning}`);
-      }
-
-      if (editingLoteId) {
-        router.push(filaUrlForProductionStep('massa'));
-        router.refresh();
-      } else {
-        router.refresh();
-        setPerguntaOutroLoteAposCriar(true);
-      }
+      await finalizeSuccessAfterSave(!editingLoteId, fotoWarning, submitSeq);
     } catch (err) {
+      if (saveCompleted) {
+        await finalizeSuccessAfterSave(!editingLoteId, fotoWarning, submitSeq);
+        return;
+      }
+      if (submitSeq !== submitSeqRef.current) return;
       setError(err instanceof Error ? err.message : 'Erro ao salvar');
       // Scroll para o erro após um pequeno delay para garantir que o DOM foi atualizado
       setTimeout(() => {
@@ -760,6 +925,8 @@ export default function MassaStepClient({
         });
       }, 100);
     } finally {
+      massaSubmitLockByOrdem.delete(ordemProducao.id);
+      submitInFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -785,10 +952,17 @@ export default function MassaStepClient({
       loteCodigo={ordemProducao.lote_codigo}
       produtoNome={ordemProducao.produto.nome}
       showLoteProdutoSubtitle={false}
-      backHref={filaUrlForProductionStep('massa')}
+      backHref={onExitToFila ? undefined : filaUrlForProductionStep('massa')}
+      onBackClick={onExitToFila}
       denseHeader
+      registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'massa' }}
       {...PRODUCTION_STEP_DENSE_SHELL}
     >
+      <OrdemDestaqueLataObs
+        tipoLataNome={ordemProducao.tipoLataNome ?? null}
+        observacaoProducao={ordemProducao.observacaoProducao ?? null}
+      />
+
       {quantityInfo.receitas && receitasNecessarias > 0 && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 space-y-1.5 sm:rounded-xl sm:px-4 sm:py-3 sm:space-y-2">
           <div className="flex flex-wrap justify-between items-baseline gap-2 text-xs sm:text-sm">
@@ -807,6 +981,11 @@ export default function MassaStepClient({
               <span className="text-emerald-700 font-semibold">Meta de receitas atingida</span>
             )}
           </div>
+          {showForm && !editingLoteId && receitasRestantes === 0 && receitasNecessarias > 0 && (
+            <p className="text-xs text-amber-800 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
+              Lote extra além da meta — use quando houve perda ou refugo nas etapas seguintes.
+            </p>
+          )}
           <div
             className="h-2 w-full rounded-full bg-slate-200 overflow-hidden sm:h-2.5"
             role="progressbar"
@@ -945,32 +1124,13 @@ export default function MassaStepClient({
                   )}
                 </div>
 
-                {/* Seleção de Receita - apenas para novo lote */}
-                {!editingLoteId && (
-                  <div className="space-y-1.5">
-                    <label className={FORM_FIELD_LABEL}>Receita</label>
-                    <div className="relative">
-                      <select
-                        value={receitaId}
-                        onChange={(e) => setReceitaId(e.target.value)}
-                        required
-                        className="w-full rounded-lg border-2 border-gray-100 bg-gray-50 px-2.5 py-2 text-xs font-medium text-gray-900 transition-all appearance-none cursor-pointer focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 sm:px-3 sm:py-2.5 sm:text-sm"
-                      >
-                        <option value="">Selecione uma receita</option>
-                        {receitas.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.codigo} - {r.nome}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="material-icons absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                        expand_more
-                      </span>
-                    </div>
+                {!editingLoteId && receitaResumoNovoLote && (
+                  <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 sm:px-4">
+                    <p className={FORM_FIELD_LABEL}>Receita (cadastro do produto)</p>
+                    <p className="text-sm font-semibold text-slate-900">{receitaResumoNovoLote}</p>
                   </div>
                 )}
 
-                {/* Lista de Ingredientes com Quantidades Editáveis */}
                 {ingredientes.length > 0 && (
                   <Accordion title="Ingredientes" defaultOpen={false}>
                     <div className="space-y-2 sm:space-y-3">
@@ -1309,24 +1469,6 @@ export default function MassaStepClient({
                   </div>
                 </div>
 
-                {/* Textura */}
-                <div className="space-y-1.5">
-                  <p className={FORM_SECTION_TITLE}>Textura</p>
-                  <div className="rounded-lg border-2 border-gray-100 bg-gray-50 px-3 py-2 sm:px-4 sm:py-2.5">
-                    <label className="flex cursor-pointer items-center gap-2 sm:gap-3">
-                      <input
-                        type="checkbox"
-                        checked={texturaOk}
-                        onChange={(e) => setTexturaOk(e.target.checked)}
-                        required
-                        aria-label="Textura OK: mole, estica, não rasga"
-                        className="h-5 w-5 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                      />
-                      <span className="text-sm font-semibold text-gray-900 sm:text-base">Macio</span>
-                    </label>
-                  </div>
-                </div>
-
                 <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:p-4">
                   <p className={FORM_SECTION_TITLE}>
                     Foto <span className="text-xs font-medium text-gray-500 sm:text-sm">(opcional)</span>
@@ -1346,20 +1488,26 @@ export default function MassaStepClient({
                    submitLabel="Salvar Lote"
                    cancelLabel="Cancelar"
                    loading={loading}
-                   disabled={!texturaOk || (!editingLoteId && (!receitaId || !masseiraId))}
+                   disabled={!editingLoteId && !masseiraId}
                    compact
                  />
               </form>
             </div>
           )}
 
-      {/* Quando o formulário está fechado: novo lote (com cópia do último) ou voltar */}
+      {/* Quando o formulário está fechado: lista de lotes + novo lote ou voltar */}
       {!showForm && (
         <div className="space-y-1.5 pt-1.5 sm:space-y-2 sm:pt-3">
           {error && !perguntaOutroLoteAposCriar && (
             <div ref={errorAlertRef}>
               <ProductionErrorAlert error={error} />
             </div>
+          )}
+          {lotes.length > 0 && (
+            <p className="mb-2 text-[11px] leading-snug text-gray-600">
+              {lotes.length} lote(s) nesta ordem. Use <strong className="text-gray-800">Registros</strong> no topo
+              para ver, editar ou excluir.
+            </p>
           )}
           {lotes.length > 0 && (
             <button
@@ -1371,9 +1519,14 @@ export default function MassaStepClient({
               Novo lote
             </button>
           )}
+          {lotes.length === 0 && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 sm:text-sm">
+              Não há lotes nesta ordem (por exemplo, se todos foram excluídos). Volte à fila e abra de novo pela etapa Massa para registar um lote.
+            </p>
+          )}
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() => (onExitToFila ? onExitToFila() : router.back())}
             className="w-full rounded-lg border-2 border-gray-100 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:border-gray-200 hover:bg-gray-50 sm:px-5 sm:py-2.5 sm:text-sm"
           >
             Voltar
@@ -1406,8 +1559,13 @@ export default function MassaStepClient({
                 onClick={() => {
                   setError(null);
                   setPerguntaOutroLoteAposCriar(false);
-                  router.push(filaUrlForProductionStep('massa'));
-                  router.refresh();
+                  if (onExitToFila) {
+                    onExitToFila();
+                    router.refresh();
+                  } else {
+                    router.push(filaUrlForProductionStep('massa'));
+                    router.refresh();
+                  }
                 }}
                 className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-base"
               >

@@ -116,7 +116,7 @@ export default function FilaModalIniciarFermentacao({ open, item, onClose, onSuc
           </div>
 
           <NumberDecimalInput
-            label="Quantidade de assadeiras produzidas"
+            label="Latas produzidas (LT)"
             value={assadeiras}
             onChange={(value) => {
               const v = Math.round(value);

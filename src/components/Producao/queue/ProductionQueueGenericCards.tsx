@@ -7,19 +7,37 @@ import VolumeTriploProgressoBar from '@/components/Producao/VolumeTriploProgress
 import FilaOrdemProducaoProgressBar from '@/components/Producao/queue/FilaOrdemProducaoProgressBar';
 import type { ProductionQueueItem } from '@/components/Producao/queue/production-queue-types';
 import {
+  BTN_ADIANTAR_ICON_SM,
+  BTN_ADIANTAR_PRIMARY_INLINE,
+  BTN_ADIANTAR_SECONDARY,
+  filaEtapaTemBotaoAdiantar,
+} from '@/components/Producao/queue/fila-adiantar-etapas-ui';
+import {
   entradaEmbalagemItemProgressMetrics,
   filaCardEstadoVisual,
   filaMensagemPreRequisitoEtapaAnterior,
   fermentacaoProgressMetricsForQueueItem,
+  labelConfirmarEtapasNaFila,
+  ordemAdiantarEtapasComoSecundarioNaFila,
+  ordemFaltaPreRequisitosNaEtapaFila,
+  ordemMostrarConfirmarEtapasNaFila,
   ordemPreRequisitosAtendidosParaTrabalharNaEtapa,
+  ordemProntaNaEtapaFila,
   planningOrderRankById,
   saidaEmbalagemItemProgressMetrics,
-  filaOrdemProducaoProgressoSequencialPct,
+  filaEtapaProgressoRelativoPct,
   type FilaCardEstadoVisual,
 } from '@/components/Producao/queue/production-queue-metrics';
+import {
+  massaReceitasMetaAtingida,
+  pedirConfirmacaoSeMassaMetaAtingida,
+} from '@/lib/production/massa-novo-lote-confirm';
 import { getQuantityByStation, type Station } from '@/lib/utils/production-conversions';
 import { etapaPathForOrdem } from '@/lib/production/production-station-routes';
 import type { ProductionQueueStationFlags } from '@/hooks/useProductionQueueDerived';
+import FilaEntradaEmbalagemRegistrosEditor from '@/components/Producao/queue/FilaEntradaEmbalagemRegistrosEditor';
+import FilaSaidaEmbalagemRegistrosEditor from '@/components/Producao/queue/FilaSaidaEmbalagemRegistrosEditor';
+import FilaFermentacaoCarrinhosEditor from '@/components/Producao/queue/FilaFermentacaoCarrinhosEditor';
 
 interface Props {
   queueForCardsActive: ProductionQueueItem[];
@@ -33,7 +51,8 @@ interface Props {
   effectiveStation: Station;
   flags: ProductionQueueStationFlags;
   router: { push: (href: string) => void; refresh: () => void };
-  onOpenMassaLotes: (item: ProductionQueueItem) => void;
+  /** `list` = ver/editar lotes; `newLote` = abrir formulário de novo lote. */
+  onOpenMassaLotes: (item: ProductionQueueItem, mode?: 'list' | 'newLote') => void;
   /** Na fermentação: abre modal (carrinho + assadeiras) em vez de ir à página da ordem. */
   onOpenFermentacaoModal?: (item: ProductionQueueItem) => void;
   onOpenPreRequisitoSync: (item: ProductionQueueItem) => void;
@@ -41,7 +60,11 @@ interface Props {
 
 const BTN_PRIMARY =
   'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold shadow-sm border transition-all whitespace-nowrap px-3 py-2.5 text-xs leading-tight min-h-[48px] sm:gap-2 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base sm:leading-normal sm:min-h-[52px]';
+/** Botões no card expandido (menos altos, leitura em fila). */
+const BTN_CARD =
+  'inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm transition-colors min-h-[42px] sm:min-h-[44px]';
 const BTN_PRIMARY_ICON = 'material-icons text-[18px] leading-none sm:text-[26px]';
+const BTN_CARD_ICON = 'material-icons text-[20px] leading-none';
 
 const MASSA_METRIC_LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
 const MASSA_METRIC_VALUE =
@@ -174,19 +197,44 @@ export default function ProductionQueueGenericCards({
         const totalNaFila = totalOrdensNaFila;
 
         const podeAtuarNestaEtapa = ordemPreRequisitosAtendidosParaTrabalharNaEtapa(item, effectiveStation);
+        // Etapa já 100% (meta atingida / adiantada): não permitir NOVO registro de latas;
+        // edição/exclusão continuam disponíveis pelos editores inline do card.
+        const etapaConcluida =
+          !item.produtoJoinFaltando && ordemProntaNaEtapaFila(item, effectiveStation);
+        const faltaPreRequisitos = ordemFaltaPreRequisitosNaEtapaFila(item, effectiveStation);
+        const mostrarConfirmarEtapas = ordemMostrarConfirmarEtapasNaFila(item, effectiveStation);
+        const labelConfirmarEtapas = labelConfirmarEtapasNaFila(item, effectiveStation);
+        const mostrarAdiantarBtn =
+          podeSincronizarPreRequisito && ordemMostrarConfirmarEtapasNaFila(item, effectiveStation);
+        const adiantarComoSecundario = ordemAdiantarEtapasComoSecundarioNaFila(item, effectiveStation);
+        const adiantarOcultoNoColapsado = filaEtapaTemBotaoAdiantar(effectiveStation);
         const msgAguardando = filaMensagemPreRequisitoEtapaAnterior(effectiveStation);
 
         const filaEstado = filaCardEstadoVisual(item, effectiveStation, {
           fromProntosSection,
           isFirstActionableInFila,
         });
-        const shell = filaCardShellClass(filaEstado, Boolean(item.produtoJoinFaltando));
+        const shell = filaCardShellClass(
+          filaEstado,
+          Boolean(item.produtoJoinFaltando && !item.produtoCargaFilaErro),
+        );
         const estadoSelo = filaCardSelo(filaEstado);
 
         const quantidadeParaCalculo = item.qtd_planejada;
-        const quantityInfo = getQuantityByStation(effectiveStation, quantidadeParaCalculo, item.produtos);
+        const unConsumo =
+          item.planejado_unidades_consumo != null &&
+          Number.isFinite(item.planejado_unidades_consumo) &&
+          item.planejado_unidades_consumo >= 0
+            ? item.planejado_unidades_consumo
+            : undefined;
+        const quantityInfo = getQuantityByStation(
+          effectiveStation,
+          quantidadeParaCalculo,
+          item.produtos,
+          unConsumo,
+        );
         const headerQuantityReadable = isEntradaEmbalagem
-          ? getQuantityByStation('saida_forno', quantidadeParaCalculo, item.produtos).readable
+          ? getQuantityByStation('saida_forno', quantidadeParaCalculo, item.produtos, unConsumo).readable
           : quantityInfo.readable;
         const headerQuantityReadableSemCapacidade = stripCapacidadePorLata(headerQuantityReadable);
         const embalagemEntradaProgress =
@@ -215,6 +263,10 @@ export default function ProductionQueueGenericCards({
 
         const receitasNecessarias = quantityInfo.receitas?.value || 0;
         const receitasBatidas = item.receitas_batidas || 0;
+        const massaMetaJaAtingida =
+          isMassa &&
+          !item.produtoJoinFaltando &&
+          massaReceitasMetaAtingida(receitasBatidas, receitasNecessarias);
 
         const showMassaMetrics =
           isMassa && !!(quantityInfo.receitas || quantityInfo.assadeiras || quantityInfo.unidades);
@@ -239,16 +291,39 @@ export default function ProductionQueueGenericCards({
                 .join(' ')
             : '';
 
+        // Observação em destaque conforme o estágio: produção (massa/fermentação) ou embalagem.
+        const obsProducaoDestaque =
+          (effectiveStation === 'massa' || effectiveStation === 'fermentacao') &&
+          item.observacao_producao &&
+          item.observacao_producao.trim() !== ''
+            ? item.observacao_producao.trim()
+            : '';
+        const obsEmbalagemDestaque =
+          (effectiveStation === 'entrada_embalagem' || effectiveStation === 'saida_embalagem') &&
+          item.observacao_embalagem &&
+          item.observacao_embalagem.trim() !== ''
+            ? item.observacao_embalagem.trim()
+            : '';
+        const obsDestaqueTexto = obsProducaoDestaque || obsEmbalagemDestaque;
+        const obsDestaqueLabel = obsProducaoDestaque
+          ? 'Observação da produção'
+          : 'Observação de embalagem';
+
         const isExpanded = expandedOrdemId === item.id;
 
         if (!isExpanded) {
+          const mostrarConfirmarColapsado =
+            mostrarConfirmarEtapas && podeSincronizarPreRequisito && !item.produtoJoinFaltando;
           return (
-            <button
+            <div
               key={item.id}
-              type="button"
-              onClick={() => toggleExpandOrdem(item.id)}
-              className={`flex w-full min-h-[52px] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left shadow-sm active:opacity-95 ${shell}`}
+              className={`flex w-full min-h-[52px] items-center gap-2 rounded-xl border px-2 py-2 shadow-sm sm:gap-2.5 sm:px-3 sm:py-2.5 ${shell}`}
             >
+              <button
+                type="button"
+                onClick={() => toggleExpandOrdem(item.id)}
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-95"
+              >
               <span
                 className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200/80 bg-slate-100/95 px-2 py-1 tabular-nums text-xs font-bold leading-none text-slate-700"
                 title="Posição na fila de planejamento / total"
@@ -262,7 +337,7 @@ export default function ProductionQueueGenericCards({
                   </span>
                   {!item.produtoJoinFaltando && (
                     <FilaOrdemProducaoProgressBar
-                      pct={filaOrdemProducaoProgressoSequencialPct(item)}
+                      pct={filaEtapaProgressoRelativoPct(item, effectiveStation)}
                       className="basis-0"
                     />
                   )}
@@ -299,13 +374,42 @@ export default function ProductionQueueGenericCards({
                     {fermentacaoResumoCompacto}
                   </span>
                 )}
+                {isEntradaEmbalagem &&
+                  (item.receitas_batidas ?? 0) > 0 &&
+                  !item.produtoJoinFaltando &&
+                  !adiantarOcultoNoColapsado && (
+                  <span className="block text-left text-[11px] font-medium text-emerald-800">
+                    {Math.round(item.receitas_batidas ?? 0)} receita
+                    {Math.round(item.receitas_batidas ?? 0) === 1 ? '' : 's'} na massa
+                    {mostrarConfirmarColapsado ? ' · expanda para confirmar etapas' : ''}
+                  </span>
+                )}
+                {mostrarConfirmarColapsado &&
+                  !adiantarOcultoNoColapsado &&
+                  effectiveStation !== 'entrada_embalagem' && (
+                  <span className="block text-left text-[11px] font-medium text-violet-800">
+                    Etapas anteriores em falta · expanda para confirmar etapas
+                  </span>
+                )}
+                {obsDestaqueTexto && !item.produtoJoinFaltando && (
+                  <span
+                    className="mt-0.5 block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-left text-[11px] font-semibold leading-tight text-amber-900"
+                    title={`${obsDestaqueLabel}: ${obsDestaqueTexto}`}
+                  >
+                    <span className="font-bold uppercase tracking-wide text-amber-700">
+                      {obsProducaoDestaque ? 'Obs. produção' : 'Obs. embalagem'}
+                    </span>{' '}
+                    {obsDestaqueTexto}
+                  </span>
+                )}
               </div>
               {item.produtoJoinFaltando && (
                 <span className="material-icons shrink-0 text-lg text-rose-500" aria-hidden>
                   error_outline
                 </span>
               )}
-            </button>
+              </button>
+            </div>
           );
         }
 
@@ -318,7 +422,13 @@ export default function ProductionQueueGenericCards({
           >
             <div className="flex flex-col gap-2 sm:gap-4">
               {/* Linha 1: cabeçalho + ação (massa: layout em colunas; resto: linha flex) */}
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div
+                className={`flex flex-col gap-2 sm:gap-4 ${
+                  isEntradaEmbalagem || isSaidaEmbalagem
+                    ? ''
+                    : 'sm:flex-row sm:items-start sm:justify-between'
+                }`}
+              >
                 {isMassa ? (
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs leading-snug sm:gap-2.5 sm:text-sm sm:leading-normal">
                     <div className="flex min-w-0 items-start gap-1.5 sm:gap-2">
@@ -352,6 +462,18 @@ export default function ProductionQueueGenericCards({
                         <span className="text-slate-500">Lata</span>{' '}
                         <span className="font-semibold text-slate-900">{item.lata_tipo_nome}</span>
                       </p>
+                    )}
+
+                    {obsDestaqueTexto && !item.produtoJoinFaltando && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          {obsDestaqueLabel}
+                          {item.lata_tipo_nome ? ` · ${item.lata_tipo_nome}` : ''}
+                        </div>
+                        <p className="mt-0.5 whitespace-pre-line text-xs font-semibold text-amber-900">
+                          {obsDestaqueTexto}
+                        </p>
+                      </div>
                     )}
 
                     {showMassaMetrics ? (
@@ -394,6 +516,185 @@ export default function ProductionQueueGenericCards({
                       )}
                     </div>
                   </div>
+                ) : isEntradaEmbalagem ? (
+                  <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-bold tabular-nums text-slate-800"
+                        title="Posição na fila"
+                      >
+                        {posicaoNaFila}/{totalNaFila}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandOrdem(item.id)}
+                          className="text-left text-sm font-bold leading-snug text-gray-900 hover:text-blue-600 sm:text-base"
+                        >
+                          {item.produtos.nome}
+                        </button>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {estadoSelo ? (
+                            <span className={estadoSelo.className}>{estadoSelo.label}</span>
+                          ) : null}
+                          {embalagemEntradaProgress ? (
+                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-800">
+                              {Math.round(embalagemEntradaProgress.entradaEmbalagem)} /{' '}
+                              {Math.round(embalagemEntradaProgress.meta)} LT
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-700">
+                              {headerQuantityReadableSemCapacidade}
+                            </span>
+                          )}
+                        </div>
+                        {item.pedidos?.clientes?.nome_fantasia ? (
+                          <p className="mt-1 flex items-center gap-1 text-xs text-slate-600">
+                            <span className="material-icons text-[14px]">person</span>
+                            <span className="truncate">{item.pedidos.clientes.nome_fantasia}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {(mostrarAdiantarBtn || adiantarComoSecundario) && (
+                      <div className="flex flex-col gap-2">
+                        {mostrarAdiantarBtn && !adiantarComoSecundario ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenPreRequisitoSync(item)}
+                            className={`${BTN_ADIANTAR_PRIMARY_INLINE} self-start`}
+                          >
+                            <span className={BTN_ADIANTAR_ICON_SM}>playlist_add_check</span>
+                            <span>{labelConfirmarEtapas}</span>
+                          </button>
+                        ) : null}
+                        {adiantarComoSecundario ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenPreRequisitoSync(item)}
+                            className={`${BTN_ADIANTAR_SECONDARY} self-start`}
+                          >
+                            <span className={BTN_ADIANTAR_ICON_SM}>playlist_add_check</span>
+                            <span>{labelConfirmarEtapas}</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : isSaidaEmbalagem ? (
+                  <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-bold tabular-nums text-slate-800"
+                        title="Posição na fila"
+                      >
+                        {posicaoNaFila}/{totalNaFila}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandOrdem(item.id)}
+                          className="text-left text-sm font-bold leading-snug text-gray-900 hover:text-blue-600 sm:text-base"
+                        >
+                          {item.produtos.nome}
+                        </button>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {estadoSelo ? (
+                            <span className={estadoSelo.className}>{estadoSelo.label}</span>
+                          ) : null}
+                          {embalagemSaidaProgress?.metaCaixas != null ? (
+                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-800">
+                              {embalagemSaidaProgress.caixasInformadas ?? 0} /{' '}
+                              {Number.isInteger(embalagemSaidaProgress.metaCaixas)
+                                ? embalagemSaidaProgress.metaCaixas
+                                : embalagemSaidaProgress.metaCaixas.toFixed(1)}{' '}
+                              cx
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-700">
+                              {headerQuantityReadableSemCapacidade}
+                            </span>
+                          )}
+                        </div>
+                        {item.pedidos?.clientes?.nome_fantasia ? (
+                          <p className="mt-1 flex items-center gap-1 text-xs text-slate-600">
+                            <span className="material-icons text-[14px]">person</span>
+                            <span className="truncate">{item.pedidos.clientes.nome_fantasia}</span>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {faltaPreRequisitos && msgAguardando ? (
+                      <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-950">
+                        {msgAguardando}
+                      </p>
+                    ) : null}
+
+                    {adiantarComoSecundario &&
+                    embalagemSaidaProgress?.metaCaixas != null &&
+                    embalagemSaidaProgress.caixasInformadas != null ? (
+                      <p className="rounded-lg border border-violet-100 bg-violet-50/80 px-3 py-2 text-xs leading-relaxed text-violet-900">
+                        Faltam{' '}
+                        <span className="font-semibold tabular-nums">
+                          {Math.max(
+                            0,
+                            Math.round(
+                              embalagemSaidaProgress.metaCaixas - embalagemSaidaProgress.caixasInformadas,
+                            ),
+                          )}{' '}
+                          caixas
+                        </span>
+                        . Use o atalho abaixo para adiantar etapas anteriores, se necessário.
+                      </p>
+                    ) : null}
+
+                    <div className="flex flex-col gap-2">
+                      {mostrarAdiantarBtn && !adiantarComoSecundario ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPreRequisitoSync(item)}
+                          className={`${BTN_ADIANTAR_PRIMARY_INLINE} self-start`}
+                        >
+                          <span className={BTN_ADIANTAR_ICON_SM}>playlist_add_check</span>
+                          <span>{labelConfirmarEtapas}</span>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!item.produtoJoinFaltando && podeAtuarNestaEtapa) {
+                            router.push(etapaPathForOrdem(item.id, 'saida_embalagem'));
+                          }
+                        }}
+                        disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa}
+                        title={
+                          !podeAtuarNestaEtapa && !item.produtoJoinFaltando
+                            ? (msgAguardando ?? undefined)
+                            : undefined
+                        }
+                        className={`${BTN_CARD} ${
+                          item.produtoJoinFaltando || !podeAtuarNestaEtapa
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
+                            : 'border-slate-300 bg-slate-800 text-white hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className={BTN_CARD_ICON}>assignment_turned_in</span>
+                        <span>Registrar saída de embalagem</span>
+                      </button>
+                      {adiantarComoSecundario ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPreRequisitoSync(item)}
+                          className={`${BTN_ADIANTAR_SECONDARY} self-start`}
+                        >
+                          <span className={BTN_ADIANTAR_ICON_SM}>playlist_add_check</span>
+                          <span>{labelConfirmarEtapas}</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 text-xs leading-snug sm:gap-x-2.5 sm:text-sm sm:leading-normal">
                     <span
@@ -430,82 +731,89 @@ export default function ProductionQueueGenericCards({
                   </div>
                 )}
 
+                {!isEntradaEmbalagem && !isSaidaEmbalagem ? (
                 <div className="flex shrink-0 sm:pl-2 w-full sm:w-auto justify-stretch sm:justify-end sm:pt-0.5">
                   {isMassa && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenMassaLotes(item)}
-                      title={
-                        item.produtoJoinFaltando
-                          ? 'Corrija o cadastro do produto antes de iniciar a massa'
-                          : receitasBatidas > 0
-                            ? 'Continuar registro de massa desta ordem'
-                            : 'Iniciar massa desta ordem'
-                      }
-                      className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        disableMassaAction
-                          ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : receitasBatidas > 0
-                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:scale-[0.99]'
-                            : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800 hover:border-slate-800 active:scale-[0.99]'
-                      }`}
-                      disabled={disableMassaAction}
-                    >
-                      <span className={BTN_PRIMARY_ICON}>play_circle</span>
-                      <span>{receitasBatidas > 0 ? 'Continuar massa' : 'Iniciar massa'}</span>
-                    </button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                      {receitasBatidas > 0 && !disableMassaAction ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenMassaLotes(item, 'list')}
+                          title="Ver, editar ou excluir lotes de massa já registrados"
+                          className={`${BTN_PRIMARY} w-full sm:w-auto bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 hover:border-slate-400 active:scale-[0.99]`}
+                        >
+                          <span className={BTN_PRIMARY_ICON}>edit</span>
+                          <span>Editar lotes</span>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (disableMassaAction) return;
+                          if (
+                            !pedirConfirmacaoSeMassaMetaAtingida(
+                              receitasBatidas,
+                              receitasNecessarias,
+                            )
+                          ) {
+                            return;
+                          }
+                          onOpenMassaLotes(item, receitasBatidas > 0 ? 'newLote' : 'list');
+                        }}
+                        title={
+                          item.produtoJoinFaltando
+                            ? 'Corrija o cadastro do produto antes de iniciar a massa'
+                            : massaMetaJaAtingida
+                              ? 'Meta de receitas atingida — confirme para registrar lote extra'
+                              : receitasBatidas > 0
+                                ? 'Registrar um novo lote de massa'
+                                : 'Iniciar massa desta ordem'
+                        }
+                        className={`${BTN_PRIMARY} w-full sm:w-auto ${
+                          disableMassaAction
+                            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                            : massaMetaJaAtingida
+                              ? 'border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100 hover:border-amber-600 active:scale-[0.99]'
+                              : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800 hover:border-slate-800 active:scale-[0.99]'
+                        }`}
+                        disabled={disableMassaAction}
+                      >
+                        <span className={BTN_PRIMARY_ICON}>
+                          {receitasBatidas > 0 ? 'add' : 'play_circle'}
+                        </span>
+                        <span>{receitasBatidas > 0 ? 'Novo lote' : 'Iniciar massa'}</span>
+                      </button>
+                    </div>
                   )}
                   {isFermentacao && (
                     <button
                       type="button"
                       onClick={() => {
-                        if (item.produtoJoinFaltando || !podeAtuarNestaEtapa) return;
+                        if (item.produtoJoinFaltando || !podeAtuarNestaEtapa || etapaConcluida) return;
                         if (onOpenFermentacaoModal) {
                           onOpenFermentacaoModal(item);
                         } else {
                           router.push(etapaPathForOrdem(item.id, 'fermentacao'));
                         }
                       }}
-                      disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa}
+                      disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa || etapaConcluida}
                       title={
                         item.produtoJoinFaltando
                           ? 'Corrija o cadastro do produto antes de iniciar a fermentação'
-                          : !podeAtuarNestaEtapa
-                            ? (msgAguardando ?? undefined)
-                            : undefined
+                          : etapaConcluida
+                            ? 'Fermentação já concluída (meta atingida). Expanda o card para editar ou excluir os carrinhos.'
+                            : !podeAtuarNestaEtapa
+                              ? (msgAguardando ?? undefined)
+                              : undefined
                       }
                       className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        item.produtoJoinFaltando || !podeAtuarNestaEtapa
+                        item.produtoJoinFaltando || !podeAtuarNestaEtapa || etapaConcluida
                           ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
                           : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
                       }`}
                     >
                       <span className={BTN_PRIMARY_ICON}>play_circle</span>
                       <span>Iniciar fermentação</span>
-                    </button>
-                  )}
-                  {isSaidaEmbalagem && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!item.produtoJoinFaltando && podeAtuarNestaEtapa) {
-                          router.push(etapaPathForOrdem(item.id, 'saida_embalagem'));
-                        }
-                      }}
-                      disabled={Boolean(item.produtoJoinFaltando) || !podeAtuarNestaEtapa}
-                      title={
-                        !podeAtuarNestaEtapa && !item.produtoJoinFaltando
-                          ? (msgAguardando ?? undefined)
-                          : undefined
-                      }
-                      className={`${BTN_PRIMARY} w-full sm:w-auto ${
-                        item.produtoJoinFaltando || !podeAtuarNestaEtapa
-                          ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99]'
-                      }`}
-                    >
-                      <span className={BTN_PRIMARY_ICON}>assignment_turned_in</span>
-                      <span>Registrar saída de embalagem</span>
                     </button>
                   )}
                   {!isMassa &&
@@ -523,9 +831,21 @@ export default function ProductionQueueGenericCards({
                       </button>
                     )}
                 </div>
+                ) : null}
               </div>
 
-              {item.produtoJoinFaltando && (
+              {item.produtoCargaFilaErro ? (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-950 sm:px-3 sm:py-2">
+                  <span className="material-icons shrink-0 text-sm sm:text-base">cloud_off</span>
+                  <span className="text-xs leading-snug sm:text-sm">
+                    <span className="font-medium">Falha ao carregar o produto na fila.</span> O cadastro pode estar
+                    correto (ID{' '}
+                    <code className="rounded bg-white/80 px-1 py-0.5 text-xs">{item.produto_id}</code>). Recarregue a
+                    página; se persistir, veja o log do servidor.
+                  </span>
+                </div>
+              ) : null}
+              {item.produtoJoinFaltando && !item.produtoCargaFilaErro ? (
                 <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-100 px-2 py-1.5 text-rose-900 sm:px-3 sm:py-2">
                   <span className="material-icons shrink-0 text-sm sm:text-base">link_off</span>
                   <span className="text-xs leading-snug sm:text-sm">
@@ -534,7 +854,7 @@ export default function ProductionQueueGenericCards({
                     associe um produto válido ou restaure o cadastro no Supabase.
                   </span>
                 </div>
-              )}
+              ) : null}
 
               {quantityInfo.hasWarning && (
                 <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-800 sm:px-3 sm:py-2">
@@ -545,25 +865,23 @@ export default function ProductionQueueGenericCards({
                 </div>
               )}
 
-              {!fromProntosSection &&
-                !item.produtoJoinFaltando &&
-                !podeAtuarNestaEtapa &&
-                msgAguardando &&
-                filaEstado !== 'finalizada' && (
+              {mostrarConfirmarEtapas &&
+                podeSincronizarPreRequisito &&
+                !filaEtapaTemBotaoAdiantar(effectiveStation) && (
                   <div className="space-y-2">
-                    <div className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/95 px-2 py-1.5 text-violet-950 sm:px-3 sm:py-2">
-                      <span className="material-icons text-sm shrink-0 sm:text-base">hourglass_empty</span>
-                      <span className="text-xs leading-snug sm:text-sm">{msgAguardando}</span>
-                    </div>
-                    {podeSincronizarPreRequisito && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPreRequisitoSync(item)}
-                        className="w-full rounded-lg border border-violet-400 bg-violet-700 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-800 sm:py-2"
-                      >
-                        Confirmar etapas
-                      </button>
-                    )}
+                    {faltaPreRequisitos && msgAguardando ? (
+                      <div className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/95 px-2 py-1.5 text-violet-950 sm:px-3 sm:py-2">
+                        <span className="material-icons text-sm shrink-0 sm:text-base">hourglass_empty</span>
+                        <span className="text-xs leading-snug sm:text-sm">{msgAguardando}</span>
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onOpenPreRequisitoSync(item)}
+                      className="w-full rounded-lg border border-violet-400 bg-violet-700 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-800 sm:py-2"
+                    >
+                      {labelConfirmarEtapas}
+                    </button>
                   </div>
                 )}
 
@@ -574,8 +892,32 @@ export default function ProductionQueueGenericCards({
                 </div>
               )}
               {isFermentacao && (
-                <div className="w-full pt-0.5">
+                <div className="w-full space-y-2 border-t border-slate-100 pt-2">
+                  <FilaFermentacaoCarrinhosEditor
+                    ordemProducaoId={item.id}
+                    carrinhos={item.fermentacao_carrinhos ?? []}
+                    unidadesAssadeira={item.produtos.unidades_assadeira}
+                    onRefresh={() => router.refresh()}
+                  />
                   <FermentacaoProgressoBar variant="compact" {...fermentacaoProgressMetricsForQueueItem(item)} />
+                </div>
+              )}
+              {isEntradaEmbalagem && (
+                <div className="w-full space-y-2 border-t border-slate-100 pt-2">
+                  <FilaEntradaEmbalagemRegistrosEditor
+                    ordemProducaoId={item.id}
+                    registros={item.entrada_embalagem_registros ?? []}
+                    onRefresh={() => router.refresh()}
+                  />
+                </div>
+              )}
+              {isSaidaEmbalagem && (
+                <div className="w-full space-y-2 border-t border-slate-100 pt-2">
+                  <FilaSaidaEmbalagemRegistrosEditor
+                    ordemProducaoId={item.id}
+                    registros={item.saida_embalagem_registros ?? []}
+                    onRefresh={() => router.refresh()}
+                  />
                 </div>
               )}
               {embalagemEntradaProgress && (
@@ -681,6 +1023,14 @@ export default function ProductionQueueGenericCards({
 
   return (
     <>
+      {isSaidaEmbalagem &&
+        queueForCardsActive.length === 0 &&
+        queueForCardsProntos.length > 0 && (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-xs text-indigo-950 sm:text-sm">
+            Não há ordens pendentes de saída. As ordens com caixas já informadas estão na secção abaixo — toque
+            no card para <span className="font-semibold">editar ou excluir</span> cada lançamento.
+          </div>
+        )}
       {queueForCardsActive.map((item, i) =>
         renderOrdemCard(item, i, false, primeiraOrdemAcionavelId != null && item.id === primeiraOrdemAcionavelId),
       )}

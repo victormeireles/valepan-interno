@@ -1,5 +1,28 @@
 import type { FornoQualityData, ProductionStepLog } from '@/domain/types/producao-etapas';
 
+const MAX_LATAS_ENTRADA_FORNO = 20;
+
+/** Latas (LT) de um log de entrada no forno — prioriza `assadeiras_lt` em dados_qualidade. */
+export function ltFromFornoLogRow(
+  qtd_saida: number | null | undefined,
+  dados_qualidade: unknown,
+  unidadesPorAssadeira: number | null,
+): number {
+  const dq = dados_qualidade as FornoQualityData | null;
+  const ltRaw = dq?.assadeiras_lt;
+  if (ltRaw != null && Number.isFinite(Number(ltRaw)) && Number(ltRaw) > 0) {
+    return Number(ltRaw);
+  }
+  const qs = qtd_saida;
+  if (qs == null || !Number.isFinite(Number(qs)) || Number(qs) <= 0) return 0;
+  if (unidadesPorAssadeira != null && unidadesPorAssadeira > 0) {
+    return Number(qs) / unidadesPorAssadeira;
+  }
+  return Number(qs);
+}
+
+export { MAX_LATAS_ENTRADA_FORNO };
+
 /**
  * Soma de latas (LT) em ciclos de forno ainda abertos (fim null).
  * Usa assadeiras_lt em dados_qualidade; senão deriva de qtd_saida / unidades por assadeira.
@@ -56,18 +79,7 @@ export function sumLatasFromFornoLogRows(
 ): number {
   let sum = 0;
   for (const log of logs) {
-    const dq = log.dados_qualidade as FornoQualityData | null;
-    const lt = dq?.assadeiras_lt;
-    if (lt != null && !Number.isNaN(Number(lt)) && Number(lt) > 0) {
-      sum += Number(lt);
-      continue;
-    }
-    const qs = log.qtd_saida;
-    if (unidadesPorAssadeira != null && unidadesPorAssadeira > 0 && qs != null && !Number.isNaN(Number(qs))) {
-      sum += Number(qs) / unidadesPorAssadeira;
-    } else if (qs != null && !Number.isNaN(Number(qs))) {
-      sum += Number(qs);
-    }
+    sum += ltFromFornoLogRow(log.qtd_saida, log.dados_qualidade, unidadesPorAssadeira);
   }
   return sum;
 }

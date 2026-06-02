@@ -16,7 +16,7 @@ function labelFor(step: ProductionStep): string {
     entrada_forno: 'Forno (entrada)',
     saida_forno: 'Forno (saída)',
     entrada_embalagem: 'Embalagem (entrada)',
-    saida_embalagem: 'Embalagem (saída)',
+    saida_embalagem: 'Saída de embalagem',
   };
   return labels[step];
 }

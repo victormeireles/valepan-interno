@@ -149,9 +149,16 @@ export default function SelectRemoteAutocomplete({
           }}
           onFocus={() => {
             setOpen(true);
-            if (options.length === 0 && query.trim().length >= 1) {
-              void runSearch(query);
+            const t = query.trim();
+            if (t.length === 0) {
+              void runSearch('');
+              return;
             }
+            if (selected?.label && t === selected.label.trim()) {
+              void runSearch('');
+              return;
+            }
+            void runSearch(query);
           }}
           className={`w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all ${value ? 'pr-16' : ''}`}
         />
@@ -167,7 +174,7 @@ export default function SelectRemoteAutocomplete({
         ) : null}
       </div>
 
-      {open && (loading || options.length > 0 || listError) ? (
+      {open ? (
         <ul
           className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg py-1 text-left"
           role="listbox"
@@ -178,20 +185,26 @@ export default function SelectRemoteAutocomplete({
           {loading && options.length === 0 ? (
             <li className="px-3 py-2 text-sm text-gray-500">A buscar…</li>
           ) : null}
-          {options.map((opt) => (
-            <li key={opt.id}>
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-gray-900"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(opt)}
-              >
-                {opt.label}
-              </button>
+          {!loading && !listError
+            ? options.map((opt) => (
+                <li key={opt.id}>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-gray-900"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(opt)}
+                  >
+                    {opt.label}
+                  </button>
+                </li>
+              ))
+            : null}
+          {!loading && !listError && options.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-gray-500">
+              {query.trim().length < 1
+                ? 'Sem produtos ativos para listar.'
+                : 'Nenhum produto encontrado.'}
             </li>
-          ))}
-          {!loading && !listError && options.length === 0 && query.trim().length >= 1 ? (
-            <li className="px-3 py-2 text-sm text-gray-500">Nenhum produto encontrado.</li>
           ) : null}
         </ul>
       ) : null}

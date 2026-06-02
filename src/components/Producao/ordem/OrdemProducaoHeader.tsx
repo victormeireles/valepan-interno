@@ -10,6 +10,8 @@ interface OrdemProducaoHeaderProps {
   publishLoading: boolean;
   /** Sem tabelas no banco ou modo somente leitura: mantém o layout, bloqueia publicar. */
   publishDisabled?: boolean;
+  /** Quando false, o dia já não está em rascunho — não faz sentido voltar a «marcar como pronto». */
+  publishAllowed?: boolean;
 }
 
 export default function OrdemProducaoHeader({
@@ -19,7 +21,9 @@ export default function OrdemProducaoHeader({
   onPublish,
   publishLoading,
   publishDisabled = false,
+  publishAllowed = true,
 }: OrdemProducaoHeaderProps) {
+  const blocked = publishDisabled || !publishAllowed;
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -34,11 +38,23 @@ export default function OrdemProducaoHeader({
         <button
           type="button"
           onClick={() => void onPublish()}
-          disabled={publishLoading || publishDisabled}
+          disabled={publishLoading || blocked}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          title="As ordens já são criadas ao adicionar/editar linhas. Marcar como pronto apenas sinaliza que o dia está fechado."
+          title={
+            publishDisabled
+              ? 'Indisponível neste modo.'
+              : !publishAllowed
+                ? 'Este dia já está marcado como pronto (ou em outro estado final).'
+                : 'As ordens já são criadas ao adicionar/editar linhas. Marcar como pronto apenas sinaliza que o dia está fechado.'
+          }
         >
-          {publishLoading ? 'Marcando...' : 'Marcar dia como pronto'}
+          {publishLoading
+            ? 'Marcando...'
+            : publishDisabled
+              ? 'Marcar dia como pronto'
+              : !publishAllowed
+                ? 'Dia já marcado'
+                : 'Marcar dia como pronto'}
         </button>
       </div>
     </div>

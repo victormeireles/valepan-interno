@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 
 import { Database } from '@/types/database';
 
-type TipoReceita = Database['public']['Enums']['tipo_receita'];
+type TipoReceita = Database['interno']['Enums']['tipo_receita'];
 
 const PRODUTOS_PATH = '/produtos/receitas';
 

@@ -72,6 +72,47 @@ describe('getQuantityByStation', () => {
     expect(q.assadeiras?.readable).toMatch(/^25 LT/);
   });
 
+  it('massa: unidadesConsumoPlanejadas ignora conversão cx×box_units', () => {
+    const p: ProductConversionInfo = {
+      unidadeNomeResumido: 'cx',
+      box_units: 48,
+      unidades_assadeira: 20,
+      receita_massa: { quantidade_por_produto: 100 },
+    };
+    const semOverride = getQuantityByStation('massa', 200, p);
+    expect(semOverride.unidades?.value).toBe(9600);
+    const comOverride = getQuantityByStation('massa', 200, p, 4000);
+    expect(comOverride.unidades?.value).toBe(4000);
+  });
+
+  it('massa: OP em latas (200×20 un) exibe 200 LT, não conversão por receita/un. legado', () => {
+    const p: ProductConversionInfo = {
+      unidadeNomeResumido: 'un',
+      box_units: null,
+      package_units: null,
+      // Cadastro legado divergente dos buracos da lata na OP
+      unidades_assadeira: 18.26,
+      receita_massa: { quantidade_por_produto: 4380 },
+    };
+    const q = getQuantityByStation('massa', 200, p, 4000);
+    expect(q.assadeiras?.value).toBe(200);
+    expect(q.assadeiras?.readable).toMatch(/^200 LT/);
+    expect(q.assadeiras?.unidadesPorAssadeira).toBe(20);
+  });
+
+  it('fermentacao: unidadesConsumoPlanejadas ÷ buracos da lata = LT da OP (não unidades brutas)', () => {
+    const p: ProductConversionInfo = {
+      unidadeNomeResumido: 'cx',
+      box_units: 48,
+      unidades_assadeira: 20,
+      receita_massa: { quantidade_por_produto: 100 },
+    };
+    const q = getQuantityByStation('fermentacao', 200, p, 4000);
+    expect(q.value).toBe(200);
+    expect(q.readable).toMatch(/^200 LT/);
+    expect(q.unitLabel).toBe('LT');
+  });
+
   it('entrada_forno: latas (LT) a partir de unidades, arredondamento para cima', () => {
     const p: ProductConversionInfo = {
       unidadeNomeResumido: 'un',

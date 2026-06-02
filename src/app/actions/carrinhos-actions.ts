@@ -122,6 +122,7 @@ export async function getCarrinhos(): Promise<CarrinhosLoadResult> {
     for (const row of rows) {
       if (row.etapa !== 'saida_forno' || row.fim == null) continue;
       const dqSaida = row.dados_qualidade as SaidaFornoQualityData | null;
+      if (dqSaida?.liberacao_carrinho_perda_total === true) continue;
       const norm = normalizeNumeroCarrinhoFermentacao(dqSaida?.numero_carrinho);
       if (!norm) continue;
       const latasSaida = latasSaidaFornoDoLog(dqSaida);
@@ -213,6 +214,35 @@ function clampInt(n: number, min: number, max?: number): number {
   return v;
 }
 
+/** Campos espelhados entre `interno.carrinhos` (fonte de verdade) e `public.carrinhos` (legado). */
+type CarrinhoEspelhoRow = {
+  id: string;
+  numero: number;
+  bandejas: number;
+  precisa_reparos: boolean;
+  quantidade_latas: number;
+  em_uso: boolean;
+  latas_ocupadas: number;
+  ativo: boolean;
+  updated_at?: string;
+};
+
+/**
+ * Mantém `public.carrinhos` sincronizado com `interno.carrinhos`.
+ * Existe uma cópia legada em `public`; sem este espelho as duas tabelas divergem
+ * (ex.: um save de «reparo» grava em interno mas a UI/consumidores que leem public continuam com o valor antigo).
+ * Best-effort: nunca falha o fluxo principal — interno é a fonte de verdade.
+ */
+async function espelharCarrinhosParaPublic(rows: CarrinhoEspelhoRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  try {
+    const publicClient = supabaseClientFactory.createServiceRolePublicClient();
+    await publicClient.from('carrinhos').upsert(rows, { onConflict: 'id' });
+  } catch {
+    // public sem a tabela (ou indisponível): ignora.
+  }
+}
+
 /** Bandejas e latas são a mesma unidade no carrinho; gravamos o mesmo valor nas duas colunas do banco. */
 export async function createCarrinho(input: {
   numero: number;
@@ -238,21 +268,29 @@ export async function createCarrinho(input: {
 
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const { error } = await supabase.from('carrinhos').insert({
-    numero: n,
-    bandejas: capacidade,
-    precisa_reparos: input.precisaReparos ?? false,
-    quantidade_latas: capacidade,
-    em_uso: emUso,
-    latas_ocupadas: latasOcupadas,
-    ativo: input.ativo ?? true,
-  });
+  const { data: inserted, error } = await supabase
+    .from('carrinhos')
+    .insert({
+      numero: n,
+      bandejas: capacidade,
+      precisa_reparos: input.precisaReparos ?? false,
+      quantidade_latas: capacidade,
+      em_uso: emUso,
+      latas_ocupadas: latasOcupadas,
+      ativo: input.ativo ?? true,
+    })
+    .select('*')
+    .single();
 
   if (error) {
     if (error.message.includes('duplicate') || error.message.includes('unique')) {
       return { success: false, error: 'Já existe um carrinho com este número.' };
     }
     return { success: false, error: error.message };
+  }
+
+  if (inserted) {
+    await espelharCarrinhosParaPublic([inserted as CarrinhoEspelhoRow]);
   }
 
   revalidatePath(PATH);
@@ -321,9 +359,16 @@ export async function createCarrinhosEmLote(input: {
     return { success: false, error: 'Todos os carrinhos deste intervalo já existem.' };
   }
 
-  const { error } = await supabase.from('carrinhos').insert(paraInserir);
+  const { data: insertedRows, error } = await supabase
+    .from('carrinhos')
+    .insert(paraInserir)
+    .select('*');
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  if (insertedRows && insertedRows.length > 0) {
+    await espelharCarrinhosParaPublic(insertedRows as CarrinhoEspelhoRow[]);
   }
 
   revalidatePath(PATH);
@@ -355,6 +400,7 @@ export async function updateCarrinho(input: {
 
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
+  const updatedAt = new Date().toISOString();
   const { error } = await supabase
     .from('carrinhos')
     .update({
@@ -365,7 +411,7 @@ export async function updateCarrinho(input: {
       em_uso: emUso,
       latas_ocupadas: latasOcupadas,
       ativo: input.ativo,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     })
     .eq('id', input.id);
 
@@ -375,6 +421,20 @@ export async function updateCarrinho(input: {
     }
     return { success: false, error: error.message };
   }
+
+  await espelharCarrinhosParaPublic([
+    {
+      id: input.id,
+      numero: n,
+      bandejas: capacidade,
+      precisa_reparos: input.precisaReparos,
+      quantidade_latas: capacidade,
+      em_uso: emUso,
+      latas_ocupadas: latasOcupadas,
+      ativo: input.ativo,
+      updated_at: updatedAt,
+    },
+  ]);
 
   revalidatePath(PATH);
   return { success: true };

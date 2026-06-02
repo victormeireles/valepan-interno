@@ -2,15 +2,27 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { completeProductionStep, getProductionStepLogs, getReceitasProduzidas } from '@/app/actions/producao-etapas-actions';
+import {
+  completeProductionStep,
+  deleteRegistroEtapaProducao,
+  getProductionStepLogs,
+  getReceitasProduzidas,
+  updateFermentacaoRegistroLog,
+} from '@/app/actions/producao-etapas-actions';
 import { fermentacaoIniciarEFinalizar } from '@/lib/production/fermentacao-iniciar-e-finalizar';
 import { getQuantityByStation } from '@/lib/utils/production-conversions';
 import { sumQuantidadeFermentacaoConcluida } from '@/lib/utils/fermentacao-progresso';
 import { formatReceitasBatidasDisplay } from '@/lib/utils/number-utils';
-import { FermentacaoQualityData, ProductionStepLog } from '@/domain/types/producao-etapas';
+import {
+  FermentacaoQualityData,
+  FornoQualityData,
+  ProductionStepLog,
+} from '@/domain/types/producao-etapas';
 import FermentacaoProgressoBar from '@/components/Producao/FermentacaoProgressoBar';
 import ProductionStepLayout from '@/components/Producao/ProductionStepLayout';
+import OrdemDestaqueLataObs from '@/components/Producao/OrdemDestaqueLataObs';
 import { filaUrlForProductionStep } from '@/lib/production/production-station-routes';
+import { rotuloExibicaoRegistroFila } from '@/lib/production/registro-adiantado-fila';
 import ProductionFormActions from '@/components/Producao/ProductionFormActions';
 import ProductionErrorAlert from '@/components/Producao/ProductionErrorAlert';
 import NumberDecimalInput from '@/components/Producao/NumberDecimalInput';
@@ -29,6 +41,11 @@ interface FermentacaoStepClientProps {
     id: string;
     lote_codigo: string;
     qtd_planejada: number;
+    planejadoUnidadesConsumo?: number;
+    /** Nome da lata (assadeira) da ordem — destaque no topo da etapa. */
+    tipoLataNome?: string | null;
+    /** Observação de produção da ordem (ex.: lavar a lata depois) — destaque no topo. */
+    observacaoProducao?: string | null;
     produto: {
       id: string;
       nome: string;
@@ -52,6 +69,8 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
   const [receitasOP, setReceitasOP] = useState<number>(0);
   const [numeroCarrinho, setNumeroCarrinho] = useState('');
   const [stepLogs, setStepLogs] = useState<ProductionStepLog[]>([]);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const logsResult = await getProductionStepLogs(ordemProducao.id);
@@ -90,14 +109,26 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
       setReceitasMassa(receitasResult.data.receitasMassa);
     }
 
-    const quantityInfo = getQuantityByStation('massa', ordemProducao.qtd_planejada, {
+    const productInfo = {
       unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
       unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
       box_units: ordemProducao.produto.box_units || null,
       receita_massa: ordemProducao.produto.receita_massa,
-    });
+    };
+    const unConsumo = ordemProducao.planejadoUnidadesConsumo;
+    const quantityInfo = getQuantityByStation(
+      'massa',
+      ordemProducao.qtd_planejada,
+      productInfo,
+      unConsumo,
+    );
     setReceitasOP(quantityInfo.receitas?.value || 0);
-  }, [ordemProducao.id, ordemProducao.qtd_planejada, ordemProducao.produto]);
+  }, [
+    ordemProducao.id,
+    ordemProducao.qtd_planejada,
+    ordemProducao.planejadoUnidadesConsumo,
+    ordemProducao.produto,
+  ]);
 
   useEffect(() => {
     void loadData();
@@ -109,12 +140,17 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
   };
 
   const calcularDemandaAssadeiras = () => {
-    const quantityInfo = getQuantityByStation('fermentacao', ordemProducao.qtd_planejada, {
-      unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
-      unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
-      box_units: ordemProducao.produto.box_units || null,
-      receita_massa: ordemProducao.produto.receita_massa,
-    });
+    const quantityInfo = getQuantityByStation(
+      'fermentacao',
+      ordemProducao.qtd_planejada,
+      {
+        unidadeNomeResumido: ordemProducao.produto.unidadeNomeResumido,
+        unidades_assadeira: ordemProducao.produto.unidades_assadeira || null,
+        box_units: ordemProducao.produto.box_units || null,
+        receita_massa: ordemProducao.produto.receita_massa,
+      },
+      ordemProducao.planejadoUnidadesConsumo,
+    );
     return quantityInfo.value || 0;
   };
 
@@ -133,6 +169,85 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
     return formatReceitasBatidasDisplay(valor);
   };
 
+  const fermentacaoLogIdsNoForno = new Set(
+    stepLogs
+      .filter((l) => l.etapa === 'entrada_forno')
+      .map((l) =>
+        String((l.dados_qualidade as FornoQualityData | null)?.fermentacao_log_id ?? '').trim(),
+      )
+      .filter(Boolean),
+  );
+
+  const logsFermentacao = stepLogs
+    .filter((l) => l.etapa === 'fermentacao')
+    .sort((a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime());
+
+  const fmtRegistroData = (iso: string) => {
+    try {
+      return new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  };
+
+  const preencherFormularioDoLog = (log: ProductionStepLog) => {
+    const dq = log.dados_qualidade as FermentacaoQualityData | null;
+    setNumeroCarrinho(dq?.numero_carrinho != null ? String(dq.numero_carrinho).trim() : '');
+    const lt = dq?.assadeiras_lt;
+    setAssadeirasProduzidas(
+      lt != null && Number.isFinite(Number(lt))
+        ? Math.min(ASSADEIRAS_PRODUZIDAS_MAX, Math.max(1, Math.round(Number(lt))))
+        : ASSADEIRAS_PRODUZIDAS_PADRAO,
+    );
+  };
+
+  const iniciarEdicao = (log: ProductionStepLog) => {
+    setEditingLogId(log.id);
+    preencherFormularioDoLog(log);
+    setError(null);
+  };
+
+  const cancelarEdicao = () => {
+    setEditingLogId(null);
+    setError(null);
+    if (logEmAndamento) {
+      preencherFormularioDoLog(logEmAndamento);
+    } else {
+      setNumeroCarrinho('');
+      setAssadeirasProduzidas(ASSADEIRAS_PRODUZIDAS_PADRAO);
+    }
+  };
+
+  const handleExcluirRegistro = async (logId: string) => {
+    if (!window.confirm('Excluir este carrinho da fermentação? O número ficará disponível novamente.')) {
+      return;
+    }
+    setDeletingLogId(logId);
+    setError(null);
+    try {
+      const r = await deleteRegistroEtapaProducao({
+        log_id: logId,
+        ordem_producao_id: ordemProducao.id,
+      });
+      if (!r.success) {
+        setError(r.error);
+        return;
+      }
+      if (editingLogId === logId) {
+        setEditingLogId(null);
+      }
+      await loadData();
+      router.refresh();
+    } finally {
+      setDeletingLogId(null);
+    }
+  };
+
   const handleIniciarEFinalizar = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -148,6 +263,33 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
         setError(r.error);
         return;
       }
+      setEditingLogId(null);
+      await loadData();
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAtualizarRegistro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLogId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const r = await updateFermentacaoRegistroLog({
+        log_id: editingLogId,
+        ordem_producao_id: ordemProducao.id,
+        numero_carrinho: numeroCarrinho,
+        assadeiras_lt: assadeirasProduzidas,
+        unidades_assadeira: ordemProducao.produto.unidades_assadeira,
+      });
+      if (!r.success) {
+        setError(r.error);
+        return;
+      }
+      setEditingLogId(null);
+      await loadData();
       router.refresh();
     } finally {
       setLoading(false);
@@ -188,6 +330,8 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
         throw new Error(result.error || 'Erro ao finalizar fermentação');
       }
 
+      setEditingLogId(null);
+      await loadData();
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar fermentação');
@@ -262,7 +406,25 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
     </div>
   );
 
-  const onSubmitForm = logEmAndamento ? handleComplete : handleIniciarEFinalizar;
+  const editandoConcluido =
+    editingLogId != null && editingLogId !== logEmAndamento?.id;
+  const onSubmitForm = editandoConcluido
+    ? handleAtualizarRegistro
+    : logEmAndamento
+      ? handleComplete
+      : handleIniciarEFinalizar;
+
+  const formTitulo = editandoConcluido
+    ? 'Editar carrinho'
+    : logEmAndamento
+      ? 'Finalizar lote em andamento'
+      : 'Novo carrinho';
+
+  const submitLabel = editandoConcluido
+    ? 'Salvar alterações'
+    : logEmAndamento
+      ? 'Finalizar fermentação'
+      : 'Registar fermentação';
 
   return (
     <ProductionStepLayout
@@ -271,14 +433,95 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
       produtoNome={ordemProducao.produto.nome}
       backHref={filaUrlForProductionStep('fermentacao')}
       denseHeader
+      registrosEtapa={{ ordemProducaoId: ordemProducao.id, etapa: 'fermentacao' }}
       {...PRODUCTION_STEP_DENSE_SHELL}
     >
+      <OrdemDestaqueLataObs
+        tipoLataNome={ordemProducao.tipoLataNome ?? null}
+        observacaoProducao={ordemProducao.observacaoProducao ?? null}
+      />
+
       <div className="space-y-2">
         {barraProgresso}
         {painelResumo}
       </div>
 
+      {logsFermentacao.length > 0 ? (
+        <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+          <h3 className={`${FORM_FIELD_LABEL} text-slate-800`}>Carrinhos registrados</h3>
+          <ul className="space-y-2">
+            {logsFermentacao.map((log) => {
+              const dq = log.dados_qualidade as FermentacaoQualityData | null;
+              const carrinho =
+                dq?.numero_carrinho != null ? String(dq.numero_carrinho).trim() : '—';
+              const lt = dq?.assadeiras_lt;
+              const ltN =
+                lt != null && Number.isFinite(Number(lt)) ? Math.round(Number(lt)) : undefined;
+              const rotulo = rotuloExibicaoRegistroFila('fermentacao', dq, carrinho, { latas: ltN });
+              const emAndamento = log.fim == null;
+              const noForno = !emAndamento && fermentacaoLogIdsNoForno.has(log.id);
+              const editandoEste = editingLogId === log.id;
+              return (
+                <li
+                  key={log.id}
+                  className={`rounded-lg border px-2.5 py-2 text-xs ${
+                    editandoEste
+                      ? 'border-blue-300 bg-blue-50/90'
+                      : 'border-slate-100 bg-white'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {rotulo}
+                        {!rotulo.includes('LT') && ltN != null ? (
+                          <span className="font-medium text-slate-600"> · {ltN} LT</span>
+                        ) : null}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {fmtRegistroData(log.inicio)}
+                        {emAndamento ? ' · Em andamento' : null}
+                      </p>
+                      {noForno ? (
+                        <span className="mt-1 inline-flex rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
+                          No forno
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-1">
+                      {!noForno ? (
+                        <button
+                          type="button"
+                          onClick={() => iniciarEdicao(log)}
+                          className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-800 hover:bg-slate-50"
+                        >
+                          Editar
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={deletingLogId === log.id || noForno}
+                        title={
+                          noForno
+                            ? 'Exclua primeiro a entrada no forno'
+                            : undefined
+                        }
+                        onClick={() => void handleExcluirRegistro(log.id)}
+                        className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-800 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingLogId === log.id ? '…' : 'Excluir'}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
       <form onSubmit={onSubmitForm} className="space-y-3 pt-1 sm:space-y-3 sm:pt-0">
+        <p className={`${FORM_SECTION_SUB} text-slate-600`}>{formTitulo}</p>
         <ProductionErrorAlert error={error} />
 
         <div className="space-y-1.5">
@@ -300,7 +543,7 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
 
         <div className="space-y-1.5">
           <NumberDecimalInput
-            label="Assadeiras produzidas"
+            label="Latas produzidas (LT)"
             value={assadeirasProduzidas}
             onChange={(value) => {
               const v = Math.round(value);
@@ -321,9 +564,9 @@ export default function FermentacaoStepClient({ ordemProducao }: FermentacaoStep
         </div>
 
         <ProductionFormActions
-          onCancel={() => router.back()}
-          submitLabel={logEmAndamento ? 'Finalizar fermentação' : 'Registar fermentação'}
-          cancelLabel="Voltar"
+          onCancel={() => (editingLogId ? cancelarEdicao() : router.back())}
+          submitLabel={submitLabel}
+          cancelLabel={editingLogId ? 'Cancelar edição' : 'Voltar'}
           loading={loading}
           disabled={assadeirasProduzidas <= 0 || !numeroCarrinho.trim()}
           compact

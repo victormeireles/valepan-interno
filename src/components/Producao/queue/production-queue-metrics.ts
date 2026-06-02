@@ -6,6 +6,34 @@ import {
 } from '@/lib/utils/production-conversions';
 import type { ProductionQueueItem } from './production-queue-types';
 
+/** Produto ausente no BD ou falha ao carregar cadastro na fila. */
+export function filaItemProdutoIndisponivel(item: ProductionQueueItem): boolean {
+  return Boolean(item.produtoJoinFaltando || item.produtoCargaFilaErro);
+}
+
+function productInfoFor(item: ProductionQueueItem): ProductConversionInfo {
+  return {
+    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
+    unidades_assadeira: item.produtos.unidades_assadeira ?? null,
+    box_units: item.produtos.box_units ?? null,
+    receita_massa: item.produtos.receita_massa ?? null,
+  };
+}
+
+function unidadesConsumoPlanejadasForItem(item: ProductionQueueItem): number | undefined {
+  const u = item.planejado_unidades_consumo;
+  return u != null && Number.isFinite(u) && u >= 0 ? u : undefined;
+}
+
+function getQtyByStation(item: ProductionQueueItem, station: Station) {
+  return getQuantityByStation(
+    station,
+    item.qtd_planejada,
+    productInfoFor(item),
+    unidadesConsumoPlanejadasForItem(item),
+  );
+}
+
 export function parseLatasInputFilaForno(raw: string): number {
   const n = parseFloat(raw.replace(',', '.'));
   return Number.isFinite(n) ? n : NaN;
@@ -21,16 +49,7 @@ export function fornoGroupProgressMetrics(orders: ProductionQueueItem[]) {
       unidadesPorAssadeira: null as number | null,
     };
   }
-  const productInfoFor = (item: ProductionQueueItem) => ({
-    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-    unidades_assadeira: item.produtos.unidades_assadeira ?? null,
-    box_units: item.produtos.box_units ?? null,
-    receita_massa: item.produtos.receita_massa ?? null,
-  });
-  const meta = orders.reduce(
-    (s, i) => s + (getQuantityByStation('entrada_forno', i.qtd_planejada, productInfoFor(i)).value || 0),
-    0,
-  );
+  const meta = orders.reduce((s, i) => s + (getQtyByStation(i, 'entrada_forno').value || 0), 0);
   const fermentacao = orders.reduce((s, i) => s + (i.fermentacao_volume_concluido ?? 0), 0);
   const forno = orders.reduce((s, i) => s + (i.forno_entrada_latas_total ?? i.forno_volume_concluido ?? 0), 0);
   const ua = orders[0].produtos.unidades_assadeira;
@@ -54,16 +73,7 @@ export function entradaEmbalagemGroupProgressMetrics(orders: ProductionQueueItem
       unidadesPorAssadeira: null as number | null,
     };
   }
-  const productInfoFor = (item: ProductionQueueItem) => ({
-    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-    unidades_assadeira: item.produtos.unidades_assadeira ?? null,
-    box_units: item.produtos.box_units ?? null,
-    receita_massa: item.produtos.receita_massa ?? null,
-  });
-  const meta = orders.reduce(
-    (s, i) => s + (getQuantityByStation('saida_forno', i.qtd_planejada, productInfoFor(i)).value || 0),
-    0,
-  );
+  const meta = orders.reduce((s, i) => s + (getQtyByStation(i, 'saida_forno').value || 0), 0);
   const saidaForno = orders.reduce((s, i) => s + (i.saida_forno_bandejas_total ?? 0), 0);
   const entradaEmbalagem = orders.reduce((s, i) => s + (i.entrada_embalagem_latas_total ?? 0), 0);
   const ua = orders[0].produtos.unidades_assadeira;
@@ -80,13 +90,7 @@ export function entradaEmbalagemGroupProgressMetrics(orders: ProductionQueueItem
 export function entradaEmbalagemItemProgressMetrics(item: ProductionQueueItem) {
   const ua = item.produtos.unidades_assadeira;
   const uaOk = ua != null && ua > 0 ? ua : null;
-  const productInfo = {
-    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-    unidades_assadeira: uaOk,
-    box_units: item.produtos.box_units ?? null,
-    receita_massa: item.produtos.receita_massa ?? null,
-  };
-  const meta = getQuantityByStation('saida_forno', item.qtd_planejada, productInfo).value || 0;
+  const meta = getQtyByStation(item, 'saida_forno').value || 0;
   const saidaForno = item.saida_forno_bandejas_total ?? 0;
   const entradaEmbalagem = item.entrada_embalagem_latas_total ?? 0;
   return {
@@ -108,16 +112,7 @@ export function saidaFornoGroupProgressMetrics(orders: ProductionQueueItem[]) {
       unidadesPorAssadeira: null as number | null,
     };
   }
-  const productInfoFor = (item: ProductionQueueItem) => ({
-    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-    unidades_assadeira: item.produtos.unidades_assadeira ?? null,
-    box_units: item.produtos.box_units ?? null,
-    receita_massa: item.produtos.receita_massa ?? null,
-  });
-  const meta = orders.reduce(
-    (s, i) => s + (getQuantityByStation('saida_forno', i.qtd_planejada, productInfoFor(i)).value || 0),
-    0,
-  );
+  const meta = orders.reduce((s, i) => s + (getQtyByStation(i, 'saida_forno').value || 0), 0);
   const entradaForno = orders.reduce((s, i) => s + (i.forno_entrada_latas_total ?? 0), 0);
   const saidaForno = orders.reduce((s, i) => s + (i.saida_forno_bandejas_total ?? 0), 0);
   const ua = orders[0].produtos.unidades_assadeira;
@@ -133,10 +128,19 @@ export function saidaFornoGroupProgressMetrics(orders: ProductionQueueItem[]) {
 
 const MASSA_META_EPS = 1e-9;
 
+/** Receitas de massa necessárias para a ordem (meta da barra de progresso da massa). */
+export function massaReceitasNecessarias(item: ProductionQueueItem): number {
+  return getQtyByStation(item, 'massa').receitas?.value || 0;
+}
+
+/** Meta da ordem em LT (meta da fermentação) — usada para calcular o saldo «Início» ao adiantar. */
+export function fermentacaoMetaLt(item: ProductionQueueItem): number {
+  return getQtyByStation(item, 'fermentacao').value || 0;
+}
+
 /** Meta de receitas de massa atingida (mesmo critério da barra de progresso). */
 export function massaMetaConcluida(item: ProductionQueueItem): boolean {
-  const q = getQuantityByStation('massa', item.qtd_planejada, item.produtos);
-  const necessarias = q.receitas?.value || 0;
+  const necessarias = massaReceitasNecessarias(item);
   const batidas = item.receitas_batidas || 0;
   return necessarias > 0 && batidas + MASSA_META_EPS >= necessarias;
 }
@@ -144,13 +148,7 @@ export function massaMetaConcluida(item: ProductionQueueItem): boolean {
 export function fermentacaoProgressMetricsForQueueItem(item: ProductionQueueItem) {
   const ua = item.produtos.unidades_assadeira;
   const uaOk = ua != null && ua > 0 ? ua : null;
-  const productInfo = {
-    unidadeNomeResumido: item.produtos.unidadeNomeResumido,
-    unidades_assadeira: uaOk,
-    box_units: item.produtos.box_units ?? null,
-    receita_massa: item.produtos.receita_massa ?? null,
-  };
-  const meta = getQuantityByStation('fermentacao', item.qtd_planejada, productInfo).value || 0;
+  const meta = getQtyByStation(item, 'fermentacao').value || 0;
   const rb = item.receitas_batidas || 0;
   const q = item.produtos.receita_massa?.quantidade_por_produto ?? 0;
   const massa = uaOk != null && q > 0 ? (rb * q) / uaOk : q > 0 ? rb * q : 0;
@@ -215,10 +213,19 @@ function productInfoFromQueueItem(item: ProductionQueueItem): ProductConversionI
 export function saidaEmbalagemItemProgressMetrics(item: ProductionQueueItem) {
   const pi = productInfoFromQueueItem(item);
   const metaBlock = getMetaCaixasSaidaEmbalagem(item.qtd_planejada, pi);
+
+  // Prioriza as caixas planejadas da ordem (conversão correta com tipo de caixa);
+  // só cai no cálculo por box_units do produto quando a OP não tem esse valor.
+  const caixasPlanejadas = item.caixas_planejadas;
+  const usarCaixasPlanejadas =
+    caixasPlanejadas != null && Number.isFinite(caixasPlanejadas) && caixasPlanejadas > 0;
+
   return {
-    metaCaixas: metaBlock.caixasEsperadas,
-    metaResumo: metaBlock.resumo,
-    metaSubtexto: metaBlock.subtexto,
+    metaCaixas: usarCaixasPlanejadas ? caixasPlanejadas : metaBlock.caixasEsperadas,
+    metaResumo: usarCaixasPlanejadas ? `${caixasPlanejadas} cx` : metaBlock.resumo,
+    metaSubtexto: usarCaixasPlanejadas
+      ? 'Caixas planejadas na ordem (conversão do planejamento, considerando o tipo de caixa).'
+      : metaBlock.subtexto,
     caixasInformadas: item.saida_embalagem_caixas_informadas ?? null,
     lotesEntrada: item.entrada_embalagem_registros_count ?? 0,
   };
@@ -230,7 +237,7 @@ export function saidaEmbalagemFilaGlobalMetrics(orders: ProductionQueueItem[]) {
   let cxSoma = 0;
   let lotesEntrada = 0;
   for (const o of orders) {
-    if (o.produtoJoinFaltando) continue;
+    if (filaItemProdutoIndisponivel(o)) continue;
     const m = saidaEmbalagemItemProgressMetrics(o);
     if (m.metaCaixas != null && Number.isFinite(m.metaCaixas)) {
       metaSoma += m.metaCaixas;
@@ -259,7 +266,7 @@ export function ordemPreRequisitosAtendidosParaTrabalharNaEtapa(
   item: ProductionQueueItem,
   station: Station,
 ): boolean {
-  if (item.produtoJoinFaltando) return false;
+  if (filaItemProdutoIndisponivel(item)) return false;
   switch (station) {
     case 'massa':
       return true;
@@ -281,6 +288,69 @@ export function ordemPreRequisitosAtendidosParaTrabalharNaEtapa(
   }
 }
 
+/** True quando faltam registros nas etapas anteriores — mostrar «Confirmar etapas» na fila. */
+export function ordemFaltaPreRequisitosNaEtapaFila(
+  item: ProductionQueueItem,
+  station: Station,
+): boolean {
+  if (filaItemProdutoIndisponivel(item)) return false;
+  return !ordemPreRequisitosAtendidosParaTrabalharNaEtapa(item, station);
+}
+
+/** Mostrar botão Confirmar/Adiantar etapas no card (pré-requisitos ou meta da etapa ainda não atingida). */
+export function ordemMostrarConfirmarEtapasNaFila(
+  item: ProductionQueueItem,
+  station: Station,
+): boolean {
+  if (filaItemProdutoIndisponivel(item)) return false;
+  if (ordemFaltaPreRequisitosNaEtapaFila(item, station)) return true;
+  switch (station) {
+    case 'entrada_forno': {
+      const meta = getQtyByStation(item, 'entrada_forno').value || 0;
+      const forno = item.forno_entrada_latas_total ?? item.forno_volume_concluido ?? 0;
+      return meta > 0 && forno + PRONTO_EPS < meta;
+    }
+    case 'saida_forno': {
+      const meta = getQtyByStation(item, 'saida_forno').value || 0;
+      const saida = item.saida_forno_bandejas_total ?? 0;
+      return meta > 0 && saida + PRONTO_EPS < meta;
+    }
+    case 'entrada_embalagem': {
+      // «Adiantar etapas» cria carrinhos na saída do forno (pré-requisito desta etapa).
+      // Quando a saída do forno já cobre a meta, não há mais nada para adiantar — só registrar a entrada.
+      const m = entradaEmbalagemItemProgressMetrics(item);
+      return m.meta > 0 && m.saidaForno + PRONTO_EPS < m.meta;
+    }
+    case 'saida_embalagem': {
+      const se = saidaEmbalagemItemProgressMetrics(item);
+      if (se.metaCaixas != null && se.metaCaixas > 0) {
+        const cx = se.caixasInformadas ?? 0;
+        return cx + PRONTO_EPS < se.metaCaixas;
+      }
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
+/** Adiantar como atalho secundário (há ação principal da etapa); Confirmar mantém destaque quando faltam pré-requisitos. */
+export function ordemAdiantarEtapasComoSecundarioNaFila(
+  item: ProductionQueueItem,
+  station: Station,
+): boolean {
+  return (
+    ordemMostrarConfirmarEtapasNaFila(item, station) &&
+    !ordemFaltaPreRequisitosNaEtapaFila(item, station)
+  );
+}
+
+export function labelConfirmarEtapasNaFila(_item: ProductionQueueItem, _station: Station): string {
+  // Rótulo unificado: o botão abre sempre o mesmo fluxo de adiantar/sincronizar etapas,
+  // independentemente de faltarem pré-requisitos, então usamos um único texto.
+  return 'Adiantar etapas';
+}
+
 /** Texto para tooltip / título quando a ordem aparece na etapa mas ainda não pode ser avançada aqui. */
 export function filaMensagemPreRequisitoEtapaAnterior(
   station: Station,
@@ -293,7 +363,7 @@ export function filaMensagemPreRequisitoEtapaAnterior(
     case 'saida_forno':
       return 'Registre entrada no forno antes da saída do forno.';
     case 'entrada_embalagem':
-      return 'Registre a saída do forno antes da entrada na embalagem.';
+      return 'Registre a saída do forno antes da entrada na embalagem. Se a massa já foi batida mas as etapas intermédias não foram lançadas no sistema, use Adiantar etapas no card da ordem.';
     case 'saida_embalagem':
       return 'Registre entrada na embalagem antes da saída de embalagem.';
     default:
@@ -303,7 +373,7 @@ export function filaMensagemPreRequisitoEtapaAnterior(
 
 /** True se já houve trabalho registrado nesta etapa, mas a meta ainda não foi atingida. */
 export function filaItemTemProgressoParcialNaEtapa(item: ProductionQueueItem, station: Station): boolean {
-  if (item.produtoJoinFaltando) return false;
+  if (filaItemProdutoIndisponivel(item)) return false;
   switch (station) {
     case 'massa':
       return (item.receitas_batidas ?? 0) >= 0.5;
@@ -314,7 +384,11 @@ export function filaItemTemProgressoParcialNaEtapa(item: ProductionQueueItem, st
     case 'saida_forno':
       return (item.saida_forno_bandejas_total ?? 0) > 0;
     case 'entrada_embalagem':
-      return (item.entrada_embalagem_latas_total ?? 0) > 0;
+      return (
+        (item.entrada_embalagem_latas_total ?? 0) > 0 ||
+        (item.receitas_batidas ?? 0) > 0 ||
+        (item.qtd_massa_finalizada ?? 0) > 0
+      );
     case 'saida_embalagem':
       return (item.saida_embalagem_caixas_informadas ?? 0) > 0;
     default:
@@ -331,7 +405,7 @@ export function filaCardEstadoVisual(
   station: Station,
   opts: { fromProntosSection: boolean; isFirstActionableInFila: boolean },
 ): FilaCardEstadoVisual {
-  if (item.produtoJoinFaltando) return 'pendente';
+  if (filaItemProdutoIndisponivel(item)) return 'pendente';
   if (opts.fromProntosSection || ordemProntaNaEtapaFila(item, station)) {
     return 'finalizada';
   }
@@ -357,7 +431,7 @@ export function filaGrupoEntradaFornoEstadoVisual(
   orders: ProductionQueueItem[],
   opts: { fromProntosSection: boolean; isFirstActiveGroup: boolean },
 ): FilaGrupoProdutoEstadoVisual {
-  if (orders.some((o) => o.produtoJoinFaltando)) return 'pendente';
+  if (orders.some((o) => filaItemProdutoIndisponivel(o))) return 'pendente';
   if (opts.fromProntosSection || fornoProductGroupEtapaCompleta(orders)) {
     return 'finalizada';
   }
@@ -372,7 +446,7 @@ export function filaGrupoSaidaFornoEstadoVisual(
   orders: ProductionQueueItem[],
   opts: { fromProntosSection: boolean; isFirstActiveGroup: boolean },
 ): FilaGrupoProdutoEstadoVisual {
-  if (orders.some((o) => o.produtoJoinFaltando)) return 'pendente';
+  if (orders.some((o) => filaItemProdutoIndisponivel(o))) return 'pendente';
   if (opts.fromProntosSection || saidaFornoProductGroupEtapaCompleta(orders)) {
     return 'finalizada';
   }
@@ -386,7 +460,7 @@ export function filaGrupoSaidaFornoEstadoVisual(
  * Indica se a ordem já cumpriu o objetivo da etapa na fila (para separar "prontos" na UI).
  */
 export function ordemProntaNaEtapaFila(item: ProductionQueueItem, station: Station): boolean {
-  if (item.produtoJoinFaltando) return false;
+  if (filaItemProdutoIndisponivel(item)) return false;
   switch (station) {
     case 'massa':
       return massaMetaConcluida(item);
@@ -395,14 +469,12 @@ export function ordemProntaNaEtapaFila(item: ProductionQueueItem, station: Stati
       return m.meta > 0 && m.fermentacao + PRONTO_EPS >= m.meta;
     }
     case 'entrada_forno': {
-      const pi = productInfoFromQueueItem(item);
-      const meta = getQuantityByStation('entrada_forno', item.qtd_planejada, pi).value || 0;
+      const meta = getQtyByStation(item, 'entrada_forno').value || 0;
       const forno = item.forno_entrada_latas_total ?? item.forno_volume_concluido ?? 0;
       return meta > 0 && forno + PRONTO_EPS >= meta;
     }
     case 'saida_forno': {
-      const pi = productInfoFromQueueItem(item);
-      const meta = getQuantityByStation('saida_forno', item.qtd_planejada, pi).value || 0;
+      const meta = getQtyByStation(item, 'saida_forno').value || 0;
       const saida = item.saida_forno_bandejas_total ?? 0;
       return meta > 0 && saida + PRONTO_EPS >= meta;
     }
@@ -411,7 +483,10 @@ export function ordemProntaNaEtapaFila(item: ProductionQueueItem, station: Stati
       return m.meta > 0 && m.entradaEmbalagem + PRONTO_EPS >= m.meta;
     }
     case 'saida_embalagem':
-      return (item.status ?? '').toLowerCase() === 'concluido';
+      return (
+        (item.saida_embalagem_caixas_informadas ?? 0) > 0 ||
+        (item.saida_embalagem_registros?.length ?? 0) > 0
+      );
     default:
       return false;
   }
@@ -428,10 +503,9 @@ const FILA_OP_PIPELINE_STATIONS: Station[] = [
 ];
 
 function filaEtapaFillRatioForOp(item: ProductionQueueItem, station: Station): number {
-  const pi = productInfoFromQueueItem(item);
   switch (station) {
     case 'massa': {
-      const nec = getQuantityByStation('massa', item.qtd_planejada, pi).receitas?.value ?? 0;
+      const nec = getQtyByStation(item, 'massa').receitas?.value ?? 0;
       if (nec <= 0) return 0;
       return Math.min(1, (item.receitas_batidas ?? 0) / nec);
     }
@@ -441,13 +515,13 @@ function filaEtapaFillRatioForOp(item: ProductionQueueItem, station: Station): n
       return Math.min(1, m.fermentacao / m.meta);
     }
     case 'entrada_forno': {
-      const meta = getQuantityByStation('entrada_forno', item.qtd_planejada, pi).value || 0;
+      const meta = getQtyByStation(item, 'entrada_forno').value || 0;
       if (meta <= 0) return 0;
       const v = item.forno_entrada_latas_total ?? item.forno_volume_concluido ?? 0;
       return Math.min(1, v / meta);
     }
     case 'saida_forno': {
-      const meta = getQuantityByStation('saida_forno', item.qtd_planejada, pi).value || 0;
+      const meta = getQtyByStation(item, 'saida_forno').value || 0;
       if (meta <= 0) return 0;
       const v = item.saida_forno_bandejas_total ?? 0;
       return Math.min(1, v / meta);
@@ -474,7 +548,7 @@ function filaEtapaFillRatioForOp(item: ProductionQueueItem, station: Station): n
  * etapas concluídas somam segmentos iguais; na primeira incompleta aplica-se só a fração atual.
  */
 export function filaOrdemProducaoProgressoSequencialPct(item: ProductionQueueItem): number {
-  if (item.produtoJoinFaltando) return 0;
+  if (filaItemProdutoIndisponivel(item)) return 0;
   if (String(item.status ?? '').toLowerCase() === 'concluido') return 100;
 
   const seg = 100 / FILA_OP_PIPELINE_STATIONS.length;
@@ -493,10 +567,42 @@ export function filaOrdemProducaoProgressoSequencialPct(item: ProductionQueueIte
 
 /** Média do progresso macro das ordens do grupo (cabeçalho compacto por produto). */
 export function filaOrdemProducaoGrupoProgressoPct(orders: ProductionQueueItem[]): number {
-  const ok = orders.filter((o) => !o.produtoJoinFaltando);
+  const ok = orders.filter((o) => !filaItemProdutoIndisponivel(o));
   if (ok.length === 0) return 0;
   const sum = ok.reduce((acc, o) => acc + filaOrdemProducaoProgressoSequencialPct(o), 0);
   return Math.round(sum / ok.length);
+}
+
+/**
+ * Progresso 0–100% relativo à PRÓPRIA etapa (não ao pipeline inteiro):
+ * ex.: na entrada do forno mostra o que já entrou no forno / meta — vazio se nada foi colocado.
+ */
+export function filaEtapaProgressoRelativoPct(item: ProductionQueueItem, station: Station): number {
+  if (filaItemProdutoIndisponivel(item)) return 0;
+  const r = Math.max(0, Math.min(1, filaEtapaFillRatioForOp(item, station)));
+  return Math.round(r * 100);
+}
+
+/** Versão por grupo (entrada/saída do forno): soma dos volumes da etapa ÷ soma das metas. */
+export function filaEtapaGrupoProgressoRelativoPct(
+  orders: ProductionQueueItem[],
+  station: Station,
+): number {
+  const ok = orders.filter((o) => !filaItemProdutoIndisponivel(o));
+  if (ok.length === 0) return 0;
+  if (station === 'entrada_forno') {
+    const g = fornoGroupProgressMetrics(ok);
+    return g.meta > 0 ? Math.round(Math.min(100, (g.forno / g.meta) * 100)) : 0;
+  }
+  if (station === 'saida_forno') {
+    const g = saidaFornoGroupProgressMetrics(ok);
+    return g.meta > 0 ? Math.round(Math.min(100, (g.saidaForno / g.meta) * 100)) : 0;
+  }
+  const sum = ok.reduce(
+    (acc, o) => acc + Math.max(0, Math.min(1, filaEtapaFillRatioForOp(o, station))),
+    0,
+  );
+  return Math.round((sum / ok.length) * 100);
 }
 
 export function fornoProductGroupEtapaCompleta(orders: ProductionQueueItem[]): boolean {
@@ -519,7 +625,7 @@ export function filaEtapaTituloSecaoProntos(station: Station): string {
     entrada_forno: 'Entrada no forno completa',
     saida_forno: 'Saída do forno completa',
     entrada_embalagem: 'Entrada na embalagem completa',
-    saida_embalagem: 'Saída de embalagem — ordem concluída',
+    saida_embalagem: 'Saída registada — expanda para editar ou excluir caixas',
   };
   return m[station] ?? 'Concluídos nesta etapa';
 }

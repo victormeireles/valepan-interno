@@ -16,6 +16,9 @@ export type ProductConversionInfo = {
   /** Cadastro de latas: unidades por lata nova (null = produto não usa lata nova neste cadastro). */
   unidades_lata_nova?: number | null;
   receita_massa?: {
+    receita_id?: string;
+    receita_nome?: string | null;
+    receita_codigo?: string | null;
     quantidade_por_produto: number; // Unidades do produto que 1 receita produz
   } | null;
 };
@@ -254,7 +257,15 @@ export function getQuantityByStation(
   station: Station,
   quantidadePlanejada: number,
   product: ProductConversionInfo,
+  unidadesConsumoPlanejadas?: number,
 ): StationQuantity {
+  const resolveBaseUnits = (): number =>
+    unidadesConsumoPlanejadas != null &&
+    Number.isFinite(unidadesConsumoPlanejadas) &&
+    unidadesConsumoPlanejadas >= 0
+      ? unidadesConsumoPlanejadas
+      : toUnits(quantidadePlanejada, product);
+
   if (station === "massa") {
     const quantidadePorProduto = product.receita_massa?.quantidade_por_produto;
 
@@ -268,9 +279,7 @@ export function getQuantityByStation(
       };
     }
 
-    // Passo 1: Converter quantidade planejada (pode ser em caixas, pacotes, unidades) para unidades
-    // Exemplo: 10 caixas × 12 unidades/caixa = 120 unidades
-    const unidadesTotais = toUnits(quantidadePlanejada, product);
+    const unidadesTotais = resolveBaseUnits();
     
     // Passo 2: Converter unidades para receitas
     // Exemplo: 120 unidades ÷ 100 unidades/receita = 1.2 receitas
@@ -279,24 +288,62 @@ export function getQuantityByStation(
     // Passo 3: Arredondar para o próximo múltiplo de 0.5
     // Exemplo: 0.1 receitas → 0.5 receitas, 0.6 receitas → 1.0 receitas, 1.1 receitas → 1.5 receitas
     const receitasArredondadas = roundReceitasUp(receitasCalculadas);
-    
-    // Calcular assadeiras (coerente com receitas arredondadas, igual fermentação/demanda OP)
-    let assadeirasInfo: { value: number; readable: string; unidadesPorAssadeira?: number } | undefined;
-    if (product.unidades_assadeira && product.unidades_assadeira > 0) {
-      const assadeirasBruto =
-        assadeirasFromReceitasArredondadas(receitasArredondadas, product) ??
-        toAssadeiras(unidadesTotais, product);
-      const unidadesPorAssadeira = product.unidades_assadeira;
-      const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
-        assadeirasBruto,
-        unidadesPorAssadeira,
-      );
 
-      assadeirasInfo = {
-        value: assadeiras,
-        readable: readableText,
-        unidadesPorAssadeira,
-      };
+    // LT da OP: quando planejamento veio em latas (unidadesConsumo ÷ qtd_planejada = int. estável),
+    // exibir as latas da ordem — não receitas arredondadas nem unidades_assadeira legado do produto.
+    let assadeirasInfo: { value: number; readable: string; unidadesPorAssadeira?: number } | undefined;
+    if (
+      unidadesConsumoPlanejadas != null &&
+      Number.isFinite(unidadesConsumoPlanejadas) &&
+      quantidadePlanejada > 0
+    ) {
+      const perLataFromOp = unidadesConsumoPlanejadas / quantidadePlanejada;
+      if (perLataFromOp >= 1) {
+        const perLataRounded = Math.round(perLataFromOp);
+        if (Math.abs(perLataFromOp - perLataRounded) < 0.05) {
+          const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
+            quantidadePlanejada,
+            perLataRounded,
+          );
+          assadeirasInfo = {
+            value: assadeiras,
+            readable: readableText,
+            unidadesPorAssadeira: perLataRounded,
+          };
+        }
+      }
+    }
+
+    if (!assadeirasInfo && product.unidades_assadeira && product.unidades_assadeira > 0) {
+      const unidadesPorAssadeira = product.unidades_assadeira;
+      if (
+        unidadesConsumoPlanejadas != null &&
+        Number.isFinite(unidadesConsumoPlanejadas) &&
+        unidadesConsumoPlanejadas > 0
+      ) {
+        const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
+          unidadesConsumoPlanejadas / unidadesPorAssadeira,
+          unidadesPorAssadeira,
+        );
+        assadeirasInfo = {
+          value: assadeiras,
+          readable: readableText,
+          unidadesPorAssadeira,
+        };
+      } else {
+        const assadeirasBruto =
+          assadeirasFromReceitasArredondadas(receitasArredondadas, product) ??
+          toAssadeiras(unidadesTotais, product);
+        const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
+          assadeirasBruto,
+          unidadesPorAssadeira,
+        );
+        assadeirasInfo = {
+          value: assadeiras,
+          readable: readableText,
+          unidadesPorAssadeira,
+        };
+      }
     }
     
     // Informação de unidades
@@ -318,15 +365,33 @@ export function getQuantityByStation(
     };
   }
 
-  const baseUnits = toUnits(quantidadePlanejada, product);
+  const baseUnits = resolveBaseUnits();
 
   if (
     station === "fermentacao" ||
     station === "entrada_forno" ||
     station === "saida_forno"
   ) {
-    const quantidadePorProduto = product.receita_massa?.quantidade_por_produto;
     const unidadesPorAssadeira = product.unidades_assadeira;
+    if (
+      unidadesConsumoPlanejadas != null &&
+      Number.isFinite(unidadesConsumoPlanejadas) &&
+      unidadesPorAssadeira != null &&
+      unidadesPorAssadeira > 0
+    ) {
+      const latasBruto = unidadesConsumoPlanejadas / unidadesPorAssadeira;
+      const { value: assadeiras, readable: readableText } = assadeirasLtReadable(
+        latasBruto,
+        unidadesPorAssadeira,
+      );
+      return {
+        value: assadeiras,
+        unitLabel: "LT",
+        readable: readableText,
+      };
+    }
+
+    const quantidadePorProduto = product.receita_massa?.quantidade_por_produto;
     const assadeirasPorReceitas =
       quantidadePorProduto &&
       quantidadePorProduto > 0 &&
