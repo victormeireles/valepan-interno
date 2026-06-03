@@ -20,6 +20,13 @@ export interface EstoqueRecord {
   quantidade: Quantidade;
   inventarioAtualizadoEm?: string;
   atualizadoEm: string;
+  tipoEstoqueId?: string;
+  produtoId?: string;
+  produtoFamiliaId?: string | null;
+  produtoFamiliaNome?: string | null;
+  produtoFamiliaImagemUrl?: string | null;
+  ordemFamilia?: number;
+  ordemNaFamilia?: number;
 }
 
 export interface InventarioLancamentoItem {

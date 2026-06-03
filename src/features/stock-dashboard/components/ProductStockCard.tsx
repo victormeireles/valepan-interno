@@ -9,13 +9,18 @@ interface ProductStockCardProps {
   quantidade: Quantidade;
   onAdjust: () => void;
   onOutflow: () => void;
+  onHistory: () => void;
 }
+
+const actionBase =
+  'inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 min-h-11';
 
 export const ProductStockCard: React.FC<ProductStockCardProps> = ({
   produto,
   quantidade,
   onAdjust,
   onOutflow,
+  onHistory,
 }) => {
   const isNegative =
     quantidade.caixas < 0 ||
@@ -24,48 +29,67 @@ export const ProductStockCard: React.FC<ProductStockCardProps> = ({
     quantidade.kg < 0;
 
   return (
-    <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between gap-3 mb-3">
+    <article
+      className={`rounded-2xl border bg-white p-3 shadow-sm transition-shadow hover:shadow-md ${
+        isNegative
+          ? 'border-red-200 ring-1 ring-red-100'
+          : 'border-gray-100'
+      }`}
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
         <h3
-          className="text-sm font-semibold text-gray-900 truncate flex-1"
+          className="min-w-0 flex-1 text-sm font-semibold leading-snug text-gray-900"
           title={produto}
         >
           {produto}
         </h3>
         <span
-          className={`text-base font-bold whitespace-nowrap ${
-            isNegative ? 'text-red-600' : 'text-gray-900'
+          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${
+            isNegative
+              ? 'bg-red-50 text-red-700 ring-1 ring-red-100'
+              : 'bg-blue-50 text-blue-800 ring-1 ring-blue-100'
           }`}
         >
           {formatQuantidade(quantidade)}
         </span>
       </div>
 
-      <div className="flex gap-2">
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onAdjust}
+            className={`${actionBase} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100`}
+          >
+            <AdjustIcon />
+            Ajustar
+          </button>
+          <button
+            type="button"
+            onClick={onOutflow}
+            className={`${actionBase} bg-blue-600 text-white hover:bg-blue-500 active:bg-blue-700`}
+          >
+            <OutflowIcon />
+            Saída
+          </button>
+        </div>
         <button
           type="button"
-          onClick={onAdjust}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          onClick={onHistory}
+          className={`${actionBase} w-full border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 active:bg-gray-200`}
+          aria-label="Ver histórico de movimentos"
         >
-          <AdjustIcon />
-          Ajustar
-        </button>
-        <button
-          type="button"
-          onClick={onOutflow}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 active:bg-blue-700 transition-colors"
-        >
-          <OutflowIcon />
-          Saída
+          <HistoryIcon />
+          Histórico
         </button>
       </div>
-    </div>
+    </article>
   );
 };
 
 const AdjustIcon = () => (
   <svg
-    className="h-3.5 w-3.5 text-gray-500"
+    className="h-3.5 w-3.5 shrink-0 text-gray-500"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -79,9 +103,25 @@ const AdjustIcon = () => (
   </svg>
 );
 
+const HistoryIcon = () => (
+  <svg
+    className="h-3.5 w-3.5 shrink-0 text-gray-500"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
 const OutflowIcon = () => (
   <svg
-    className="h-3.5 w-3.5 text-white"
+    className="h-3.5 w-3.5 shrink-0 text-white"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -94,5 +134,3 @@ const OutflowIcon = () => (
     <line x1="2" y1="12" x2="22" y2="12" />
   </svg>
 );
-
-

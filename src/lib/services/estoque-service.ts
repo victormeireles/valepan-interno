@@ -343,6 +343,13 @@ export class EstoqueService {
       produto: saldo.produtoNome,
       quantidade: saldo.quantidade,
       atualizadoEm: saldo.updatedAt,
+      tipoEstoqueId: saldo.tipoEstoqueId,
+      produtoId: saldo.produtoId,
+      produtoFamiliaId: saldo.produtoFamiliaId,
+      produtoFamiliaNome: saldo.produtoFamiliaNome,
+      produtoFamiliaImagemUrl: saldo.produtoFamiliaImagemUrl,
+      ordemFamilia: saldo.ordemFamilia,
+      ordemNaFamilia: saldo.ordemNaFamilia,
     }));
   }
 

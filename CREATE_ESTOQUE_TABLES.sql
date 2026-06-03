@@ -66,3 +66,5 @@ CREATE TABLE IF NOT EXISTS inventario_lancamento_itens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventario_lanc_data ON inventario_lancamentos(data DESC);
+
+-- RLS: ver ESTOQUE_RLS.sql (aplicar após criar tabelas)

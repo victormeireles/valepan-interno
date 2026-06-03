@@ -2,21 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { EstoqueMovimentoOrigem, EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
+import { ORIGEM_COLORS, ORIGEM_LABELS } from '@/domain/estoque/movimento-display';
 import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
-
-const ORIGEM_LABELS: Record<EstoqueMovimentoOrigem, string> = {
-  embalagem: 'Embalagem',
-  saida: 'Saída',
-  inventario: 'Inventário',
-  ajuste_manual: 'Ajuste manual',
-};
-
-const ORIGEM_COLORS: Record<EstoqueMovimentoOrigem, string> = {
-  embalagem: 'bg-emerald-100 text-emerald-800',
-  saida: 'bg-orange-100 text-orange-800',
-  inventario: 'bg-blue-100 text-blue-800',
-  ajuste_manual: 'bg-gray-100 text-gray-800',
-};
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso);

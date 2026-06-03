@@ -14,6 +14,11 @@ export interface EstoqueSaldoRecord {
   produtoNome: string;
   quantidade: Quantidade;
   updatedAt: string;
+  produtoFamiliaId?: string | null;
+  produtoFamiliaNome?: string | null;
+  produtoFamiliaImagemUrl?: string | null;
+  ordemFamilia?: number;
+  ordemNaFamilia?: number;
 }
 
 export interface EstoqueMovimentoRecord {

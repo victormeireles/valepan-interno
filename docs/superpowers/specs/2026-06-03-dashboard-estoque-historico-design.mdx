@@ -1,0 +1,200 @@
+# Design: Histórico de movimentos no dashboard de estoque
+
+**Data:** 2026-06-03  
+**Status:** Aguardando revisão do stakeholder  
+**Rota:** `/painel/dashboard-estoque`  
+**Depende de:** Fase A estoque/auditoria (`estoque_movimentos`, `GET /api/estoque/movimentos`)
+
+## Contexto
+
+O painel de estoque exibe saldos por tipo de estoque (rótulo “cliente”) e produto, com ações **Ajustar** e **Saída** por card. A auditoria global existe em `/estoque/auditoria` (tabela ampla, filtros manuais), mas o operador precisa ver **o que aconteceu com aquele produto** sem sair do fluxo do dashboard.
+
+O ledger `estoque_movimentos` já registra delta, saldo resultante e origem (`embalagem`, `saida`, `inventario`, `ajuste_manual`). A API `GET /api/estoque/movimentos` aceita `tipoEstoqueId`, `produtoId`, `origem`, `de`, `ate` e `limit`.
+
+**Gap atual:** `EstoqueRecord` no painel só expõe nomes (`cliente`, `produto`), sem UUIDs necessários para filtrar movimentos por item.
+
+## Objetivos
+
+1. Botão **Histórico** em cada card de produto no dashboard.
+2. Modal com **linha do tempo** de movimentos daquele par (tipo estoque + produto).
+3. Filtro **De / Até** com atalhos **Hoje · Ontem · Últimos 7 dias** (padrão **Hoje**).
+4. Lista **mais recente no topo** (estilo log).
+5. Reutilizar API e tokens visuais de origem já usados na auditoria.
+
+## Decisões de produto (validadas)
+
+| Tópico | Decisão |
+|--------|---------|
+| Filtro de data | Intervalo De/Até + atalhos Hoje, Ontem, 7 dias; padrão Hoje |
+| Ordem da lista | Mais recente no topo |
+| Botão no card | Linha 1: Ajustar \| Saída; linha 2: Histórico (largura total, estilo neutro) |
+| Layout do modal | Timeline vertical (trilho + conteúdo), não tabela |
+| Largura do modal | `max-w-xl` (maior que dialogs de formulário `max-w-md`) |
+| Limite de registros | `limit=100`; aviso se truncado |
+| Filtro por origem no modal | Fora de escopo v1 (pode acrescentar depois) |
+| Link para `/estoque/auditoria` | Fora de escopo v1 |
+| Drill-down para registro fonte | Fora de escopo (sem FK na Fase A) |
+
+## Fora de escopo
+
+- Export CSV / imagem
+- Paginação “carregar mais” além do limit 100
+- Autor do movimento (campo futuro)
+- Alterar estoque a partir do modal de histórico
+- Histórico quando dados vêm só da planilha (fallback sem Supabase)
+
+## UI — Card do produto (`ProductStockCard`)
+
+```
+┌─────────────────────────────────────┐
+│ Produto                    saldo    │
+├─────────────────────────────────────┤
+│ [ Ajustar ]      [ Saída (azul) ]   │
+│ [ ícone Histórico — w-full ]        │
+└─────────────────────────────────────┘
+```
+
+- **Histórico:** `min-h-11`, borda cinza, ícone SVG (relógio ou lista), texto “Histórico”, não compete visualmente com Saída.
+- `aria-label="Ver histórico de movimentos"`.
+- Prop `onHistory` propagada: `ProductStockCard` → `ClientStockBlock` → `StockDashboard` → estado `historyTarget` (mesmo padrão de `adjustTarget` / `outflowTarget`).
+
+## UI — Modal `StockHistoryDialog`
+
+### Shell
+
+- Igual aos dialogs existentes: `fixed inset-0 z-50`, scrim `bg-black/50`, painel `rounded-3xl bg-white shadow-2xl`.
+- `role="dialog"`, `aria-modal="true"`, `aria-labelledby` no título.
+- Fechar: botão X, Esc, clique no scrim.
+- Foco trap no modal ao abrir; `prefers-reduced-motion`: sem animação de entrada na lista.
+
+### Header (fixo)
+
+- Eyebrow: “Histórico de movimentos”
+- Título: nome do produto
+- Subtítulo: `{tipoEstoqueNome}` · Saldo atual: `{formatQuantidade}`
+
+### Filtros (fixos)
+
+- **Segment control:** Hoje | Ontem | 7 dias — preenche De/Até (dia civil, timezone do navegador; implementação com helper compartilhado).
+- Inputs `type="date"` De e Até (editáveis após atalho).
+- Recarregar ao confirmar período (botão “Atualizar” ou debounce ~300ms ao mudar datas).
+- Contador: “N movimentos” após carga.
+
+### Corpo (scroll)
+
+- `max-h-[min(60dvh,520px)]`, scroll vertical único.
+- **Timeline vertical**, ordem `created_at DESC`.
+
+Cada item exibe:
+
+| Elemento | Conteúdo |
+|----------|----------|
+| Hora | `HH:mm`; se intervalo > 1 dia, também `dd/MM` |
+| Origem | Badge com label + cor (compartilhado com auditoria) |
+| Delta | Apenas dimensões ≠ 0; `+`/`-`; ícone ↑/↓ além de cor |
+| Saldo | Linha secundária: `Saldo: {formatQuantidade(saldo)}` |
+
+Números com `font-variant-numeric: tabular-nums` onde aplicável.
+
+### Estados
+
+| Estado | Comportamento |
+|--------|----------------|
+| Loading | Skeleton 3–4 linhas |
+| Vazio | “Nenhum movimento neste período” + sugerir ampliar intervalo |
+| Erro | Mensagem + “Tentar novamente” |
+| Truncado (100) | Banner: “Mostrando os 100 movimentos mais recentes — refine o período” |
+| Sem IDs (fallback planilha) | Botão Histórico desabilitado ou modal com mensagem “Histórico disponível apenas com estoque no banco” |
+
+### Footer
+
+- Botão **Fechar** (secundário; largura total em viewport estreita).
+
+## Tokens visuais de origem (compartilhados)
+
+Extrair de `src/app/estoque/auditoria/page.tsx` para módulo reutilizável, por exemplo `src/domain/estoque/movimento-display.ts`:
+
+| Origem | Label | Cor (badge) |
+|--------|-------|-------------|
+| `embalagem` | Embalagem | emerald |
+| `saida` | Saída | orange |
+| `inventario` | Inventário | blue |
+| `ajuste_manual` | Ajuste manual | gray |
+
+## Dados e API
+
+### Estender payload do painel
+
+Adicionar a `EstoqueRecord` (`src/domain/types/inventario.ts`):
+
+```ts
+tipoEstoqueId?: string;
+produtoId?: string;
+```
+
+Preencher em `EstoqueService.listarSaldosComFallback()` ao mapear `EstoqueSaldoRecord`. Omitir quando fonte for planilha (fallback).
+
+### Fetch do modal
+
+```
+GET /api/estoque/movimentos?tipoEstoqueId={uuid}&produtoId={uuid}&de={isoStart}&ate={isoEnd}&limit=100
+```
+
+Sem novo endpoint. Reutilizar `estoqueService.listarMovimentos`.
+
+### Datas na query
+
+- Alinhar com página `/estoque/auditoria`: início/fim do dia em ISO.
+- Criar helper único, ex. `src/lib/utils/estoque-date-range.ts`:
+  - `getPresetRange('hoje' | 'ontem' | '7dias')` → `{ de, ate }`
+  - `dateInputsToIso(de: string, ate: string)` para envio à API
+
+## Arquitetura de componentes
+
+| Artefato | Responsabilidade |
+|----------|------------------|
+| `movimento-display.ts` | `ORIGEM_LABELS`, `ORIGEM_COLORS`, helpers de badge |
+| `StockHistoryDialog.tsx` | Modal, filtros, fetch, estados |
+| `StockMovementTimeline.tsx` | Render da timeline (props: `movimentos[]`) |
+| `ProductStockCard.tsx` | Botão Histórico + `onHistory` |
+| `ClientStockBlock.tsx` | Repasse `onHistory` |
+| `StockDashboard.tsx` | `historyTarget`, render dialog |
+| `estoque-service.ts` | IDs no map de saldos |
+| `auditoria/page.tsx` | Importar labels/cores do módulo compartilhado |
+
+## Tratamento de erros
+
+| Situação | Comportamento |
+|----------|----------------|
+| `tipoEstoqueId` ou `produtoId` ausente | Não chamar API; UX explicativa |
+| HTTP 4xx/5xx | Mensagem no modal + retry |
+| 0 movimentos no período | Empty state |
+| ≥100 movimentos | Banner de truncamento |
+
+## Testes
+
+| Tipo | Caso |
+|------|------|
+| Unit | `getPresetRange`: Hoje/Ontem/7d → limites corretos |
+| Unit | `StockMovementTimeline`: 0 itens, 1 item, delta só campos não zero |
+| Unit | Formatação delta com sinal e ícone direção |
+| Integração (opcional) | API movimentos com `tipoEstoqueId` + `produtoId` + intervalo |
+
+## Critérios de aceite
+
+- [ ] Cada card de produto no dashboard exibe botão Histórico na segunda linha
+- [ ] Modal abre com período **Hoje** por padrão e lista movimentos mais recentes primeiro
+- [ ] Atalhos Hoje / Ontem / 7 dias atualizam De/Até e recarregam a lista
+- [ ] Timeline mostra hora, origem (badge), delta legível e saldo resultante
+- [ ] Painel envia `tipoEstoqueId` e `produtoId` quando saldos vêm do Supabase
+- [ ] Fallback planilha não quebra o dashboard; histórico indisponível de forma clara
+- [ ] Modal acessível (dialog, Esc, foco, labels)
+- [ ] Labels/cores de origem consistentes com `/estoque/auditoria`
+
+## Referências no código
+
+- `src/features/stock-dashboard/components/ProductStockCard.tsx`
+- `src/features/stock-dashboard/components/StockAdjustmentDialog.tsx` (padrão de modal)
+- `src/app/estoque/auditoria/page.tsx`
+- `src/app/api/estoque/movimentos/route.ts`
+- `docs/superpowers/specs/2026-06-02-estoque-auditoria-design.mdx`

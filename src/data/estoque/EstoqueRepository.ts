@@ -13,10 +13,20 @@ import type { Database } from '@/types/database';
 type SaldoRow = Database['public']['Tables']['estoque_saldos']['Row'];
 type MovimentoRow = Database['public']['Tables']['estoque_movimentos']['Row'];
 
+type ProdutoWithFamilia = {
+  nome: string;
+  produto_familia_id: string | null;
+  ordem_na_familia: number;
+  produto_familias: { nome_exibicao: string; ordem: number; imagem_url: string | null } | null;
+};
+
 type SaldoWithRelations = SaldoRow & {
   tipos_estoque: { nome: string } | null;
-  produtos: { nome: string } | null;
+  produtos: ProdutoWithFamilia | null;
 };
+
+const SALDO_SELECT =
+  '*, tipos_estoque(nome), produtos(nome, produto_familia_id, ordem_na_familia, produto_familias(nome_exibicao, ordem, imagem_url))';
 
 type MovimentoWithRelations = MovimentoRow & {
   tipos_estoque: { nome: string } | null;
@@ -131,7 +141,7 @@ export class EstoqueRepository {
   async listAllSaldos(): Promise<EstoqueSaldoRecord[]> {
     const { data, error } = await this.supabase
       .from('estoque_saldos')
-      .select('*, tipos_estoque(nome), produtos(nome)')
+      .select(SALDO_SELECT)
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -144,7 +154,7 @@ export class EstoqueRepository {
   async listSaldosByTipoEstoque(tipoEstoqueId: string): Promise<EstoqueSaldoRecord[]> {
     const { data, error } = await this.supabase
       .from('estoque_saldos')
-      .select('*, tipos_estoque(nome), produtos(nome)')
+      .select(SALDO_SELECT)
       .eq('tipo_estoque_id', tipoEstoqueId);
 
     if (error) {
@@ -189,14 +199,20 @@ export class EstoqueRepository {
   }
 
   private mapSaldoRow(row: SaldoWithRelations): EstoqueSaldoRecord {
+    const produto = row.produtos;
     return {
       id: row.id,
       tipoEstoqueId: row.tipo_estoque_id,
       tipoEstoqueNome: row.tipos_estoque?.nome ?? '',
       produtoId: row.produto_id,
-      produtoNome: row.produtos?.nome ?? '',
+      produtoNome: produto?.nome ?? '',
       quantidade: mapQuantidade(row),
       updatedAt: row.updated_at,
+      produtoFamiliaId: produto?.produto_familia_id ?? null,
+      produtoFamiliaNome: produto?.produto_familias?.nome_exibicao ?? null,
+      produtoFamiliaImagemUrl: produto?.produto_familias?.imagem_url ?? null,
+      ordemFamilia: produto?.produto_familias?.ordem,
+      ordemNaFamilia: produto?.ordem_na_familia,
     };
   }
 

@@ -12,12 +12,15 @@ interface ClientStockBlockProps {
   filterTerm?: string;
   onAdjustStock: (data: StockCardSelection) => void;
   onRegisterOutflow: (data: StockCardSelection) => void;
+  onViewHistory: (data: StockCardSelection) => void;
 }
 
 export type StockCardSelection = {
   estoqueNome: string;
   produto: string;
   quantidade: Quantidade;
+  tipoEstoqueId?: string;
+  produtoId?: string;
 };
 
 export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
@@ -26,6 +29,7 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
   filterTerm = '',
   onAdjustStock,
   onRegisterOutflow,
+  onViewHistory,
 }) => {
   const isTotalNegative =
     summary.total.caixas < 0 ||
@@ -41,14 +45,12 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
     const searchTerm = filterTerm.toLowerCase().trim();
     const clienteMatches = cliente.toLowerCase().includes(searchTerm);
 
-    // Se o cliente corresponde, mostra todos os produtos
     if (clienteMatches) {
       return summary.produtos;
     }
 
-    // Caso contrário, filtra apenas os produtos que correspondem
     return summary.produtos.filter((item) =>
-      item.produto.toLowerCase().includes(searchTerm)
+      item.produto.toLowerCase().includes(searchTerm),
     );
   }, [summary.produtos, filterTerm, cliente]);
 
@@ -57,18 +59,35 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
   }
 
   return (
-    <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4">
-      <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-300">
-        <span
-          className={`${
-            isTotalNegative ? 'text-red-600 font-bold' : 'text-gray-600 font-normal'
-          }`}
-        >
-          {formatQuantidade(summary.total)}
-        </span>{' '}
-        - {cliente}
-      </h2>
-      <div className="space-y-3">
+    <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <header
+        className={`border-b px-4 py-3 sm:px-5 ${
+          isTotalNegative ? 'border-red-100 bg-red-50/40' : 'border-gray-100 bg-gray-50/80'
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="text-base font-bold leading-tight text-gray-900 sm:text-lg">
+            {cliente}
+          </h2>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
+                isTotalNegative
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-gray-900 text-white'
+              }`}
+            >
+              {formatQuantidade(summary.total)}
+            </span>
+            <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-gray-200">
+              {filteredProdutos.length} produto
+              {filteredProdutos.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <div className="space-y-2.5 bg-gray-50/50 p-3 sm:p-4">
         {filteredProdutos.map((item) => (
           <ProductStockCard
             key={item.produto}
@@ -79,6 +98,8 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
                 estoqueNome: cliente,
                 produto: item.produto,
                 quantidade: item.quantidade,
+                tipoEstoqueId: item.tipoEstoqueId,
+                produtoId: item.produtoId,
               })
             }
             onOutflow={() =>
@@ -86,12 +107,22 @@ export const ClientStockBlock: React.FC<ClientStockBlockProps> = ({
                 estoqueNome: cliente,
                 produto: item.produto,
                 quantidade: item.quantidade,
+                tipoEstoqueId: item.tipoEstoqueId,
+                produtoId: item.produtoId,
+              })
+            }
+            onHistory={() =>
+              onViewHistory({
+                estoqueNome: cliente,
+                produto: item.produto,
+                quantidade: item.quantidade,
+                tipoEstoqueId: item.tipoEstoqueId,
+                produtoId: item.produtoId,
               })
             }
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 };
-
