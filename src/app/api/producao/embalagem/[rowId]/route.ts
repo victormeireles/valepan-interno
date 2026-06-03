@@ -4,6 +4,10 @@ import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 import { estoqueService } from '@/lib/services/estoque-service';
+import {
+  embalagemLoteService,
+  EstoqueResolverError,
+} from '@/lib/services/embalagem-lote-service';
 
 export async function GET(
   request: Request,
@@ -96,8 +100,12 @@ export async function PUT(
     });
     
     const completeValues = responseComplete.data.values?.[0] || [];
+    const dataPedido = completeValues[0] || '';
+    const dataFabricacao = completeValues[1] || '';
     const cliente = completeValues[2] || '';             // C
+    const congelado = completeValues[5] || 'Não';
     const produto = completeValues[4] || '';             // E
+    const lotePlanilha = completeValues[26] || '';
     const pedidoCaixas = Number(completeValues[6] || 0);    // G
     const pedidoPacotes = Number(completeValues[7] || 0);   // H
     const pedidoUnidades = Number(completeValues[8] || 0);  // I
@@ -113,6 +121,15 @@ export async function PUT(
     const pacoteFotoUrl = completeValues[17] || '';         // R
     const etiquetaFotoUrl = completeValues[20] || '';       // U
     const palletFotoUrl = completeValues[23] || '';         // X
+
+    try {
+      await embalagemLoteService.resolveIds(cliente.toString(), produto.toString());
+    } catch (e) {
+      if (e instanceof EstoqueResolverError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
     
     const range = `${tabName}!M${rowNumber}:Q${rowNumber}`;
     const values = [
@@ -147,12 +164,52 @@ export async function PUT(
     ]);
 
 
-    await atualizarEstoque(cliente, produto, producaoAnterior, {
-      caixas: caixas || 0,
-      pacotes: pacotes || 0,
-      unidades: unidades || 0,
-      kg: kg || 0,
-    });
+    const produzidoEm = new Date().toISOString();
+    let loteId: string | undefined;
+    try {
+      const lote = await embalagemLoteService.criarLoteSubstituicao({
+        planilhaRowId: rowNumber,
+        dataPedido: dataPedido.toString(),
+        dataFabricacao: dataFabricacao.toString(),
+        cliente: cliente.toString(),
+        produto: produto.toString(),
+        congelado: congelado.toString(),
+        lote: lotePlanilha,
+        quantidade: {
+          caixas: caixas || 0,
+          pacotes: pacotes || 0,
+          unidades: unidades || 0,
+          kg: kg || 0,
+        },
+        producaoAnterior,
+        produzidoEm,
+        obsEmbalagem: obsEmbalagem || '',
+        fotos: {
+          pacoteFotoUrl: pacoteFotoUrl || undefined,
+          etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+          palletFotoUrl: palletFotoUrl || undefined,
+        },
+      });
+      loteId = lote.id;
+
+      await atualizarEstoque(
+        cliente,
+        produto,
+        producaoAnterior,
+        {
+          caixas: caixas || 0,
+          pacotes: pacotes || 0,
+          unidades: unidades || 0,
+          kg: kg || 0,
+        },
+        loteId,
+      );
+    } catch (dbError) {
+      if (loteId) {
+        await embalagemLoteService.compensarLote(loteId).catch(() => undefined);
+      }
+      throw dbError;
+    }
 
     try {
       // Buscar obsEmbalagem da coluna AC
@@ -204,6 +261,7 @@ async function atualizarEstoque(
   produto: string,
   anterior: { caixas: number; pacotes: number; unidades: number; kg: number },
   novo: { caixas: number; pacotes: number; unidades: number; kg: number },
+  embalagemLoteId?: string,
 ) {
   const delta = {
     caixas: novo.caixas - anterior.caixas,
@@ -229,5 +287,6 @@ async function atualizarEstoque(
     produto,
     delta,
     origem: 'embalagem',
+    embalagemLoteId,
   });
 }

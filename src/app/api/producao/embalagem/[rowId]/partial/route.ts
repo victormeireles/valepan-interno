@@ -3,6 +3,10 @@ import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 import { estoqueService } from '@/lib/services/estoque-service';
+import {
+  embalagemLoteService,
+  EstoqueResolverError,
+} from '@/lib/services/embalagem-lote-service';
 
 export async function POST(
   request: Request,
@@ -79,7 +83,7 @@ export async function POST(
     const pedidoPacotes = Number(originalValues[7] || 0);   // H
     const pedidoUnidades = Number(originalValues[8] || 0);  // I
     const pedidoKg = Number(originalValues[9] || 0);        // J
-    const lote = originalValues[26] || '';              // AA - Lote (copiar)
+    const lotePlanilha = originalValues[26] || '';       // AA - Lote (copiar)
     const etiquetaGerada = originalValues[27] || '';    // AB - Etiqueta Gerada (copiar)
 
     // 2. Validar que produção é menor que pedido em pelo menos um campo
@@ -94,6 +98,15 @@ export async function POST(
       return NextResponse.json({ 
         error: 'Produção não é parcial. Use o botão "Salvar Produção" normal.' 
       }, { status: 400 });
+    }
+
+    try {
+      await embalagemLoteService.resolveIds(cliente.toString(), produto.toString());
+    } catch (e) {
+      if (e instanceof EstoqueResolverError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
     }
 
     // 3. Calcular novo valor do pedido da linha original (descontar o produzido)
@@ -151,7 +164,7 @@ export async function POST(
       palletFotoUrl || '',         // X - pallet_foto_url
       palletFotoId || '',          // Y - pallet_foto_id
       palletFotoUploadedAt || '', // Z - pallet_foto_uploaded_at
-      lote || '',                  // AA (26) - Lote (copiado da linha original)
+      lotePlanilha || '',          // AA (26) - Lote (copiado da linha original)
       etiquetaGerada || '',        // AB (27) - Etiqueta Gerada (copiada da linha original)
       obsEmbalagem || '',          // AC (28) - Obs embalagem
     ];
@@ -179,21 +192,57 @@ export async function POST(
     const metaOriginalUnidades = pedidoUnidades + u;
     const metaOriginalKg = pedidoKg + k;
 
-    // Obter tipo de estoque do cliente
+    if (!novaLinhaRowId) {
+      return NextResponse.json(
+        { error: 'Não foi possível determinar a linha criada na planilha' },
+        { status: 500 },
+      );
+    }
+
     const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
     const clienteEstoque = tipoEstoque ?? cliente;
 
-    await estoqueService.aplicarDelta({
-      cliente: clienteEstoque,
-      produto,
-      delta: {
-        caixas: c,
-        pacotes: p,
-        unidades: u,
-        kg: k,
-      },
-      origem: 'embalagem',
-    });
+    let loteId: string | undefined;
+    try {
+      const loteRecord = await embalagemLoteService.criarLoteParcial({
+        planilhaRowId: novaLinhaRowId,
+        planilhaRowIdOrigem: rowNumber,
+        dataPedido: dataPedido.toString(),
+        dataFabricacao: dataFabricacao.toString(),
+        cliente: cliente.toString(),
+        produto: produto.toString(),
+        congelado: congelado.toString(),
+        lote: lotePlanilha,
+        quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
+        produzidoEm: now,
+        obsEmbalagem: obsEmbalagem || '',
+        fotos: {
+          pacoteFotoUrl: pacoteFotoUrl || undefined,
+          pacoteFotoId: pacoteFotoId || undefined,
+          pacoteFotoUploadedAt: pacoteFotoUploadedAt || undefined,
+          etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+          etiquetaFotoId: etiquetaFotoId || undefined,
+          etiquetaFotoUploadedAt: etiquetaFotoUploadedAt || undefined,
+          palletFotoUrl: palletFotoUrl || undefined,
+          palletFotoId: palletFotoId || undefined,
+          palletFotoUploadedAt: palletFotoUploadedAt || undefined,
+        },
+      });
+      loteId = loteRecord.id;
+
+      await estoqueService.aplicarDelta({
+        cliente: clienteEstoque,
+        produto: produto.toString(),
+        delta: { caixas: c, pacotes: p, unidades: u, kg: k },
+        origem: 'embalagem',
+        embalagemLoteId: loteId,
+      });
+    } catch (dbError) {
+      if (loteId) {
+        await embalagemLoteService.compensarLote(loteId).catch(() => undefined);
+      }
+      throw dbError;
+    }
 
     try {
       // ObsEmbalagem já está na nova linha criada, buscar dela se necessário

@@ -1128,6 +1128,128 @@ export type Database = {
           },
         ]
       }
+      embalagem_lotes: {
+        Row: {
+          caixas: number
+          congelado: string
+          created_at: string
+          data_fabricacao: string
+          data_pedido: string
+          etiqueta_foto_id: string | null
+          etiqueta_foto_uploaded_at: string | null
+          etiqueta_foto_url: string | null
+          id: string
+          kg: number
+          lote: number | null
+          modo: Database["public"]["Enums"]["embalagem_lote_modo"]
+          obs_embalagem: string | null
+          pacote_foto_id: string | null
+          pacote_foto_uploaded_at: string | null
+          pacote_foto_url: string | null
+          pacotes: number
+          pallet_foto_id: string | null
+          pallet_foto_uploaded_at: string | null
+          pallet_foto_url: string | null
+          pedido_embalagem_id: string | null
+          planilha_row_id: number | null
+          planilha_row_id_origem: number | null
+          producao_anterior: Json | null
+          produto_id: string
+          produzido_em: string
+          tipo_estoque_id: string
+          unidades: number
+        }
+        Insert: {
+          caixas?: number
+          congelado?: string
+          created_at?: string
+          data_fabricacao: string
+          data_pedido: string
+          etiqueta_foto_id?: string | null
+          etiqueta_foto_uploaded_at?: string | null
+          etiqueta_foto_url?: string | null
+          id?: string
+          kg?: number
+          lote?: number | null
+          modo: Database["public"]["Enums"]["embalagem_lote_modo"]
+          obs_embalagem?: string | null
+          pacote_foto_id?: string | null
+          pacote_foto_uploaded_at?: string | null
+          pacote_foto_url?: string | null
+          pacotes?: number
+          pallet_foto_id?: string | null
+          pallet_foto_uploaded_at?: string | null
+          pallet_foto_url?: string | null
+          pedido_embalagem_id?: string | null
+          planilha_row_id?: number | null
+          planilha_row_id_origem?: number | null
+          producao_anterior?: Json | null
+          produto_id: string
+          produzido_em?: string
+          tipo_estoque_id: string
+          unidades?: number
+        }
+        Update: {
+          caixas?: number
+          congelado?: string
+          created_at?: string
+          data_fabricacao?: string
+          data_pedido?: string
+          etiqueta_foto_id?: string | null
+          etiqueta_foto_uploaded_at?: string | null
+          etiqueta_foto_url?: string | null
+          id?: string
+          kg?: number
+          lote?: number | null
+          modo?: Database["public"]["Enums"]["embalagem_lote_modo"]
+          obs_embalagem?: string | null
+          pacote_foto_id?: string | null
+          pacote_foto_uploaded_at?: string | null
+          pacote_foto_url?: string | null
+          pacotes?: number
+          pallet_foto_id?: string | null
+          pallet_foto_uploaded_at?: string | null
+          pallet_foto_url?: string | null
+          pedido_embalagem_id?: string | null
+          planilha_row_id?: number | null
+          planilha_row_id_origem?: number | null
+          producao_anterior?: Json | null
+          produto_id?: string
+          produzido_em?: string
+          tipo_estoque_id?: string
+          unidades?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embalagem_lotes_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "embalagem_lotes_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "embalagem_lotes_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "embalagem_lotes_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           app_key: string
@@ -1352,6 +1474,7 @@ export type Database = {
           delta_kg: number
           delta_pacotes: number
           delta_unidades: number
+          embalagem_lote_id: string | null
           id: string
           origem: Database["public"]["Enums"]["estoque_movimento_origem"]
           produto_id: string
@@ -1367,6 +1490,7 @@ export type Database = {
           delta_kg?: number
           delta_pacotes?: number
           delta_unidades?: number
+          embalagem_lote_id?: string | null
           id?: string
           origem: Database["public"]["Enums"]["estoque_movimento_origem"]
           produto_id: string
@@ -1382,6 +1506,7 @@ export type Database = {
           delta_kg?: number
           delta_pacotes?: number
           delta_unidades?: number
+          embalagem_lote_id?: string | null
           id?: string
           origem?: Database["public"]["Enums"]["estoque_movimento_origem"]
           produto_id?: string
@@ -1392,6 +1517,13 @@ export type Database = {
           tipo_estoque_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "estoque_movimentos_embalagem_lote_id_fkey"
+            columns: ["embalagem_lote_id"]
+            isOneToOne: false
+            referencedRelation: "embalagem_lotes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estoque_movimentos_produto_id_fkey"
             columns: ["produto_id"]
@@ -3950,6 +4082,7 @@ export type Database = {
         | "resgate"
         | "expiracao"
         | "ajuste_manual"
+      embalagem_lote_modo: "parcial" | "substituicao" | "importado"
       estoque_consignado_tipo_mov_enum:
         | "entrada_remessa"
         | "saida_venda"
@@ -4127,6 +4260,7 @@ export const Constants = {
         "expiracao",
         "ajuste_manual",
       ],
+      embalagem_lote_modo: ["parcial", "substituicao", "importado"],
       estoque_consignado_tipo_mov_enum: [
         "entrada_remessa",
         "saida_venda",

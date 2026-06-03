@@ -41,6 +41,7 @@ type AtualizarQuantidadeInput = {
 type RegistrarMovimentoByNomesInput = AjusteQuantidadeInput & {
   allowNegative?: boolean;
   origem?: EstoqueMovimentoOrigem;
+  embalagemLoteId?: string;
 };
 
 export class EstoqueService {
@@ -227,6 +228,7 @@ export class EstoqueService {
     delta,
     allowNegative = false,
     origem = 'ajuste_manual',
+    embalagemLoteId,
   }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord> {
     const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(cliente);
     const produtoId = await estoqueResolverService.resolveProdutoId(produto);
@@ -239,6 +241,7 @@ export class EstoqueService {
       delta,
       allowNegative,
       origem,
+      embalagemLoteId,
     });
 
     return record;
@@ -271,6 +274,7 @@ export class EstoqueService {
     delta: Quantidade;
     allowNegative?: boolean;
     origem: EstoqueMovimentoOrigem;
+    embalagemLoteId?: string;
   }): Promise<EstoqueRecord> {
     const saldoAtualRow = await estoqueRepository.findSaldo(
       input.tipoEstoqueId,
@@ -298,6 +302,7 @@ export class EstoqueService {
       delta: input.delta,
       saldo,
       origem: input.origem,
+      embalagemLoteId: input.embalagemLoteId ?? null,
     });
 
     await estoqueRepository.upsertSaldo(

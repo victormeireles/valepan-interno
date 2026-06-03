@@ -127,6 +127,7 @@ export class EstoqueRepository {
         saldo_unidades: input.saldo.unidades,
         saldo_kg: input.saldo.kg,
         origem: input.origem,
+        embalagem_lote_id: input.embalagemLoteId ?? null,
       })
       .select()
       .single();
