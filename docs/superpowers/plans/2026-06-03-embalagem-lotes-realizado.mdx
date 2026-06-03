@@ -1,0 +1,642 @@
+# Embalagem — Lotes de realizado (Fase B.1) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Persistir cada confirmação de embalagem como lote no Supabase (`embalagem_lotes`), vincular movimentos de estoque via `embalagem_lote_id`, manter painel lendo planilha, e oferecer job de backfill configurável.
+
+**Architecture:** SQL migration + `EmbalagemLoteRepository` / `EmbalagemLoteService` seguindo o padrão da Fase A (`EstoqueRepository` / `EstoqueService`). APIs `PUT` e `POST partial` validam UUIDs **antes** da planilha, gravam planilha como hoje, depois lote + `aplicarDelta` com `embalagemLoteId`. Job `sync-embalagem-lotes-from-sheet.ts` importa linhas com M–P > 0 sem tocar estoque.
+
+**Tech Stack:** Next.js 15 App Router, Supabase JS, Google Sheets API, Vitest, `tsx` para scripts CLI.
+
+**Spec:** `docs/superpowers/specs/2026-06-03-embalagem-lotes-realizado-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_EMBALAGEM_LOTES_TABLES.sql` | enum, tabela `embalagem_lotes`, FK em `estoque_movimentos` |
+| `EMBALAGEM_LOTES_RLS.sql` | RLS + grants service_role |
+| `src/domain/types/embalagem-lote.ts` | tipos domain + payloads insert |
+| `src/domain/embalagem/sync-lote-window.ts` | parse CLI `--days` / `--since`, corte de data BR |
+| `src/domain/embalagem/sync-lote-window.test.ts` | testes Vitest do parser/janela |
+| `src/domain/embalagem/map-sheet-row-to-lote.ts` | mapeia row A:AC → payload insert |
+| `src/domain/embalagem/map-sheet-row-to-lote.test.ts` | testes de mapeamento e filtro produção > 0 |
+| `src/data/embalagem/EmbalagemLoteRepository.ts` | insert, findByPlanilhaRowId, updateByPlanilhaRowId, deleteById |
+| `src/lib/services/embalagem-lote-service.ts` | criarLoteParcial, criarLoteSubstituicao |
+| `src/domain/types/estoque-db.ts` | `embalagemLoteId?` em `RegistrarMovimentoInput` |
+| `src/data/estoque/EstoqueRepository.ts` | passar `embalagem_lote_id` no insert |
+| `src/lib/services/estoque-service.ts` | propagar `embalagemLoteId` em `aplicarDelta` / `registrarMovimentoByIds` |
+| `src/app/api/producao/embalagem/[rowId]/partial/route.ts` | validação pré-planilha + lote + estoque |
+| `src/app/api/producao/embalagem/[rowId]/route.ts` | idem no PUT |
+| `scripts/sync-embalagem-lotes-from-sheet.ts` | backfill |
+| `package.json` | scripts `sync:embalagem-lotes` |
+| `types/database.ts` | regenerar via `npm run gen:types` após migration |
+
+---
+
+### Task 1: Migration Supabase (schema)
+
+**Files:**
+- Create: `CREATE_EMBALAGEM_LOTES_TABLES.sql`
+- Create: `EMBALAGEM_LOTES_RLS.sql`
+
+- [ ] **Step 1: Criar `CREATE_EMBALAGEM_LOTES_TABLES.sql`**
+
+```sql
+DO $$ BEGIN
+  CREATE TYPE embalagem_lote_modo AS ENUM ('parcial', 'substituicao', 'importado');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS embalagem_lotes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  produzido_em timestamptz NOT NULL DEFAULT now(),
+  modo embalagem_lote_modo NOT NULL,
+  planilha_row_id integer,
+  planilha_row_id_origem integer,
+  pedido_embalagem_id uuid,
+  data_pedido date NOT NULL,
+  data_fabricacao date NOT NULL,
+  tipo_estoque_id uuid NOT NULL REFERENCES tipos_estoque(id),
+  produto_id uuid NOT NULL REFERENCES produtos(id),
+  congelado text NOT NULL DEFAULT 'Não',
+  lote integer,
+  caixas integer NOT NULL DEFAULT 0,
+  pacotes integer NOT NULL DEFAULT 0,
+  unidades integer NOT NULL DEFAULT 0,
+  kg numeric(12, 3) NOT NULL DEFAULT 0,
+  obs_embalagem text,
+  pacote_foto_url text,
+  pacote_foto_id text,
+  pacote_foto_uploaded_at timestamptz,
+  etiqueta_foto_url text,
+  etiqueta_foto_id text,
+  etiqueta_foto_uploaded_at timestamptz,
+  pallet_foto_url text,
+  pallet_foto_id text,
+  pallet_foto_uploaded_at timestamptz,
+  producao_anterior jsonb
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_embalagem_lotes_planilha_row_id
+  ON embalagem_lotes(planilha_row_id)
+  WHERE planilha_row_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_embalagem_lotes_data_pedido
+  ON embalagem_lotes(data_pedido DESC);
+
+CREATE INDEX IF NOT EXISTS idx_embalagem_lotes_tipo_prod_produzido
+  ON embalagem_lotes(tipo_estoque_id, produto_id, produzido_em DESC);
+
+ALTER TABLE estoque_movimentos
+  ADD COLUMN IF NOT EXISTS embalagem_lote_id uuid REFERENCES embalagem_lotes(id);
+
+CREATE INDEX IF NOT EXISTS idx_estoque_mov_embalagem_lote
+  ON estoque_movimentos(embalagem_lote_id)
+  WHERE embalagem_lote_id IS NOT NULL;
+```
+
+- [ ] **Step 2: Criar `EMBALAGEM_LOTES_RLS.sql`**
+
+```sql
+ALTER TABLE public.embalagem_lotes ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.embalagem_lotes FROM anon, authenticated;
+GRANT ALL ON TABLE public.embalagem_lotes TO service_role;
+```
+
+- [ ] **Step 3: Aplicar no Supabase**
+
+Executar ambos os arquivos no SQL Editor do projeto (ordem: CREATE → RLS).
+
+- [ ] **Step 4: Regenerar tipos TypeScript**
+
+```powershell
+cd "c:\Users\victo\AI\Valepan Interno"
+npm run gen:types
+```
+
+Expected: `types/database.ts` contém tabelas `embalagem_lotes` e coluna `embalagem_lote_id` em `estoque_movimentos`.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add CREATE_EMBALAGEM_LOTES_TABLES.sql EMBALAGEM_LOTES_RLS.sql types/database.ts
+git commit -m "feat(db): tabela embalagem_lotes e FK em estoque_movimentos"
+```
+
+---
+
+### Task 2: Tipos de domínio
+
+**Files:**
+- Create: `src/domain/types/embalagem-lote.ts`
+
+- [ ] **Step 1: Criar tipos**
+
+```typescript
+import type { Quantidade } from './inventario';
+
+export type EmbalagemLoteModo = 'parcial' | 'substituicao' | 'importado';
+
+export interface EmbalagemLoteInsert {
+  modo: EmbalagemLoteModo;
+  planilhaRowId: number;
+  planilhaRowIdOrigem?: number | null;
+  dataPedido: string;
+  dataFabricacao: string;
+  tipoEstoqueId: string;
+  produtoId: string;
+  congelado: 'Sim' | 'Não';
+  lote?: number | null;
+  quantidade: Quantidade;
+  produzidoEm: string;
+  obsEmbalagem?: string | null;
+  fotos?: {
+    pacoteFotoUrl?: string;
+    pacoteFotoId?: string;
+    pacoteFotoUploadedAt?: string;
+    etiquetaFotoUrl?: string;
+    etiquetaFotoId?: string;
+    etiquetaFotoUploadedAt?: string;
+    palletFotoUrl?: string;
+    palletFotoId?: string;
+    palletFotoUploadedAt?: string;
+  };
+  producaoAnterior?: Quantidade | null;
+}
+
+export interface EmbalagemLoteRecord extends EmbalagemLoteInsert {
+  id: string;
+  createdAt: string;
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```powershell
+git add src/domain/types/embalagem-lote.ts
+git commit -m "feat(domain): tipos embalagem lote"
+```
+
+---
+
+### Task 3: Mapeamento planilha → lote (puro + testes)
+
+**Files:**
+- Create: `src/domain/embalagem/map-sheet-row-to-lote.ts`
+- Create: `src/domain/embalagem/map-sheet-row-to-lote.test.ts`
+- Create: `src/domain/embalagem/sync-lote-window.ts`
+- Create: `src/domain/embalagem/sync-lote-window.test.ts`
+
+- [ ] **Step 1: Testes da janela de datas**
+
+`src/domain/embalagem/sync-lote-window.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { parseSyncLoteArgs, isDataPedidoInWindow } from './sync-lote-window';
+
+describe('parseSyncLoteArgs', () => {
+  it('default days=7', () => {
+    const r = parseSyncLoteArgs([]);
+    expect(r.days).toBe(7);
+    expect(r.since).toBeUndefined();
+    expect(r.dryRun).toBe(false);
+  });
+
+  it('parses --since and --dry-run', () => {
+    const r = parseSyncLoteArgs(['--since=2026-05-01', '--dry-run', '--force']);
+    expect(r.since).toBe('2026-05-01');
+    expect(r.dryRun).toBe(true);
+    expect(r.force).toBe(true);
+  });
+});
+
+describe('isDataPedidoInWindow', () => {
+  it('includes date on since boundary', () => {
+    expect(isDataPedidoInWindow('2026-06-01', { since: '2026-06-01' })).toBe(true);
+  });
+
+  it('excludes date before since', () => {
+    expect(isDataPedidoInWindow('2026-05-31', { since: '2026-06-01' })).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Implementar `sync-lote-window.ts`**
+
+```typescript
+import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+
+export type SyncLoteArgs = {
+  days: number;
+  since?: string;
+  dryRun: boolean;
+  force: boolean;
+};
+
+export function parseSyncLoteArgs(argv: string[]): SyncLoteArgs {
+  let days = 7;
+  let since: string | undefined;
+  let dryRun = false;
+  let force = false;
+
+  for (const arg of argv) {
+    if (arg.startsWith('--days=')) days = Math.max(1, parseInt(arg.slice(7), 10) || 7);
+    else if (arg.startsWith('--since=')) since = arg.slice(8).trim();
+    else if (arg === '--dry-run') dryRun = true;
+    else if (arg === '--force') force = true;
+  }
+
+  return { days, since, dryRun, force };
+}
+
+export function resolveSinceDate(args: SyncLoteArgs): string {
+  if (args.since) return args.since;
+  return addCalendarDaysISO(getTodayISOInBrazilTimezone(), -args.days);
+}
+
+export function isDataPedidoInWindow(
+  dataPedido: string,
+  window: { since: string },
+): boolean {
+  return dataPedido >= window.since;
+}
+```
+
+- [ ] **Step 3: Testes de mapeamento**
+
+`map-sheet-row-to-lote.test.ts` — testar `rowTemProducao`, `parseProduzidoEmFromRow` com índices A=0… AC=28.
+
+- [ ] **Step 4: Implementar `map-sheet-row-to-lote.ts`**
+
+Funções exportadas:
+- `rowTemProducao(row: string[]): boolean` — soma índices 12–15 (M–P) > 0
+- `parseProduzidoEmFromRow(row: string[]): string` — Q (16) ou K (10)
+- `mapRowToLoteInsert(row, rowNumber, resolvedIds): EmbalagemLoteInsert` com `modo: 'importado'`
+
+Usar `normalizeToISODate` nas colunas A e B.
+
+- [ ] **Step 5: Rodar testes**
+
+```powershell
+npx vitest run src/domain/embalagem/sync-lote-window.test.ts src/domain/embalagem/map-sheet-row-to-lote.test.ts
+```
+
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add src/domain/embalagem/
+git commit -m "feat(domain): mapeamento e janela para sync de lotes embalagem"
+```
+
+---
+
+### Task 4: EmbalagemLoteRepository
+
+**Files:**
+- Create: `src/data/embalagem/EmbalagemLoteRepository.ts`
+
+- [ ] **Step 1: Implementar repositório**
+
+Padrão igual `EstoqueRepository`: `supabaseClientFactory.createServiceRoleClient()`, tabela `embalagem_lotes`.
+
+Métodos:
+- `insert(input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord>`
+- `findByPlanilhaRowId(rowId: number): Promise<EmbalagemLoteRecord | null>`
+- `updateByPlanilhaRowId(rowId: number, input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord>`
+- `deleteById(id: string): Promise<void>` — usado em compensação se movimento falhar
+
+Mapear camelCase ↔ snake_case nas colunas; `fotos` → colunas `pacote_foto_*`, etc.
+
+Export singleton: `export const embalagemLoteRepository = new EmbalagemLoteRepository();`
+
+- [ ] **Step 2: Commit**
+
+```powershell
+git add src/data/embalagem/EmbalagemLoteRepository.ts
+git commit -m "feat(data): EmbalagemLoteRepository"
+```
+
+---
+
+### Task 5: Estoque — `embalagem_lote_id`
+
+**Files:**
+- Modify: `src/domain/types/estoque-db.ts`
+- Modify: `src/data/estoque/EstoqueRepository.ts`
+- Modify: `src/lib/services/estoque-service.ts`
+
+- [ ] **Step 1: Estender `RegistrarMovimentoInput`**
+
+```typescript
+export interface RegistrarMovimentoInput {
+  tipoEstoqueId: string;
+  produtoId: string;
+  delta: Quantidade;
+  saldo: Quantidade;
+  origem: EstoqueMovimentoOrigem;
+  embalagemLoteId?: string | null;
+}
+```
+
+- [ ] **Step 2: `EstoqueRepository.insertMovimento`**
+
+Incluir no `.insert({ ... })`:
+
+```typescript
+embalagem_lote_id: input.embalagemLoteId ?? null,
+```
+
+- [ ] **Step 3: `EstoqueService`**
+
+Em `RegistrarMovimentoByNomesInput` e `registrarMovimentoByIds`, adicionar `embalagemLoteId?: string` e repassar ao `insertMovimento`.
+
+Em `aplicarDelta`, aceitar `embalagemLoteId?: string` no destructuring e passar para `registrarMovimentoByIds`.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add src/domain/types/estoque-db.ts src/data/estoque/EstoqueRepository.ts src/lib/services/estoque-service.ts
+git commit -m "feat(estoque): embalagem_lote_id em movimentos"
+```
+
+---
+
+### Task 6: EmbalagemLoteService
+
+**Files:**
+- Create: `src/lib/services/embalagem-lote-service.ts`
+
+- [ ] **Step 1: Implementar serviço**
+
+```typescript
+import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
+import { estoqueResolverService, EstoqueResolverError } from '@/lib/services/estoque-resolver-service';
+import type { EmbalagemLoteInsert, EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
+
+export class EmbalagemLoteService {
+  async resolveIds(cliente: string, produto: string) {
+    const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueFromCliente(cliente);
+    const produtoId = await estoqueResolverService.resolveProdutoId(produto);
+    return { tipoEstoqueId, produtoId };
+  }
+
+  async criarLote(input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord> {
+    const existing = await embalagemLoteRepository.findByPlanilhaRowId(input.planilhaRowId);
+    if (existing) {
+      throw new Error(`Lote já existe para planilha_row_id=${input.planilhaRowId}`);
+    }
+    return embalagemLoteRepository.insert(input);
+  }
+
+  async criarLoteParcial(/* payload from partial route */): Promise<EmbalagemLoteRecord> { /* ... */ }
+  async criarLoteSubstituicao(/* payload from PUT */): Promise<EmbalagemLoteRecord> { /* ... */ }
+
+  async compensarLote(loteId: string): Promise<void> {
+    await embalagemLoteRepository.deleteById(loteId);
+  }
+}
+
+export const embalagemLoteService = new EmbalagemLoteService();
+export { EstoqueResolverError };
+```
+
+`criarLoteParcial` / `criarLoteSubstituicao` montam `EmbalagemLoteInsert` com `modo` correto.
+
+- [ ] **Step 2: Commit**
+
+```powershell
+git add src/lib/services/embalagem-lote-service.ts
+git commit -m "feat(service): EmbalagemLoteService"
+```
+
+---
+
+### Task 7: API POST partial
+
+**Files:**
+- Modify: `src/app/api/producao/embalagem/[rowId]/partial/route.ts`
+
+- [ ] **Step 1: Resolver IDs antes da planilha**
+
+Após ler `originalValues` e validar `isPartial`, chamar:
+
+```typescript
+let tipoEstoqueId: string;
+let produtoId: string;
+try {
+  ({ tipoEstoqueId, produtoId } = await embalagemLoteService.resolveIds(cliente, produto));
+} catch (e) {
+  if (e instanceof EstoqueResolverError) {
+    return NextResponse.json({ error: e.message }, { status: 400 });
+  }
+  throw e;
+}
+```
+
+- [ ] **Step 2: Manter bloco planilha existente** (steps 4–5 atuais: update G–J, append linha).
+
+- [ ] **Step 3: Após obter `novaLinhaRowId`, persistir lote + estoque**
+
+```typescript
+let loteId: string | undefined;
+try {
+  const lote = await embalagemLoteService.criarLoteParcial({
+    planilhaRowId: novaLinhaRowId!,
+    planilhaRowIdOrigem: rowNumber,
+    dataPedido: normalizeToISODate(dataPedido),
+    dataFabricacao: normalizeToISODate(dataFabricacao),
+    tipoEstoqueId,
+    produtoId,
+    congelado: congelado === 'Sim' ? 'Sim' : 'Não',
+    lote: lote ? Number(lote) : null,
+    quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
+    produzidoEm: new Date().toISOString(),
+    obsEmbalagem,
+    fotos: { /* pacote, etiqueta, pallet */ },
+  });
+  loteId = lote.id;
+
+  const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(cliente);
+  const clienteEstoque = tipoEstoque ?? cliente;
+
+  await estoqueService.aplicarDelta({
+    cliente: clienteEstoque,
+    produto,
+    delta: { caixas: c, pacotes: p, unidades: u, kg: k },
+    origem: 'embalagem',
+    embalagemLoteId: loteId,
+  });
+} catch (error) {
+  if (loteId) await embalagemLoteService.compensarLote(loteId);
+  throw error;
+}
+```
+
+Remover o bloco antigo `estoqueService.aplicarDelta` que ficava **antes** do try WhatsApp (evitar duplicar delta).
+
+- [ ] **Step 4: `npm run lint` e smoke manual**
+
+Registrar partial em dev; conferir row em `embalagem_lotes` e `embalagem_lote_id` no último `estoque_movimentos`.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add src/app/api/producao/embalagem/[rowId]/partial/route.ts
+git commit -m "feat(api): partial embalagem persiste lote no Supabase"
+```
+
+---
+
+### Task 8: API PUT substituição
+
+**Files:**
+- Modify: `src/app/api/producao/embalagem/[rowId]/route.ts`
+
+- [ ] **Step 1: Ler produção anterior e resolver IDs antes do update na planilha**
+
+Usar `completeValues` já lidos; `producaoAnterior` de M–P; `resolveIds(cliente, produto)` com 400 em falha.
+
+- [ ] **Step 2: Após updates na planilha, criar lote substituição**
+
+```typescript
+const lote = await embalagemLoteService.criarLoteSubstituicao({
+  planilhaRowId: rowNumber,
+  modo: 'substituicao',
+  /* metadados das colunas A–F, AA, AC, fotos R–Z */,
+  quantidade: { caixas, pacotes, unidades, kg },
+  producaoAnterior: producaoAnterior,
+  produzidoEm: new Date().toISOString(),
+});
+```
+
+- [ ] **Step 3: Alterar `atualizarEstoque` para aceitar `embalagemLoteId`**
+
+```typescript
+async function atualizarEstoque(
+  cliente: string,
+  produto: string,
+  anterior: Quantidade,
+  novo: Quantidade,
+  embalagemLoteId?: string,
+) {
+  /* delta como hoje */
+  if (!houveMudanca) return;
+  await estoqueService.aplicarDelta({ /* ... */, embalagemLoteId });
+}
+```
+
+Sempre criar lote no PUT; movimento de estoque só se `houveMudanca`. Se movimento falhar após lote, `compensarLote`.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add src/app/api/producao/embalagem/[rowId]/route.ts
+git commit -m "feat(api): PUT embalagem persiste lote substituicao"
+```
+
+---
+
+### Task 9: Job sync-embalagem-lotes-from-sheet
+
+**Files:**
+- Create: `scripts/sync-embalagem-lotes-from-sheet.ts`
+- Modify: `package.json`
+
+- [ ] **Step 1: Script principal**
+
+Espelhar `sync-estoque-from-sheet.ts`:
+- `dotenv` antes dos imports dinâmicos
+- `parseSyncLoteArgs(process.argv.slice(2))`
+- `readSheetValues` em `PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos`, `A:AC`
+- Para cada linha com índice `rowNumber = i + 2`:
+  - `dataPedido = normalizeToISODate(r[0])`
+  - skip se `!isDataPedidoInWindow(dataPedido, { since: resolveSinceDate(args) })`
+  - skip se `!rowTemProducao(r)`
+  - resolver tipo/produto; skip + warn se falhar
+  - se `findByPlanilhaRowId` existe e `!args.force` → skip duplicata
+  - se `args.force` → `updateByPlanilhaRowId` senão `insert` com `modo: 'importado'`
+- Log final: `{ lidas, elegiveis, criadas, atualizadas, ignoradas, errosResolucao }`
+
+- [ ] **Step 2: Scripts npm**
+
+```json
+"sync:embalagem-lotes": "npx tsx scripts/sync-embalagem-lotes-from-sheet.ts",
+"sync:embalagem-lotes:dry": "npx tsx scripts/sync-embalagem-lotes-from-sheet.ts --dry-run"
+```
+
+- [ ] **Step 3: Dry-run local**
+
+```powershell
+npm run sync:embalagem-lotes:dry
+npm run sync:embalagem-lotes -- --days=7
+```
+
+Expected: contadores no stdout; segunda execução sem `--force` não duplica.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add scripts/sync-embalagem-lotes-from-sheet.ts package.json
+git commit -m "feat(scripts): sync embalagem lotes from sheet"
+```
+
+---
+
+### Task 10: Verificação final
+
+- [ ] **Step 1: Suite de testes**
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
+
+Expected: PASS / sem erros novos.
+
+- [ ] **Step 2: Checklist spec (manual)**
+
+| Critério | Como verificar |
+|----------|----------------|
+| Partial → lote + FK estoque | POST partial; query Supabase |
+| PUT → lote substituicao | PUT com mudança em M–P |
+| Painel inalterado | `/realizado/embalagem` carrega sem erro |
+| Job 7 dias | `npm run sync:embalagem-lotes` |
+| Backfill sem estoque | contagem `estoque_movimentos` estável após job |
+
+- [ ] **Step 3: Commit doc de plano (se ainda não commitado)**
+
+```powershell
+git add docs/superpowers/plans/2026-06-03-embalagem-lotes-realizado.mdx
+git commit -m "docs: plano implementacao embalagem lotes B.1"
+```
+
+---
+
+## Spec coverage (self-review)
+
+| Requisito spec | Task |
+|----------------|------|
+| Tabela `embalagem_lotes` + enum | Task 1 |
+| FK `embalagem_lote_id` | Task 1, 5 |
+| Dual-write planilha + lote DB | Tasks 7, 8 |
+| Painel lê planilha (sem mudança painel route) | Nenhuma alteração em `painel/embalagem` |
+| Job `--days` / `--since` / `--dry-run` / `--force` | Tasks 3, 9 |
+| Job não altera estoque | Task 9 (sem `estoqueService`) |
+| Validação IDs antes planilha | Tasks 7, 8 |
+| Compensação lote se movimento falha | Tasks 6, 7, 8 |
+| `modo = importado` no job | Task 3, 9 |
+| Tipos TS atualizados | Task 1 Step 4 |
+
+## Riscos conhecidos
+
+- Se lote/estoque falhar **após** append na planilha (partial), a planilha fica alterada e o DB não — operador pode repetir; documentado na spec. Mitigação futura: transação ou ordem invertida na B.2.
+- PUT gera um lote por save mesmo com delta estoque zero (auditoria); movimento só quando delta ≠ 0.
