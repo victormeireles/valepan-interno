@@ -5,10 +5,26 @@ import {
   EstoqueRecord,
   Quantidade,
 } from '@/domain/types/inventario';
+import type {
+  EstoqueMovimentoOrigem,
+  EstoqueMovimentoRecord,
+  ListMovimentosFilters,
+} from '@/domain/types/estoque-db';
+import {
+  aplicarDeltaComClamp,
+  calcularDelta,
+  criarQuantidadeZerada,
+} from '@/domain/estoque/quantidade-calculo';
+import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
+import { inventarioRepository } from '@/data/estoque/InventarioRepository';
 import { inventarioSheetManager } from '@/lib/managers/inventario-sheet-manager';
 import { estoqueSheetManager } from '@/lib/managers/estoque-sheet-manager';
 import { clientesService } from './clientes-service';
 import { tiposEstoqueService } from './tipos-estoque-service';
+import {
+  estoqueResolverService,
+  EstoqueResolverError,
+} from './estoque-resolver-service';
 
 type AjusteQuantidadeInput = {
   cliente: string;
@@ -22,24 +38,35 @@ type AtualizarQuantidadeInput = {
   quantidade: Quantidade;
 };
 
+type RegistrarMovimentoByNomesInput = AjusteQuantidadeInput & {
+  allowNegative?: boolean;
+  origem?: EstoqueMovimentoOrigem;
+};
+
 export class EstoqueService {
   public async obterEstoqueCliente(cliente: string): Promise<EstoqueRecord[]> {
-    return estoqueSheetManager.listByCliente(cliente);
+    const saldos = await this.listarSaldosComFallback();
+    const clienteNormalizado = cliente.trim();
+    return saldos.filter((record) => record.cliente.trim() === clienteNormalizado);
   }
 
   public async obterTodosEstoques(): Promise<EstoqueRecord[]> {
-    return estoqueSheetManager.listAll();
+    return this.listarSaldosComFallback();
+  }
+
+  public async listarMovimentos(
+    filters: ListMovimentosFilters,
+  ): Promise<EstoqueMovimentoRecord[]> {
+    return estoqueRepository.listMovimentos(filters);
   }
 
   public async obterTipoEstoqueCliente(cliente: string): Promise<string | null> {
-    // Buscar o cliente pelo nome
     const clienteData = await clientesService.findByName(cliente);
-    
+
     if (!clienteData) {
       return null;
     }
 
-    // Se o cliente tem tipo_estoque_id, buscar o tipo de estoque pelo ID
     if (clienteData.tipoEstoqueId) {
       const tipoEstoque = await tiposEstoqueService.findById(clienteData.tipoEstoqueId);
       if (tipoEstoque) {
@@ -47,10 +74,8 @@ export class EstoqueService {
       }
     }
 
-    // Fallback: tentar encontrar tipo de estoque pelo nome_fantasia
     let tipoEstoque = await tiposEstoqueService.findByName(clienteData.nomeFantasia);
-    
-    // Se não encontrar, tentar por razao_social
+
     if (!tipoEstoque) {
       tipoEstoque = await tiposEstoqueService.findByName(clienteData.razaoSocial);
     }
@@ -60,22 +85,18 @@ export class EstoqueService {
 
   public async clientePossuiEtiqueta(cliente: string): Promise<boolean> {
     try {
-      // Primeiro, tentar buscar diretamente pelo nome do cliente como tipo de estoque
-      // (caso comum onde o nome do cliente corresponde ao nome do tipo de estoque)
       let tipoEstoque = await tiposEstoqueService.findByName(cliente);
-      
+
       if (tipoEstoque) {
         return tipoEstoque.possuiEtiqueta;
       }
 
-      // Se não encontrou, buscar o cliente pelo nome
       const clienteData = await clientesService.findByName(cliente);
-      
+
       if (!clienteData) {
         return false;
       }
 
-      // Se o cliente tem tipo_estoque_id, buscar o tipo de estoque pelo ID
       if (clienteData.tipoEstoqueId) {
         tipoEstoque = await tiposEstoqueService.findById(clienteData.tipoEstoqueId);
         if (tipoEstoque) {
@@ -83,17 +104,14 @@ export class EstoqueService {
         }
       }
 
-      // Tentar encontrar tipo de estoque pelo nome_fantasia
       if (!tipoEstoque) {
         tipoEstoque = await tiposEstoqueService.findByName(clienteData.nomeFantasia);
       }
-      
-      // Se não encontrar, tentar por razao_social
+
       if (!tipoEstoque) {
         tipoEstoque = await tiposEstoqueService.findByName(clienteData.razaoSocial);
       }
 
-      // Retornar true apenas se o tipo de estoque existir e possui_etiqueta for true
       return tipoEstoque?.possuiEtiqueta ?? false;
     } catch {
       return false;
@@ -124,18 +142,59 @@ export class EstoqueService {
     diffs: EstoqueDiff[];
     estoqueAtualizado: EstoqueRecord[];
   }> {
-    const avaliacao = await this.avaliarInventario(
-      payload.cliente,
-      payload.itens,
+    const avaliacao = await this.avaliarInventario(payload.cliente, payload.itens);
+    const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(payload.cliente);
+
+    const itensComZeros = this.completarItensComZeros(avaliacao.estoqueAtual, payload.itens);
+
+    const itensResolvidos = await Promise.all(
+      itensComZeros.map(async (item) => ({
+        produtoId: await estoqueResolverService.resolveProdutoId(item.produto),
+        produtoNome: item.produto,
+        quantidade: item.quantidade,
+      })),
     );
+
+    await inventarioRepository.create({
+      data: payload.data,
+      tipoEstoqueId,
+      itens: itensResolvidos.map((item) => ({
+        produtoId: item.produtoId,
+        quantidade: item.quantidade,
+      })),
+    });
+
+    for (const item of itensResolvidos) {
+      const saldoAtual = await estoqueRepository.findSaldo(tipoEstoqueId, item.produtoId);
+      const quantidadeAtual = saldoAtual
+        ? {
+            caixas: saldoAtual.caixas,
+            pacotes: saldoAtual.pacotes,
+            unidades: saldoAtual.unidades,
+            kg: Number(saldoAtual.kg),
+          }
+        : criarQuantidadeZerada();
+
+      const delta = calcularDelta(quantidadeAtual, item.quantidade);
+      const houveMudanca =
+        delta.caixas !== 0 ||
+        delta.pacotes !== 0 ||
+        delta.unidades !== 0 ||
+        delta.kg !== 0;
+
+      if (!houveMudanca) continue;
+
+      await this.registrarMovimentoByIds({
+        tipoEstoqueId,
+        produtoId: item.produtoId,
+        tipoEstoqueNome: payload.cliente,
+        produtoNome: item.produtoNome,
+        delta,
+        origem: 'inventario',
+      });
+    }
+
     const atualizadoEm = new Date().toISOString();
-
-    const itensComZeros = this.completarItensComZeros(
-      avaliacao.estoqueAtual,
-      payload.itens,
-    );
-    const inventarioAtualizadoEm = atualizadoEm;
-
     await estoqueSheetManager.replaceClienteEstoque(
       payload.cliente,
       itensComZeros.map((item) => ({
@@ -143,16 +202,20 @@ export class EstoqueService {
         quantidade: item.quantidade,
       })),
       {
-        inventarioAtualizadoEm,
+        inventarioAtualizadoEm: atualizadoEm,
         atualizadoEm,
       },
     );
 
-    await inventarioSheetManager.registrarInventario(
-      payload.data,
-      payload.cliente,
-      payload.itens,
-    );
+    try {
+      await inventarioSheetManager.registrarInventario(
+        payload.data,
+        payload.cliente,
+        payload.itens,
+      );
+    } catch (error) {
+      console.error('[EstoqueService] Falha dual-write inventário planilha:', error);
+    }
 
     const estoqueAtualizado = await this.obterEstoqueCliente(payload.cliente);
     return { diffs: avaliacao.diffs, estoqueAtualizado };
@@ -163,33 +226,22 @@ export class EstoqueService {
     produto,
     delta,
     allowNegative = false,
-  }: AjusteQuantidadeInput & { allowNegative?: boolean }): Promise<EstoqueRecord> {
-    const estoqueAtual = await this.obterEstoqueCliente(cliente);
-    const produtoNormalizado = produto.trim();
-    const existente = estoqueAtual.find(
-      (record) => record.produto.trim() === produtoNormalizado,
-    );
-    const quantidadeAtual = existente?.quantidade ?? this.criarQuantidadeZerada();
-    const novaQuantidade = this.somarQuantidades(quantidadeAtual, delta, allowNegative);
+    origem = 'ajuste_manual',
+  }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord> {
+    const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(cliente);
+    const produtoId = await estoqueResolverService.resolveProdutoId(produto);
 
-    const atualizadoEm = new Date().toISOString();
+    const record = await this.registrarMovimentoByIds({
+      tipoEstoqueId,
+      produtoId,
+      tipoEstoqueNome: cliente,
+      produtoNome: produto,
+      delta,
+      allowNegative,
+      origem,
+    });
 
-    await estoqueSheetManager.upsertQuantidade(
-      { cliente, produto },
-      novaQuantidade,
-      {
-        atualizadoEm,
-        inventarioAtualizadoEm: existente?.inventarioAtualizadoEm ?? atualizadoEm,
-      },
-    );
-
-    return {
-      cliente,
-      produto,
-      quantidade: novaQuantidade,
-      inventarioAtualizadoEm: existente?.inventarioAtualizadoEm ?? atualizadoEm,
-      atualizadoEm,
-    };
+    return record;
   }
 
   public async definirQuantidadeAbsoluta({
@@ -198,28 +250,100 @@ export class EstoqueService {
     quantidade,
   }: AtualizarQuantidadeInput): Promise<EstoqueRecord> {
     const estoqueAtual = await this.obterEstoqueCliente(cliente);
-    const existente = estoqueAtual.find(
-      (record) => record.produto === produto,
-    );
-    const atualizadoEm = new Date().toISOString();
+    const existente = estoqueAtual.find((record) => record.produto === produto);
+    const quantidadeAtual = existente?.quantidade ?? criarQuantidadeZerada();
     const quantidadeNormalizada = this.normalizarQuantidade(quantidade);
+    const delta = calcularDelta(quantidadeAtual, quantidadeNormalizada);
 
-    await estoqueSheetManager.upsertQuantidade(
-      { cliente, produto },
-      quantidadeNormalizada,
-      {
-        inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
-        atualizadoEm,
-      },
-    );
-
-    return {
+    return this.aplicarDelta({
       cliente,
       produto,
-      quantidade: quantidadeNormalizada,
-      inventarioAtualizadoEm: existente?.inventarioAtualizadoEm,
+      delta,
+      origem: 'ajuste_manual',
+    });
+  }
+
+  private async registrarMovimentoByIds(input: {
+    tipoEstoqueId: string;
+    produtoId: string;
+    tipoEstoqueNome: string;
+    produtoNome: string;
+    delta: Quantidade;
+    allowNegative?: boolean;
+    origem: EstoqueMovimentoOrigem;
+  }): Promise<EstoqueRecord> {
+    const saldoAtualRow = await estoqueRepository.findSaldo(
+      input.tipoEstoqueId,
+      input.produtoId,
+    );
+
+    const quantidadeAtual = saldoAtualRow
+      ? {
+          caixas: saldoAtualRow.caixas,
+          pacotes: saldoAtualRow.pacotes,
+          unidades: saldoAtualRow.unidades,
+          kg: Number(saldoAtualRow.kg),
+        }
+      : criarQuantidadeZerada();
+
+    const { saldo } = aplicarDeltaComClamp(
+      quantidadeAtual,
+      input.delta,
+      input.allowNegative ?? false,
+    );
+
+    await estoqueRepository.insertMovimento({
+      tipoEstoqueId: input.tipoEstoqueId,
+      produtoId: input.produtoId,
+      delta: input.delta,
+      saldo,
+      origem: input.origem,
+    });
+
+    await estoqueRepository.upsertSaldo(
+      input.tipoEstoqueId,
+      input.produtoId,
+      saldo,
+    );
+
+    const atualizadoEm = new Date().toISOString();
+
+    try {
+      await estoqueSheetManager.upsertQuantidade(
+        { cliente: input.tipoEstoqueNome, produto: input.produtoNome },
+        saldo,
+        {
+          atualizadoEm,
+          inventarioAtualizadoEm: saldoAtualRow?.updated_at ?? atualizadoEm,
+        },
+      );
+    } catch (error) {
+      console.error('[EstoqueService] Falha dual-write estoque planilha:', error);
+    }
+
+    return {
+      cliente: input.tipoEstoqueNome,
+      produto: input.produtoNome,
+      quantidade: saldo,
+      inventarioAtualizadoEm: saldoAtualRow?.updated_at,
       atualizadoEm,
     };
+  }
+
+  private async listarSaldosComFallback(): Promise<EstoqueRecord[]> {
+    const count = await estoqueRepository.countSaldos();
+
+    if (count === 0) {
+      return estoqueSheetManager.listAll();
+    }
+
+    const saldos = await estoqueRepository.listAllSaldos();
+    return saldos.map((saldo) => ({
+      cliente: saldo.tipoEstoqueNome,
+      produto: saldo.produtoNome,
+      quantidade: saldo.quantidade,
+      atualizadoEm: saldo.updatedAt,
+    }));
   }
 
   private calcularDiffs(
@@ -245,7 +369,7 @@ export class EstoqueService {
       diffs.push({
         produto,
         anterior: quantidade,
-        novo: this.criarQuantidadeZerada(),
+        novo: criarQuantidadeZerada(),
       });
     });
 
@@ -263,7 +387,7 @@ export class EstoqueService {
       if (!produtosInformados.has(record.produto)) {
         itensComZeros.push({
           produto: record.produto,
-          quantidade: this.criarQuantidadeZerada(),
+          quantidade: criarQuantidadeZerada(),
         });
       }
     });
@@ -271,34 +395,12 @@ export class EstoqueService {
     return itensComZeros;
   }
 
-  private somarQuantidades(
-    a: Quantidade,
-    b: Quantidade,
-    allowNegative = false,
-  ): Quantidade {
-    const kgSomado = parseFloat((a.kg + (b.kg || 0)).toFixed(3));
-    const caixas = a.caixas + (b.caixas || 0);
-    const pacotes = a.pacotes + (b.pacotes || 0);
-    const unidades = a.unidades + (b.unidades || 0);
-    
-    return {
-      caixas: allowNegative ? caixas : this.clampZero(caixas),
-      pacotes: allowNegative ? pacotes : this.clampZero(pacotes),
-      unidades: allowNegative ? unidades : this.clampZero(unidades),
-      kg: allowNegative ? kgSomado : this.clampZero(kgSomado),
-    };
-  }
-
-  private clampZero(value: number): number {
-    return value < 0 ? 0 : value;
-  }
-
   private normalizarQuantidade(quantidade: Quantidade): Quantidade {
     const normalizarInteiro = (valor: number | undefined): number => {
       if (!Number.isFinite(valor)) {
         return 0;
       }
-      return this.clampZero(Math.trunc(valor ?? 0));
+      return Math.max(0, Math.trunc(valor ?? 0));
     };
 
     const normalizarKg = (valor: number | undefined): number => {
@@ -306,7 +408,7 @@ export class EstoqueService {
         return 0;
       }
       const kg = parseFloat((valor ?? 0).toFixed(3));
-      return this.clampZero(kg);
+      return Math.max(0, kg);
     };
 
     return {
@@ -316,11 +418,7 @@ export class EstoqueService {
       kg: normalizarKg(quantidade.kg),
     };
   }
-
-  private criarQuantidadeZerada(): Quantidade {
-    return { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
-  }
 }
 
+export { EstoqueResolverError };
 export const estoqueService = new EstoqueService();
-

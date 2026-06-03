@@ -174,6 +174,7 @@ async function atualizarEstoque(
         kg: -delta.kg,
       },
       allowNegative: true,
+      origem: 'saida',
     });
   }
 }

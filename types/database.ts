@@ -14,6 +14,156 @@ export type Database = {
   }
   public: {
     Tables: {
+      assadeiras: {
+        Row: {
+          ativo: boolean
+          codigo: string | null
+          created_at: string
+          descricao: string | null
+          diametro_buracos_mm: number | null
+          id: string
+          nome: string
+          numero_buracos: number
+          ordem: number
+          quantidade_latas: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string
+          descricao?: string | null
+          diametro_buracos_mm?: number | null
+          id?: string
+          nome: string
+          numero_buracos?: number
+          ordem?: number
+          quantidade_latas?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string | null
+          created_at?: string
+          descricao?: string | null
+          diametro_buracos_mm?: number | null
+          id?: string
+          nome?: string
+          numero_buracos?: number
+          ordem?: number
+          quantidade_latas?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      boletos: {
+        Row: {
+          boleto_pdf_status: string
+          boleto_pdf_storage_path: string | null
+          boleto_pdf_tentativas: number
+          boleto_pdf_ultima_tentativa_em: string | null
+          boleto_pdf_ultimo_erro: string | null
+          codigo_barras: string | null
+          created_at: string
+          data_pagamento: string | null
+          data_vencimento: string | null
+          empresa_id: string
+          fechamento_id: string | null
+          id: string
+          id_integracao_bancaria: string | null
+          nosso_numero: string | null
+          pedido_id: string | null
+          raw_json: Json | null
+          seu_numero: string | null
+          status_pagamento: string | null
+          updated_at: string
+          url_boleto: string | null
+          valor: number | null
+        }
+        Insert: {
+          boleto_pdf_status?: string
+          boleto_pdf_storage_path?: string | null
+          boleto_pdf_tentativas?: number
+          boleto_pdf_ultima_tentativa_em?: string | null
+          boleto_pdf_ultimo_erro?: string | null
+          codigo_barras?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          empresa_id: string
+          fechamento_id?: string | null
+          id?: string
+          id_integracao_bancaria?: string | null
+          nosso_numero?: string | null
+          pedido_id?: string | null
+          raw_json?: Json | null
+          seu_numero?: string | null
+          status_pagamento?: string | null
+          updated_at?: string
+          url_boleto?: string | null
+          valor?: number | null
+        }
+        Update: {
+          boleto_pdf_status?: string
+          boleto_pdf_storage_path?: string | null
+          boleto_pdf_tentativas?: number
+          boleto_pdf_ultima_tentativa_em?: string | null
+          boleto_pdf_ultimo_erro?: string | null
+          codigo_barras?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          empresa_id?: string
+          fechamento_id?: string | null
+          id?: string
+          id_integracao_bancaria?: string | null
+          nosso_numero?: string | null
+          pedido_id?: string | null
+          raw_json?: Json | null
+          seu_numero?: string | null
+          status_pagamento?: string | null
+          updated_at?: string
+          url_boleto?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boletos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletos_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boletos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+        ]
+      }
       cadastro_hamburgueria_comentarios: {
         Row: {
           cliente_id: string
@@ -80,6 +230,45 @@ export type Database = {
         }
         Relationships: []
       }
+      carrinhos: {
+        Row: {
+          ativo: boolean
+          bandejas: number
+          created_at: string
+          em_uso: boolean
+          id: string
+          latas_ocupadas: number
+          numero: number
+          precisa_reparos: boolean
+          quantidade_latas: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          bandejas?: number
+          created_at?: string
+          em_uso?: boolean
+          id?: string
+          latas_ocupadas?: number
+          numero: number
+          precisa_reparos?: boolean
+          quantidade_latas?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          bandejas?: number
+          created_at?: string
+          em_uso?: boolean
+          id?: string
+          latas_ocupadas?: number
+          numero?: number
+          precisa_reparos?: boolean
+          quantidade_latas?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categorias: {
         Row: {
           aparece_por_padrao: boolean
@@ -106,6 +295,78 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      cliente_assadeira_bloqueios: {
+        Row: {
+          assadeira_id: string
+          cliente_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          assadeira_id: string
+          cliente_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          assadeira_id?: string
+          cliente_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_assadeira_bloqueios_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_assadeira_bloqueios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cliente_assadeiras: {
+        Row: {
+          assadeira_id: string
+          cliente_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          assadeira_id: string
+          cliente_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          assadeira_id?: string
+          cliente_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_assadeiras_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_assadeiras_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cliente_categorias: {
         Row: {
@@ -209,6 +470,7 @@ export type Database = {
           ativo: boolean | null
           cnpj: string | null
           codigo_cenario_imposto_erp: number | null
+          comissao_consignado_percentual: number
           comissao_distribuidor_percentual: number
           created_at: string | null
           dia_semana_entrega: number | null
@@ -226,6 +488,7 @@ export type Database = {
           indicador_id: string | null
           inscricao_estadual: string | null
           instagram: string | null
+          is_consignado: boolean
           is_pessoa_juridica: boolean
           marca_pao_atual: string | null
           media_paes_semana: number | null
@@ -253,6 +516,7 @@ export type Database = {
           updated_at: string | null
           usuario_padrao_id: string | null
           vendedor_id: string | null
+          vendedor_padrao_hamburguerias_id: string | null
           whatsapp_ddd: string | null
           whatsapp_numero: string | null
         }
@@ -262,6 +526,7 @@ export type Database = {
           ativo?: boolean | null
           cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          comissao_consignado_percentual?: number
           comissao_distribuidor_percentual?: number
           created_at?: string | null
           dia_semana_entrega?: number | null
@@ -279,6 +544,7 @@ export type Database = {
           indicador_id?: string | null
           inscricao_estadual?: string | null
           instagram?: string | null
+          is_consignado?: boolean
           is_pessoa_juridica?: boolean
           marca_pao_atual?: string | null
           media_paes_semana?: number | null
@@ -306,6 +572,7 @@ export type Database = {
           updated_at?: string | null
           usuario_padrao_id?: string | null
           vendedor_id?: string | null
+          vendedor_padrao_hamburguerias_id?: string | null
           whatsapp_ddd?: string | null
           whatsapp_numero?: string | null
         }
@@ -315,6 +582,7 @@ export type Database = {
           ativo?: boolean | null
           cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          comissao_consignado_percentual?: number
           comissao_distribuidor_percentual?: number
           created_at?: string | null
           dia_semana_entrega?: number | null
@@ -332,6 +600,7 @@ export type Database = {
           indicador_id?: string | null
           inscricao_estadual?: string | null
           instagram?: string | null
+          is_consignado?: boolean
           is_pessoa_juridica?: boolean
           marca_pao_atual?: string | null
           media_paes_semana?: number | null
@@ -359,6 +628,7 @@ export type Database = {
           updated_at?: string | null
           usuario_padrao_id?: string | null
           vendedor_id?: string | null
+          vendedor_padrao_hamburguerias_id?: string | null
           whatsapp_ddd?: string | null
           whatsapp_numero?: string | null
         }
@@ -422,6 +692,13 @@ export type Database = {
           {
             foreignKeyName: "clientes_vendedor_id_fkey"
             columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_vendedor_padrao_hamburguerias_id_fkey"
+            columns: ["vendedor_padrao_hamburguerias_id"]
             isOneToOne: false
             referencedRelation: "vendedores"
             referencedColumns: ["id"]
@@ -756,6 +1033,45 @@ export type Database = {
           },
         ]
       }
+      distribuidor_parcelas_permitidas: {
+        Row: {
+          created_at: string
+          distribuidor_id: string
+          id: string
+          is_default: boolean
+          parcela_id: string
+        }
+        Insert: {
+          created_at?: string
+          distribuidor_id: string
+          id?: string
+          is_default?: boolean
+          parcela_id: string
+        }
+        Update: {
+          created_at?: string
+          distribuidor_id?: string
+          id?: string
+          is_default?: boolean
+          parcela_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distribuidor_parcelas_permitidas_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribuidor_parcelas_permitidas_parcela_id_fkey"
+            columns: ["parcela_id"]
+            isOneToOne: false
+            referencedRelation: "parcelas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       distribuidor_precos_revenda: {
         Row: {
           created_at: string
@@ -818,6 +1134,7 @@ export type Database = {
           app_secret: string
           ativo: boolean
           cnpj: string | null
+          codigo_cenario_imposto_remessa_consignacao_erp: number | null
           codigo_conta_corrente_erp: string | null
           codigo_conta_corrente_s_boleto_erp: string | null
           created_at: string | null
@@ -825,6 +1142,7 @@ export type Database = {
           estado: string | null
           id: string
           nome: string
+          parcelas_empresa_sem_cobranca_id: string | null
           razao_social: string | null
           updated_at: string | null
         }
@@ -833,6 +1151,7 @@ export type Database = {
           app_secret: string
           ativo?: boolean
           cnpj?: string | null
+          codigo_cenario_imposto_remessa_consignacao_erp?: number | null
           codigo_conta_corrente_erp?: string | null
           codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
@@ -840,6 +1159,7 @@ export type Database = {
           estado?: string | null
           id?: string
           nome: string
+          parcelas_empresa_sem_cobranca_id?: string | null
           razao_social?: string | null
           updated_at?: string | null
         }
@@ -848,6 +1168,7 @@ export type Database = {
           app_secret?: string
           ativo?: boolean
           cnpj?: string | null
+          codigo_cenario_imposto_remessa_consignacao_erp?: number | null
           codigo_conta_corrente_erp?: string | null
           codigo_conta_corrente_s_boleto_erp?: string | null
           created_at?: string | null
@@ -855,10 +1176,19 @@ export type Database = {
           estado?: string | null
           id?: string
           nome?: string
+          parcelas_empresa_sem_cobranca_id?: string | null
           razao_social?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresas_parcelas_empresa_sem_cobranca_id_fkey"
+            columns: ["parcelas_empresa_sem_cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "parcelas_empresa"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       enderecos_entrega: {
         Row: {
@@ -918,6 +1248,238 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estoque_consignado_movimentos: {
+        Row: {
+          created_at: string
+          criado_por: string | null
+          distribuidor_id: string
+          id: string
+          observacao: string | null
+          pedido_id: string | null
+          produto_id: string
+          quantidade: number
+          tipo: Database["public"]["Enums"]["estoque_consignado_tipo_mov_enum"]
+        }
+        Insert: {
+          created_at?: string
+          criado_por?: string | null
+          distribuidor_id: string
+          id?: string
+          observacao?: string | null
+          pedido_id?: string | null
+          produto_id: string
+          quantidade: number
+          tipo: Database["public"]["Enums"]["estoque_consignado_tipo_mov_enum"]
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string | null
+          distribuidor_id?: string
+          id?: string
+          observacao?: string | null
+          pedido_id?: string | null
+          produto_id?: string
+          quantidade?: number
+          tipo?: Database["public"]["Enums"]["estoque_consignado_tipo_mov_enum"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_consignado_movimentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      estoque_movimentos: {
+        Row: {
+          created_at: string
+          delta_caixas: number
+          delta_kg: number
+          delta_pacotes: number
+          delta_unidades: number
+          id: string
+          origem: Database["public"]["Enums"]["estoque_movimento_origem"]
+          produto_id: string
+          saldo_caixas: number
+          saldo_kg: number
+          saldo_pacotes: number
+          saldo_unidades: number
+          tipo_estoque_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta_caixas?: number
+          delta_kg?: number
+          delta_pacotes?: number
+          delta_unidades?: number
+          id?: string
+          origem: Database["public"]["Enums"]["estoque_movimento_origem"]
+          produto_id: string
+          saldo_caixas?: number
+          saldo_kg?: number
+          saldo_pacotes?: number
+          saldo_unidades?: number
+          tipo_estoque_id: string
+        }
+        Update: {
+          created_at?: string
+          delta_caixas?: number
+          delta_kg?: number
+          delta_pacotes?: number
+          delta_unidades?: number
+          id?: string
+          origem?: Database["public"]["Enums"]["estoque_movimento_origem"]
+          produto_id?: string
+          saldo_caixas?: number
+          saldo_kg?: number
+          saldo_pacotes?: number
+          saldo_unidades?: number
+          tipo_estoque_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_movimentos_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estoque_saldos: {
+        Row: {
+          caixas: number
+          id: string
+          kg: number
+          pacotes: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades: number
+          updated_at: string
+        }
+        Insert: {
+          caixas?: number
+          id?: string
+          kg?: number
+          pacotes?: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades?: number
+          updated_at?: string
+        }
+        Update: {
+          caixas?: number
+          id?: string
+          kg?: number
+          pacotes?: number
+          produto_id?: string
+          tipo_estoque_id?: string
+          unidades?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_saldos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_saldos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_saldos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_saldos_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
             referencedColumns: ["id"]
           },
         ]
@@ -1073,6 +1635,94 @@ export type Database = {
           },
         ]
       }
+      inventario_lancamento_itens: {
+        Row: {
+          caixas: number
+          id: string
+          inventario_id: string
+          kg: number
+          pacotes: number
+          produto_id: string
+          unidades: number
+        }
+        Insert: {
+          caixas?: number
+          id?: string
+          inventario_id: string
+          kg?: number
+          pacotes?: number
+          produto_id: string
+          unidades?: number
+        }
+        Update: {
+          caixas?: number
+          id?: string
+          inventario_id?: string
+          kg?: number
+          pacotes?: number
+          produto_id?: string
+          unidades?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventario_lancamento_itens_inventario_id_fkey"
+            columns: ["inventario_id"]
+            isOneToOne: false
+            referencedRelation: "inventario_lancamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      inventario_lancamentos: {
+        Row: {
+          created_at: string
+          data: string
+          id: string
+          tipo_estoque_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          id?: string
+          tipo_estoque_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          id?: string
+          tipo_estoque_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventario_lancamentos_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       masseiras: {
         Row: {
           ativo: boolean | null
@@ -1100,12 +1750,249 @@ export type Database = {
         }
         Relationships: []
       }
+      nota_fiscal_fechamento: {
+        Row: {
+          created_at: string
+          fechamento_id: string
+          id: string
+          nota_fiscal_id: string
+        }
+        Insert: {
+          created_at?: string
+          fechamento_id: string
+          id?: string
+          nota_fiscal_id: string
+        }
+        Update: {
+          created_at?: string
+          fechamento_id?: string
+          id?: string
+          nota_fiscal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nota_fiscal_fechamento_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_fechamento_nota_fiscal_id_fkey"
+            columns: ["nota_fiscal_id"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nota_fiscal_pedido: {
+        Row: {
+          created_at: string
+          id: string
+          nota_fiscal_id: string
+          pedido_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nota_fiscal_id: string
+          pedido_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nota_fiscal_id?: string
+          pedido_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nota_fiscal_pedido_nota_fiscal_id_fkey"
+            columns: ["nota_fiscal_id"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_pedido_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_pedido_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_pedido_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+        ]
+      }
+      notas_fiscais: {
+        Row: {
+          chave_acesso: string | null
+          created_at: string
+          danfe_arquivo_status: string
+          danfe_storage_path: string | null
+          danfe_tentativas: number
+          danfe_ultima_tentativa_em: string | null
+          danfe_ultimo_erro: string | null
+          data_emissao: string | null
+          empresa_id: string
+          id: string
+          modelo: string | null
+          numero_nota: string | null
+          omie_evento_id: string | null
+          omie_id_nf: number | null
+          omie_pedido_codigo: number | null
+          raw_json: Json | null
+          reconciliada: boolean
+          serie: string | null
+          status: string
+          updated_at: string
+          url_danfe: string | null
+          url_xml: string | null
+          valor_produtos: number | null
+          valor_total: number | null
+        }
+        Insert: {
+          chave_acesso?: string | null
+          created_at?: string
+          danfe_arquivo_status?: string
+          danfe_storage_path?: string | null
+          danfe_tentativas?: number
+          danfe_ultima_tentativa_em?: string | null
+          danfe_ultimo_erro?: string | null
+          data_emissao?: string | null
+          empresa_id: string
+          id?: string
+          modelo?: string | null
+          numero_nota?: string | null
+          omie_evento_id?: string | null
+          omie_id_nf?: number | null
+          omie_pedido_codigo?: number | null
+          raw_json?: Json | null
+          reconciliada?: boolean
+          serie?: string | null
+          status?: string
+          updated_at?: string
+          url_danfe?: string | null
+          url_xml?: string | null
+          valor_produtos?: number | null
+          valor_total?: number | null
+        }
+        Update: {
+          chave_acesso?: string | null
+          created_at?: string
+          danfe_arquivo_status?: string
+          danfe_storage_path?: string | null
+          danfe_tentativas?: number
+          danfe_ultima_tentativa_em?: string | null
+          danfe_ultimo_erro?: string | null
+          data_emissao?: string | null
+          empresa_id?: string
+          id?: string
+          modelo?: string | null
+          numero_nota?: string | null
+          omie_evento_id?: string | null
+          omie_id_nf?: number | null
+          omie_pedido_codigo?: number | null
+          raw_json?: Json | null
+          reconciliada?: boolean
+          serie?: string | null
+          status?: string
+          updated_at?: string
+          url_danfe?: string | null
+          url_xml?: string | null
+          valor_produtos?: number | null
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_fiscais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notas_fiscais_omie_evento_id_fkey"
+            columns: ["omie_evento_id"]
+            isOneToOne: false
+            referencedRelation: "omie_webhook_eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      omie_webhook_eventos: {
+        Row: {
+          app_key_recebida: string
+          created_at: string
+          empresa_id: string
+          erro: string | null
+          id: string
+          message_id: string | null
+          payload_json: Json
+          processed_at: string | null
+          received_at: string
+          status_processamento: string
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          app_key_recebida: string
+          created_at?: string
+          empresa_id: string
+          erro?: string | null
+          id?: string
+          message_id?: string | null
+          payload_json: Json
+          processed_at?: string | null
+          received_at?: string
+          status_processamento?: string
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          app_key_recebida?: string
+          created_at?: string
+          empresa_id?: string
+          erro?: string | null
+          id?: string
+          message_id?: string | null
+          payload_json?: Json
+          processed_at?: string | null
+          received_at?: string
+          status_processamento?: string
+          topic?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "omie_webhook_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ordens_producao: {
         Row: {
+          assadeira_id: string | null
           created_at: string | null
           data_producao: string | null
           id: string
           lote_codigo: string
+          ordem_planejamento: number | null
           pedido_id: string | null
           prioridade: number | null
           produto_id: string
@@ -1113,10 +2000,12 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          assadeira_id?: string | null
           created_at?: string | null
           data_producao?: string | null
           id?: string
           lote_codigo: string
+          ordem_planejamento?: number | null
           pedido_id?: string | null
           prioridade?: number | null
           produto_id: string
@@ -1124,10 +2013,12 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          assadeira_id?: string | null
           created_at?: string | null
           data_producao?: string | null
           id?: string
           lote_codigo?: string
+          ordem_planejamento?: number | null
           pedido_id?: string | null
           prioridade?: number | null
           produto_id?: string
@@ -1135,6 +2026,13 @@ export type Database = {
           status?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ordens_producao_pedido_id_fkey"
             columns: ["pedido_id"]
@@ -1429,6 +2327,7 @@ export type Database = {
           fechamento_id: string | null
           id: string
           is_bonificacao: boolean
+          is_remessa_consignacao: boolean
           observacoes: string | null
           prazo_aprovacao: string | null
           prioridade: string
@@ -1451,6 +2350,7 @@ export type Database = {
           fechamento_id?: string | null
           id?: string
           is_bonificacao?: boolean
+          is_remessa_consignacao?: boolean
           observacoes?: string | null
           prazo_aprovacao?: string | null
           prioridade?: string
@@ -1473,6 +2373,7 @@ export type Database = {
           fechamento_id?: string | null
           id?: string
           is_bonificacao?: boolean
+          is_remessa_consignacao?: boolean
           observacoes?: string | null
           prazo_aprovacao?: string | null
           prioridade?: string
@@ -1536,6 +2437,7 @@ export type Database = {
           masseira_id: string | null
           ordem_producao_id: string
           perda_qtd: number | null
+          ph_massa: number | null
           qtd_entrada: number | null
           qtd_saida: number | null
           receita_id: string | null
@@ -1556,6 +2458,7 @@ export type Database = {
           masseira_id?: string | null
           ordem_producao_id: string
           perda_qtd?: number | null
+          ph_massa?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
           receita_id?: string | null
@@ -1576,6 +2479,7 @@ export type Database = {
           masseira_id?: string | null
           ordem_producao_id?: string
           perda_qtd?: number | null
+          ph_massa?: number | null
           qtd_entrada?: number | null
           qtd_saida?: number | null
           receita_id?: string | null
@@ -1673,6 +2577,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "producao_etapas_log"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      produto_assadeiras: {
+        Row: {
+          assadeira_id: string
+          created_at: string
+          id: string
+          produto_id: string
+          unidades_por_assadeira: number
+          updated_at: string
+        }
+        Insert: {
+          assadeira_id: string
+          created_at?: string
+          id?: string
+          produto_id: string
+          unidades_por_assadeira: number
+          updated_at?: string
+        }
+        Update: {
+          assadeira_id?: string
+          created_at?: string
+          id?: string
+          produto_id?: string
+          unidades_por_assadeira?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produto_assadeiras_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_assadeiras_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_assadeiras_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "produto_assadeiras_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
           },
         ]
       }
@@ -2119,6 +3079,174 @@ export type Database = {
         }
         Relationships: []
       }
+      roteiro_paradas: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id: string
+          manual_categoria: string | null
+          ordem: number
+          pedido_id: string | null
+          roteiro_veiculo_id: string
+          tipo: string
+          titulo: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          manual_categoria?: string | null
+          ordem: number
+          pedido_id?: string | null
+          roteiro_veiculo_id: string
+          tipo?: string
+          titulo?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          manual_categoria?: string | null
+          ordem?: number
+          pedido_id?: string | null
+          roteiro_veiculo_id?: string
+          tipo?: string
+          titulo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roteiro_paradas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roteiro_paradas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roteiro_paradas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+          {
+            foreignKeyName: "roteiro_paradas_roteiro_veiculo_id_fkey"
+            columns: ["roteiro_veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "roteiro_veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roteiro_veiculos: {
+        Row: {
+          created_at: string | null
+          id: string
+          motorista_alocado_em: string | null
+          motorista_alocado_por: string | null
+          motorista_usuario_id: string | null
+          ordem_exibicao: number
+          roteiro_id: string
+          updated_at: string | null
+          veiculo_logistica_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          motorista_alocado_em?: string | null
+          motorista_alocado_por?: string | null
+          motorista_usuario_id?: string | null
+          ordem_exibicao?: number
+          roteiro_id: string
+          updated_at?: string | null
+          veiculo_logistica_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          motorista_alocado_em?: string | null
+          motorista_alocado_por?: string | null
+          motorista_usuario_id?: string | null
+          ordem_exibicao?: number
+          roteiro_id?: string
+          updated_at?: string | null
+          veiculo_logistica_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roteiro_veiculos_motorista_alocado_por_fkey"
+            columns: ["motorista_alocado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roteiro_veiculos_motorista_usuario_id_fkey"
+            columns: ["motorista_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roteiro_veiculos_roteiro_id_fkey"
+            columns: ["roteiro_id"]
+            isOneToOne: false
+            referencedRelation: "roteiros_entrega"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roteiro_veiculos_veiculo_logistica_id_fkey"
+            columns: ["veiculo_logistica_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos_logistica"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roteiros_entrega: {
+        Row: {
+          created_at: string | null
+          data_rota: string
+          id: string
+          publicado_em: string | null
+          publicado_por: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_rota: string
+          id?: string
+          publicado_em?: string | null
+          publicado_por?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_rota?: string
+          id?: string
+          publicado_em?: string | null
+          publicado_por?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roteiros_entrega_publicado_por_fkey"
+            columns: ["publicado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sugestoes_envio_logs: {
         Row: {
           canal: string
@@ -2304,6 +3432,32 @@ export type Database = {
           },
         ]
       }
+      usuario_papeis: {
+        Row: {
+          created_at: string
+          papel: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          papel: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          papel?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuario_papeis_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           cliente_id: string | null
@@ -2360,6 +3514,39 @@ export type Database = {
           },
         ]
       }
+      veiculos_logistica: {
+        Row: {
+          ativo: boolean
+          capacidade: number
+          capacidade_unidade: string
+          created_at: string | null
+          id: string
+          nome: string
+          placa: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          capacidade: number
+          capacidade_unidade: string
+          created_at?: string | null
+          id?: string
+          nome: string
+          placa?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          capacidade?: number
+          capacidade_unidade?: string
+          created_at?: string | null
+          id?: string
+          nome?: string
+          placa?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       vendedores: {
         Row: {
           ativo: boolean
@@ -2405,6 +3592,148 @@ export type Database = {
           expires?: string
           identifier?: string
           token?: string
+        }
+        Relationships: []
+      }
+      whatsapp_notificacao_log: {
+        Row: {
+          created_at: string
+          destino: string | null
+          enviado: boolean
+          erro: string | null
+          id: string
+          mensagem_preview: string | null
+          motivo_nao_envio: string | null
+          referencia_id: string | null
+          referencia_tipo: string | null
+          tipo_chave: string
+          triggered_by: string | null
+          zapi_message_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          destino?: string | null
+          enviado: boolean
+          erro?: string | null
+          id?: string
+          mensagem_preview?: string | null
+          motivo_nao_envio?: string | null
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          tipo_chave: string
+          triggered_by?: string | null
+          zapi_message_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          destino?: string | null
+          enviado?: boolean
+          erro?: string | null
+          id?: string
+          mensagem_preview?: string | null
+          motivo_nao_envio?: string | null
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          tipo_chave?: string
+          triggered_by?: string | null
+          zapi_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_notificacao_log_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_notificacao_tipos: {
+        Row: {
+          categoria: string
+          chave: string
+          created_at: string
+          descricao: string
+          habilitado: boolean
+          id: string
+          nome: string
+          ordem: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          categoria: string
+          chave: string
+          created_at?: string
+          descricao?: string
+          habilitado?: boolean
+          id?: string
+          nome: string
+          ordem?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          categoria?: string
+          chave?: string
+          created_at?: string
+          descricao?: string
+          habilitado?: boolean
+          id?: string
+          nome?: string
+          ordem?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_notificacao_tipos_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_pedido_mensagem: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          process_started_at: string | null
+          processed_at: string | null
+          raw_payload: Json | null
+          status: string
+          telefone: string
+          tentativas: number
+          texto: string | null
+          ultimo_erro: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          process_started_at?: string | null
+          processed_at?: string | null
+          raw_payload?: Json | null
+          status?: string
+          telefone: string
+          tentativas?: number
+          texto?: string | null
+          ultimo_erro?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          process_started_at?: string | null
+          processed_at?: string | null
+          raw_payload?: Json | null
+          status?: string
+          telefone?: string
+          tentativas?: number
+          texto?: string | null
+          ultimo_erro?: string | null
         }
         Relationships: []
       }
@@ -2499,6 +3828,43 @@ export type Database = {
         }
         Relationships: []
       }
+      vw_estoque_consignado_saldo: {
+        Row: {
+          distribuidor_id: string | null
+          produto_id: string | null
+          saldo: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_consignado_movimentos_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
       vw_produtos_com_receitas: {
         Row: {
           produto_codigo: string | null
@@ -2527,6 +3893,34 @@ export type Database = {
       }
     }
     Functions: {
+      auth_tem_papel: { Args: { p_papel: string }; Returns: boolean }
+      claim_next_whatsapp_pedido_mensagem: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          message_id: string
+          process_started_at: string | null
+          processed_at: string | null
+          raw_payload: Json | null
+          status: string
+          telefone: string
+          tentativas: number
+          texto: string | null
+          ultimo_erro: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "whatsapp_pedido_mensagem"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      crm_first_pipeline_stage_id: { Args: never; Returns: string }
+      crm_seed_set_admin_profile: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       get_receita_tipo: {
         Args: { receita_id: string }
         Returns: Database["public"]["Enums"]["tipo_receita"]
@@ -2556,6 +3950,16 @@ export type Database = {
         | "resgate"
         | "expiracao"
         | "ajuste_manual"
+      estoque_consignado_tipo_mov_enum:
+        | "entrada_remessa"
+        | "saida_venda"
+        | "ajuste_entrada"
+        | "ajuste_saida"
+      estoque_movimento_origem:
+        | "embalagem"
+        | "saida"
+        | "inventario"
+        | "ajuste_manual"
       frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
       tipo_pedido_enum: "valepan" | "hamburgueria"
@@ -2573,49 +3977,6 @@ export type Database = {
         | "cadastro_realizado"
         | "em_analise_valepan"
         | "em_analise_distribuidor"
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-  interno: {
-    Tables: {
-      whatsapp_notificacoes_config: {
-        Row: {
-          id: string
-          embalagem_habilitado: boolean
-          fermentacao_habilitado: boolean
-          forno_habilitado: boolean
-          saidas_habilitado: boolean
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Relationships: []
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2764,6 +4125,18 @@ export const Constants = {
         "bonus_missao",
         "resgate",
         "expiracao",
+        "ajuste_manual",
+      ],
+      estoque_consignado_tipo_mov_enum: [
+        "entrada_remessa",
+        "saida_venda",
+        "ajuste_entrada",
+        "ajuste_saida",
+      ],
+      estoque_movimento_origem: [
+        "embalagem",
+        "saida",
+        "inventario",
         "ajuste_manual",
       ],
       frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],

@@ -10,7 +10,9 @@
     "lint": "eslint",
     "gen:types": "node scripts/gen-types.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sync-estoque": "npx tsx scripts/sync-estoque-from-sheet.ts",
+    "sync-estoque:dry": "npx tsx scripts/sync-estoque-from-sheet.ts --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.83.0",

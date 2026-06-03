@@ -228,5 +228,6 @@ async function atualizarEstoque(
     cliente: clienteEstoque,
     produto,
     delta,
+    origem: 'embalagem',
   });
 }

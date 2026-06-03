@@ -192,6 +192,7 @@ export async function POST(
         unidades: u,
         kg: k,
       },
+      origem: 'embalagem',
     });
 
     try {

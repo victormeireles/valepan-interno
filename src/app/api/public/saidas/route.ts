@@ -75,6 +75,7 @@ export async function POST(request: Request) {
         kg: -(payload.meta.kg || 0),
       },
       allowNegative: true,
+      origem: 'saida',
     });
 
     // Enviar notificação WhatsApp (se não foi solicitado para pular)

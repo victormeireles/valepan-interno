@@ -157,6 +157,7 @@ export async function POST(
           kg: -(kg || 0),
         },
         allowNegative: true,
+        origem: 'saida',
       });
     }
 

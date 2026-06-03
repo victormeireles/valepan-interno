@@ -42,6 +42,7 @@ export async function DELETE(
             produto: existingRow.produto,
             delta: quantidade,
             allowNegative: true,
+            origem: 'saida',
           });
         }
       }
