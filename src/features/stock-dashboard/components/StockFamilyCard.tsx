@@ -42,8 +42,8 @@ export const StockFamilyCard: React.FC<StockFamilyCardProps> = ({
   );
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="relative aspect-[4/3] w-full bg-gray-100">
+    <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-white shadow-sm has-[[data-menu-open=true]]:relative has-[[data-menu-open=true]]:z-30">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-t-2xl bg-gray-100">
         {familia.familiaImagemUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -65,7 +65,7 @@ export const StockFamilyCard: React.FC<StockFamilyCardProps> = ({
           {familia.familiaNome}
         </h3>
 
-        <div className="mt-3 flex-1 overflow-hidden rounded-xl border border-gray-100">
+        <div className="mt-3 flex-1 overflow-visible rounded-xl border border-gray-100">
           <div
             className="grid items-center gap-x-2 border-b border-gray-100 bg-gray-50/80 px-3 py-1.5 sm:px-4"
             style={gridStyle}

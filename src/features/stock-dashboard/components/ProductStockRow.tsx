@@ -62,8 +62,9 @@ export const ProductStockRow: React.FC<ProductStockRowProps> = ({
     <div
       className={`grid min-h-11 items-center gap-x-2 px-3 py-1.5 sm:px-4 ${
         highlighted ? 'bg-blue-50/60' : 'hover:bg-gray-50/80'
-      }`}
+      } ${menuOpen ? 'relative z-30' : ''}`}
       style={gridStyle}
+      {...(menuOpen ? { 'data-menu-open': true } : {})}
     >
       <p
         className="min-w-0 truncate text-sm font-medium text-gray-900"
@@ -102,7 +103,7 @@ export const ProductStockRow: React.FC<ProductStockRowProps> = ({
           <div
             id={menuId}
             role="menu"
-            className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
+            className="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
           >
             <MenuItem
               label="Ajustar"
