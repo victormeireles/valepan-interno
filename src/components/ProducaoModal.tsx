@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import NumberInput from './FormControls/NumberInput';
 import PhotoUploader from './PhotoUploader';
 import PhotoManager from './PhotoManager';
 import { ProducaoData } from '@/domain/types';
 import { PhotoValidator } from '@/domain/validators/PhotoValidator';
+import {
+  resolverCamposRealizadoEmbalagem,
+  type CamposRealizadoEmbalagem,
+} from '@/domain/embalagem/painel-quantidade';
 
 
 interface ProducaoModalProps {
@@ -18,13 +22,24 @@ interface ProducaoModalProps {
   produto?: string;
   cliente?: string;
   rowId?: number;
+  /** Novo lote via botão + — salva por pedido canônico no DB. */
+  pedidoEmbalagemId?: string;
+  congelado?: 'Sim' | 'Não';
   pedidoQuantidades?: {
     caixas: number;
     pacotes: number;
     unidades: number;
     kg: number;
   };
+  pedidoMetaOriginal?: {
+    caixas: number;
+    pacotes: number;
+    unidades: number;
+    kg: number;
+  };
   mode?: 'embalagem' | 'forno' | 'fermentacao' | 'resfriamento';
+  /** Aberto via botão "+" (novo lote), não edição de lote existente. */
+  isNewLote?: boolean;
 }
 
 export default function ProducaoModal({
@@ -37,8 +52,12 @@ export default function ProducaoModal({
   produto = '',
   cliente = '',
   rowId,
+  pedidoEmbalagemId,
+  congelado = 'Não',
   pedidoQuantidades,
-  mode = 'embalagem'
+  pedidoMetaOriginal,
+  mode = 'embalagem',
+  isNewLote = false,
 }: ProducaoModalProps) {
   const [formData, setFormData] = useState<ProducaoData>({
     caixas: 0,
@@ -64,13 +83,189 @@ export default function ProducaoModal({
   const [confirmModalMessage, setConfirmModalMessage] = useState('');
   const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
 
+  const camposVisiveis: CamposRealizadoEmbalagem = useMemo(() => {
+    if (mode !== 'embalagem' || !pedidoMetaOriginal) {
+      return { caixas: true, pacotes: true, unidades: true, kg: true };
+    }
+    return resolverCamposRealizadoEmbalagem(pedidoMetaOriginal);
+  }, [mode, pedidoMetaOriginal]);
+
+  const sanitizeQuantidades = useCallback(
+    (data: ProducaoData): ProducaoData => {
+      if (mode !== 'embalagem') return data;
+      return {
+        ...data,
+        caixas: camposVisiveis.caixas ? data.caixas : 0,
+        pacotes: camposVisiveis.pacotes ? data.pacotes : 0,
+        unidades: camposVisiveis.unidades ? data.unidades : 0,
+        kg: camposVisiveis.kg ? data.kg : 0,
+      };
+    },
+    [mode, camposVisiveis],
+  );
+
+  const totalQtyVisivel = useCallback(
+    (data: ProducaoData) => {
+      const q = sanitizeQuantidades(data);
+      return (q.caixas || 0) + (q.pacotes || 0) + (q.unidades || 0) + (q.kg || 0);
+    },
+    [sanitizeQuantidades],
+  );
+
   // Sincronizar só ao abrir o modal ou trocar a linha. Não listar `initialData` nas deps:
   // o pai recria o objeto a cada render e reaplicaria valores antigos por cima do que o usuário digitou.
   useEffect(() => {
-    if (!isOpen || !initialData || rowId == null) return;
+    if (!isOpen || !initialData) return;
+    if (isNewLote && pedidoEmbalagemId) {
+      setFormData(initialData);
+      return;
+    }
+    if (rowId == null) return;
     setFormData(initialData);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
-  }, [isOpen, rowId]);
+  }, [isOpen, rowId, isNewLote, pedidoEmbalagemId]);
+
+  const buildLotePayload = useCallback(
+    (data: ProducaoData) => ({
+      caixas: data.caixas,
+      pacotes: data.pacotes,
+      unidades: data.unidades,
+      kg: data.kg,
+      congelado,
+      obsEmbalagem: data.obsEmbalagem || '',
+      pacoteFotoUrl: data.pacoteFotoUrl,
+      pacoteFotoId: data.pacoteFotoId,
+      pacoteFotoUploadedAt: data.pacoteFotoUploadedAt,
+      etiquetaFotoUrl: data.etiquetaFotoUrl,
+      etiquetaFotoId: data.etiquetaFotoId,
+      etiquetaFotoUploadedAt: data.etiquetaFotoUploadedAt,
+      palletFotoUrl: data.palletFotoUrl,
+      palletFotoId: data.palletFotoId,
+      palletFotoUploadedAt: data.palletFotoUploadedAt,
+    }),
+    [congelado],
+  );
+
+  const uploadPendingPhotos = useCallback(
+    async (targetRowId: number) => {
+      const hasPhotos = Object.values(photoFiles).some((file) => file !== null);
+      if (!hasPhotos) return;
+
+      setPhotoLoading(true);
+      const uploadPromises: Promise<Response>[] = [];
+      const photoTypes: string[] = [];
+
+      for (const [photoType, photoFile] of Object.entries(photoFiles)) {
+        if (!photoFile) continue;
+        const formDataPhoto = new FormData();
+        formDataPhoto.append('photo', photoFile);
+        formDataPhoto.append('rowId', targetRowId.toString());
+        formDataPhoto.append('photoType', photoType);
+        uploadPromises.push(
+          fetch('/api/upload/photo', { method: 'POST', body: formDataPhoto }),
+        );
+        photoTypes.push(photoType);
+      }
+
+      const uploadResults = await Promise.all(uploadPromises);
+      const fotos: Record<string, string | undefined> = {};
+      const now = new Date().toISOString();
+
+      for (let i = 0; i < uploadResults.length; i++) {
+        const uploadRes = uploadResults[i];
+        const photoType = photoTypes[i];
+        if (!uploadRes.ok) {
+          if (uploadRes.status === 413) {
+            throw new Error(
+              `Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`,
+            );
+          }
+          throw new Error(`Erro ao fazer upload da foto ${photoType}. Status: ${uploadRes.status}`);
+        }
+        const uploadData = await uploadRes.json();
+        const prefix =
+          photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+        fotos[`${prefix}FotoUrl`] = uploadData.photoUrl;
+        fotos[`${prefix}FotoId`] = uploadData.photoId;
+        fotos[`${prefix}FotoUploadedAt`] = now;
+      }
+
+      if (Object.keys(fotos).length > 0) {
+        const syncRes = await fetch(
+          `/api/producao/embalagem/planilha/${targetRowId}/fotos`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fotos),
+          },
+        );
+        if (!syncRes.ok) {
+          const syncData = await syncRes.json().catch(() => ({}));
+          throw new Error(syncData.error || 'Erro ao sincronizar fotos no banco');
+        }
+      }
+
+      setPhotoLoading(false);
+    },
+    [photoFiles],
+  );
+
+  const executeSaveNovoLote = useCallback(async () => {
+    if (!pedidoEmbalagemId) return;
+
+    if (totalQtyVisivel(formData) <= 0) {
+      setMessage({
+        type: 'error',
+        text: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).',
+      });
+      return;
+    }
+
+    const payload = sanitizeQuantidades(formData);
+
+    try {
+      setIsSubmitting(true);
+      setMessage(null);
+
+      const res = await fetch(
+        `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildLotePayload(payload)),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
+
+      const planilhaRowId = data.planilhaRowId ?? data.novaLinhaRowId;
+      if (planilhaRowId) {
+        await uploadPendingPhotos(Number(planilhaRowId));
+      }
+
+      if (onSaveSuccess) await onSaveSuccess();
+      setFormData({ caixas: 0, pacotes: 0, unidades: 0, kg: 0, obsEmbalagem: '' });
+      setPhotoFiles({ pacote: null, etiqueta: null, pallet: null });
+      setMessage(null);
+      onClose();
+    } catch (error) {
+      setPhotoLoading(false);
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Erro ao salvar novo lote',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    pedidoEmbalagemId,
+    formData,
+    buildLotePayload,
+    uploadPendingPhotos,
+    onSaveSuccess,
+    totalQtyVisivel,
+    sanitizeQuantidades,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,6 +292,11 @@ export default function ProducaoModal({
   };
 
   const executeSubmit = async () => {
+    if (isNewLote && pedidoEmbalagemId && mode === 'embalagem') {
+      await executeSaveNovoLote();
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setMessage(null);
@@ -172,15 +372,14 @@ export default function ProducaoModal({
         setPhotoLoading(false);
       }
       
-      await onSave(updatedFormData);
+      await onSave(sanitizeQuantidades(updatedFormData));
       
       // Recarregar dados do painel se callback fornecido
       if (onSaveSuccess) {
         await onSaveSuccess();
       }
       
-      // Fechar modal imediatamente após salvar com sucesso
-      onClose();
+      resetAndClose();
     } catch (error) {
       setPhotoLoading(false);
       setMessage({ 
@@ -248,10 +447,18 @@ export default function ProducaoModal({
     if (mode !== 'embalagem' || !pedidoQuantidades) return false;
 
     return (
-      (pedidoQuantidades.caixas > 0 && formData.caixas < pedidoQuantidades.caixas) ||
-      (pedidoQuantidades.pacotes > 0 && formData.pacotes < pedidoQuantidades.pacotes) ||
-      (pedidoQuantidades.unidades > 0 && formData.unidades < pedidoQuantidades.unidades) ||
-      (pedidoQuantidades.kg > 0 && formData.kg < pedidoQuantidades.kg)
+      (camposVisiveis.caixas &&
+        pedidoQuantidades.caixas > 0 &&
+        formData.caixas < pedidoQuantidades.caixas) ||
+      (camposVisiveis.pacotes &&
+        pedidoQuantidades.pacotes > 0 &&
+        formData.pacotes < pedidoQuantidades.pacotes) ||
+      (camposVisiveis.unidades &&
+        pedidoQuantidades.unidades > 0 &&
+        formData.unidades < pedidoQuantidades.unidades) ||
+      (camposVisiveis.kg &&
+        pedidoQuantidades.kg > 0 &&
+        formData.kg < pedidoQuantidades.kg)
     );
   };
 
@@ -260,7 +467,22 @@ export default function ProducaoModal({
     e.preventDefault();
 
     // Prevenir múltiplos cliques
-    if (isSubmitting || !rowId || mode !== 'embalagem') return;
+    if (isSubmitting || mode !== 'embalagem') return;
+
+    if (isNewLote && pedidoEmbalagemId) {
+      const validator = new PhotoValidator(formData, photoFiles, cliente);
+      const validationResult = validator.validate();
+      if (!validationResult.isValid && validationResult.errorMessage) {
+        setConfirmModalMessage(validationResult.errorMessage);
+        setShowConfirmModal(true);
+        setPendingAction('partial');
+        return;
+      }
+      await executeSaveNovoLote();
+      return;
+    }
+
+    if (!rowId) return;
 
     // Validação de fotos obrigatórias
     const validator = new PhotoValidator(formData, photoFiles, cliente);
@@ -279,20 +501,22 @@ export default function ProducaoModal({
   };
 
   const executeSavePartial = async () => {
+    if (isNewLote && pedidoEmbalagemId) {
+      await executeSaveNovoLote();
+      return;
+    }
+
     if (!rowId) return;
 
-    const totalQty =
-      (formData.caixas || 0) +
-      (formData.pacotes || 0) +
-      (formData.unidades || 0) +
-      (formData.kg || 0);
-    if (totalQty <= 0) {
+    if (totalQtyVisivel(formData) <= 0) {
       setMessage({
         type: 'error',
         text: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).',
       });
       return;
     }
+
+    const payload = sanitizeQuantidades(formData);
     
     try {
       setIsSubmitting(true);
@@ -303,10 +527,10 @@ export default function ProducaoModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          caixas: formData.caixas,
-          pacotes: formData.pacotes,
-          unidades: formData.unidades,
-          kg: formData.kg,
+          caixas: payload.caixas,
+          pacotes: payload.pacotes,
+          unidades: payload.unidades,
+          kg: payload.kg,
           // Incluir dados de fotos JÁ EXISTENTES (não novas)
           pacoteFotoUrl: formData.pacoteFotoUrl,
           pacoteFotoId: formData.pacoteFotoId,
@@ -384,8 +608,7 @@ export default function ProducaoModal({
         await onSaveSuccess();
       }
 
-      // Fechar modal imediatamente após salvar com sucesso
-      onClose();
+      resetAndClose();
     } catch (error) {
       setPhotoLoading(false);
       setMessage({ 
@@ -416,7 +639,7 @@ export default function ProducaoModal({
     setConfirmModalMessage('');
   };
 
-  const handleClose = () => {
+  const resetAndClose = () => {
     setFormData({
       caixas: 0,
       pacotes: 0,
@@ -436,21 +659,88 @@ export default function ProducaoModal({
     onClose();
   };
 
+  const hasDraftChanges = useCallback(() => {
+    const hasQty =
+      (formData.caixas || 0) +
+        (formData.pacotes || 0) +
+        (formData.unidades || 0) +
+        (formData.kg || 0) >
+      0;
+    const hasObs = Boolean((formData.obsEmbalagem || '').trim());
+    const hasNewPhotos = Object.values(photoFiles).some((file) => file !== null);
+    return hasQty || hasObs || hasNewPhotos;
+  }, [formData, photoFiles]);
+
+  const requestClose = useCallback(() => {
+    if (isSubmitting || photoLoading || loading) return;
+    if (hasDraftChanges()) {
+      const confirmed = window.confirm(
+        'Descartar o que foi preenchido neste lote?',
+      );
+      if (!confirmed) return;
+    }
+    resetAndClose();
+  }, [hasDraftChanges, isSubmitting, photoLoading, loading]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showConfirmModal) {
+        requestClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, showConfirmModal, requestClose]);
+
   if (!isOpen) return null;
 
+  const modalTitle = isNewLote ? 'Novo lote' : 'Editar produção';
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="producao-modal-title"
+    >
+      {/* Scrim leve: fundo já é gray-900 — overlay escuro demais “apaga” os cards */}
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/25 backdrop-blur-[1px] cursor-default motion-reduce:backdrop-blur-none"
+        aria-label="Fechar modal"
+        onClick={requestClose}
+        disabled={isSubmitting || photoLoading || loading}
+      />
+
+      <div
+        className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto motion-reduce:transition-none"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 sm:p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Editar Produção
+          <div className="flex justify-between items-center mb-6 gap-3">
+            <h2 id="producao-modal-title" className="text-xl sm:text-2xl font-bold text-gray-900">
+              {modalTitle}
             </h2>
             <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
+              type="button"
+              onClick={requestClose}
+              className="inline-flex items-center justify-center min-h-11 min-w-11 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label="Fechar"
+              disabled={isSubmitting || photoLoading || loading}
             >
-              ×
+              <span className="material-icons text-2xl" aria-hidden>
+                close
+              </span>
             </button>
           </div>
 
@@ -500,15 +790,17 @@ export default function ProducaoModal({
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              <NumberInput
-                label={mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? 'Latas' : 'Caixas'}
-                value={formData.caixas}
-                onChange={(value) => setFormData(prev => ({ ...prev, caixas: value }))}
-                min={0}
-                step={1}
-              />
+              {(mode !== 'embalagem' || camposVisiveis.caixas) && (
+                <NumberInput
+                  label={mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? 'Latas' : 'Caixas'}
+                  value={formData.caixas}
+                  onChange={(value) => setFormData(prev => ({ ...prev, caixas: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
               
-              {mode !== 'forno' && mode !== 'fermentacao' && mode !== 'resfriamento' && (
+              {mode !== 'forno' && mode !== 'fermentacao' && mode !== 'resfriamento' && (mode !== 'embalagem' || camposVisiveis.pacotes) && (
                 <NumberInput
                   label="Pacotes"
                   value={formData.pacotes}
@@ -518,21 +810,25 @@ export default function ProducaoModal({
                 />
               )}
               
-              <NumberInput
-                label="Unidades"
-                value={formData.unidades}
-                onChange={(value) => setFormData(prev => ({ ...prev, unidades: value }))}
-                min={0}
-                step={1}
-              />
+              {(mode !== 'embalagem' || camposVisiveis.unidades) && (
+                <NumberInput
+                  label="Unidades"
+                  value={formData.unidades}
+                  onChange={(value) => setFormData(prev => ({ ...prev, unidades: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
               
-              <NumberInput
-                label="Kg"
-                value={formData.kg}
-                onChange={(value) => setFormData(prev => ({ ...prev, kg: value }))}
-                min={0}
-                step={1}
-              />
+              {(mode !== 'embalagem' || camposVisiveis.kg) && (
+                <NumberInput
+                  label="Kg"
+                  value={formData.kg}
+                  onChange={(value) => setFormData(prev => ({ ...prev, kg: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
             </div>
 
             {/* Campo de Observação - APENAS para modo embalagem */}
@@ -643,8 +939,8 @@ export default function ProducaoModal({
             <div className="flex justify-end space-x-4 pt-6">
               <button
                 type="button"
-                onClick={handleClose}
-                className="px-6 py-3 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium"
+                onClick={requestClose}
+                className="px-6 py-3 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium min-h-11"
                 disabled={loading || isSubmitting}
               >
                 Cancelar
@@ -697,8 +993,15 @@ export default function ProducaoModal({
 
       {/* Modal de Confirmação de Fotos Faltantes */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-[1px]"
+          role="alertdialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6">
               <div className="flex items-start gap-4 mb-6">
                 <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
