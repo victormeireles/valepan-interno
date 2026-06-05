@@ -1,4 +1,5 @@
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import type {
   PedidoEmbalagemKey,
   PedidoEmbalagemRecord,
@@ -62,6 +63,91 @@ export class PedidoEmbalagemRepository {
     return supabaseClientFactory.createServiceRoleClient();
   }
 
+  async findById(id: string): Promise<PedidoEmbalagemRecord | null> {
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .select()
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar pedido embalagem: ${error.message}`);
+    }
+
+    return data ? fromDbRow(data) : null;
+  }
+
+  async updateQuantidades(
+    id: string,
+    quantidade: PedidoEmbalagemUpsert['quantidade'],
+  ): Promise<PedidoEmbalagemRecord> {
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .update({
+        caixas: quantidade.caixas,
+        pacotes: quantidade.pacotes,
+        unidades: quantidade.unidades,
+        kg: quantidade.kg,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Erro ao atualizar pedido embalagem: ${error.message}`);
+    }
+
+    return fromDbRow(data);
+  }
+
+  async updatePedidoFields(
+    id: string,
+    fields: {
+      dataProducao: string;
+      dataFabricacaoEtiqueta: string;
+      tipoEstoqueId: string;
+      produtoId: string;
+      observacao: string;
+      quantidade: PedidoEmbalagemUpsert['quantidade'];
+    },
+  ): Promise<PedidoEmbalagemRecord> {
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .update({
+        data_producao: fields.dataProducao,
+        data_fabricacao_etiqueta: fields.dataFabricacaoEtiqueta,
+        tipo_estoque_id: fields.tipoEstoqueId,
+        produto_id: fields.produtoId,
+        observacao: fields.observacao,
+        caixas: fields.quantidade.caixas,
+        pacotes: fields.quantidade.pacotes,
+        unidades: fields.quantidade.unidades,
+        kg: fields.quantidade.kg,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Erro ao atualizar pedido embalagem: ${error.message}`);
+    }
+
+    return fromDbRow(data);
+  }
+
+  async deleteById(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('pedidos_embalagem')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao remover pedido embalagem: ${error.message}`);
+    }
+  }
+
   async findByKey(key: PedidoEmbalagemKey): Promise<PedidoEmbalagemRecord | null> {
     const { data, error } = await this.supabase
       .from('pedidos_embalagem')
@@ -108,17 +194,6 @@ export class PedidoEmbalagemRepository {
     return (data ?? []).map(fromDbRow);
   }
 
-  async deleteById(id: string): Promise<void> {
-    const { error } = await this.supabase
-      .from('pedidos_embalagem')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      throw new Error(`Erro ao remover pedido embalagem: ${error.message}`);
-    }
-  }
-
   async deleteForDateExceptKeys(
     dataProducao: string,
     keepKeys: PedidoEmbalagemKey[],
@@ -135,6 +210,75 @@ export class PedidoEmbalagemRepository {
     }
 
     return deleted;
+  }
+
+  async findUltimaDataComPedidos(
+    lookbackDays: number,
+    anchorDate?: string,
+  ): Promise<string | null> {
+    const anchor = anchorDate ?? getTodayISOInBrazilTimezone();
+    const fromDate = addCalendarDaysISO(anchor, -(lookbackDays - 1));
+
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .select('data_producao')
+      .gte('data_producao', fromDate)
+      .lte('data_producao', anchor)
+      .order('data_producao', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar última data com pedidos: ${error.message}`);
+    }
+
+    return data?.data_producao ?? null;
+  }
+
+  async findDataAnteriorComPedidos(
+    beforeDate: string,
+    maxLookbackDays: number,
+  ): Promise<string | null> {
+    const fromDate = addCalendarDaysISO(beforeDate, -maxLookbackDays);
+
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .select('data_producao')
+      .gte('data_producao', fromDate)
+      .lt('data_producao', beforeDate)
+      .order('data_producao', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar data anterior com pedidos: ${error.message}`);
+    }
+
+    return data?.data_producao ?? null;
+  }
+
+  async listByDatasProducao(dates: string[]): Promise<Map<string, PedidoEmbalagemRecord[]>> {
+    const map = new Map<string, PedidoEmbalagemRecord[]>();
+    const unique = [...new Set(dates.filter(Boolean))];
+    if (unique.length === 0) return map;
+
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .select()
+      .in('data_producao', unique);
+
+    if (error) {
+      throw new Error(`Erro ao listar pedidos por datas: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      const record = fromDbRow(row);
+      const list = map.get(record.dataProducao) ?? [];
+      list.push(record);
+      map.set(record.dataProducao, list);
+    }
+
+    return map;
   }
 
 }
