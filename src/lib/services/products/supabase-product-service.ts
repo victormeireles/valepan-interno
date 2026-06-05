@@ -49,6 +49,39 @@ export class SupabaseProductService {
     return (data ?? []).map((record) => this.mapRecord(record));
   }
 
+  public async findById(id: string): Promise<ProductDTO | null> {
+    const client = this.resolveClient();
+
+    const { data, error } = await client
+      .from('produtos')
+      .select(
+        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+      )
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar produto por ID: ${error.message}`);
+    }
+
+    if (!data) return null;
+    return this.mapRecord(data);
+  }
+
+  public async findByIds(ids: string[]): Promise<ProductDTO[]> {
+    if (ids.length === 0) return [];
+    const client = this.resolveClient();
+    const { data, error } = await client
+      .from('produtos')
+      .select(
+        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+      )
+      .eq('ativo', true)
+      .in('id', ids);
+    if (error) throw new Error(`Erro ao buscar produtos: ${error.message}`);
+    return (data ?? []).map((record) => this.mapRecord(record));
+  }
+
   public async findByName(nome: string): Promise<ProductDTO | null> {
     const client = this.resolveClient();
 
