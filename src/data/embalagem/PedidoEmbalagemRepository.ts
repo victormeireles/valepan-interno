@@ -62,6 +62,24 @@ export class PedidoEmbalagemRepository {
     return supabaseClientFactory.createServiceRoleClient();
   }
 
+  async findByKey(key: PedidoEmbalagemKey): Promise<PedidoEmbalagemRecord | null> {
+    const { data, error } = await this.supabase
+      .from('pedidos_embalagem')
+      .select()
+      .eq('data_producao', key.dataProducao)
+      .eq('data_fabricacao_etiqueta', key.dataFabricacaoEtiqueta)
+      .eq('tipo_estoque_id', key.tipoEstoqueId)
+      .eq('produto_id', key.produtoId)
+      .eq('observacao', key.observacao)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar pedido embalagem: ${error.message}`);
+    }
+
+    return data ? fromDbRow(data) : null;
+  }
+
   async upsertMany(inputs: PedidoEmbalagemUpsert[]): Promise<PedidoEmbalagemRecord[]> {
     if (inputs.length === 0) return [];
 

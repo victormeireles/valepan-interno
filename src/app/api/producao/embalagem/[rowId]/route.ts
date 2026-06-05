@@ -103,6 +103,7 @@ export async function PUT(
     const dataPedido = completeValues[0] || '';
     const dataFabricacao = completeValues[1] || '';
     const cliente = completeValues[2] || '';             // C
+    const observacaoCliente = completeValues[3] || '';   // D
     const congelado = completeValues[5] || 'Não';
     const produto = completeValues[4] || '';             // E
     const lotePlanilha = completeValues[26] || '';
@@ -175,6 +176,7 @@ export async function PUT(
         produto: produto.toString(),
         congelado: congelado.toString(),
         lote: lotePlanilha,
+        observacaoCliente: observacaoCliente.toString(),
         quantidade: {
           caixas: caixas || 0,
           pacotes: pacotes || 0,

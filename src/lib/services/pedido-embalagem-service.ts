@@ -1,5 +1,6 @@
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { aggregatePedidosFromSheetRows } from '@/domain/embalagem/map-sheet-rows-to-pedidos';
+import { pedidoKeyToString } from '@/domain/embalagem/pedido-key';
 import type { PedidoEmbalagemKey } from '@/domain/types/pedido-embalagem';
 import {
   enumerateDatesInclusive,
@@ -123,6 +124,33 @@ export class PedidoEmbalagemService {
       results.push(await this.reconcileForDate(date, options));
     }
     return results;
+  }
+
+  async resolvePedidoEmbalagemId(
+    key: PedidoEmbalagemKey,
+  ): Promise<string | null> {
+    let found = await pedidoEmbalagemRepository.findByKey(key);
+    if (found) return found.id;
+
+    try {
+      await this.reconcileForDate(key.dataProducao);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[resolvePedidoEmbalagemId] reconcile falhou para ${key.dataProducao}:`,
+        message,
+      );
+    }
+
+    found = await pedidoEmbalagemRepository.findByKey(key);
+    if (!found) {
+      console.warn(
+        `[resolvePedidoEmbalagemId] pedido não encontrado: ${pedidoKeyToString(key)}`,
+      );
+      return null;
+    }
+
+    return found.id;
   }
 
   async reconcileWindow(

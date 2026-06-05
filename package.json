@@ -17,6 +17,8 @@
     "sync:embalagem-lotes:dry": "npx tsx scripts/sync-embalagem-lotes-from-sheet.ts --dry-run",
     "sync:pedidos-embalagem": "npx tsx scripts/sync-pedidos-embalagem-from-sheet.ts",
     "sync:pedidos-embalagem:dry": "npx tsx scripts/sync-pedidos-embalagem-from-sheet.ts --dry-run",
+    "link:embalagem-lotes-pedidos": "npx tsx scripts/link-embalagem-lotes-pedidos.ts",
+    "link:embalagem-lotes-pedidos:dry": "npx tsx scripts/link-embalagem-lotes-pedidos.ts --dry-run",
     "reconcile-estoque": "npx tsx scripts/reconcile-estoque-sheet-db.ts",
     "test:reconcile-estoque": "vitest run src/domain/estoque/estoque-reconcile.test.ts"
   },

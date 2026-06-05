@@ -24,6 +24,7 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
     modo: input.modo,
     planilha_row_id: input.planilhaRowId,
     planilha_row_id_origem: input.planilhaRowIdOrigem ?? null,
+    pedido_embalagem_id: input.pedidoEmbalagemId ?? null,
     data_pedido: input.dataPedido,
     data_fabricacao: input.dataFabricacao,
     tipo_estoque_id: input.tipoEstoqueId,
@@ -56,6 +57,7 @@ function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
     modo: row.modo,
     planilhaRowId: row.planilha_row_id ?? 0,
     planilhaRowIdOrigem: row.planilha_row_id_origem,
+    pedidoEmbalagemId: row.pedido_embalagem_id,
     dataPedido: row.data_pedido,
     dataFabricacao: row.data_fabricacao,
     tipoEstoqueId: row.tipo_estoque_id,
@@ -141,6 +143,38 @@ export class EmbalagemLoteRepository {
 
     if (error) {
       throw new Error(`Erro ao remover lote: ${error.message}`);
+    }
+  }
+
+  async listUnlinkedInWindow(
+    from: string,
+    to: string,
+  ): Promise<EmbalagemLoteRecord[]> {
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select()
+      .is('pedido_embalagem_id', null)
+      .gte('data_pedido', from)
+      .lte('data_pedido', to);
+
+    if (error) {
+      throw new Error(`Erro ao listar lotes sem pedido: ${error.message}`);
+    }
+
+    return (data ?? []).map(fromDbRow);
+  }
+
+  async updatePedidoEmbalagemId(
+    id: string,
+    pedidoEmbalagemId: string,
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('embalagem_lotes')
+      .update({ pedido_embalagem_id: pedidoEmbalagemId })
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao vincular lote ao pedido: ${error.message}`);
     }
   }
 }

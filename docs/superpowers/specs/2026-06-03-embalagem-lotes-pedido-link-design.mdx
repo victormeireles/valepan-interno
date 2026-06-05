@@ -1,0 +1,159 @@
+# Design: Embalagem — Vínculo lote → pedido (Fase B.2.1)
+
+**Data:** 2026-06-04  
+**Status:** Aprovado pelo stakeholder  
+**Depende de:** B.1 (`embalagem_lotes`), B.2 (`pedidos_embalagem`, reconcile, sync ±3 dias)
+
+## Contexto
+
+`embalagem_lotes` reserva `pedido_embalagem_id` (nullable) desde a B.1, mas nunca é preenchido. `pedidos_embalagem` (B.2) guarda a meta canônica agregada com chave:
+
+`data_producao` + `data_fabricacao_etiqueta` + `tipo_estoque_id` + `produto_id` + `observacao` (coluna D).
+
+Cada lote já tem `data_pedido`, `data_fabricacao`, `tipo_estoque_id`, `produto_id`, mas **não** persiste Obs Cliente — só `obs_embalagem` (AC). O vínculo usa coluna D da planilha no momento do link (API ao vivo ou job).
+
+## Objetivos (B.2.1)
+
+1. Preencher `embalagem_lotes.pedido_embalagem_id` ao criar/atualizar lotes (PUT / POST partial).
+2. Job dedicado para backfill de lotes existentes com FK NULL na janela ±3 dias.
+3. Função compartilhada `resolvePedidoEmbalagemId`: lookup → reconcile do dia se necessário → lookup → uuid ou null.
+4. FK `embalagem_lotes.pedido_embalagem_id` → `pedidos_embalagem(id)` + índice parcial.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Escopo | Lotes **novos** + **backfill** existentes |
+| Pedido não encontrado | `reconcileForDate(data_producao)` e retry; ainda null → **NULL + log**, operação segue |
+| Janela backfill | **±3 dias** em `data_pedido` / `data_producao` (igual sync pedidos) |
+| Job | **Dedicado** `link-embalagem-lotes-pedidos.ts` (não acoplar sync lotes/pedidos) |
+| Abordagem técnica | **#2** — `resolvePedidoEmbalagemId` compartilhado APIs + job |
+| Obs Cliente | Lida da planilha col D; **não** nova coluna em `embalagem_lotes` |
+| Falha vínculo | Não falha PUT/partial nem job (contador + log) |
+
+## Fora de escopo
+
+- B.3 painel ler Supabase
+- Etiquetas / congelado na chave
+- Vincular lotes fora da janela ±3 (sem parâmetro CLI extra nesta fase)
+- Alterar planilha
+
+## Chave de vínculo
+
+```text
+data_producao         ← lote.data_pedido (col A)
+data_fabricacao_etiqueta ← lote.data_fabricacao (col B)
+tipo_estoque_id       ← já no lote
+produto_id            ← já no lote
+observacao            ← col D normalizada (normalizeObservacao)
+```
+
+## `resolvePedidoEmbalagemId`
+
+**Local:** `PedidoEmbalagemService`
+
+1. `pedidoEmbalagemRepository.findByKey(key)`
+2. Se null → `reconcileForDate(key.dataProducao)` (não dry-run)
+3. `findByKey` novamente
+4. Retorna `id` ou `null` (log: `pedido não resolvido para lote …`)
+
+**Entrada:** `PedidoEmbalagemKey` (5 campos).
+
+## Escrita ao vivo
+
+### PUT `/api/producao/embalagem/[rowId]`
+
+- Já lê linha A–Z; extrair `observacao` (D).
+- Passar para `criarLoteSubstituicao({ ..., observacaoCliente })`.
+- `EmbalagemLoteService` chama `resolvePedidoEmbalagemId` antes de insert/update.
+- Persistir `pedido_embalagem_id` em `EmbalagemLoteRepository`.
+
+### POST partial
+
+- Lote na **nova linha**; obs D vem da linha original (já lida como `observacao`).
+- Mesmo fluxo de resolve + insert.
+
+### Sync lotes (`importado`)
+
+- Opcional nesta fase: job link cobre backfill; sync lotes **pode** chamar resolve se linha A:J disponível no mapper — **fora do escopo mínimo**; job dedicado é suficiente.
+
+## Job `link-embalagem-lotes-pedidos`
+
+**npm:** `link:embalagem-lotes-pedidos`, `link:embalagem-lotes-pedidos:dry`
+
+### Algoritmo
+
+1. Janela `from`/`to` = hoje ±3 (reutilizar `resolvePedidoSyncWindow` sem overrides).
+2. Listar `embalagem_lotes` onde `pedido_embalagem_id IS NULL` e `data_pedido` entre `from` e `to`.
+3. Para cada lote com `planilha_row_id`:
+   - Ler planilha `A:J` na linha.
+   - Montar chave (D normalizada).
+   - `resolvePedidoEmbalagemId`.
+   - Se uuid → `updatePedidoEmbalagemId(loteId, uuid)`.
+4. Relatório: candidatos, vinculados, ainda null, erros leitura planilha.
+
+### Ordem operacional recomendada
+
+```text
+sync:pedidos-embalagem → sync:embalagem-lotes → link:embalagem-lotes-pedidos
+```
+
+## Schema
+
+```sql
+ALTER TABLE embalagem_lotes
+  ADD CONSTRAINT embalagem_lotes_pedido_embalagem_id_fkey
+  FOREIGN KEY (pedido_embalagem_id) REFERENCES pedidos_embalagem(id);
+
+CREATE INDEX IF NOT EXISTS idx_embalagem_lotes_pedido_embalagem_id
+  ON embalagem_lotes(pedido_embalagem_id)
+  WHERE pedido_embalagem_id IS NOT NULL;
+```
+
+Arquivo: `ALTER_EMBALAGEM_LOTES_PEDIDO_FK.sql`
+
+## Camada de código
+
+| Artefato | Responsabilidade |
+|----------|------------------|
+| `PedidoEmbalagemRepository.findByKey` | SELECT pela unique natural |
+| `PedidoEmbalagemService.resolvePedidoEmbalagemId` | lookup + reconcile + retry |
+| `EmbalagemLoteInsert.pedidoEmbalagemId?` | tipo domain |
+| `EmbalagemLoteRepository` | persistir FK no insert/update; `listUnlinkedInWindow`, `updatePedidoEmbalagemId` |
+| `EmbalagemLoteService` | resolve no criar parcial/substituição |
+| `partial/route.ts`, `[rowId]/route.ts` | passar observacao D |
+| `scripts/link-embalagem-lotes-pedidos.ts` | backfill janela |
+| `resolve-pedido-for-lote.test.ts` | testes unitários chave + normalize |
+
+## Tratamento de erros
+
+| Situação | Comportamento |
+|----------|---------------|
+| Pedido não existe após reconcile | `pedido_embalagem_id` NULL + log |
+| `planilha_row_id` null no lote | skip + log (job) |
+| Linha planilha apagada | skip + log |
+| Falha reconcile | log; tenta findByKey mesmo assim; NULL se falhar |
+| Falha update FK | log no job; não aborta lote seguinte |
+
+## Testes
+
+- Unitário: `findByKey` mapping; resolve chama reconcile quando miss (mock).
+- Unitário: observacao trim na chave.
+- Integração manual: após link job, `COUNT(*)` lotes vinculados na janela > 0.
+
+## Critérios de aceite
+
+- [ ] FK + índice aplicados em produção
+- [ ] PUT/partial novos lotes com pedido existente recebem `pedido_embalagem_id`
+- [ ] Sem pedido na planilha → NULL, operação OK
+- [ ] Job ±3 vincula lotes NULL existentes quando pedido canônico existe
+- [ ] `npm run link:embalagem-lotes-pedidos:dry` documentado
+- [ ] Painel/planilha inalterados
+
+## Fases futuras
+
+| Fase | Escopo |
+|------|--------|
+| B.2.1 | Vínculo lote → pedido (esta spec) |
+| B.3 | Painel lê pedido + SUM(lotes) do DB |
+| CLI histórico | `--since` no link job (se necessário) |

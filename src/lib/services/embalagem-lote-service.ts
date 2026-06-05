@@ -1,4 +1,5 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
+import { loteToPedidoKey } from '@/domain/embalagem/pedido-key-from-lote';
 import type {
   EmbalagemLoteFotos,
   EmbalagemLoteInsert,
@@ -9,6 +10,7 @@ import {
   estoqueResolverService,
   EstoqueResolverError,
 } from '@/lib/services/estoque-resolver-service';
+import { pedidoEmbalagemService } from '@/lib/services/pedido-embalagem-service';
 import { normalizeToISODate } from '@/lib/utils/date-utils';
 
 export { EstoqueResolverError };
@@ -24,6 +26,7 @@ export type CriarLoteParcialInput = {
   lote?: string | number | null;
   quantidade: Quantidade;
   produzidoEm?: string;
+  observacaoCliente?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
 };
@@ -39,11 +42,29 @@ export type CriarLoteSubstituicaoInput = {
   quantidade: Quantidade;
   producaoAnterior: Quantidade;
   produzidoEm?: string;
+  observacaoCliente?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
 };
 
 export class EmbalagemLoteService {
+  private async resolvePedidoEmbalagemIdForLote(
+    tipoEstoqueId: string,
+    produtoId: string,
+    dataPedido: string,
+    dataFabricacao: string,
+    observacaoCliente: string,
+  ): Promise<string | null> {
+    return pedidoEmbalagemService.resolvePedidoEmbalagemId(
+      loteToPedidoKey({
+        dataPedido,
+        dataFabricacao,
+        tipoEstoqueId,
+        produtoId,
+        observacaoCliente,
+      }),
+    );
+  }
   async resolveIds(
     cliente: string,
     produto: string,
@@ -74,13 +95,23 @@ export class EmbalagemLoteService {
     );
     const loteNum =
       input.lote !== '' && input.lote != null ? Number(input.lote) : null;
+    const dataPedido = normalizeToISODate(input.dataPedido);
+    const dataFabricacao = normalizeToISODate(input.dataFabricacao);
+    const pedidoEmbalagemId = await this.resolvePedidoEmbalagemIdForLote(
+      tipoEstoqueId,
+      produtoId,
+      dataPedido,
+      dataFabricacao,
+      input.observacaoCliente ?? '',
+    );
 
     return this.criarLote({
       modo: 'parcial',
       planilhaRowId: input.planilhaRowId,
       planilhaRowIdOrigem: input.planilhaRowIdOrigem,
-      dataPedido: normalizeToISODate(input.dataPedido),
-      dataFabricacao: normalizeToISODate(input.dataFabricacao),
+      pedidoEmbalagemId,
+      dataPedido,
+      dataFabricacao,
       tipoEstoqueId,
       produtoId,
       congelado: input.congelado === 'Sim' ? 'Sim' : 'Não',
@@ -101,12 +132,22 @@ export class EmbalagemLoteService {
     );
     const loteNum =
       input.lote !== '' && input.lote != null ? Number(input.lote) : null;
+    const dataPedido = normalizeToISODate(input.dataPedido);
+    const dataFabricacao = normalizeToISODate(input.dataFabricacao);
+    const pedidoEmbalagemId = await this.resolvePedidoEmbalagemIdForLote(
+      tipoEstoqueId,
+      produtoId,
+      dataPedido,
+      dataFabricacao,
+      input.observacaoCliente ?? '',
+    );
 
     const payload: EmbalagemLoteInsert = {
       modo: 'substituicao',
       planilhaRowId: input.planilhaRowId,
-      dataPedido: normalizeToISODate(input.dataPedido),
-      dataFabricacao: normalizeToISODate(input.dataFabricacao),
+      pedidoEmbalagemId,
+      dataPedido,
+      dataFabricacao,
       tipoEstoqueId,
       produtoId,
       congelado: input.congelado === 'Sim' ? 'Sim' : 'Não',

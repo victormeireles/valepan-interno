@@ -1,0 +1,93 @@
+# Vínculo lote → pedido (Fase B.2.1) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Preencher `embalagem_lotes.pedido_embalagem_id` via chave natural compartilhada com `pedidos_embalagem`, em lotes novos (APIs) e backfill na janela ±3 dias.
+
+**Architecture:** `PedidoEmbalagemService.resolvePedidoEmbalagemId` faz findByKey → reconcileForDate → findByKey. `EmbalagemLoteService` chama ao criar lote. Job `link-embalagem-lotes-pedidos` lê col D da planilha por `planilha_row_id` e atualiza FK. Migration adiciona FK + índice.
+
+**Tech Stack:** Next.js API routes, Supabase, Google Sheets, Vitest, tsx CLI.
+
+**Spec:** `docs/superpowers/specs/2026-06-03-embalagem-lotes-pedido-link-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `ALTER_EMBALAGEM_LOTES_PEDIDO_FK.sql` | FK + índice |
+| `PedidoEmbalagemRepository.ts` | `findByKey` |
+| `pedido-embalagem-service.ts` | `resolvePedidoEmbalagemId` |
+| `embalagem-lote.ts` | `pedidoEmbalagemId?` no insert/record |
+| `EmbalagemLoteRepository.ts` | FK no toDbInsert/update; `listUnlinkedInWindow`, `updatePedidoEmbalagemId` |
+| `embalagem-lote-service.ts` | resolve + set FK em parcial/substituição |
+| `partial/route.ts`, `[rowId]/route.ts` | passar `observacaoCliente` |
+| `resolve-pedido-for-lote.test.ts` | testes Vitest |
+| `link-embalagem-lotes-pedidos.ts` | job backfill |
+| `package.json` | scripts npm |
+
+---
+
+### Task 1: Migration FK
+
+**Files:** `ALTER_EMBALAGEM_LOTES_PEDIDO_FK.sql`
+
+- [ ] SQL FK + índice parcial
+- [ ] Aplicar no Supabase valepan-pedidos
+
+---
+
+### Task 2: Repository findByKey
+
+**Files:** `PedidoEmbalagemRepository.ts`
+
+- [ ] `findByKey(key: PedidoEmbalagemKey): Promise<PedidoEmbalagemRecord | null>`
+
+---
+
+### Task 3: resolvePedidoEmbalagemId
+
+**Files:** `pedido-embalagem-service.ts`, `resolve-pedido-for-lote.test.ts`
+
+- [ ] Implementar resolve com reconcile on miss
+- [ ] Testes com mocks repository + reconcile
+
+---
+
+### Task 4: Embalagem lote FK persist
+
+**Files:** `embalagem-lote.ts`, `EmbalagemLoteRepository.ts`, `embalagem-lote-service.ts`
+
+- [ ] `pedidoEmbalagemId` em insert/update mapping
+- [ ] `observacaoCliente` nos inputs parcial/substituição
+- [ ] Chamar resolve antes de persistir
+- [ ] `listUnlinkedInWindow(from, to)`, `updatePedidoEmbalagemId(id, pedidoId)`
+
+---
+
+### Task 5: APIs produção
+
+**Files:** `partial/route.ts`, `[rowId]/route.ts`
+
+- [ ] Extrair/passar observacao col D para serviço de lote
+
+---
+
+### Task 6: Job link
+
+**Files:** `scripts/link-embalagem-lotes-pedidos.ts`, `package.json`
+
+- [ ] Janela ±3 via `resolvePedidoSyncWindow`
+- [ ] Loop lotes NULL → sheet A:J → resolve → update
+- [ ] `--dry-run` flag
+- [ ] npm scripts
+
+---
+
+### Task 7: Verificação
+
+- [ ] `npx vitest run resolve-pedido-for-lote.test.ts`
+- [ ] `npm run build`
+- [ ] `npm run link:embalagem-lotes-pedidos:dry`
+- [ ] `npm run link:embalagem-lotes-pedidos` e SQL spot-check

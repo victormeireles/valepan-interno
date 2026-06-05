@@ -213,6 +213,7 @@ export async function POST(
         produto: produto.toString(),
         congelado: congelado.toString(),
         lote: lotePlanilha,
+        observacaoCliente: observacao.toString(),
         quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
         produzidoEm: now,
         obsEmbalagem: obsEmbalagem || '',
