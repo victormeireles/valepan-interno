@@ -68,7 +68,6 @@ function renderPedidoAccordion(
   opts: {
     renderEmbalagemLot: (item: PainelLoteItem) => ReactNode;
     onNovoLote: (p: PainelPedidoEmbalagem) => void;
-    novoLotePedidoId: string | null;
     showNovoLote: boolean;
     productionStatusOverride?: 'not-started' | 'partial' | 'complete';
   },
@@ -105,7 +104,6 @@ function renderPedidoAccordion(
       }
       productionStatusOverride={opts.productionStatusOverride}
       onNovoLote={opts.showNovoLote ? () => opts.onNovoLote(pedido) : undefined}
-      isNovoLoteLoading={opts.novoLotePedidoId === pedido.pedidoEmbalagemId}
       renderLots={() =>
         pedido.lotes.map((lote) =>
           opts.renderEmbalagemLot(loteToPainelItem(pedido, lote)),
@@ -120,7 +118,6 @@ export default function ProducaoEmbalagemPage() {
   const [pedidos, setPedidos] = useState<PainelPedidoEmbalagem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [novoLotePedidoId, setNovoLotePedidoId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => getTodayISOInBrazilTimezone());
   const [producaoModalOpen, setProducaoModalOpen] = useState(false);
@@ -263,42 +260,32 @@ export default function ProducaoEmbalagemPage() {
     }
   }, []);
 
-  const handleNovoLote = useCallback(async (pedido: PainelPedidoEmbalagem) => {
-    try {
-      setNovoLotePedidoId(pedido.pedidoEmbalagemId);
-      const res = await fetch(
-        `/api/producao/embalagem/pedido/${pedido.pedidoEmbalagemId}/resolver-linha`,
-        { method: 'POST' },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao resolver linha');
-
-      setIsNewLoteModal(true);
-      setEditingItem({
-        cliente: pedido.cliente,
-        produto: pedido.produto,
-        observacao: pedido.observacao,
-        congelado: pedido.congelado ?? 'Não',
-        unidade: pedido.unidade,
-        aProduzir: pedido.aProduzir,
-        produzido: 0,
-        dataFabricacao: pedido.dataFabricacao,
-        rowId: data.planilhaRowId,
-        caixas: 0,
-        pacotes: 0,
-        unidades: 0,
-        kg: 0,
-        pedidoCaixas: pedido.pedido.caixas,
-        pedidoPacotes: pedido.pedido.pacotes,
-        pedidoUnidades: pedido.pedido.unidades,
-        pedidoKg: pedido.pedido.kg,
-      });
-      setProducaoModalOpen(true);
-    } catch (err) {
-      setMessage(getVisibleErrorMessage(err, 'Erro ao iniciar novo lote'));
-    } finally {
-      setNovoLotePedidoId(null);
-    }
+  const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
+    setIsNewLoteModal(true);
+    setEditingItem({
+      pedidoEmbalagemId: pedido.pedidoEmbalagemId,
+      cliente: pedido.cliente,
+      produto: pedido.produto,
+      observacao: pedido.observacao,
+      congelado: pedido.congelado ?? 'Não',
+      unidade: pedido.unidade,
+      aProduzir: pedido.aProduzir,
+      produzido: 0,
+      dataFabricacao: pedido.dataFabricacao,
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+      pedidoCaixas: Math.max(0, pedido.pedido.caixas - pedido.produzido.caixas),
+      pedidoPacotes: Math.max(0, pedido.pedido.pacotes - pedido.produzido.pacotes),
+      pedidoUnidades: Math.max(0, pedido.pedido.unidades - pedido.produzido.unidades),
+      pedidoKg: Math.max(0, pedido.pedido.kg - pedido.produzido.kg),
+      metaCaixas: pedido.pedido.caixas,
+      metaPacotes: pedido.pedido.pacotes,
+      metaUnidades: pedido.pedido.unidades,
+      metaKg: pedido.pedido.kg,
+    });
+    setProducaoModalOpen(true);
   }, []);
 
   const handlePhotoClick = useCallback((item: PainelLoteItem) => {
@@ -477,7 +464,6 @@ export default function ProducaoEmbalagemPage() {
   const accordionOpts = {
     renderEmbalagemLot,
     onNovoLote: handleNovoLote,
-    novoLotePedidoId,
   };
 
   return (
@@ -640,6 +626,8 @@ export default function ProducaoEmbalagemPage() {
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}
         rowId={editingItem?.rowId}
+        pedidoEmbalagemId={editingItem?.pedidoEmbalagemId}
+        congelado={editingItem?.congelado ?? 'Não'}
         pedidoQuantidades={
           editingItem
             ? {
@@ -647,6 +635,16 @@ export default function ProducaoEmbalagemPage() {
                 pacotes: editingItem.pedidoPacotes || 0,
                 unidades: editingItem.pedidoUnidades || 0,
                 kg: editingItem.pedidoKg || 0,
+              }
+            : undefined
+        }
+        pedidoMetaOriginal={
+          editingItem
+            ? {
+                caixas: editingItem.metaCaixas ?? 0,
+                pacotes: editingItem.metaPacotes ?? 0,
+                unidades: editingItem.metaUnidades ?? 0,
+                kg: editingItem.metaKg ?? 0,
               }
             : undefined
         }
