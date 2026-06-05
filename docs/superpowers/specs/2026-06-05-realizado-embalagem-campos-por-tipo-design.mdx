@@ -1,0 +1,148 @@
+# Design: Realizado Embalagem — inputs condicionais por tipo de pedido
+
+**Data:** 2026-06-05  
+**Status:** Aprovado pelo stakeholder
+
+## Contexto
+
+No modal de produção (`ProducaoModal`) em `/realizado/embalagem`, os quatro inputs — Caixas, Pacotes, Unidades e Kg — aparecem sempre, independentemente do tipo de pedido. Isso confunde operadores e permite preenchimento em dimensões que não fazem parte da meta.
+
+O resumo “Pedido:” no topo do modal **já filtra** badges por saldo > 0. A mudança é aplicar a mesma lógica de negócio aos **campos editáveis**, com base na **meta original** do pedido (não no saldo restante).
+
+## Objetivo
+
+Exibir no modal apenas os inputs relevantes ao tipo de pedido de embalagem, conforme a meta original (`pedidos_embalagem` / `pedido.pedido`).
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Base para visibilidade | **Meta original** do pedido (`pedido.pedido`), não saldo restante |
+| cx ou pct > 0 na meta | Mostrar **Caixas + Pacotes** (pacote = quebra de caixa) |
+| cx + pct juntos na meta | Mesma regra: **Caixas + Pacotes** |
+| un > 0 (sem cx/pct) | Mostrar **apenas Unidades** |
+| kg > 0 (sem cx/pct/un) | Mostrar **apenas Kg** |
+| Combinações inválidas | cx+kg, cx+un, pct+kg, pct+un, un+kg **não existem** no cadastro — sem tratamento especial |
+| Meta zerada (edge) | Fallback: manter comportamento atual (todos os campos visíveis) |
+| Escopo | Apenas `ProducaoModal` com `mode === 'embalagem'` |
+| Fluxos | Novo lote (+) e edição de lote existente |
+| `pedidoQuantidades` (saldo) | **Inalterado** — badges “Pedido:” e detecção de produção parcial |
+
+## Fora de escopo
+
+- Alterar modais de meta (`CreatePedidoModal`, `EditModal`)
+- Modos forno, fermentação e resfriamento no `ProducaoModal`
+- Validação de cadastro para impedir combinações inválidas na meta
+- Renomear label “Unidades” para “Embalagens”
+
+## Arquitetura
+
+### Função de domínio (recomendada — Abordagem A)
+
+Adicionar em `src/domain/embalagem/painel-quantidade.ts`:
+
+```typescript
+export type CamposRealizadoEmbalagem = {
+  caixas: boolean;
+  pacotes: boolean;
+  unidades: boolean;
+  kg: boolean;
+};
+
+export function resolverCamposRealizadoEmbalagem(meta: Quantidade): CamposRealizadoEmbalagem;
+```
+
+Regra:
+
+1. Se `meta.caixas > 0` **ou** `meta.pacotes > 0` → `{ caixas: true, pacotes: true, unidades: false, kg: false }`
+2. Senão, se `meta.unidades > 0` → `{ caixas: false, pacotes: false, unidades: true, kg: false }`
+3. Senão, se `meta.kg > 0` → `{ caixas: false, pacotes: false, unidades: false, kg: true }`
+4. Senão (meta zerada) → todos `true` (fallback seguro)
+
+### Props do modal
+
+Nova prop opcional em `ProducaoModal`:
+
+```typescript
+pedidoMetaOriginal?: {
+  caixas: number;
+  pacotes: number;
+  unidades: number;
+  kg: number;
+};
+```
+
+- `pedidoMetaOriginal` → decide quais inputs renderizar
+- `pedidoQuantidades` → saldo restante; badges e `isPartialProduction` (sem mudança de semântica)
+
+### Fluxo de dados
+
+**Novo lote** (`handleNovoLote` em `realizado/embalagem/page.tsx`):
+
+- Já possui `pedido.pedido` → passar como `pedidoMetaOriginal`
+
+**Editar lote** (`handleEditProducao`):
+
+- Enriquecer `loteToPainelItem` com meta original do pai (`pedido.pedido`) e repassar ao modal
+- Alternativa equivalente: lookup em `pedidos[]` por `pedidoEmbalagemId` — preferir enriquecer no adapter para evitar lookup frágil
+
+Campos sugeridos em `PainelLoteItem`:
+
+```typescript
+metaCaixas?: number;
+metaPacotes?: number;
+metaUnidades?: number;
+metaKg?: number;
+```
+
+Ou objeto `pedidoMetaOriginal` tipado como `Quantidade`.
+
+## Comportamento do modal
+
+### Renderização
+
+- Em `mode === 'embalagem'`, renderizar `NumberInput` condicionalmente conforme `resolverCamposRealizadoEmbalagem(pedidoMetaOriginal)`
+- Se `pedidoMetaOriginal` ausente, manter comportamento atual (todos visíveis) — compatibilidade
+
+### Validação e submit
+
+- Campos ocultos enviados como **0** no payload (não confiar em state residual)
+- “Informe ao menos uma quantidade > 0” considera **apenas campos visíveis**
+- `isPartialProduction`: comparar só dimensões **visíveis** cujo saldo (`pedidoQuantidades`) > 0
+
+### Resumo “Pedido:”
+
+Sem alteração — continua usando `pedidoQuantidades` (saldo) com badges filtrados por qtd > 0.
+
+## Testes
+
+Unit tests para `resolverCamposRealizadoEmbalagem`:
+
+| Meta | Resultado |
+|------|-----------|
+| 225 cx, 0 pct | cx + pct |
+| 0 cx, 30 pct | cx + pct |
+| 10 cx + 5 pct | cx + pct |
+| 500 un | só un |
+| 12 kg | só kg |
+| 0 em tudo | todos (fallback) |
+
+Arquivo sugerido: testes colocados junto ao domínio (ex.: `painel-quantidade.test.ts` ou arquivo existente de testes de embalagem).
+
+## Arquivos impactados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/domain/embalagem/painel-quantidade.ts` | Nova função + tipo |
+| `src/domain/embalagem/painel-quantidade.test.ts` (ou similar) | Testes unitários |
+| `src/components/ProducaoModal.tsx` | Prop, render condicional, validação/submit |
+| `src/domain/realizado/painel-pedido-adapter.ts` | Meta original no `PainelLoteItem` |
+| `src/app/realizado/embalagem/page.tsx` | Passar `pedidoMetaOriginal` nos dois fluxos |
+
+## Riscos e mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| Edição de lote sem meta original | Enriquecer `loteToPainelItem`; fallback = todos os campos |
+| Dados legados com combinação inválida | Regra cx/pct tem prioridade; combinações raras não quebram UI |
+| State com valores em campos ocultos | Zerar campos ocultos no submit |
