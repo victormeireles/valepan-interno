@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { appendRow, calculateLoteFromDataFabricacao } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG, PedidoEmbalagemPayload } from '@/config/embalagem';
+import {
+  pedidoEmbalagemService,
+  EstoqueResolverError,
+} from '@/lib/services/pedido-embalagem-service';
 
 function isValidDateISO(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
@@ -19,6 +23,18 @@ export async function POST(request: Request) {
     }
     if (!Array.isArray(payload.itens) || payload.itens.length === 0) {
       return NextResponse.json({ error: 'Inclua ao menos um item' }, { status: 400 });
+    }
+
+    try {
+      await pedidoEmbalagemService.validatePayloadItems(
+        payload.cliente,
+        payload.itens.map((i) => i.produto),
+      );
+    } catch (e) {
+      if (e instanceof EstoqueResolverError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
     }
 
     // Calcular o lote baseado na data de fabricação
@@ -61,6 +77,17 @@ export async function POST(request: Request) {
         '',                      // AB (27) - Etiqueta Gerada (inicialmente vazio)
       ];
       await appendRow(spreadsheetId, tabName, values);
+    }
+
+    try {
+      await pedidoEmbalagemService.reconcileForDate(payload.dataPedido);
+    } catch (reconcileError) {
+      const message =
+        reconcileError instanceof Error
+          ? reconcileError.message
+          : 'Erro ao sincronizar pedido no banco';
+      console.error('[embalagem-pedido] reconcile falhou:', message);
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     revalidatePath('/api/painel/embalagem');

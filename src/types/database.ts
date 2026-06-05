@@ -1128,6 +1128,66 @@ export type Database = {
           },
         ]
       }
+      pedidos_embalagem: {
+        Row: {
+          caixas: number
+          created_at: string
+          data_fabricacao_etiqueta: string
+          data_producao: string
+          id: string
+          kg: number
+          observacao: string
+          pacotes: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades: number
+          updated_at: string
+        }
+        Insert: {
+          caixas?: number
+          created_at?: string
+          data_fabricacao_etiqueta: string
+          data_producao: string
+          id?: string
+          kg?: number
+          observacao?: string
+          pacotes?: number
+          produto_id: string
+          tipo_estoque_id: string
+          unidades?: number
+          updated_at?: string
+        }
+        Update: {
+          caixas?: number
+          created_at?: string
+          data_fabricacao_etiqueta?: string
+          data_producao?: string
+          id?: string
+          kg?: number
+          observacao?: string
+          pacotes?: number
+          produto_id?: string
+          tipo_estoque_id?: string
+          unidades?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_embalagem_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       embalagem_lotes: {
         Row: {
           caixas: number

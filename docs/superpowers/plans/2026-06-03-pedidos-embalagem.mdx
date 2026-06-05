@@ -1,0 +1,162 @@
+# Pedidos de embalagem (Fase B.2) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Persistir meta de pedido de embalagem em `pedidos_embalagem` (agregado canônico), dual-write na planilha inalterada, reconcile por `data_producao` após cada API, e job de sync ±3 dias.
+
+**Architecture:** Tabela flat com UNIQUE na chave natural; `PedidoEmbalagemService.reconcileForDate` lê planilha A:J, agrupa, upsert, delete órfãos. APIs validam FKs antes da planilha, escrevem planilha como hoje, chamam reconcile. Job reutiliza o mesmo reconcile para cada dia na janela.
+
+**Tech Stack:** Next.js 15 App Router, Supabase JS, Google Sheets API, Vitest, `tsx` CLI.
+
+**Spec:** `docs/superpowers/specs/2026-06-03-pedidos-embalagem-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_PEDIDOS_EMBALAGEM_TABLES.sql` | tabela + unique constraint |
+| `PEDIDOS_EMBALAGEM_RLS.sql` | RLS service_role |
+| `src/domain/types/pedido-embalagem.ts` | `PedidoEmbalagemKey`, insert/upsert types |
+| `src/domain/embalagem/pedido-key.ts` | `normalizeObservacao`, `buildPedidoKey`, `aggregateQuantidades` |
+| `src/domain/embalagem/pedido-key.test.ts` | testes merge/obs |
+| `src/domain/embalagem/sync-pedido-window.ts` | `resolvePedidoSyncWindow()`, `isDataProducaoInWindow()` |
+| `src/domain/embalagem/sync-pedido-window.test.ts` | janela ±3 BR |
+| `src/domain/embalagem/map-sheet-rows-to-pedidos.ts` | rows → `Map<key, AggregatedPedido>` |
+| `src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts` | mapeamento A:J |
+| `src/data/embalagem/PedidoEmbalagemRepository.ts` | upsert, deleteByDateExceptKeys |
+| `src/lib/services/pedido-embalagem-service.ts` | reconcileForDate, reconcileWindow |
+| `src/app/api/submit/embalagem-pedido/route.ts` | validate → sheet → reconcile |
+| `src/app/api/embalagem/edit/[rowId]/route.ts` | PUT: reconcile data nova + antiga se A mudou |
+| `src/app/api/embalagem/delete/[rowId]/route.ts` | DELETE: reconcile data lida |
+| `scripts/sync-pedidos-embalagem-from-sheet.ts` | job janela |
+| `package.json` | `sync:pedidos-embalagem`, `:dry` |
+| `types/database.ts` | `npm run gen:types` |
+
+---
+
+### Task 1: Migration Supabase
+
+**Files:**
+- Create: `CREATE_PEDIDOS_EMBALAGEM_TABLES.sql`
+- Create: `PEDIDOS_EMBALAGEM_RLS.sql`
+
+- [ ] **Step 1:** Criar SQL da tabela com UNIQUE e índice em `data_producao`
+- [ ] **Step 2:** Criar RLS espelhando `EMBALAGEM_LOTES_RLS.sql`
+- [ ] **Step 3:** Aplicar no Supabase (projeto valepan-pedidos) e rodar `npm run gen:types`
+
+---
+
+### Task 2: Domain — chave e agregação
+
+**Files:**
+- Create: `src/domain/types/pedido-embalagem.ts`
+- Create: `src/domain/embalagem/pedido-key.ts`
+- Create: `src/domain/embalagem/pedido-key.test.ts`
+
+- [ ] **Step 1:** Testes para `normalizeObservacao` e soma de duas linhas mesma chave
+- [ ] **Step 2:** Implementar `pedido-key.ts`
+- [ ] **Step 3:** `npx vitest run src/domain/embalagem/pedido-key.test.ts`
+
+---
+
+### Task 3: Domain — janela e map sheet
+
+**Files:**
+- Create: `src/domain/embalagem/sync-pedido-window.ts`
+- Create: `src/domain/embalagem/sync-pedido-window.test.ts`
+- Create: `src/domain/embalagem/map-sheet-rows-to-pedidos.ts`
+- Create: `src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts`
+
+- [ ] **Step 1:** Testes janela `hoje±3` com data fixa mockada (inject `getTodayISOInBrazilTimezone` ou passar `today` param)
+- [ ] **Step 2:** Testes map: duas rows iguais → um grupo com soma G–J
+- [ ] **Step 3:** Implementar window + mapper (async resolve via callback injetado para testes)
+- [ ] **Step 4:** Vitest nos quatro arquivos
+
+---
+
+### Task 4: Repository
+
+**Files:**
+- Create: `src/data/embalagem/PedidoEmbalagemRepository.ts`
+
+- [ ] **Step 1:** `upsertByKey(rows: PedidoEmbalagemInsert[])` usando `onConflict` na unique
+- [ ] **Step 2:** `deleteForDateWhereKeyNotIn(dataProducao, keys: PedidoEmbalagemKey[])`
+- [ ] **Step 3:** `findAllKeysForDate(dataProducao)` para dry-run stats
+
+---
+
+### Task 5: Service reconcile
+
+**Files:**
+- Create: `src/lib/services/pedido-embalagem-service.ts`
+
+- [ ] **Step 1:** `reconcileForDate(dataProducao: string)` — read sheet, map, upsert, delete
+- [ ] **Step 2:** `reconcileWindow(from, to)` — loop dias ISO entre from e to
+- [ ] **Step 3:** Reutilizar `estoqueResolverService` / `EmbalagemLoteService.resolveIds` pattern
+
+---
+
+### Task 6: API POST embalagem-pedido
+
+**Files:**
+- Modify: `src/app/api/submit/embalagem-pedido/route.ts`
+
+- [ ] **Step 1:** Antes do loop planilha, validar resolver para `payload.cliente` + cada `item.produto`
+- [ ] **Step 2:** Manter loop `appendRow` idêntico
+- [ ] **Step 3:** Após sucesso planilha, `pedidoEmbalagemService.reconcileForDate(payload.dataPedido)`
+- [ ] **Step 4:** Falha reconcile → 500
+
+---
+
+### Task 7: API PUT edit
+
+**Files:**
+- Modify: `src/app/api/embalagem/edit/[rowId]/route.ts`
+
+- [ ] **Step 1:** Ler `dataProducao` original antes do update (já existe leitura A:AB)
+- [ ] **Step 2:** Validar resolver antes de update planilha
+- [ ] **Step 3:** Update planilha como hoje
+- [ ] **Step 4:** `reconcileForDate(novaData)`; se `novaData !== dataOriginal`, também `reconcileForDate(dataOriginal)`
+
+---
+
+### Task 8: API DELETE
+
+**Files:**
+- Modify: `src/app/api/embalagem/delete/[rowId]/route.ts`
+
+- [ ] **Step 1:** GET linha A antes de `deleteSheetRow`
+- [ ] **Step 2:** Delete planilha + `reconcileForDate(dataProducao)`
+
+---
+
+### Task 9: Job sync
+
+**Files:**
+- Create: `scripts/sync-pedidos-embalagem-from-sheet.ts`
+- Modify: `package.json`
+
+- [ ] **Step 1:** CLI `--dry-run`, calcular `from`/`to` com `sync-pedido-window`
+- [ ] **Step 2:** Chamar `reconcileWindow(from, to)` com relatório stdout
+- [ ] **Step 3:** Adicionar scripts npm
+
+---
+
+### Task 10: Verificação final
+
+- [ ] **Step 1:** `npm run build`
+- [ ] **Step 2:** `npx vitest run src/domain/embalagem/pedido-key.test.ts src/domain/embalagem/sync-pedido-window.test.ts src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts`
+- [ ] **Step 3:** `npm run sync:pedidos-embalagem:dry` contra planilha real
+- [ ] **Step 4:** `npm run sync:pedidos-embalagem` e validar SQL: contagem por `data_producao` na janela vs agregado manual da planilha
+- [ ] **Step 5:** Smoke POST meta (dev) + reconcile — opcional
+
+---
+
+## Notas para implementador
+
+- **PUT mudou coluna A:** reconcile nos dois dias evita registro órfão na data antiga.
+- **Congelado:** não entra na chave; não remover da escrita planilha no POST.
+- **Não** alterar `GET` edit/duplicate nem rotas de produção (`/api/producao/embalagem`).
+- Tipos: após migration, merge cuidadoso em `src/types/database.ts` se `gen:types` sobrescrever blocos manuais (padrão B.1).

@@ -1,0 +1,46 @@
+import { describe, expect, it, vi } from 'vitest';
+import { aggregatePedidosFromSheetRows } from './map-sheet-rows-to-pedidos';
+
+describe('aggregatePedidosFromSheetRows', () => {
+  it('merges two rows with same business key', async () => {
+    const resolveIds = vi.fn().mockResolvedValue({
+      tipoEstoqueId: 't1',
+      produtoId: 'p1',
+    });
+
+    const rows = [
+      ['2026-06-03', '2026-06-04', 'Cliente X', '', 'Pão', 'Não', 10, 0, 0, 0],
+      ['2026-06-03', '2026-06-04', 'Cliente X', '', 'Pão', 'Sim', 5, 0, 0, 0],
+    ];
+
+    const map = await aggregatePedidosFromSheetRows(rows, {
+      dataProducaoFilter: '2026-06-03',
+      resolveIds,
+    });
+
+    expect(map.size).toBe(1);
+    const entry = [...map.values()][0];
+    expect(entry.quantidade.caixas).toBe(15);
+    expect(resolveIds).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters by dataProducao', async () => {
+    const resolveIds = vi.fn().mockResolvedValue({
+      tipoEstoqueId: 't1',
+      produtoId: 'p1',
+    });
+
+    const rows = [
+      ['2026-06-02', '2026-06-04', 'C', '', 'P', 'Não', 1, 0, 0, 0],
+      ['2026-06-03', '2026-06-04', 'C', '', 'P', 'Não', 2, 0, 0, 0],
+    ];
+
+    const map = await aggregatePedidosFromSheetRows(rows, {
+      dataProducaoFilter: '2026-06-03',
+      resolveIds,
+    });
+
+    expect(map.size).toBe(1);
+    expect([...map.values()][0].quantidade.caixas).toBe(2);
+  });
+});

@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { readSheetValues, calculateLoteFromDataFabricacao, updateCell } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import {
+  pedidoEmbalagemService,
+  EstoqueResolverError,
+} from '@/lib/services/pedido-embalagem-service';
 
 function normalizeToISODate(value: unknown): string {
   if (value == null) return '';
@@ -87,6 +91,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Dados obrigatórios não fornecidos' }, { status: 400 });
     }
 
+    try {
+      await pedidoEmbalagemService.resolveIds(cliente, produto);
+    } catch (e) {
+      if (e instanceof EstoqueResolverError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
+      throw e;
+    }
+
     // Buscar dados originais (created_at, data de fabricação e lote) antes de atualizar
     const { getGoogleSheetsClient } = await import('@/lib/googleSheets');
     const sheets = await getGoogleSheetsClient();
@@ -102,6 +115,7 @@ export async function PUT(
     
     // Extrair valores originais
     const originalValues = originalResponse.data.values?.[0] || [];
+    const originalDataPedido = originalValues[0] ? normalizeToISODate(originalValues[0]) : '';
     const originalDataFabricacao = originalValues[1] ? normalizeToISODate(originalValues[1]) : ''; // Coluna B (índice 1)
     const originalCreatedAt = originalValues[10] || new Date().toISOString(); // Coluna K (índice 10)
 
@@ -136,6 +150,23 @@ export async function PUT(
     if (originalDataFabricacao !== normalizedDataFabricacao) {
       const novoLote = calculateLoteFromDataFabricacao(normalizedDataFabricacao);
       await updateCell(spreadsheetId, tabName, rowNumber, 'AA', novoLote);
+    }
+
+    try {
+      await pedidoEmbalagemService.reconcileForDate(normalizedDataPedido);
+      if (
+        originalDataPedido &&
+        originalDataPedido !== normalizedDataPedido
+      ) {
+        await pedidoEmbalagemService.reconcileForDate(originalDataPedido);
+      }
+    } catch (reconcileError) {
+      const message =
+        reconcileError instanceof Error
+          ? reconcileError.message
+          : 'Erro ao sincronizar pedido no banco';
+      console.error('[embalagem/edit] reconcile falhou:', message);
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     revalidatePath('/api/painel/embalagem');
