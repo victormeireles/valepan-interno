@@ -38,15 +38,6 @@ export function calcularSaldoPedido(pedido: Quantidade, produzido: Quantidade): 
   };
 }
 
-export function quantidadeExcedeSaldo(produzido: Quantidade, saldo: Quantidade): boolean {
-  return (
-    produzido.caixas > saldo.caixas ||
-    produzido.pacotes > saldo.pacotes ||
-    produzido.unidades > saldo.unidades ||
-    Number(produzido.kg) > Number(saldo.kg)
-  );
-}
-
 export type CamposRealizadoEmbalagem = {
   caixas: boolean;
   pacotes: boolean;

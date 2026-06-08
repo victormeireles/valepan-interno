@@ -1,10 +1,5 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
 import { appendEmbalagemProducaoRow } from '@/domain/embalagem/pedido-sheet-ops';
-import {
-  calcularSaldoPedido,
-  quantidadeExcedeSaldo,
-  quantidadeTemSaldoPedido,
-} from '@/domain/embalagem/painel-quantidade';
 import { loteToPedidoKey } from '@/domain/embalagem/pedido-key-from-lote';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
@@ -198,13 +193,6 @@ export class EmbalagemLoteService {
       throw new Error('Pedido de embalagem não encontrado');
     }
 
-    const produzidoAtual = await embalagemLoteRepository.sumQuantidadeByPedidoId(pedido.id);
-    const saldo = calcularSaldoPedido(pedido.quantidade, produzidoAtual);
-
-    if (!quantidadeTemSaldoPedido(saldo)) {
-      throw new Error('Não há saldo restante para embalar neste pedido');
-    }
-
     const q = {
       caixas: input.quantidade.caixas,
       pacotes: input.quantidade.pacotes,
@@ -214,10 +202,6 @@ export class EmbalagemLoteService {
 
     if (q.caixas + q.pacotes + q.unidades + q.kg <= 0) {
       throw new Error('Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).');
-    }
-
-    if (quantidadeExcedeSaldo(q, saldo)) {
-      throw new Error('Quantidade informada excede o saldo restante do pedido');
     }
 
     const planilhaRowId = await appendEmbalagemProducaoRow({
