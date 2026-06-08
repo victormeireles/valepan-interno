@@ -10,6 +10,7 @@ interface PhotoUploaderProps {
   loading?: boolean;
   disabled?: boolean;
   currentPhotoUrl?: string;
+  variant?: 'default' | 'compact';
 }
 
 export default function PhotoUploader({
@@ -18,8 +19,15 @@ export default function PhotoUploader({
   loading = false,
   disabled = false,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  currentPhotoUrl: _currentPhotoUrl // Reservado para uso futuro
+  currentPhotoUrl: _currentPhotoUrl, // Reservado para uso futuro
+  variant = 'default',
 }: PhotoUploaderProps) {
+  const isCompact = variant === 'compact';
+  const dropzonePadding = isCompact ? 'p-1.5' : 'p-3';
+  const previewHeight = isCompact ? 'h-20' : 'h-24';
+  const cameraBtnClass = isCompact
+    ? 'w-full flex items-center justify-center gap-1.5 px-2 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium min-h-11'
+    : 'w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium';
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
@@ -96,16 +104,16 @@ export default function PhotoUploader({
   };
 
   return (
-    <div className="space-y-2">
-      {/* Área de upload */}
-      <div className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors ${
-        isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'
-      } ${disabled || compressing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    <div className={isCompact ? 'space-y-1.5' : 'space-y-2'}>
+      <div
+        className={`border-2 border-dashed rounded-lg ${dropzonePadding} text-center transition-colors ${
+          isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'
+        } ${disabled || compressing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         {...getRootProps()}
       >
         <input {...getInputProps()} disabled={compressing} />
         {compressing ? (
-          <div className="flex flex-col items-center justify-center py-4">
+          <div className={`flex flex-col items-center justify-center ${isCompact ? 'py-2' : 'py-4'}`}>
             <svg className="animate-spin h-6 w-6 text-blue-600 mb-1" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -113,19 +121,27 @@ export default function PhotoUploader({
             <p className="text-xs text-gray-600">Comprimindo...</p>
           </div>
         ) : preview ? (
-          <div className="relative w-full h-24 flex items-center justify-center">
+          <div className={`relative w-full ${previewHeight} flex items-center justify-center`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg" />
             <button
               type="button"
               onClick={handleRemove}
-              className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 text-xs hover:bg-red-600 transition-colors"
+              className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 text-xs hover:bg-red-600 transition-colors min-h-6 min-w-6 flex items-center justify-center"
               disabled={loading || disabled}
+              aria-label="Remover foto"
             >
               <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
             </button>
+          </div>
+        ) : isCompact ? (
+          <div className="flex flex-col items-center justify-center py-1 gap-0.5">
+            <span className="material-icons text-gray-400 text-xl" aria-hidden>
+              add_a_photo
+            </span>
+            <p className="text-[10px] text-gray-500 leading-tight">Adicionar</p>
           </div>
         ) : (
           <div className="flex items-center justify-center gap-2 py-2">
@@ -143,12 +159,11 @@ export default function PhotoUploader({
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
 
-      {/* Botão para Tirar Foto (força abertura da câmera) */}
       <button
         type="button"
         onClick={handleOpenCamera}
         disabled={loading || disabled || compressing}
-        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+        className={cameraBtnClass}
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>

@@ -146,6 +146,83 @@ export class EmbalagemLoteRepository {
     }
   }
 
+  async listByPedidoEmbalagemIds(
+    pedidoIds: string[],
+  ): Promise<Map<string, EmbalagemLoteRecord[]>> {
+    const map = new Map<string, EmbalagemLoteRecord[]>();
+    if (pedidoIds.length === 0) return map;
+
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select()
+      .in('pedido_embalagem_id', pedidoIds)
+      .order('produzido_em', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar lotes por pedido: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      const record = fromDbRow(row);
+      const pid = row.pedido_embalagem_id as string;
+      const list = map.get(pid) ?? [];
+      list.push(record);
+      map.set(pid, list);
+    }
+
+    return map;
+  }
+
+  async sumQuantidadeByPedidoId(pedidoId: string): Promise<{
+    caixas: number;
+    pacotes: number;
+    unidades: number;
+    kg: number;
+  }> {
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select('caixas, pacotes, unidades, kg')
+      .eq('pedido_embalagem_id', pedidoId);
+
+    if (error) {
+      throw new Error(`Erro ao somar lotes: ${error.message}`);
+    }
+
+    return (data ?? []).reduce(
+      (acc, row) => ({
+        caixas: acc.caixas + (row.caixas || 0),
+        pacotes: acc.pacotes + (row.pacotes || 0),
+        unidades: acc.unidades + (row.unidades || 0),
+        kg: Number((acc.kg + Number(row.kg || 0)).toFixed(3)),
+      }),
+      { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
+    );
+  }
+
+  async updateFotosByPlanilhaRowId(
+    planilhaRowId: number,
+    fotos: EmbalagemLoteInsert['fotos'],
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('embalagem_lotes')
+      .update({
+        pacote_foto_url: fotos?.pacoteFotoUrl ?? null,
+        pacote_foto_id: fotos?.pacoteFotoId ?? null,
+        pacote_foto_uploaded_at: fotos?.pacoteFotoUploadedAt ?? null,
+        etiqueta_foto_url: fotos?.etiquetaFotoUrl ?? null,
+        etiqueta_foto_id: fotos?.etiquetaFotoId ?? null,
+        etiqueta_foto_uploaded_at: fotos?.etiquetaFotoUploadedAt ?? null,
+        pallet_foto_url: fotos?.palletFotoUrl ?? null,
+        pallet_foto_id: fotos?.palletFotoId ?? null,
+        pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
+      })
+      .eq('planilha_row_id', planilhaRowId);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar fotos do lote: ${error.message}`);
+    }
+  }
+
   async listUnlinkedInWindow(
     from: string,
     to: string,
