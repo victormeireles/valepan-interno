@@ -1,3 +1,4 @@
+import { loteFromDataFabricacaoEtiqueta } from '@/domain/embalagem/lote-from-data-fabricacao';
 import {
   derivarUnidadePrincipal,
   somarQuantidades,
@@ -65,7 +66,7 @@ export function buildPainelPedido(
     aProduzir,
     produzidoScalar,
     possuiEtiqueta,
-    lote: lotes.find((l) => l.lote != null)?.lote ?? undefined,
+    lote: loteFromDataFabricacaoEtiqueta(pedido.dataFabricacaoEtiqueta),
     lotes: painelLotes,
     producaoUpdatedAt,
   };

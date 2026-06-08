@@ -53,6 +53,12 @@ describe('buildPainelPedido', () => {
     expect(painel.produzidoScalar).toBe(0);
     expect(painel.lotes).toEqual([]);
   });
+
+  it('deriva lote da data de fabricação da etiqueta', () => {
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], true);
+
+    expect(painel.lote).toBe(155);
+  });
 });
 
 describe('mapLoteToPainel', () => {
