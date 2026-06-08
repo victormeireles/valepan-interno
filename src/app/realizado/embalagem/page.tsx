@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import {
   RealizadoHeader,
@@ -9,36 +9,41 @@ import {
   ThreeColumnLayout,
   EmbalagemDashboard,
   EmbalagemProductAccordion,
+  EmbalagemPageSkeleton,
 } from '@/components/Realizado';
 import {
-  groupEmbalagemItemsByProduto,
-  hasEmbalagemQuantity,
-  isEmbalagemPedidoProdutoFinalizado,
-} from '@/domain/realizado/embalagem-group-by-produto';
-import { RealizadoItemEmbalagem, RealizadoGroup } from '@/domain/types/realizado';
+  pedidosToDashboardItems,
+  snapshotsToDashboardItems,
+} from '@/domain/embalagem/painel-dashboard-adapter';
+import { hasEmbalagemQuantity } from '@/domain/realizado/embalagem-group-by-produto';
+import {
+  isPedidoEmbalagemFinalizado,
+  loteToPainelItem,
+  type PainelLoteItem,
+} from '@/domain/realizado/painel-pedido-adapter';
+import type {
+  DashboardSnapshot,
+  PainelPedidoEmbalagem,
+} from '@/domain/types/painel-embalagem';
+import { RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
-import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
-import { addCalendarDaysISO, formatLocalTimeHHmm } from '@/lib/utils/date-utils';
+import {
+  addCalendarDaysISO,
+  formatLocalTimeHHmm,
+  getTodayISOInBrazilTimezone,
+} from '@/lib/utils/date-utils';
+import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
 
-type PainelItem = RealizadoItemEmbalagem & {
-  pacoteFotoId?: string;
-  pacoteFotoUploadedAt?: string;
-  etiquetaFotoId?: string;
-  etiquetaFotoUploadedAt?: string;
-  palletFotoId?: string;
-  palletFotoUploadedAt?: string;
-  pedidoCaixas?: number;
-  pedidoPacotes?: number;
-  pedidoUnidades?: number;
-  pedidoKg?: number;
-  obsEmbalagem?: string;
-  producaoUpdatedAt?: string;
+type EmbalagemGroup = RealizadoGroup & {
+  cliente?: string;
+  dataFabricacao?: string;
+  observacao?: string;
+  pedidos: PainelPedidoEmbalagem[];
 };
 
-/** Só exibe horário se coluna Q preenchida e houver quantidade embalada (M–P). */
-function horarioEmbalagemParaCard(item: PainelItem): string | undefined {
+function horarioEmbalagemParaCard(item: PainelLoteItem): string | undefined {
   if (!hasEmbalagemQuantity(item)) return undefined;
   const raw = item.producaoUpdatedAt?.trim();
   if (!raw) return undefined;
@@ -50,95 +55,168 @@ function getVisibleErrorMessage(error: unknown, fallback: string): string | null
   return /fail(?:ed)? to fetch/i.test(message) ? null : message;
 }
 
-// Função helper para formatar quantidades no formato "X cx + Y pct"
 function formatQuantidade(caixas: number, pacotes: number): string {
   const parts: string[] = [];
-  if (caixas > 0) {
-    parts.push(`${caixas} cx`);
-  }
-  if (pacotes > 0) {
-    parts.push(`${pacotes} pct`);
-  }
+  if (caixas > 0) parts.push(`${caixas} cx`);
+  if (pacotes > 0) parts.push(`${pacotes} pct`);
   return parts.length > 0 ? parts.join(' + ') : '0';
 }
 
+function renderPedidoAccordion(
+  pedido: PainelPedidoEmbalagem,
+  groupKey: string,
+  opts: {
+    renderEmbalagemLot: (item: PainelLoteItem) => ReactNode;
+    onNovoLote: (p: PainelPedidoEmbalagem) => void;
+    showNovoLote: boolean;
+    productionStatusOverride?: 'not-started' | 'partial' | 'complete';
+  },
+) {
+  const parentProduzido = QuantityBreakdown.buildEntries([
+    { quantidade: pedido.produzido.caixas, unidade: 'cx' },
+    { quantidade: pedido.produzido.pacotes, unidade: 'pct' },
+    { quantidade: pedido.produzido.unidades, unidade: 'un' },
+    { quantidade: pedido.produzido.kg, unidade: 'kg' },
+  ]);
+  const parentMeta = QuantityBreakdown.buildEntries([
+    { quantidade: pedido.pedido.caixas, unidade: 'cx' },
+    { quantidade: pedido.pedido.pacotes, unidade: 'pct' },
+    { quantidade: pedido.pedido.unidades, unidade: 'un' },
+    { quantidade: pedido.pedido.kg, unidade: 'kg' },
+  ]);
+  const instanceId = `${groupKey}|${pedido.pedidoEmbalagemId}`;
+
+  return (
+    <EmbalagemProductAccordion
+      key={instanceId}
+      instanceId={instanceId}
+      produto={pedido.produto}
+      somaProduzido={pedido.produzidoScalar}
+      somaAProduzir={pedido.aProduzir}
+      unidade={pedido.unidade}
+      congelado={pedido.congelado === 'Sim'}
+      detalhesProduzido={parentProduzido}
+      detalhesMeta={parentMeta}
+      horarioEmbalagem={
+        pedido.producaoUpdatedAt
+          ? formatLocalTimeHHmm(pedido.producaoUpdatedAt) ?? undefined
+          : undefined
+      }
+      productionStatusOverride={opts.productionStatusOverride}
+      onNovoLote={opts.showNovoLote ? () => opts.onNovoLote(pedido) : undefined}
+      renderLots={() =>
+        pedido.lotes.map((lote) =>
+          opts.renderEmbalagemLot(loteToPainelItem(pedido, lote)),
+        )
+      }
+    />
+  );
+}
+
 export default function ProducaoEmbalagemPage() {
-  const latestDate = useLatestDataDate('embalagem');
-  const [items, setItems] = useState<PainelItem[]>([]);
+  const initialDateResolved = useRef(false);
+  const [pedidos, setPedidos] = useState<PainelPedidoEmbalagem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(latestDate);
+  const [selectedDate, setSelectedDate] = useState(() => getTodayISOInBrazilTimezone());
   const [producaoModalOpen, setProducaoModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<PainelItem | null>(null);
+  const [isNewLoteModal, setIsNewLoteModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<PainelLoteItem | null>(null);
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [photoDropdownOpen, setPhotoDropdownOpen] = useState<string | null>(null);
-  const [itemsComparisonPrev, setItemsComparisonPrev] = useState<PainelItem[]>([]);
-  const [itemsComparisonWeek, setItemsComparisonWeek] = useState<PainelItem[]>([]);
+  const [comparisonWeekItems, setComparisonWeekItems] = useState<EmbalagemDashboardItem[]>(
+    [],
+  );
+  const [comparisonPrevItems, setComparisonPrevItems] = useState<EmbalagemDashboardItem[]>([]);
+  const [comparisonWeekDate, setComparisonWeekDate] = useState<string>(() =>
+    addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
+  );
   const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
 
-  // Atualizar selectedDate quando latestDate é carregado
-  useEffect(() => {
-    setSelectedDate(latestDate);
-  }, [latestDate]);
+  const applyCargaResponse = useCallback(
+    (
+      data: {
+        pedidos: PainelPedidoEmbalagem[];
+        ultimaDataComDados: string | null;
+        comparacaoSemana: { date: string; items: DashboardSnapshot[] };
+        comparacaoAnterior: { date: string | null; items: DashboardSnapshot[] };
+      },
+      currentDate: string,
+    ) => {
+      if (
+        !initialDateResolved.current &&
+        data.ultimaDataComDados &&
+        data.ultimaDataComDados !== currentDate
+      ) {
+        initialDateResolved.current = true;
+        setSelectedDate(data.ultimaDataComDados);
+        return;
+      }
+      initialDateResolved.current = true;
+      setPedidos(data.pedidos);
+      setComparisonWeekDate(data.comparacaoSemana.date);
+      setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
+      setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
+      setDateComparisonPrev(data.comparacaoAnterior.date);
+    },
+    [],
+  );
 
-  const loadEmbalagemFull = useCallback(
+  const loadCargaEmbalagem = useCallback(
     async (showSpinner: boolean) => {
-      if (showSpinner) setLoading(true);
+      if (showSpinner) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       try {
-        const dateWeek = addCalendarDaysISO(selectedDate, -7);
-
-        const [resMain, resWeek] = await Promise.all([
-          fetch(`/api/painel/embalagem?date=${selectedDate}`),
-          fetch(`/api/painel/embalagem?date=${dateWeek}`),
-        ]);
-        const dataMain = await resMain.json();
-        const dataWeek = await resWeek.json();
-        if (!resMain.ok) throw new Error(dataMain.error || 'Falha ao carregar painel');
-        if (!resWeek.ok) throw new Error(dataWeek.error || 'Falha ao carregar painel (semana)');
-
-        setItems((dataMain.items || []) as PainelItem[]);
-        setItemsComparisonWeek((dataWeek.items || []) as PainelItem[]);
-
-        let foundPrev: PainelItem[] = [];
-        let foundPrevDate: string | null = null;
-        for (let i = 1; i <= 14; i++) {
-          const d = addCalendarDaysISO(selectedDate, -i);
-          const res = await fetch(`/api/painel/embalagem?date=${d}`);
-          const data = await res.json();
-          if (!res.ok) continue;
-          const arr = (data.items || []) as PainelItem[];
-          if (arr.length > 0) {
-            foundPrev = arr;
-            foundPrevDate = d;
-            break;
-          }
-        }
-        setItemsComparisonPrev(foundPrev);
-        setDateComparisonPrev(foundPrevDate);
+        const res = await fetch(`/api/painel/embalagem/carga?date=${selectedDate}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+        applyCargaResponse(data, selectedDate);
       } catch (err) {
         if (showSpinner) {
           setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
         } else {
-          console.error('Erro ao recarregar dados do painel:', err);
+          console.error('Erro ao recarregar carga embalagem:', err);
         }
       } finally {
         if (showSpinner) setLoading(false);
+        setRefreshing(false);
       }
     },
-    [selectedDate],
+    [selectedDate, applyCargaResponse],
   );
 
-  useEffect(() => {
-    void loadEmbalagemFull(true);
-
-    if (!producaoModalOpen) {
-      const interval = setInterval(() => void loadEmbalagemFull(false), 60_000);
-      return () => clearInterval(interval);
+  const refreshPedidosOnly = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+      setPedidos((data.pedidos || []) as PainelPedidoEmbalagem[]);
+    } catch (err) {
+      console.error('Erro ao recarregar pedidos:', err);
+    } finally {
+      setRefreshing(false);
     }
-  }, [selectedDate, producaoModalOpen, loadEmbalagemFull]);
+  }, [selectedDate]);
 
-  const handleEditProducao = useCallback(async (item: PainelItem) => {
+  // Carrega só quando a data muda — abrir/fechar modal NÃO recarrega a tela
+  useEffect(() => {
+    void loadCargaEmbalagem(true);
+  }, [selectedDate, loadCargaEmbalagem]);
+
+  // Atualização em background; pausa enquanto o modal está aberto
+  useEffect(() => {
+    if (producaoModalOpen) return;
+    const interval = setInterval(() => void refreshPedidosOnly(), 60_000);
+    return () => clearInterval(interval);
+  }, [selectedDate, producaoModalOpen, refreshPedidosOnly]);
+
+  const handleEditProducao = useCallback(async (item: PainelLoteItem) => {
     if (!item.rowId) {
       setMessage('Este item não pode ser editado');
       return;
@@ -150,7 +228,8 @@ export default function ProducaoEmbalagemPage() {
       const res = await fetch(`/api/producao/embalagem/${item.rowId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados de produção');
-      
+
+      setIsNewLoteModal(false);
       setEditingItem({
         ...item,
         caixas: data.data.caixas || 0,
@@ -181,13 +260,41 @@ export default function ProducaoEmbalagemPage() {
     }
   }, []);
 
-  const handlePhotoClick = useCallback((item: PainelItem) => {
+  const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
+    setIsNewLoteModal(true);
+    setEditingItem({
+      pedidoEmbalagemId: pedido.pedidoEmbalagemId,
+      cliente: pedido.cliente,
+      produto: pedido.produto,
+      observacao: pedido.observacao,
+      congelado: pedido.congelado ?? 'Não',
+      unidade: pedido.unidade,
+      aProduzir: pedido.aProduzir,
+      produzido: 0,
+      dataFabricacao: pedido.dataFabricacao,
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+      pedidoCaixas: Math.max(0, pedido.pedido.caixas - pedido.produzido.caixas),
+      pedidoPacotes: Math.max(0, pedido.pedido.pacotes - pedido.produzido.pacotes),
+      pedidoUnidades: Math.max(0, pedido.pedido.unidades - pedido.produzido.unidades),
+      pedidoKg: Math.max(0, pedido.pedido.kg - pedido.produzido.kg),
+      metaCaixas: pedido.pedido.caixas,
+      metaPacotes: pedido.pedido.pacotes,
+      metaUnidades: pedido.pedido.unidades,
+      metaKg: pedido.pedido.kg,
+    });
+    setProducaoModalOpen(true);
+  }, []);
+
+  const handlePhotoClick = useCallback((item: PainelLoteItem) => {
     const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
     setPhotoDropdownOpen((prev) => (prev === itemKey ? null : itemKey));
   }, []);
 
   const renderEmbalagemLot = useCallback(
-    (embalagemItem: PainelItem) => {
+    (embalagemItem: PainelLoteItem) => {
       const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
       const isItemLoading = loadingCardId === itemKey;
       const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
@@ -196,12 +303,6 @@ export default function ProducaoEmbalagemPage() {
         { quantidade: embalagemItem.pacotes, unidade: 'pct' },
         { quantidade: embalagemItem.unidades, unidade: 'un' },
         { quantidade: embalagemItem.kg, unidade: 'kg' },
-      ]);
-      const metaDetalhes = QuantityBreakdown.buildEntries([
-        { quantidade: embalagemItem.pedidoCaixas, unidade: 'cx' },
-        { quantidade: embalagemItem.pedidoPacotes, unidade: 'pct' },
-        { quantidade: embalagemItem.pedidoUnidades, unidade: 'un' },
-        { quantidade: embalagemItem.pedidoKg, unidade: 'kg' },
       ]);
 
       return (
@@ -218,50 +319,52 @@ export default function ProducaoEmbalagemPage() {
             onClick={() => void handleEditProducao(embalagemItem)}
             isLoading={isItemLoading}
             detalhesProduzido={produzidoDetalhes}
-            detalhesMeta={metaDetalhes}
             horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
           />
 
-          {photoDropdownOpen === itemKey && (embalagemItem.pacoteFotoUrl || embalagemItem.etiquetaFotoUrl || embalagemItem.palletFotoUrl) && (
-            <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
-              {embalagemItem.pacoteFotoUrl && (
-                <a
-                  href={embalagemItem.pacoteFotoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                  onClick={() => setPhotoDropdownOpen(null)}
-                >
-                  <span className="text-sm">📦</span>
-                  <span className="text-sm">Foto do Pacote</span>
-                </a>
-              )}
-              {embalagemItem.etiquetaFotoUrl && (
-                <a
-                  href={embalagemItem.etiquetaFotoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                  onClick={() => setPhotoDropdownOpen(null)}
-                >
-                  <span className="text-sm">🏷️</span>
-                  <span className="text-sm">Foto da Etiqueta</span>
-                </a>
-              )}
-              {embalagemItem.palletFotoUrl && (
-                <a
-                  href={embalagemItem.palletFotoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                  onClick={() => setPhotoDropdownOpen(null)}
-                >
-                  <span className="text-sm">🚛</span>
-                  <span className="text-sm">Foto do Pallet</span>
-                </a>
-              )}
-            </div>
-          )}
+          {photoDropdownOpen === itemKey &&
+            (embalagemItem.pacoteFotoUrl ||
+              embalagemItem.etiquetaFotoUrl ||
+              embalagemItem.palletFotoUrl) && (
+              <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
+                {embalagemItem.pacoteFotoUrl && (
+                  <a
+                    href={embalagemItem.pacoteFotoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                    onClick={() => setPhotoDropdownOpen(null)}
+                  >
+                    <span className="text-sm">📦</span>
+                    <span className="text-sm">Foto do Pacote</span>
+                  </a>
+                )}
+                {embalagemItem.etiquetaFotoUrl && (
+                  <a
+                    href={embalagemItem.etiquetaFotoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                    onClick={() => setPhotoDropdownOpen(null)}
+                  >
+                    <span className="text-sm">🏷️</span>
+                    <span className="text-sm">Foto da Etiqueta</span>
+                  </a>
+                )}
+                {embalagemItem.palletFotoUrl && (
+                  <a
+                    href={embalagemItem.palletFotoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                    onClick={() => setPhotoDropdownOpen(null)}
+                  >
+                    <span className="text-sm">🚛</span>
+                    <span className="text-sm">Foto do Pallet</span>
+                  </a>
+                )}
+              </div>
+            )}
         </div>
       );
     },
@@ -269,7 +372,7 @@ export default function ProducaoEmbalagemPage() {
   );
 
   const refreshPainelData = async () => {
-    await loadEmbalagemFull(false);
+    await refreshPedidosOnly();
   };
 
   const handleSaveProducao = async (producaoData: ProducaoData) => {
@@ -278,7 +381,7 @@ export default function ProducaoEmbalagemPage() {
     try {
       setProducaoLoading(true);
       setMessage(null);
-      
+
       const res = await fetch(`/api/producao/embalagem/${editingItem.rowId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -286,7 +389,7 @@ export default function ProducaoEmbalagemPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
-      
+
       setEditingItem(null);
       setProducaoLoading(false);
       setMessage('Produção atualizada com sucesso!');
@@ -298,116 +401,70 @@ export default function ProducaoEmbalagemPage() {
     }
   };
 
+  const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
+  const dashboardPrev = comparisonPrevItems;
+  const dashboardWeek = comparisonWeekItems;
+
   const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
-    const groups: { [key: string]: PainelItem[] } = {};
+    const groups: Record<string, PainelPedidoEmbalagem[]> = {};
 
-    items.forEach((item) => {
-      const dataFab = item.dataFabricacao || selectedDate;
-      const obs = item.observacao?.trim() || '';
-      const groupKey = `${item.cliente}|${dataFab}|${obs}`;
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(item);
+    pedidos.forEach((pedido) => {
+      const dataFab = pedido.dataFabricacao || selectedDate;
+      const obs = pedido.observacao?.trim() || '';
+      const groupKey = `${pedido.cliente}|${dataFab}|${obs}`;
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(pedido);
     });
 
-    const gruposNaoFinalizados: Array<
-      RealizadoGroup & {
-        cliente?: string;
-        dataFabricacao?: string;
-        observacao?: string;
-        minRowId?: number;
-      }
-    > = [];
-    const gruposFinalizados: Array<
-      RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string; minRowId?: number }
-    > = [];
+    const gruposNaoFinalizados: EmbalagemGroup[] = [];
+    const gruposFinalizados: EmbalagemGroup[] = [];
 
-    Object.entries(groups).forEach(([groupKey, groupItems]) => {
+    Object.entries(groups).forEach(([groupKey, groupPedidos]) => {
       const [cliente, dataFab, obs] = groupKey.split('|');
+      const naoFinal = groupPedidos.filter((p) => !isPedidoEmbalagemFinalizado(p));
+      const final = groupPedidos.filter((p) => isPedidoEmbalagemFinalizado(p));
 
-      const sortedItems = [...groupItems].sort((a, b) => {
-        const rowIdA = a.rowId ?? Number.MAX_SAFE_INTEGER;
-        const rowIdB = b.rowId ?? Number.MAX_SAFE_INTEGER;
-        return rowIdA - rowIdB;
-      });
-
-      const minRowId = Math.min(...sortedItems.map((item) => item.rowId ?? Number.MAX_SAFE_INTEGER));
-
-      const porProduto = groupEmbalagemItemsByProduto(sortedItems as PainelItem[]);
-      const finalizadoPorProduto = new Map(
-        porProduto.map((g) => [g.produto, isEmbalagemPedidoProdutoFinalizado(g)] as const),
-      );
-
-      const itemsNaoFinal: PainelItem[] = [];
-      const itemsFinal: PainelItem[] = [];
-      for (const it of sortedItems) {
-        if (finalizadoPorProduto.get(it.produto)) {
-          itemsFinal.push(it);
-        } else {
-          itemsNaoFinal.push(it);
-        }
-      }
-
-      if (itemsNaoFinal.length > 0) {
+      if (naoFinal.length > 0) {
         gruposNaoFinalizados.push({
           key: groupKey,
           cliente,
           dataFabricacao: dataFab,
           observacao: obs || undefined,
-          items: itemsNaoFinal,
-          minRowId,
+          items: [],
+          pedidos: naoFinal,
         });
       }
-
-      if (itemsFinal.length > 0) {
+      if (final.length > 0) {
         gruposFinalizados.push({
           key: groupKey,
           cliente,
           dataFabricacao: dataFab,
           observacao: obs || undefined,
-          items: itemsFinal,
-          minRowId,
+          items: [],
+          pedidos: final,
         });
       }
     });
 
-    const sortByMinRowId = (a: { minRowId?: number }, b: { minRowId?: number }) => {
-      const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
-      const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
-      return minRowIdA - minRowIdB;
-    };
+    return { gruposNaoFinalizados, gruposFinalizados };
+  }, [pedidos, selectedDate]);
 
-    gruposNaoFinalizados.sort(sortByMinRowId);
-    gruposFinalizados.sort(sortByMinRowId);
-
-    const removeMinRowId = (
-      group: (typeof gruposNaoFinalizados)[0] | (typeof gruposFinalizados)[0],
-    ): RealizadoGroup & { cliente?: string; dataFabricacao?: string; observacao?: string } => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { minRowId, ...rest } = group;
-      return rest;
-    };
-
-    return {
-      gruposNaoFinalizados: gruposNaoFinalizados.map(removeMinRowId) as RealizadoGroup[],
-      gruposFinalizados: gruposFinalizados.map(removeMinRowId) as RealizadoGroup[],
-    };
-  }, [items, selectedDate]);
-
-  // Calcular totais de produção e meta
   const totais = useMemo(() => {
-    const totalCaixasProduzido = items.reduce((sum, item) => sum + (item.caixas || 0), 0);
-    const totalPacotesProduzido = items.reduce((sum, item) => sum + (item.pacotes || 0), 0);
-    const totalCaixasMeta = items.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
-    const totalPacotesMeta = items.reduce((sum, item) => sum + (item.pedidoPacotes || 0), 0);
+    const totalCaixasProduzido = pedidos.reduce((sum, p) => sum + p.produzido.caixas, 0);
+    const totalPacotesProduzido = pedidos.reduce((sum, p) => sum + p.produzido.pacotes, 0);
+    const totalCaixasMeta = pedidos.reduce((sum, p) => sum + p.pedido.caixas, 0);
+    const totalPacotesMeta = pedidos.reduce((sum, p) => sum + p.pedido.pacotes, 0);
 
     return {
       produzido: formatQuantidade(totalCaixasProduzido, totalPacotesProduzido),
       meta: formatQuantidade(totalCaixasMeta, totalPacotesMeta),
     };
-  }, [items]);
+  }, [pedidos]);
+
+  const accordionOpts = {
+    renderEmbalagemLot,
+    onNovoLote: handleNovoLote,
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -420,205 +477,177 @@ export default function ProducaoEmbalagemPage() {
 
       <div className="p-4">
         {message && (
-          <div className={`mb-4 p-4 rounded-md border ${
-            message.includes('sucesso') 
-              ? 'bg-green-800/30 border-green-600 text-green-100'
-              : 'bg-red-800/30 border-red-600 text-red-100'
-          }`}>
+          <div
+            className={`mb-4 p-4 rounded-md border ${
+              message.includes('sucesso')
+                ? 'bg-green-800/30 border-green-600 text-green-100'
+                : 'bg-red-800/30 border-red-600 text-red-100'
+            }`}
+          >
             {message}
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
+          <EmbalagemPageSkeleton />
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
+            {refreshing ? (
+              <div
+                className="mb-3 flex items-center gap-2 text-sm text-gray-400"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-600 border-t-amber-400 animate-spin motion-reduce:animate-none" />
+                Atualizando dados…
+              </div>
+            ) : null}
+            <div
+              className={`grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start transition-opacity duration-200 motion-reduce:transition-none ${
+                refreshing ? 'opacity-70 pointer-events-none' : ''
+              }`}
+            >
               <div className="min-w-0 space-y-8">
-            {/* Seção de Cards Não Finalizados */}
-            {gruposNaoFinalizados.length > 0 && (
-              <div className="mb-8">
-                <ThreeColumnLayout
-                  columnCount={1}
-                  groups={gruposNaoFinalizados}
-                  renderGroup={(group) => {
-                    const embalagemGroup = group as RealizadoGroup & {
-                      cliente?: string;
-                      dataFabricacao?: string;
-                      observacao?: string;
-                    };
+                {gruposNaoFinalizados.length > 0 && (
+                  <div className="mb-8">
+                    <ThreeColumnLayout
+                      columnCount={1}
+                      groups={gruposNaoFinalizados}
+                      renderGroup={(group) => {
+                        const g = group as EmbalagemGroup;
+                        return (
+                          <ClientGroup
+                            cliente={g.cliente}
+                            dataFabricacao={g.dataFabricacao}
+                            observacao={g.observacao}
+                            selectedDate={selectedDate}
+                          >
+                            {g.pedidos.map((pedido) =>
+                              renderPedidoAccordion(pedido, g.key, {
+                                ...accordionOpts,
+                                showNovoLote: true,
+                                productionStatusOverride:
+                                  pedido.produzidoScalar === 0 ? 'not-started' : 'partial',
+                              }),
+                            )}
+                          </ClientGroup>
+                        );
+                      }}
+                    />
+                  </div>
+                )}
 
-                    return (
-                      <ClientGroup
-                        cliente={embalagemGroup.cliente}
-                        dataFabricacao={embalagemGroup.dataFabricacao}
-                        observacao={embalagemGroup.observacao}
-                        selectedDate={selectedDate}
-                      >
-                        {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
-                          const parentProduzido = QuantityBreakdown.buildEntries([
-                            { quantidade: g.somaCaixas, unidade: 'cx' },
-                            { quantidade: g.somaPacotes, unidade: 'pct' },
-                            { quantidade: g.somaUnidades, unidade: 'un' },
-                            { quantidade: g.somaKg, unidade: 'kg' },
-                          ]);
-                          const parentMeta = QuantityBreakdown.buildEntries([
-                            { quantidade: g.somaPedidoCaixas, unidade: 'cx' },
-                            { quantidade: g.somaPedidoPacotes, unidade: 'pct' },
-                            { quantidade: g.somaPedidoUnidades, unidade: 'un' },
-                            { quantidade: g.somaPedidoKg, unidade: 'kg' },
-                          ]);
-                          const unidadeRef = g.lots[0]?.unidade ?? '';
-                          const instanceId = `${embalagemGroup.key}|${g.produto}`;
-
-                          return (
-                            <EmbalagemProductAccordion
-                              key={instanceId}
-                              instanceId={instanceId}
-                              produto={g.produto}
-                              somaProduzido={g.somaProduzido}
-                              somaAProduzir={g.somaAProduzir}
-                              unidade={unidadeRef}
-                              congelado={g.algumCongelado}
-                              detalhesProduzido={parentProduzido}
-                              detalhesMeta={parentMeta}
-                              horarioEmbalagem={g.horarioMaisRecente}
-                              productionStatusOverride={g.somaProduzido === 0 ? 'not-started' : 'partial'}
-                              renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
-                            />
-                          );
-                        })}
-                      </ClientGroup>
-                    );
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Seção de Cards Finalizados */}
-            {gruposFinalizados.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
-                <ThreeColumnLayout
-                  columnCount={1}
-                  groups={gruposFinalizados}
-                  renderGroup={(group) => {
-                    const embalagemGroup = group as RealizadoGroup & {
-                      cliente?: string;
-                      dataFabricacao?: string;
-                      observacao?: string;
-                    };
-
-                    return (
-                      <ClientGroup
-                        cliente={embalagemGroup.cliente}
-                        dataFabricacao={embalagemGroup.dataFabricacao}
-                        observacao={embalagemGroup.observacao}
-                        selectedDate={selectedDate}
-                      >
-                        {groupEmbalagemItemsByProduto(group.items as PainelItem[]).map((g) => {
-                          const parentProduzido = QuantityBreakdown.buildEntries([
-                            { quantidade: g.somaCaixas, unidade: 'cx' },
-                            { quantidade: g.somaPacotes, unidade: 'pct' },
-                            { quantidade: g.somaUnidades, unidade: 'un' },
-                            { quantidade: g.somaKg, unidade: 'kg' },
-                          ]);
-                          const parentMeta = QuantityBreakdown.buildEntries([
-                            { quantidade: g.somaPedidoCaixas, unidade: 'cx' },
-                            { quantidade: g.somaPedidoPacotes, unidade: 'pct' },
-                            { quantidade: g.somaPedidoUnidades, unidade: 'un' },
-                            { quantidade: g.somaPedidoKg, unidade: 'kg' },
-                          ]);
-                          const unidadeRef = g.lots[0]?.unidade ?? '';
-                          const instanceId = `${embalagemGroup.key}|${g.produto}`;
-
-                          return (
-                            <EmbalagemProductAccordion
-                              key={instanceId}
-                              instanceId={instanceId}
-                              produto={g.produto}
-                              somaProduzido={g.somaProduzido}
-                              somaAProduzir={g.somaAProduzir}
-                              unidade={unidadeRef}
-                              congelado={g.algumCongelado}
-                              detalhesProduzido={parentProduzido}
-                              detalhesMeta={parentMeta}
-                              horarioEmbalagem={g.horarioMaisRecente}
-                              renderLots={() => g.lots.map((lot) => renderEmbalagemLot(lot as PainelItem))}
-                            />
-                          );
-                        })}
-                      </ClientGroup>
-                    );
-                  }}
-                />
-              </div>
-            )}
+                {gruposFinalizados.length > 0 && (
+                  <div className="mb-8">
+                    <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
+                    <ThreeColumnLayout
+                      columnCount={1}
+                      groups={gruposFinalizados}
+                      renderGroup={(group) => {
+                        const g = group as EmbalagemGroup;
+                        return (
+                          <ClientGroup
+                            cliente={g.cliente}
+                            dataFabricacao={g.dataFabricacao}
+                            observacao={g.observacao}
+                            selectedDate={selectedDate}
+                          >
+                            {g.pedidos.map((pedido) =>
+                              renderPedidoAccordion(pedido, g.key, {
+                                ...accordionOpts,
+                                showNovoLote: false,
+                              }),
+                            )}
+                          </ClientGroup>
+                        );
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               <EmbalagemDashboard
                 selectedDate={selectedDate}
-                items={items}
+                items={dashboardItems}
                 comparisonPrev={
                   dateComparisonPrev
-                    ? { date: dateComparisonPrev, items: itemsComparisonPrev }
+                    ? { date: dateComparisonPrev, items: dashboardPrev }
                     : null
                 }
                 comparisonWeek={{
-                  date: addCalendarDaysISO(selectedDate, -7),
-                  items: itemsComparisonWeek,
+                  date: comparisonWeekDate,
+                  items: dashboardWeek,
                 }}
               />
             </div>
 
             <footer className="mt-6 text-center text-gray-400 text-sm">
-              {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens • {totais.produzido} / {totais.meta}
+              {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {pedidos.length}{' '}
+              pedidos • {totais.produzido} / {totais.meta}
             </footer>
           </>
         )}
       </div>
 
-      {/* Fechar dropdowns ao clicar fora */}
       {photoDropdownOpen && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setPhotoDropdownOpen(null)}
-        />
+        <div className="fixed inset-0 z-40" onClick={() => setPhotoDropdownOpen(null)} />
       )}
 
       <ProducaoModal
         isOpen={producaoModalOpen}
         onClose={() => {
           setProducaoModalOpen(false);
+          setIsNewLoteModal(false);
           setEditingItem(null);
         }}
+        isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
         onSaveSuccess={refreshPainelData}
-        initialData={editingItem ? {
-          caixas: editingItem.caixas || 0,
-          pacotes: editingItem.pacotes || 0,
-          unidades: editingItem.unidades || 0,
-          kg: editingItem.kg || 0,
-          pacoteFotoUrl: editingItem.pacoteFotoUrl,
-          pacoteFotoId: editingItem.pacoteFotoId,
-          pacoteFotoUploadedAt: editingItem.pacoteFotoUploadedAt,
-          etiquetaFotoUrl: editingItem.etiquetaFotoUrl,
-          etiquetaFotoId: editingItem.etiquetaFotoId,
-          etiquetaFotoUploadedAt: editingItem.etiquetaFotoUploadedAt,
-          palletFotoUrl: editingItem.palletFotoUrl,
-          palletFotoId: editingItem.palletFotoId,
-          palletFotoUploadedAt: editingItem.palletFotoUploadedAt,
-          obsEmbalagem: editingItem.obsEmbalagem || '',
-        } : undefined}
+        initialData={
+          editingItem
+            ? {
+                caixas: editingItem.caixas || 0,
+                pacotes: editingItem.pacotes || 0,
+                unidades: editingItem.unidades || 0,
+                kg: editingItem.kg || 0,
+                pacoteFotoUrl: editingItem.pacoteFotoUrl,
+                pacoteFotoId: editingItem.pacoteFotoId,
+                pacoteFotoUploadedAt: editingItem.pacoteFotoUploadedAt,
+                etiquetaFotoUrl: editingItem.etiquetaFotoUrl,
+                etiquetaFotoId: editingItem.etiquetaFotoId,
+                etiquetaFotoUploadedAt: editingItem.etiquetaFotoUploadedAt,
+                palletFotoUrl: editingItem.palletFotoUrl,
+                palletFotoId: editingItem.palletFotoId,
+                palletFotoUploadedAt: editingItem.palletFotoUploadedAt,
+                obsEmbalagem: editingItem.obsEmbalagem || '',
+              }
+            : undefined
+        }
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}
         rowId={editingItem?.rowId}
-        pedidoQuantidades={editingItem ? {
-          caixas: editingItem.pedidoCaixas || 0,
-          pacotes: editingItem.pedidoPacotes || 0,
-          unidades: editingItem.pedidoUnidades || 0,
-          kg: editingItem.pedidoKg || 0,
-        } : undefined}
+        pedidoEmbalagemId={editingItem?.pedidoEmbalagemId}
+        congelado={editingItem?.congelado ?? 'Não'}
+        pedidoQuantidades={
+          editingItem
+            ? {
+                caixas: editingItem.pedidoCaixas || 0,
+                pacotes: editingItem.pedidoPacotes || 0,
+                unidades: editingItem.pedidoUnidades || 0,
+                kg: editingItem.pedidoKg || 0,
+              }
+            : undefined
+        }
+        pedidoMetaOriginal={
+          editingItem
+            ? {
+                caixas: editingItem.metaCaixas ?? 0,
+                pacotes: editingItem.metaPacotes ?? 0,
+                unidades: editingItem.metaUnidades ?? 0,
+                kg: editingItem.metaKg ?? 0,
+              }
+            : undefined
+        }
         loading={producaoLoading}
         mode="embalagem"
       />

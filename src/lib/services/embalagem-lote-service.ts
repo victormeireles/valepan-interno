@@ -1,5 +1,12 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
+import { appendEmbalagemProducaoRow } from '@/domain/embalagem/pedido-sheet-ops';
+import {
+  calcularSaldoPedido,
+  quantidadeExcedeSaldo,
+  quantidadeTemSaldoPedido,
+} from '@/domain/embalagem/painel-quantidade';
 import { loteToPedidoKey } from '@/domain/embalagem/pedido-key-from-lote';
+import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
   EmbalagemLoteFotos,
   EmbalagemLoteInsert,
@@ -43,6 +50,17 @@ export type CriarLoteSubstituicaoInput = {
   producaoAnterior: Quantidade;
   produzidoEm?: string;
   observacaoCliente?: string;
+  obsEmbalagem?: string;
+  fotos?: EmbalagemLoteFotos;
+};
+
+export type CriarLotePorPedidoInput = {
+  pedidoEmbalagemId: string;
+  clienteNome: string;
+  produtoNome: string;
+  congelado: string;
+  quantidade: Quantidade;
+  produzidoEm?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
 };
@@ -170,6 +188,75 @@ export class EmbalagemLoteService {
     }
 
     return embalagemLoteRepository.insert(payload);
+  }
+
+  async criarLotePorPedidoEmbalagem(
+    input: CriarLotePorPedidoInput,
+  ): Promise<EmbalagemLoteRecord> {
+    const pedido = await pedidoEmbalagemRepository.findById(input.pedidoEmbalagemId);
+    if (!pedido) {
+      throw new Error('Pedido de embalagem não encontrado');
+    }
+
+    const produzidoAtual = await embalagemLoteRepository.sumQuantidadeByPedidoId(pedido.id);
+    const saldo = calcularSaldoPedido(pedido.quantidade, produzidoAtual);
+
+    if (!quantidadeTemSaldoPedido(saldo)) {
+      throw new Error('Não há saldo restante para embalar neste pedido');
+    }
+
+    const q = {
+      caixas: input.quantidade.caixas,
+      pacotes: input.quantidade.pacotes,
+      unidades: input.quantidade.unidades,
+      kg: input.quantidade.kg,
+    };
+
+    if (q.caixas + q.pacotes + q.unidades + q.kg <= 0) {
+      throw new Error('Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).');
+    }
+
+    if (quantidadeExcedeSaldo(q, saldo)) {
+      throw new Error('Quantidade informada excede o saldo restante do pedido');
+    }
+
+    const planilhaRowId = await appendEmbalagemProducaoRow({
+      dataPedido: pedido.dataProducao,
+      dataFabricacao: pedido.dataFabricacaoEtiqueta,
+      cliente: input.clienteNome,
+      observacao: pedido.observacao,
+      produto: input.produtoNome,
+      congelado: input.congelado,
+      quantidade: q,
+      obsEmbalagem: input.obsEmbalagem,
+      fotos: input.fotos,
+    });
+
+    const produzidoEm = input.produzidoEm ?? new Date().toISOString();
+
+    return this.criarLote({
+      modo: 'parcial',
+      planilhaRowId,
+      planilhaRowIdOrigem: null,
+      pedidoEmbalagemId: pedido.id,
+      dataPedido: pedido.dataProducao,
+      dataFabricacao: pedido.dataFabricacaoEtiqueta,
+      tipoEstoqueId: pedido.tipoEstoqueId,
+      produtoId: pedido.produtoId,
+      congelado: input.congelado === 'Sim' ? 'Sim' : 'Não',
+      lote: null,
+      quantidade: q,
+      produzidoEm,
+      obsEmbalagem: input.obsEmbalagem ?? null,
+      fotos: input.fotos,
+    });
+  }
+
+  async syncFotosFromPlanilhaRow(
+    planilhaRowId: number,
+    fotos: EmbalagemLoteFotos,
+  ): Promise<void> {
+    await embalagemLoteRepository.updateFotosByPlanilhaRowId(planilhaRowId, fotos);
   }
 
   async compensarLote(loteId: string): Promise<void> {

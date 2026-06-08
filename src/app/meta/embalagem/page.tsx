@@ -5,7 +5,10 @@ import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
 import EtiquetaModal from '@/components/EtiquetaModal';
 
+import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
+
 type PainelItem = {
+  pedidoEmbalagemId: string;
   cliente: string;
   produto: string;
   unidade: 'cx' | 'pct' | 'un' | 'kg';
@@ -13,23 +16,36 @@ type PainelItem = {
   observacao: string;
   aProduzir: number;
   produzido: number;
-  dataPedido?: string; // Data de produção
-  dataFabricacao?: string; // Data de fabricação na etiqueta
-  rowId?: number; // Número da linha no Google Sheets
-  sourceType?: 'pedido' | 'producao'; // Tipo de origem dos dados
-  // Valores individuais para edição
+  dataPedido?: string;
+  dataFabricacao?: string;
   caixas?: number;
   pacotes?: number;
   unidades?: number;
   kg?: number;
-  // Dados de etiqueta
   lote?: number;
   etiquetaGerada?: boolean;
-  // Dados de foto
-  photoUrl?: string;
-  photoId?: string;
-  photoUploadedAt?: string;
 };
+
+function pedidoToMetaItem(p: PainelPedidoEmbalagem): PainelItem {
+  return {
+    pedidoEmbalagemId: p.pedidoEmbalagemId,
+    cliente: p.cliente,
+    produto: p.produto,
+    unidade: p.unidade,
+    congelado: p.congelado ?? 'Não',
+    observacao: p.observacao,
+    aProduzir: p.aProduzir,
+    produzido: p.produzidoScalar,
+    dataPedido: p.dataPedido,
+    dataFabricacao: p.dataFabricacao,
+    caixas: p.pedido.caixas,
+    pacotes: p.pedido.pacotes,
+    unidades: p.pedido.unidades,
+    kg: p.pedido.kg,
+    lote: p.lote,
+    etiquetaGerada: p.etiquetaGerada,
+  };
+}
 
 type CreatePedidoData = {
   dataPedido: string;
@@ -138,7 +154,8 @@ export default function PedidoEmbalagemPage() {
         const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        setItems((data.items || []) as PainelItem[]);
+        const pedidos = (data.pedidos || []) as PainelPedidoEmbalagem[];
+        setItems(pedidos.map(pedidoToMetaItem));
       } catch (err) {
         setMessage(err instanceof Error ? err.message : 'Erro ao carregar o painel');
       } finally {
@@ -175,15 +192,15 @@ export default function PedidoEmbalagemPage() {
 
   // Função para abrir modal de edição
   const handleEditItem = async (item: PainelItem) => {
-    if (!item.rowId || item.sourceType !== 'pedido') {
+    if (!item.pedidoEmbalagemId) {
       setMessage('Este item não pode ser editado');
       return;
     }
 
     try {
-      setLoadingCardId(`${item.cliente}-${item.produto}-${item.rowId}`);
+      setLoadingCardId(`${item.cliente}-${item.produto}-${item.pedidoEmbalagemId}`);
       setEditLoading(true);
-      const res = await fetch(`/api/embalagem/edit/${item.rowId}`);
+      const res = await fetch(`/api/embalagem/pedido/${item.pedidoEmbalagemId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados para edição');
       
@@ -237,7 +254,8 @@ export default function PedidoEmbalagemPage() {
       const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
+        const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
+        setItems(pedidosReload.map(pedidoToMetaItem));
       }
       
       // Limpar mensagem após 3 segundos
@@ -281,9 +299,9 @@ export default function PedidoEmbalagemPage() {
         setMessage('Novo pedido criado com sucesso!');
       } else {
         // Editar pedido existente
-        if (!editingItem?.rowId) return;
+        if (!editingItem?.pedidoEmbalagemId) return;
         
-        const res = await fetch(`/api/embalagem/edit/${editingItem.rowId}`, {
+        const res = await fetch(`/api/embalagem/pedido/${editingItem.pedidoEmbalagemId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(editData),
@@ -298,7 +316,8 @@ export default function PedidoEmbalagemPage() {
       const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
+        const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
+        setItems(pedidosReload.map(pedidoToMetaItem));
       }
       
       // Limpar mensagem após 3 segundos
@@ -312,13 +331,13 @@ export default function PedidoEmbalagemPage() {
 
   // Função para deletar pedido
   const handleDeleteOrder = async () => {
-    if (!editingItem?.rowId) return;
+    if (!editingItem?.pedidoEmbalagemId) return;
 
     try {
       setEditLoading(true);
-      setMessage(null); // Limpar mensagem anterior
+      setMessage(null);
       
-      const res = await fetch(`/api/embalagem/delete/${editingItem.rowId}`, {
+      const res = await fetch(`/api/embalagem/pedido/${editingItem.pedidoEmbalagemId}`, {
         method: 'DELETE',
       });
       const data = await res.json();
@@ -330,7 +349,8 @@ export default function PedidoEmbalagemPage() {
       const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
+        const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
+        setItems(pedidosReload.map(pedidoToMetaItem));
       }
       
       // Limpar mensagem após 3 segundos
@@ -362,7 +382,8 @@ export default function PedidoEmbalagemPage() {
       const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
+        const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
+        setItems(pedidosReload.map(pedidoToMetaItem));
       }
       setMessage('Etiqueta gerada com sucesso!');
       setTimeout(() => setMessage(null), 3000);
@@ -473,7 +494,7 @@ export default function PedidoEmbalagemPage() {
                   <div className="flex flex-wrap gap-2">
                     {groupItems.map((item, itemIndex) => {
                             const progressoItem = item.aProduzir > 0 ? Math.min((item.produzido / item.aProduzir) * 100, 100) : 0;
-                            const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
+                            const itemKey = `${item.cliente}-${item.produto}-${item.pedidoEmbalagemId}`;
                             const isItemLoading = loadingCardId === itemKey;
                             
                             return (
@@ -503,22 +524,6 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                       )}
                                     </span>
-                                    {item.photoUrl && (
-                                      <a
-                                        href={item.photoUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          window.open(item.photoUrl, '_blank');
-                                        }}
-                                        className="text-white hover:text-gray-300 ml-2 transition-colors cursor-pointer"
-                                        title="Ver foto"
-                                      >
-                                        <span className="material-icons text-lg">photo_camera</span>
-                                      </a>
-                                    )}
                                     {item.lote && (
                                       <button
                                         onClick={(e) => handleEtiquetaClick(item, e)}
@@ -576,7 +581,7 @@ export default function PedidoEmbalagemPage() {
         }}
         onSave={handleSaveEdit}
         onDelete={!isNewOrder ? handleDeleteOrder : undefined}
-        rowId={isNewOrder ? undefined : editingItem?.rowId}
+        rowId={undefined}
         initialData={isNewOrder ? {
           dataPedido: selectedDate,
           dataFabricacao: selectedDate,
@@ -628,7 +633,7 @@ export default function PedidoEmbalagemPage() {
           congeladoInicial={etiquetaItem.congelado === 'Sim'}
           cliente={etiquetaItem.cliente}
           lote={etiquetaItem.lote || 0}
-          rowId={etiquetaItem.rowId}
+          rowId={undefined}
           onSuccess={handleEtiquetaSuccess}
         />
       )}

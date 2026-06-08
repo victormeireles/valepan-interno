@@ -1,0 +1,870 @@
+# Modal de Lote de Embalagem — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Redesenhar o modal de embalagem (criar + editar) com layout mobile-first unificado, fotos em grid compacto com botão Tirar Foto preservado, e CTAs corretos por fluxo.
+
+**Architecture:** Extrair subcomponentes em `src/components/EmbalagemLoteModal/`. `ProducaoModal` mantém state e lógica de save/upload; quando `mode === 'embalagem'`, renderiza `EmbalagemLoteModalShell` em vez do JSX legado. Modos forno/fermentação/resfriamento permanecem no branch antigo.
+
+**Tech Stack:** Next.js App Router, React 19, TypeScript, Tailwind CSS, Vitest, react-dropzone.
+
+**Spec:** `docs/superpowers/specs/2026-06-05-embalagem-lote-modal-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/embalagem/embalagem-lote-modal.ts` | Progresso do pedido + contagem de fotos |
+| `src/domain/embalagem/embalagem-lote-modal.test.ts` | Testes unitários |
+| `src/components/FormControls/PhotoUploader.tsx` | Prop `variant="compact"` |
+| `src/components/PhotoManager.tsx` | Modo inline compacto; sheet em vez de `window.confirm` |
+| `src/components/EmbalagemLoteModal/EmbalagemLoteModalHeader.tsx` | Título, chips, barra de progresso |
+| `src/components/EmbalagemLoteModal/EmbalagemQuantidadeSection.tsx` | Inputs + Preencher restante |
+| `src/components/EmbalagemLoteModal/EmbalagemObservacaoField.tsx` | Textarea |
+| `src/components/EmbalagemLoteModal/EmbalagemFotosGrid.tsx` | Grid 3 colunas de fotos |
+| `src/components/EmbalagemLoteModal/EmbalagemLoteModalFooter.tsx` | Rodapé sticky + CTAs |
+| `src/components/EmbalagemLoteModal/EmbalagemDiscardSheet.tsx` | Confirmar descarte |
+| `src/components/EmbalagemLoteModal/EmbalagemPhotoWarningBanner.tsx` | Fotos faltantes inline |
+| `src/components/EmbalagemLoteModal/EmbalagemLoteModalShell.tsx` | Composição scroll + footer |
+| `src/components/EmbalagemLoteModal/index.ts` | Re-exports |
+| `src/components/ProducaoModal.tsx` | Branch embalagem → shell; lógica inalterada |
+
+---
+
+### Task 1: Helpers de domínio (progresso + contagem de fotos)
+
+**Files:**
+- Create: `src/domain/embalagem/embalagem-lote-modal.ts`
+- Create: `src/domain/embalagem/embalagem-lote-modal.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+Criar `src/domain/embalagem/embalagem-lote-modal.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import {
+  calcularProgressoEmbalagemPedido,
+  contarFotosEmbalagem,
+} from '@/domain/embalagem/embalagem-lote-modal';
+import type { ProducaoData } from '@/domain/types';
+
+const meta = { caixas: 225, pacotes: 0, unidades: 0, kg: 0 };
+const saldo = { caixas: 45, pacotes: 0, unidades: 0, kg: 0 };
+
+describe('calcularProgressoEmbalagemPedido', () => {
+  it('calcula produzido e percentual na dimensão principal (cx/pct)', () => {
+    expect(calcularProgressoEmbalagemPedido(meta, saldo)).toEqual({
+      dimensao: 'caixas',
+      label: 'cx',
+      meta: 225,
+      produzido: 180,
+      restante: 45,
+      percentual: 80,
+    });
+  });
+
+  it('usa unidades quando meta é só un', () => {
+    expect(
+      calcularProgressoEmbalagemPedido(
+        { caixas: 0, pacotes: 0, unidades: 500, kg: 0 },
+        { caixas: 0, pacotes: 0, unidades: 100, kg: 0 },
+      ),
+    ).toEqual({
+      dimensao: 'unidades',
+      label: 'un',
+      meta: 500,
+      produzido: 400,
+      restante: 100,
+      percentual: 80,
+    });
+  });
+});
+
+describe('contarFotosEmbalagem', () => {
+  const empty: ProducaoData = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+  const files = { pacote: null, etiqueta: null, pallet: null };
+
+  it('conta 3 fotos obrigatórias para cliente normal', () => {
+    expect(
+      contarFotosEmbalagem(
+        { ...empty, pacoteFotoUrl: 'a', etiquetaFotoUrl: 'b' },
+        files,
+        'Cliente X',
+      ),
+    ).toEqual({ preenchidas: 2, total: 3 });
+  });
+
+  it('conta 2 fotos para cliente especial (sem etiqueta)', () => {
+    expect(
+      contarFotosEmbalagem({ ...empty, pacoteFotoUrl: 'a' }, files, 'Da Casa'),
+    ).toEqual({ preenchidas: 1, total: 2 });
+  });
+
+  it('inclui arquivo novo selecionado', () => {
+    expect(
+      contarFotosEmbalagem(empty, { ...files, pallet: {} as File }, 'Cliente X'),
+    ).toEqual({ preenchidas: 1, total: 3 });
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/domain/embalagem/embalagem-lote-modal.test.ts`
+
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implementar helpers**
+
+Criar `src/domain/embalagem/embalagem-lote-modal.ts`:
+
+```typescript
+import { isSpecialPhotoClient } from '@/config/photoRules';
+import type { ProducaoData } from '@/domain/types';
+import type { PhotoFiles } from '@/domain/validators/PhotoValidator';
+
+type Quantidade = {
+  caixas: number;
+  pacotes: number;
+  unidades: number;
+  kg: number;
+};
+
+export type ProgressoEmbalagemPedido = {
+  dimensao: keyof Quantidade;
+  label: string;
+  meta: number;
+  produzido: number;
+  restante: number;
+  percentual: number;
+};
+
+const LABEL: Record<keyof Quantidade, string> = {
+  caixas: 'cx',
+  pacotes: 'pct',
+  unidades: 'un',
+  kg: 'kg',
+};
+
+function dimensaoPrincipal(meta: Quantidade): keyof Quantidade {
+  if (meta.caixas > 0 || meta.pacotes > 0) return 'caixas';
+  if (meta.unidades > 0) return 'unidades';
+  if (meta.kg > 0) return 'kg';
+  return 'caixas';
+}
+
+export function calcularProgressoEmbalagemPedido(
+  meta: Quantidade,
+  saldo: Quantidade,
+): ProgressoEmbalagemPedido {
+  const dim = dimensaoPrincipal(meta);
+  const metaVal = meta[dim] || 0;
+  const restante = saldo[dim] || 0;
+  const produzido = Math.max(0, metaVal - restante);
+  const percentual = metaVal > 0 ? Math.min(100, Math.round((produzido / metaVal) * 100)) : 0;
+  return {
+    dimensao: dim,
+    label: LABEL[dim],
+    meta: metaVal,
+    produzido,
+    restante,
+    percentual,
+  };
+}
+
+type SlotFoto = 'pacote' | 'etiqueta' | 'pallet';
+
+function slotPreenchido(
+  slot: SlotFoto,
+  formData: ProducaoData,
+  photoFiles: PhotoFiles,
+): boolean {
+  if (slot === 'pacote') return Boolean(formData.pacoteFotoUrl || photoFiles.pacote);
+  if (slot === 'etiqueta') return Boolean(formData.etiquetaFotoUrl || photoFiles.etiqueta);
+  return Boolean(formData.palletFotoUrl || photoFiles.pallet);
+}
+
+export function contarFotosEmbalagem(
+  formData: ProducaoData,
+  photoFiles: PhotoFiles,
+  cliente: string,
+): { preenchidas: number; total: number } {
+  const especial = isSpecialPhotoClient(cliente);
+  const slots: SlotFoto[] = especial ? ['pacote', 'pallet'] : ['pacote', 'etiqueta', 'pallet'];
+  const preenchidas = slots.filter((s) => slotPreenchido(s, formData, photoFiles)).length;
+  return { preenchidas, total: slots.length };
+}
+
+export function slotsFotoEmbalagem(cliente: string): SlotFoto[] {
+  return isSpecialPhotoClient(cliente)
+    ? ['pacote', 'pallet']
+    : ['pacote', 'etiqueta', 'pallet'];
+}
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/domain/embalagem/embalagem-lote-modal.test.ts`
+
+Expected: PASS (3 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/embalagem/embalagem-lote-modal.ts src/domain/embalagem/embalagem-lote-modal.test.ts
+git commit -m "feat(embalagem): helpers de progresso e contagem de fotos do modal"
+```
+
+---
+
+### Task 2: `PhotoUploader` variant compact
+
+**Files:**
+- Modify: `src/components/FormControls/PhotoUploader.tsx`
+
+- [ ] **Step 1: Adicionar prop `variant`**
+
+No topo do arquivo, estender interface:
+
+```typescript
+interface PhotoUploaderProps {
+  onPhotoSelect: (file: File) => void;
+  onPhotoRemove: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  currentPhotoUrl?: string;
+  variant?: 'default' | 'compact';
+}
+```
+
+No destructuring: `variant = 'default'`.
+
+- [ ] **Step 2: Aplicar classes condicionais**
+
+Substituir o wrapper da dropzone e preview por:
+
+```typescript
+const isCompact = variant === 'compact';
+const dropzonePadding = isCompact ? 'p-1.5' : 'p-3';
+const previewHeight = isCompact ? 'h-20' : 'h-24';
+const cameraBtnClass = isCompact
+  ? 'w-full flex items-center justify-center gap-1.5 px-2 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium min-h-11'
+  : 'w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium';
+```
+
+Na dropzone: `className={\`border-2 border-dashed rounded-lg ${dropzonePadding} ...\`}`
+
+No preview: `className={\`relative w-full ${previewHeight} flex items-center justify-center\`}`
+
+No empty state compact, ocultar texto longo — só ícone:
+
+```typescript
+) : isCompact ? (
+  <div className="flex flex-col items-center justify-center py-1 gap-0.5">
+    <span className="material-icons text-gray-400 text-xl" aria-hidden>add_a_photo</span>
+    <p className="text-[10px] text-gray-500 leading-tight">Adicionar</p>
+  </div>
+) : (
+  // bloco default existente
+```
+
+Botão Tirar Foto: usar `cameraBtnClass` — **mesmo** `handleOpenCamera`, `capture="environment"`, `processFile`.
+
+- [ ] **Step 3: Verificar build**
+
+Run: `npm run build`
+
+Expected: compila sem erro de tipo
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/FormControls/PhotoUploader.tsx
+git commit -m "feat(ui): PhotoUploader variant compact para grid de fotos"
+```
+
+---
+
+### Task 3: `PhotoManager` inline (sem window.confirm)
+
+**Files:**
+- Modify: `src/components/PhotoManager.tsx`
+
+- [ ] **Step 1: Adicionar props `variant` e `onRemoveRequest`**
+
+```typescript
+interface PhotoManagerProps {
+  photoUrl?: string;
+  photoId?: string;
+  onPhotoRemove: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  showRemoveButton?: boolean;
+  className?: string;
+  variant?: 'default' | 'inline';
+  onRemoveRequest?: () => void;
+}
+```
+
+- [ ] **Step 2: Alterar `handleRemove`**
+
+```typescript
+const handleRemove = async (e: React.MouseEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (disabled || loading || isRemoving) return;
+
+  if (onRemoveRequest) {
+    onRemoveRequest();
+    return;
+  }
+
+  if (window.confirm('Tem certeza que deseja remover esta foto?')) {
+    setIsRemoving(true);
+    try {
+      await onPhotoRemove();
+    } finally {
+      setIsRemoving(false);
+    }
+  }
+};
+```
+
+- [ ] **Step 3: Estilo inline**
+
+Quando `variant === 'inline'`, renderizar thumbnail `h-20 w-full object-cover rounded-md` com botões overlay pequenos (ver / remover) em vez do layout default expandido.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/PhotoManager.tsx
+git commit -m "feat(ui): PhotoManager inline para tiles compactos"
+```
+
+---
+
+### Task 4: Componentes de confirmação (discard + fotos)
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemDiscardSheet.tsx`
+- Create: `src/components/EmbalagemLoteModal/EmbalagemPhotoWarningBanner.tsx`
+
+- [ ] **Step 1: EmbalagemDiscardSheet**
+
+```tsx
+'use client';
+
+type Props = {
+  open: boolean;
+  onDiscard: () => void;
+  onContinue: () => void;
+};
+
+export default function EmbalagemDiscardSheet({ open, onDiscard, onContinue }: Props) {
+  if (!open) return null;
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-end sm:items-center justify-center bg-black/30 p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="discard-title"
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5">
+        <h3 id="discard-title" className="text-lg font-semibold text-gray-900 mb-2">
+          Descartar alterações?
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          O que foi preenchido neste lote será perdido.
+        </p>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+          <button
+            type="button"
+            onClick={onContinue}
+            className="min-h-11 px-4 py-2 rounded-md bg-gray-100 text-gray-800 font-medium hover:bg-gray-200"
+          >
+            Continuar editando
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="min-h-11 px-4 py-2 rounded-md bg-red-600 text-white font-medium hover:bg-red-700"
+          >
+            Descartar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: EmbalagemPhotoWarningBanner**
+
+```tsx
+'use client';
+
+type Props = {
+  message: string;
+  onContinue: () => void;
+  onBack: () => void;
+};
+
+export default function EmbalagemPhotoWarningBanner({ message, onContinue, onBack }: Props) {
+  return (
+    <div
+      className="mx-4 mb-2 p-3 rounded-lg border border-amber-300 bg-amber-50"
+      role="alert"
+    >
+      <p className="text-sm text-amber-900 whitespace-pre-line mb-3">{message}</p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="min-h-11 px-3 py-2 text-sm font-medium rounded-md bg-white border border-amber-300 text-amber-900"
+        >
+          Voltar e adicionar fotos
+        </button>
+        <button
+          type="button"
+          onClick={onContinue}
+          className="min-h-11 px-3 py-2 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700"
+        >
+          Continuar sem fotos
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/EmbalagemDiscardSheet.tsx src/components/EmbalagemLoteModal/EmbalagemPhotoWarningBanner.tsx
+git commit -m "feat(embalagem): sheets de descarte e aviso de fotos"
+```
+
+---
+
+### Task 5: Header com progresso
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemLoteModalHeader.tsx`
+
+- [ ] **Step 1: Implementar componente**
+
+```tsx
+'use client';
+
+import { calcularProgressoEmbalagemPedido } from '@/domain/embalagem/embalagem-lote-modal';
+
+type Props = {
+  title: string;
+  produto: string;
+  cliente: string;
+  congelado: 'Sim' | 'Não';
+  pedidoMetaOriginal?: { caixas: number; pacotes: number; unidades: number; kg: number };
+  pedidoQuantidades?: { caixas: number; pacotes: number; unidades: number; kg: number };
+  onClose: () => void;
+  closeDisabled?: boolean;
+};
+
+export default function EmbalagemLoteModalHeader({
+  title,
+  produto,
+  cliente,
+  congelado,
+  pedidoMetaOriginal,
+  pedidoQuantidades,
+  onClose,
+  closeDisabled,
+}: Props) {
+  const progresso =
+    pedidoMetaOriginal && pedidoQuantidades
+      ? calcularProgressoEmbalagemPedido(pedidoMetaOriginal, pedidoQuantidades)
+      : null;
+
+  return (
+    <div className="px-4 pt-3 pb-4 border-b border-gray-100">
+      <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-3 sm:hidden" aria-hidden />
+      <div className="flex justify-between items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 id="producao-modal-title" className="text-lg font-bold text-gray-900">
+            {title}
+          </h2>
+          <p className="text-sm text-gray-700 truncate mt-0.5">{produto}</p>
+          <p className="text-xs text-gray-500 mt-1 truncate">
+            {cliente}
+            {congelado === 'Sim' ? ' · Congelado' : ''}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={closeDisabled}
+          className="inline-flex items-center justify-center min-h-11 min-w-11 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500"
+          aria-label="Fechar"
+        >
+          <span className="material-icons text-2xl" aria-hidden>close</span>
+        </button>
+      </div>
+      {progresso && progresso.meta > 0 && (
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>
+              {progresso.produzido} / {progresso.meta} {progresso.label}
+            </span>
+            <span>{progresso.percentual}%</span>
+          </div>
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-600 rounded-full transition-[width] motion-reduce:transition-none"
+              style={{ width: `${progresso.percentual}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Restante: {progresso.restante} {progresso.label}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/EmbalagemLoteModalHeader.tsx
+git commit -m "feat(embalagem): header do modal com barra de progresso"
+```
+
+---
+
+### Task 6: Seção de quantidade + observação
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemQuantidadeSection.tsx`
+- Create: `src/components/EmbalagemLoteModal/EmbalagemObservacaoField.tsx`
+
+- [ ] **Step 1: EmbalagemQuantidadeSection**
+
+Props: `camposVisiveis`, `formData`, `setFormData`, `pedidoQuantidades`, `loading`, `qtyError?: string`.
+
+Grid: `grid-cols-1` se exatamente 1 campo visível, senão `grid-cols-2`.
+
+Botão Preencher restante:
+
+```typescript
+const handlePreencherRestante = () => {
+  if (!pedidoQuantidades) return;
+  setFormData((prev) => ({
+    ...prev,
+    caixas: camposVisiveis.caixas ? pedidoQuantidades.caixas : prev.caixas,
+    pacotes: camposVisiveis.pacotes ? pedidoQuantidades.pacotes : prev.pacotes,
+    unidades: camposVisiveis.unidades ? pedidoQuantidades.unidades : prev.unidades,
+    kg: camposVisiveis.kg ? pedidoQuantidades.kg : prev.kg,
+  }));
+};
+```
+
+Renderizar `NumberInput` condicionalmente (mesma lógica atual do ProducaoModal).
+
+- [ ] **Step 2: EmbalagemObservacaoField**
+
+Textarea `rows={2}`, label `Observação (opcional)`, mesmas classes de foco do modal atual.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/EmbalagemQuantidadeSection.tsx src/components/EmbalagemLoteModal/EmbalagemObservacaoField.tsx
+git commit -m "feat(embalagem): seções de quantidade e observação do modal"
+```
+
+---
+
+### Task 7: Grid de fotos
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemFotosGrid.tsx`
+
+- [ ] **Step 1: Implementar grid**
+
+Props principais:
+- `cliente`, `formData`, `photoFiles`, `photoLoading`, `loading`
+- `onPhotoSelect`, `onPhotoRemove`, `onPhotoManagerRemove`
+- `removeConfirmSlot: SlotFoto | null`, `setRemoveConfirmSlot`
+
+Usar `slotsFotoEmbalagem(cliente)` e `contarFotosEmbalagem` para título `Fotos · n/total`.
+
+Por slot:
+- Label: Pacote / Etiqueta / Pallet
+- Se `formData.*FotoUrl`: `PhotoManager variant="inline"` + `onRemoveRequest={() => setRemoveConfirmSlot(slot)}`
+- Senão: `PhotoUploader variant="compact"` com handlers existentes
+
+Grid: `grid grid-cols-2 gap-2` se 2 slots, senão `grid-cols-3`.
+
+Mini sheet de remover foto (dentro do grid ou no shell): quando `removeConfirmSlot` setado, confirmar antes de chamar `onPhotoManagerRemove`.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/EmbalagemFotosGrid.tsx
+git commit -m "feat(embalagem): grid compacto de fotos com Tirar Foto"
+```
+
+---
+
+### Task 8: Rodapé sticky
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemLoteModalFooter.tsx`
+
+- [ ] **Step 1: Implementar footer**
+
+Props:
+- `isNewLote`, `showPartial`, `isSubmitting`, `photoLoading`, `loading`
+- `onCancel`, `onPartial`, `onSubmit`
+
+Lógica de labels:
+- Primário: `isNewLote ? 'Criar lote' : 'Salvar'`
+- Loading: `isNewLote ? 'Criando lote…' : 'Salvando…'`; se `photoLoading` → `'Enviando fotos…'`
+- **Não renderizar** botão Salvar Parcial se `isNewLote`
+
+Layout mobile: `flex flex-col-reverse sm:flex-row gap-2 sm:justify-end` com `min-h-11` em todos.
+
+Classes: `sticky bottom-0 bg-white border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/EmbalagemLoteModalFooter.tsx
+git commit -m "feat(embalagem): rodapé sticky com CTAs corretos"
+```
+
+---
+
+### Task 9: Shell + index
+
+**Files:**
+- Create: `src/components/EmbalagemLoteModal/EmbalagemLoteModalShell.tsx`
+- Create: `src/components/EmbalagemLoteModal/index.ts`
+
+- [ ] **Step 1: Definir props do shell**
+
+O shell recebe do `ProducaoModal` tudo necessário para render + callbacks de ação (sem duplicar lógica de API):
+
+```typescript
+export type EmbalagemLoteModalShellProps = {
+  isNewLote: boolean;
+  produto: string;
+  cliente: string;
+  congelado: 'Sim' | 'Não';
+  pedidoMetaOriginal?: ProducaoModalProps['pedidoMetaOriginal'];
+  pedidoQuantidades?: ProducaoModalProps['pedidoQuantidades'];
+  formData: ProducaoData;
+  setFormData: React.Dispatch<React.SetStateAction<ProducaoData>>;
+  camposVisiveis: CamposRealizadoEmbalagem;
+  photoFiles: PhotoFiles;
+  photoLoading: boolean;
+  loading: boolean;
+  isSubmitting: boolean;
+  message: { type: 'success' | 'error'; text: string } | null;
+  showPhotoWarning: boolean;
+  photoWarningMessage: string;
+  showDiscardSheet: boolean;
+  removeConfirmSlot: 'pacote' | 'etiqueta' | 'pallet' | null;
+  setRemoveConfirmSlot: (s: 'pacote' | 'etiqueta' | 'pallet' | null) => void;
+  showPartial: boolean;
+  onRequestClose: () => void;
+  onDiscardConfirm: () => void;
+  onDiscardCancel: () => void;
+  onPhotoWarningContinue: () => void;
+  onPhotoWarningBack: () => void;
+  onPhotoSelect: (file: File, type: 'pacote' | 'etiqueta' | 'pallet') => void;
+  onPhotoRemove: (type: 'pacote' | 'etiqueta' | 'pallet') => void;
+  onPhotoManagerRemove: (type: 'pacote' | 'etiqueta' | 'pallet') => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onPartial: (e: React.FormEvent) => void;
+};
+```
+
+- [ ] **Step 2: Compor layout**
+
+Estrutura:
+
+```tsx
+<div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full max-h-[92dvh] flex flex-col">
+  <EmbalagemLoteModalHeader ... />
+  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+    {message && /* banner erro/sucesso */}
+    <EmbalagemQuantidadeSection ... />
+    <EmbalagemObservacaoField ... />
+    <EmbalagemFotosGrid ... />
+  </div>
+  {showPhotoWarning && <EmbalagemPhotoWarningBanner ... />}
+  <EmbalagemLoteModalFooter ... />
+  <EmbalagemDiscardSheet ... />
+  {/* mini confirm remover foto se removeConfirmSlot */}
+</div>
+```
+
+- [ ] **Step 3: index.ts**
+
+```typescript
+export { default as EmbalagemLoteModalShell } from './EmbalagemLoteModalShell';
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/EmbalagemLoteModal/
+git commit -m "feat(embalagem): shell unificado do modal de lote"
+```
+
+---
+
+### Task 10: Integrar no `ProducaoModal`
+
+**Files:**
+- Modify: `src/components/ProducaoModal.tsx`
+
+- [ ] **Step 1: Novo state para sheets**
+
+```typescript
+const [showDiscardSheet, setShowDiscardSheet] = useState(false);
+const [showPhotoWarning, setShowPhotoWarning] = useState(false);
+const [photoWarningMessage, setPhotoWarningMessage] = useState('');
+const [removeConfirmSlot, setRemoveConfirmSlot] = useState<'pacote' | 'etiqueta' | 'pallet' | null>(null);
+```
+
+- [ ] **Step 2: Substituir `requestClose`**
+
+```typescript
+const requestClose = useCallback(() => {
+  if (isSubmitting || photoLoading || loading) return;
+  if (hasDraftChanges()) {
+    setShowDiscardSheet(true);
+    return;
+  }
+  resetAndClose();
+}, [hasDraftChanges, isSubmitting, photoLoading, loading]);
+```
+
+`resetAndClose` deve também limpar `showDiscardSheet`, `showPhotoWarning`, `removeConfirmSlot`.
+
+- [ ] **Step 3: Substituir modal de fotos aninhado**
+
+Em `handleSubmit` / `handleSavePartial`, quando validação de fotos falhar:
+
+```typescript
+setPhotoWarningMessage(validationResult.errorMessage);
+setShowPhotoWarning(true);
+setPendingAction('submit'); // ou 'partial'
+return;
+```
+
+Remover JSX do `showConfirmModal` antigo (z-60). `handleConfirmAction` vira handlers do banner:
+
+```typescript
+const handlePhotoWarningContinue = async () => {
+  setShowPhotoWarning(false);
+  if (pendingAction === 'submit') await executeSubmit();
+  else if (pendingAction === 'partial') await executeSavePartial();
+  setPendingAction(null);
+};
+```
+
+- [ ] **Step 4: Branch de render**
+
+Após `if (!isOpen) return null;`:
+
+```typescript
+const embalagemShell = mode === 'embalagem';
+
+return (
+  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4" ...>
+    <button type="button" className="absolute inset-0 ..." onClick={requestClose} ... />
+    {embalagemShell ? (
+      <EmbalagemLoteModalShell
+        isNewLote={isNewLote}
+        title={isNewLote ? 'Novo lote' : 'Editar lote'}
+        showPartial={!isNewLote && isPartialProduction()}
+        ...
+      />
+    ) : (
+      /* JSX legado existente para forno/fermentacao/resfriamento — copiar bloco atual sem alterações */
+    )}
+  </div>
+);
+```
+
+- [ ] **Step 5: Garantir Salvar Parcial oculto em novo lote**
+
+Já coberto por `showPartial={!isNewLote && isPartialProduction()}` no footer.
+
+- [ ] **Step 6: Rodar build e testes**
+
+Run: `npm test -- src/domain/embalagem/embalagem-lote-modal.test.ts`
+Run: `npm run build`
+
+Expected: PASS + build OK
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/components/ProducaoModal.tsx
+git commit -m "feat(embalagem): integra layout unificado no ProducaoModal"
+```
+
+---
+
+### Task 11: Atualizar spec + checklist manual
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-06-05-embalagem-lote-modal-design.mdx`
+
+- [ ] **Step 1: Status da spec**
+
+Alterar `Status: Aguardando revisão` → `Status: Aprovado pelo stakeholder`
+
+- [ ] **Step 2: Teste manual em `/realizado/embalagem`**
+
+| Cenário | Esperado |
+|---------|----------|
+| Novo lote (+) em mobile | Sheet bottom, progresso, grid 3 fotos, Tirar Foto funciona, CTA "Criar lote", sem Salvar Parcial |
+| Editar lote | Mesmo layout, valores preenchidos, thumbs nas fotos, CTA "Salvar", Parcial se qty < saldo |
+| Cliente Da Casa | Grid 2 colunas (sem etiqueta), contador 2 fotos |
+| Preencher restante | Preenche saldo nos campos visíveis |
+| Fechar com rascunho | Sheet descarte (não alert nativo) |
+| Salvar sem fotos | Banner amarelo inline |
+| Modo forno (outra tela) | Layout antigo inalterado |
+
+- [ ] **Step 3: Commit docs**
+
+```bash
+git add docs/superpowers/specs/2026-06-05-embalagem-lote-modal-design.mdx
+git commit -m "docs: marca spec do modal de lote embalagem como aprovada"
+```
+
+---
+
+## Self-review (cobertura da spec)
+
+| Requisito spec | Task |
+|----------------|------|
+| Layout único criar/editar | Task 9–10 |
+| Fotos visíveis compactas | Task 2, 7 |
+| Tirar Foto comportamento atual | Task 2 (variant compact preserva camera) |
+| Salvar Parcial só edição | Task 8, 10 |
+| CTA Criar lote / Salvar | Task 8 |
+| Preencher restante | Task 6 |
+| Progresso meta/produzido | Task 1, 5 |
+| Sem window.confirm descarte | Task 4, 10 |
+| Banner fotos faltantes | Task 4, 10 |
+| Material Icons, sem emoji | Task 5, 7 |
+| Modos forno/etc inalterados | Task 10 branch |
+| page.tsx sem mudança de contrato | Nenhuma task na page |

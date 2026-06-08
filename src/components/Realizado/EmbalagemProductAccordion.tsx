@@ -18,6 +18,9 @@ export interface EmbalagemProductAccordionProps {
   renderLots: () => ReactNode;
   /** Farol do card pai (ex.: só vermelho/amarelo na fila não finalizada). */
   productionStatusOverride?: ProductionStatus;
+  onNovoLote?: () => void;
+  /** Quando true, exibe spinner no botão + deste card. */
+  isNovoLoteLoading?: boolean;
 }
 
 function sanitizeForHtmlId(value: string): string {
@@ -36,6 +39,8 @@ export default function EmbalagemProductAccordion({
   horarioEmbalagem,
   renderLots,
   productionStatusOverride,
+  onNovoLote,
+  isNovoLoteLoading = false,
 }: EmbalagemProductAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const reactId = useId();
@@ -46,27 +51,63 @@ export default function EmbalagemProductAccordion({
     ? `Recolher lotes de ${produto}`
     : `Expandir lotes de ${produto}`;
 
-  const expandButton = (
-    <button
-      type="button"
-      className="
-        inline-flex items-center justify-center
-        min-h-11 min-w-11 shrink-0 rounded-md text-gray-300
-        hover:bg-gray-700/50
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
-      "
-      aria-expanded={expanded}
-      aria-controls={panelId}
-      aria-label={ariaLabel}
-      onClick={(e) => {
-        e.stopPropagation();
-        setExpanded((v) => !v);
-      }}
-    >
-      <span className="material-icons text-2xl motion-reduce:transition-none" aria-hidden>
-        {expanded ? 'expand_more' : 'chevron_right'}
-      </span>
-    </button>
+  const trailingActions = (
+    <div className="flex items-center shrink-0">
+      {onNovoLote ? (
+        <button
+          type="button"
+          className="
+            inline-flex items-center justify-center
+            min-h-11 min-w-11 rounded-md text-amber-400
+            hover:bg-gray-700/50
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
+            disabled:opacity-60 disabled:cursor-wait
+          "
+          aria-label={
+            isNovoLoteLoading
+              ? `Abrindo novo lote de ${produto}…`
+              : `Novo lote de ${produto}`
+          }
+          aria-busy={isNovoLoteLoading}
+          disabled={isNovoLoteLoading}
+          onClick={(e) => {
+            e.stopPropagation();
+            onNovoLote();
+          }}
+        >
+          {isNovoLoteLoading ? (
+            <span
+              className="inline-block h-5 w-5 rounded-full border-2 border-amber-400/30 border-t-amber-400 animate-spin motion-reduce:animate-none"
+              aria-hidden
+            />
+          ) : (
+            <span className="material-icons text-2xl" aria-hidden>
+              add
+            </span>
+          )}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="
+          inline-flex items-center justify-center
+          min-h-11 min-w-11 shrink-0 rounded-md text-gray-300
+          hover:bg-gray-700/50
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
+        "
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        aria-label={ariaLabel}
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded((v) => !v);
+        }}
+      >
+        <span className="material-icons text-2xl motion-reduce:transition-none" aria-hidden>
+          {expanded ? 'expand_more' : 'chevron_right'}
+        </span>
+      </button>
+    </div>
   );
 
   return (
@@ -82,7 +123,7 @@ export default function EmbalagemProductAccordion({
         detalhesProduzido={detalhesProduzido}
         detalhesMeta={detalhesMeta}
         horarioEmbalagem={horarioEmbalagem}
-        trailingSlot={expandButton}
+        trailingSlot={trailingActions}
         productionStatusOverride={productionStatusOverride}
       />
       <div

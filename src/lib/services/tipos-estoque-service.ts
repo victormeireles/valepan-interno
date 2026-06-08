@@ -78,6 +78,18 @@ export class TiposEstoqueService {
     return this.mapRecord(data);
   }
 
+  public async findByIds(ids: string[]): Promise<TipoEstoqueDTO[]> {
+    if (ids.length === 0) return [];
+    const client = this.resolveClient();
+    const { data, error } = await client
+      .from('tipos_estoque')
+      .select('id, nome, ativo, possui_etiqueta')
+      .eq('ativo', true)
+      .in('id', ids);
+    if (error) throw new Error(`Erro ao buscar tipos de estoque: ${error.message}`);
+    return (data ?? []).map((record) => this.mapRecord(record));
+  }
+
   private resolveClient(): SupabaseClient<Database> {
     return this.factory.createServiceRoleClient();
   }

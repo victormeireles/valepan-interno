@@ -1,0 +1,891 @@
+# Realizado Embalagem — Performance — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Reduzir carga de `/realizado/embalagem` de ~23 requests para 1 na abertura/troca de data, e 1 request leve no polling, mantendo paridade visual e métricas do dashboard.
+
+**Architecture:** Novo `GET /api/painel/embalagem/carga` monta pedidos completos + snapshots leves de comparação numa única invocação com queries batch no Supabase. `getPainelForDate` é otimizado (batch IDs, `possuiEtiqueta` do tipo). Frontend cacheia comparações e polling chama só `/painel`.
+
+**Tech Stack:** Next.js 15 App Router, Supabase JS, Vitest, React 19 client components.
+
+**Spec:** `docs/superpowers/specs/2026-06-05-realizado-embalagem-performance-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/types/painel-embalagem.ts` | Tipos `DashboardSnapshot`, `CargaEmbalagemResponse` |
+| `src/domain/embalagem/painel-dashboard-adapter.ts` | `pedidosToDashboardSnapshots` + refator de `pedidosToDashboardItems` |
+| `src/domain/embalagem/painel-dashboard-adapter.test.ts` | Testes snapshots |
+| `src/lib/services/tipos-estoque-service.ts` | `findByIds` |
+| `src/lib/services/products/supabase-product-service.ts` | `findByIds` |
+| `src/data/embalagem/PedidoEmbalagemRepository.ts` | Queries de data + `listByDatasProducao` |
+| `src/data/embalagem/PedidoEmbalagemRepository.test.ts` | Testes puros de helpers de data (se necessário) |
+| `src/lib/services/painel-embalagem-service.ts` | Batch maps, `getCargaCompleta`, remover `clientePossuiEtiqueta` |
+| `src/lib/services/painel-embalagem-service.test.ts` | Testes serviço + snapshots |
+| `src/app/api/painel/embalagem/carga/route.ts` | Novo endpoint |
+| `src/app/realizado/embalagem/page.tsx` | Carga unificada + cache + polling leve |
+
+---
+
+### Task 1: Tipos de resposta da carga
+
+**Files:**
+- Modify: `src/domain/types/painel-embalagem.ts`
+
+- [ ] **Step 1: Adicionar tipos ao final do arquivo**
+
+```typescript
+export type DashboardSnapshot = {
+  caixas: number;
+  pacotes: number;
+  pedidoCaixas: number;
+  pedidoPacotes: number;
+  producaoUpdatedAt?: string;
+};
+
+export type CargaEmbalagemResponse = {
+  date: string;
+  ultimaDataComDados: string | null;
+  pedidos: PainelPedidoEmbalagem[];
+  comparacaoSemana: {
+    date: string;
+    items: DashboardSnapshot[];
+  };
+  comparacaoAnterior: {
+    date: string | null;
+    items: DashboardSnapshot[];
+  };
+};
+```
+
+- [ ] **Step 2: Verificar TypeScript**
+
+Run: `pnpm exec tsc --noEmit`
+Expected: sem erros novos
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/domain/types/painel-embalagem.ts
+git commit -m "feat(embalagem): tipos CargaEmbalagemResponse e DashboardSnapshot"
+```
+
+---
+
+### Task 2: Snapshots do dashboard (domínio)
+
+**Files:**
+- Modify: `src/domain/embalagem/painel-dashboard-adapter.ts`
+- Create: `src/domain/embalagem/painel-dashboard-adapter.test.ts`
+
+- [ ] **Step 1: Escrever teste falhando**
+
+Create `src/domain/embalagem/painel-dashboard-adapter.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import {
+  pedidosToDashboardItems,
+  pedidosToDashboardSnapshots,
+} from '@/domain/embalagem/painel-dashboard-adapter';
+import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
+
+const pedido: PainelPedidoEmbalagem = {
+  pedidoEmbalagemId: 'p1',
+  cliente: 'HB',
+  produto: 'Brioche',
+  observacao: '',
+  dataPedido: '2026-06-05',
+  dataFabricacao: '2026-06-06',
+  pedido: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
+  produzido: { caixas: 50, pacotes: 0, unidades: 0, kg: 0 },
+  unidade: 'cx',
+  aProduzir: 100,
+  produzidoScalar: 50,
+  possuiEtiqueta: true,
+  lotes: [
+    {
+      loteId: 'l1',
+      planilhaRowId: 1,
+      modo: 'parcial',
+      quantidade: { caixas: 50, pacotes: 0, unidades: 0, kg: 0 },
+      produzidoEm: '2026-06-05T15:56:00Z',
+      congelado: 'Não',
+    },
+  ],
+  producaoUpdatedAt: '2026-06-05T15:56:00Z',
+};
+
+describe('pedidosToDashboardSnapshots', () => {
+  it('emite meta do pedido e caixas por lote sem URLs de foto', () => {
+    const snapshots = pedidosToDashboardSnapshots([pedido]);
+
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toEqual({
+      caixas: 0,
+      pacotes: 0,
+      pedidoCaixas: 100,
+      pedidoPacotes: 0,
+      producaoUpdatedAt: '2026-06-05T15:56:00Z',
+    });
+    expect(snapshots[1]).toEqual({
+      caixas: 50,
+      pacotes: 0,
+      pedidoCaixas: 0,
+      pedidoPacotes: 0,
+      producaoUpdatedAt: '2026-06-05T15:56:00Z',
+    });
+    expect(snapshots[1]).not.toHaveProperty('pacoteFotoUrl');
+  });
+});
+
+describe('pedidosToDashboardItems', () => {
+  it('continua incluindo cliente/produto para UI', () => {
+    const items = pedidosToDashboardItems([pedido]);
+    expect(items[0].cliente).toBe('HB');
+    expect(items[1].caixas).toBe(50);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste — deve falhar**
+
+Run: `pnpm exec vitest run src/domain/embalagem/painel-dashboard-adapter.test.ts`
+Expected: FAIL — `pedidosToDashboardSnapshots` not exported
+
+- [ ] **Step 3: Implementar snapshots e refatorar items**
+
+Replace `src/domain/embalagem/painel-dashboard-adapter.ts` contents:
+
+```typescript
+import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
+import type {
+  DashboardSnapshot,
+  PainelPedidoEmbalagem,
+} from '@/domain/types/painel-embalagem';
+import { derivarUnidadePrincipal } from '@/domain/embalagem/painel-quantidade';
+
+/** Payload mínimo para comparações do dashboard (sem fotos). */
+export function pedidosToDashboardSnapshots(
+  pedidos: PainelPedidoEmbalagem[],
+): DashboardSnapshot[] {
+  const items: DashboardSnapshot[] = [];
+
+  for (const p of pedidos) {
+    items.push({
+      caixas: 0,
+      pacotes: 0,
+      pedidoCaixas: p.pedido.caixas,
+      pedidoPacotes: p.pedido.pacotes,
+      producaoUpdatedAt: p.producaoUpdatedAt,
+    });
+
+    for (const l of p.lotes) {
+      items.push({
+        caixas: l.quantidade.caixas,
+        pacotes: l.quantidade.pacotes,
+        pedidoCaixas: 0,
+        pedidoPacotes: 0,
+        producaoUpdatedAt: l.produzidoEm,
+      });
+    }
+  }
+
+  return items;
+}
+
+/** Adapta pedidos canônicos para o EmbalagemDashboard (meta por pedido, hourly por lote). */
+export function pedidosToDashboardItems(
+  pedidos: PainelPedidoEmbalagem[],
+): EmbalagemDashboardItem[] {
+  const items: EmbalagemDashboardItem[] = [];
+
+  for (const p of pedidos) {
+    items.push({
+      cliente: p.cliente,
+      produto: p.produto,
+      produzido: p.produzidoScalar,
+      aProduzir: p.aProduzir,
+      caixas: 0,
+      pacotes: 0,
+      pedidoCaixas: p.pedido.caixas,
+      pedidoPacotes: p.pedido.pacotes,
+      producaoUpdatedAt: p.producaoUpdatedAt,
+    });
+
+    for (const l of p.lotes) {
+      const { unidade, valor } = derivarUnidadePrincipal(l.quantidade);
+      items.push({
+        cliente: p.cliente,
+        produto: p.produto,
+        produzido: valor,
+        aProduzir: valor,
+        caixas: l.quantidade.caixas,
+        pacotes: l.quantidade.pacotes,
+        pedidoCaixas: 0,
+        pedidoPacotes: 0,
+        producaoUpdatedAt: l.produzidoEm,
+        pacoteFotoUrl: l.pacoteFotoUrl,
+        etiquetaFotoUrl: l.etiquetaFotoUrl,
+        palletFotoUrl: l.palletFotoUrl,
+      });
+      void unidade;
+    }
+  }
+
+  return items;
+}
+
+/** Converte snapshots da API em items do dashboard (colunas de comparação). */
+export function snapshotsToDashboardItems(
+  snapshots: DashboardSnapshot[],
+): EmbalagemDashboardItem[] {
+  return snapshots.map((s) => ({
+    cliente: '',
+    produto: '',
+    produzido: s.caixas,
+    aProduzir: s.pedidoCaixas,
+    caixas: s.caixas,
+    pacotes: s.pacotes,
+    pedidoCaixas: s.pedidoCaixas,
+    pedidoPacotes: s.pedidoPacotes,
+    producaoUpdatedAt: s.producaoUpdatedAt,
+  }));
+}
+```
+
+- [ ] **Step 4: Rodar testes**
+
+Run: `pnpm exec vitest run src/domain/embalagem/painel-dashboard-adapter.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/embalagem/painel-dashboard-adapter.ts src/domain/embalagem/painel-dashboard-adapter.test.ts
+git commit -m "feat(embalagem): snapshots leves para dashboard de comparação"
+```
+
+---
+
+### Task 3: Batch `findByIds` em tipos e produtos
+
+**Files:**
+- Modify: `src/lib/services/tipos-estoque-service.ts`
+- Modify: `src/lib/services/products/supabase-product-service.ts`
+
+- [ ] **Step 1: Adicionar `findByIds` em TiposEstoqueService**
+
+Após `findById`, adicionar:
+
+```typescript
+public async findByIds(ids: string[]): Promise<TipoEstoqueDTO[]> {
+  if (ids.length === 0) return [];
+
+  const client = this.resolveClient();
+  const { data, error } = await client
+    .from('tipos_estoque')
+    .select('id, nome, ativo, possui_etiqueta')
+    .eq('ativo', true)
+    .in('id', ids);
+
+  if (error) {
+    throw new Error(`Erro ao buscar tipos de estoque: ${error.message}`);
+  }
+
+  return (data ?? []).map((record) => this.mapRecord(record));
+}
+```
+
+- [ ] **Step 2: Adicionar `findByIds` em SupabaseProductService**
+
+Após `findById`, adicionar:
+
+```typescript
+public async findByIds(ids: string[]): Promise<ProductDTO[]> {
+  if (ids.length === 0) return [];
+
+  const client = this.resolveClient();
+  const { data, error } = await client
+    .from('produtos')
+    .select(
+      'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+    )
+    .eq('ativo', true)
+    .in('id', ids);
+
+  if (error) {
+    throw new Error(`Erro ao buscar produtos: ${error.message}`);
+  }
+
+  return (data ?? []).map((record) => this.mapRecord(record));
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/lib/services/tipos-estoque-service.ts src/lib/services/products/supabase-product-service.ts
+git commit -m "feat: batch findByIds para tipos estoque e produtos"
+```
+
+---
+
+### Task 4: Queries de data no repositório
+
+**Files:**
+- Modify: `src/data/embalagem/PedidoEmbalagemRepository.ts`
+
+- [ ] **Step 1: Importar util de data**
+
+No topo do arquivo:
+
+```typescript
+import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+```
+
+- [ ] **Step 2: Adicionar métodos antes do fechamento da classe**
+
+```typescript
+async findUltimaDataComPedidos(
+  lookbackDays: number,
+  anchorDate?: string,
+): Promise<string | null> {
+  const anchor = anchorDate ?? getTodayISOInBrazilTimezone();
+  const fromDate = addCalendarDaysISO(anchor, -(lookbackDays - 1));
+
+  const { data, error } = await this.supabase
+    .from('pedidos_embalagem')
+    .select('data_producao')
+    .gte('data_producao', fromDate)
+    .lte('data_producao', anchor)
+    .order('data_producao', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar última data com pedidos: ${error.message}`);
+  }
+
+  return data?.data_producao ?? null;
+}
+
+async findDataAnteriorComPedidos(
+  beforeDate: string,
+  maxLookbackDays: number,
+): Promise<string | null> {
+  const fromDate = addCalendarDaysISO(beforeDate, -maxLookbackDays);
+
+  const { data, error } = await this.supabase
+    .from('pedidos_embalagem')
+    .select('data_producao')
+    .gte('data_producao', fromDate)
+    .lt('data_producao', beforeDate)
+    .order('data_producao', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar data anterior com pedidos: ${error.message}`);
+  }
+
+  return data?.data_producao ?? null;
+}
+
+async listByDatasProducao(dates: string[]): Promise<Map<string, PedidoEmbalagemRecord[]>> {
+  const map = new Map<string, PedidoEmbalagemRecord[]>();
+  const unique = [...new Set(dates.filter(Boolean))];
+  if (unique.length === 0) return map;
+
+  const { data, error } = await this.supabase
+    .from('pedidos_embalagem')
+    .select()
+    .in('data_producao', unique);
+
+  if (error) {
+    throw new Error(`Erro ao listar pedidos por datas: ${error.message}`);
+  }
+
+  for (const row of data ?? []) {
+    const record = fromDbRow(row);
+    const list = map.get(record.dataProducao) ?? [];
+    list.push(record);
+    map.set(record.dataProducao, list);
+  }
+
+  return map;
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/data/embalagem/PedidoEmbalagemRepository.ts
+git commit -m "feat(embalagem): queries batch de datas no PedidoEmbalagemRepository"
+```
+
+---
+
+### Task 5: Otimizar `getPainelForDate`
+
+**Files:**
+- Modify: `src/lib/services/painel-embalagem-service.ts`
+
+- [ ] **Step 1: Refatorar `buildNameMaps` para batch**
+
+Substituir método privado:
+
+```typescript
+private async buildNameMaps(pedidos: PedidoEmbalagemRecord[]) {
+  const tipoIds = [...new Set(pedidos.map((p) => p.tipoEstoqueId))];
+  const produtoIds = [...new Set(pedidos.map((p) => p.produtoId))];
+
+  const [tipos, produtos] = await Promise.all([
+    tiposEstoqueService.findByIds(tipoIds),
+    this.productService.findByIds(produtoIds),
+  ]);
+
+  const tipoById = new Map(tipos.map((t) => [t.id, t]));
+  const produtoNomeById = new Map(produtos.map((p) => [p.id, p.nome]));
+
+  return { tipoById, produtoNomeById };
+}
+```
+
+- [ ] **Step 2: Refatorar loop em `getPainelForDate`**
+
+Remover import de `estoqueService`. No loop:
+
+```typescript
+const [lotesByPedido, { tipoById, produtoNomeById }] = await Promise.all([
+  embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
+  this.buildNameMaps(pedidos),
+]);
+
+const result: PainelPedidoEmbalagem[] = [];
+
+for (const pedido of pedidos) {
+  const tipo = tipoById.get(pedido.tipoEstoqueId);
+  const cliente = tipo?.nome ?? 'Desconhecido';
+  const produto = produtoNomeById.get(pedido.produtoId) ?? 'Desconhecido';
+  const lotes = lotesByPedido.get(pedido.id) ?? [];
+  const possuiEtiqueta = tipo?.possuiEtiqueta ?? false;
+
+  result.push(buildPainelPedido(pedido, cliente, produto, lotes, possuiEtiqueta));
+}
+```
+
+- [ ] **Step 3: Extrair helper privado `buildPedidosPainel`**
+
+Para reutilizar em `getCargaCompleta`, extrair:
+
+```typescript
+private buildPedidosPainel(
+  pedidos: PedidoEmbalagemRecord[],
+  lotesByPedido: Map<string, EmbalagemLoteRecord[]>,
+  tipoById: Map<string, TipoEstoqueDTO>,
+  produtoNomeById: Map<string, string>,
+): PainelPedidoEmbalagem[] {
+  const result: PainelPedidoEmbalagem[] = [];
+
+  for (const pedido of pedidos) {
+    const tipo = tipoById.get(pedido.tipoEstoqueId);
+    const cliente = tipo?.nome ?? 'Desconhecido';
+    const produto = produtoNomeById.get(pedido.produtoId) ?? 'Desconhecido';
+    const lotes = lotesByPedido.get(pedido.id) ?? [];
+    const possuiEtiqueta = tipo?.possuiEtiqueta ?? false;
+    result.push(buildPainelPedido(pedido, cliente, produto, lotes, possuiEtiqueta));
+  }
+
+  result.sort((a, b) => {
+    const clienteCmp = a.cliente.localeCompare(b.cliente, 'pt-BR');
+    if (clienteCmp !== 0) return clienteCmp;
+    const prodCmp = a.produto.localeCompare(b.produto, 'pt-BR');
+    if (prodCmp !== 0) return prodCmp;
+    return a.pedidoEmbalagemId.localeCompare(b.pedidoEmbalagemId);
+  });
+
+  return result;
+}
+```
+
+Refatorar `getPainelForDate` para usar o helper.
+
+Adicionar imports:
+
+```typescript
+import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
+import type { TipoEstoqueDTO } from '@/lib/services/tipos-estoque-service';
+import { pedidosToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
+import type { CargaEmbalagemResponse } from '@/domain/types/painel-embalagem';
+import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+```
+
+- [ ] **Step 4: Rodar testes existentes**
+
+Run: `pnpm exec vitest run src/lib/services/painel-embalagem-service.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/painel-embalagem-service.ts
+git commit -m "perf(embalagem): batch IDs e possuiEtiqueta do tipo no painel"
+```
+
+---
+
+### Task 6: `getCargaCompleta` + testes
+
+**Files:**
+- Modify: `src/lib/services/painel-embalagem-service.ts`
+- Modify: `src/lib/services/painel-embalagem-service.test.ts`
+
+- [ ] **Step 1: Escrever teste com mocks (falha esperada)**
+
+Adicionar ao final de `painel-embalagem-service.test.ts` — usar vi.mock nos repositórios ou testar só lógica pura via export de helper. **Abordagem pragmática:** testar integração leve mockando repos:
+
+Create test file section — alternativa mais simples: test unitário de função exportada `resolveCargaDates`:
+
+Exportar helper puro em `src/domain/embalagem/painel-carga-dates.ts`:
+
+```typescript
+import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+
+export function resolveCargaComparisonDates(selectedDate: string) {
+  return {
+    dateSemana: addCalendarDaysISO(selectedDate, -7),
+  };
+}
+```
+
+Test:
+
+```typescript
+import { resolveCargaComparisonDates } from '@/domain/embalagem/painel-carga-dates';
+
+describe('resolveCargaComparisonDates', () => {
+  it('calcula D-7', () => {
+    expect(resolveCargaComparisonDates('2026-06-05').dateSemana).toBe('2026-05-29');
+  });
+});
+```
+
+- [ ] **Step 2: Implementar `getCargaCompleta` no serviço**
+
+```typescript
+async getCargaCompleta(date: string): Promise<CargaEmbalagemResponse> {
+  const dateSemana = addCalendarDaysISO(date, -7);
+
+  const [ultimaDataComDados, dateAnterior] = await Promise.all([
+    pedidoEmbalagemRepository.findUltimaDataComPedidos(7),
+    pedidoEmbalagemRepository.findDataAnteriorComPedidos(date, 14),
+  ]);
+
+  const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
+  const pedidosByDate = await pedidoEmbalagemRepository.listByDatasProducao(datesToLoad);
+
+  const allPedidos = [...pedidosByDate.values()].flat();
+  const pedidoIds = allPedidos.map((p) => p.id);
+
+  const [lotesByPedido, { tipoById, produtoNomeById }] = await Promise.all([
+    embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
+    this.buildNameMaps(allPedidos),
+  ]);
+
+  const pedidosMain = this.buildPedidosPainel(
+    pedidosByDate.get(date) ?? [],
+    lotesByPedido,
+    tipoById,
+    produtoNomeById,
+  );
+
+  const pedidosSemana = this.buildPedidosPainel(
+    pedidosByDate.get(dateSemana) ?? [],
+    lotesByPedido,
+    tipoById,
+    produtoNomeById,
+  );
+
+  const pedidosAnterior =
+    dateAnterior != null
+      ? this.buildPedidosPainel(
+          pedidosByDate.get(dateAnterior) ?? [],
+          lotesByPedido,
+          tipoById,
+          produtoNomeById,
+        )
+      : [];
+
+  return {
+    date,
+    ultimaDataComDados,
+    pedidos: pedidosMain,
+    comparacaoSemana: {
+      date: dateSemana,
+      items: pedidosToDashboardSnapshots(pedidosSemana),
+    },
+    comparacaoAnterior: {
+      date: dateAnterior,
+      items: pedidosToDashboardSnapshots(pedidosAnterior),
+    },
+  };
+}
+```
+
+- [ ] **Step 3: Rodar testes**
+
+Run: `pnpm exec vitest run src/lib/services/painel-embalagem-service.test.ts src/domain/embalagem/painel-carga-dates.ts`
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/painel-embalagem-service.ts src/domain/embalagem/painel-carga-dates.ts src/lib/services/painel-embalagem-service.test.ts
+git commit -m "feat(embalagem): getCargaCompleta com queries consolidadas"
+```
+
+---
+
+### Task 7: Rota API `/carga`
+
+**Files:**
+- Create: `src/app/api/painel/embalagem/carga/route.ts`
+
+- [ ] **Step 1: Criar route handler**
+
+```typescript
+import { NextResponse } from 'next/server';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import { painelEmbalagemService } from '@/lib/services/painel-embalagem-service';
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
+
+    const response = await painelEmbalagemService.getCargaCompleta(date);
+    return NextResponse.json(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 2: Smoke test manual (dev server rodando)**
+
+Run: `curl -s "http://localhost:3001/api/painel/embalagem/carga?date=2026-06-05" | head -c 200`
+Expected: JSON com `pedidos`, `comparacaoSemana`, `comparacaoAnterior`, `ultimaDataComDados`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/api/painel/embalagem/carga/route.ts
+git commit -m "feat(api): GET /api/painel/embalagem/carga"
+```
+
+---
+
+### Task 8: Refatorar frontend `realizado/embalagem/page.tsx`
+
+**Files:**
+- Modify: `src/app/realizado/embalagem/page.tsx`
+
+- [ ] **Step 1: Remover `useLatestDataDate` e imports não usados**
+
+Remover:
+```typescript
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+```
+
+Adicionar:
+```typescript
+import type { DashboardSnapshot } from '@/domain/types/painel-embalagem';
+import { snapshotsToDashboardItems } from '@/domain/embalagem/painel-dashboard-adapter';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import { useRef } from 'react';
+```
+
+- [ ] **Step 2: Substituir estado inicial e cache**
+
+```typescript
+const [selectedDate, setSelectedDate] = useState(() => getTodayISOInBrazilTimezone());
+const initialDateResolved = useRef(false);
+const [comparisonWeekItems, setComparisonWeekItems] = useState<ReturnType<typeof snapshotsToDashboardItems>>([]);
+const [comparisonPrevItems, setComparisonPrevItems] = useState<ReturnType<typeof snapshotsToDashboardItems>>([]);
+const [comparisonWeekDate, setComparisonWeekDate] = useState<string>(() =>
+  addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
+);
+```
+
+Remover states `pedidosComparisonPrev`, `pedidosComparisonWeek` (substituídos por items + dates).
+
+- [ ] **Step 3: Substituir `loadEmbalagemFull` por duas funções**
+
+```typescript
+const applyCargaResponse = useCallback(
+  (data: {
+    pedidos: PainelPedidoEmbalagem[];
+    ultimaDataComDados: string | null;
+    comparacaoSemana: { date: string; items: DashboardSnapshot[] };
+    comparacaoAnterior: { date: string | null; items: DashboardSnapshot[] };
+  }, currentDate: string) => {
+    if (
+      !initialDateResolved.current &&
+      data.ultimaDataComDados &&
+      data.ultimaDataComDados !== currentDate
+    ) {
+      initialDateResolved.current = true;
+      setSelectedDate(data.ultimaDataComDados);
+      return;
+    }
+    initialDateResolved.current = true;
+    setPedidos(data.pedidos);
+    setComparisonWeekDate(data.comparacaoSemana.date);
+    setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
+    setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
+    setDateComparisonPrev(data.comparacaoAnterior.date);
+  },
+  [],
+);
+
+const loadCargaEmbalagem = useCallback(
+  async (showSpinner: boolean) => {
+    if (showSpinner) setLoading(true);
+    else setRefreshing(true);
+    try {
+      const res = await fetch(`/api/painel/embalagem/carga?date=${selectedDate}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+      applyCargaResponse(data, selectedDate);
+    } catch (err) {
+      if (showSpinner) {
+        setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
+      } else {
+        console.error('Erro ao recarregar carga embalagem:', err);
+      }
+    } finally {
+      if (showSpinner) setLoading(false);
+      setRefreshing(false);
+    }
+  },
+  [selectedDate, applyCargaResponse],
+);
+
+const refreshPedidosOnly = useCallback(async () => {
+  setRefreshing(true);
+  try {
+    const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+    setPedidos((data.pedidos || []) as PainelPedidoEmbalagem[]);
+  } catch (err) {
+    console.error('Erro ao recarregar pedidos:', err);
+  } finally {
+    setRefreshing(false);
+  }
+}, [selectedDate]);
+```
+
+- [ ] **Step 4: Atualizar effects e handlers**
+
+```typescript
+useEffect(() => {
+  void loadCargaEmbalagem(true);
+}, [selectedDate, loadCargaEmbalagem]);
+
+useEffect(() => {
+  if (producaoModalOpen) return;
+  const interval = setInterval(() => void refreshPedidosOnly(), 60_000);
+  return () => clearInterval(interval);
+}, [selectedDate, producaoModalOpen, refreshPedidosOnly]);
+```
+
+Substituir `refreshPainelData`:
+```typescript
+const refreshPainelData = async () => {
+  await refreshPedidosOnly();
+};
+```
+
+- [ ] **Step 5: Atualizar useMemos do dashboard**
+
+```typescript
+const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
+const dashboardPrev = comparisonPrevItems;
+const dashboardWeek = comparisonWeekItems;
+```
+
+Props do `EmbalagemDashboard`:
+```typescript
+comparisonWeek={{
+  date: comparisonWeekDate,
+  items: dashboardWeek,
+}}
+```
+
+- [ ] **Step 6: Remover `useEffect` que sincronizava `latestDate`**
+
+Apagar bloco:
+```typescript
+useEffect(() => {
+  setSelectedDate(latestDate);
+}, [latestDate]);
+```
+
+- [ ] **Step 7: Lint e build**
+
+Run: `pnpm exec eslint src/app/realizado/embalagem/page.tsx`
+Run: `pnpm run build`
+Expected: PASS
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/app/realizado/embalagem/page.tsx
+git commit -m "perf(realizado): carga unificada embalagem e polling leve"
+```
+
+---
+
+### Task 9: Verificação final
+
+- [ ] **Step 1: Rodar suite de testes**
+
+Run: `pnpm test`
+Expected: all PASS
+
+- [ ] **Step 2: Checklist manual (DevTools Network)**
+
+1. Abrir `/realizado/embalagem` → 1 request `/carga`
+2. Trocar data → 1 request `/carga`
+3. Aguardar 60s → 1 request `/painel?date=...` (sem `/carga`)
+4. Totais rodapé = resumo dashboard
+5. Salvar produção → lista atualiza, comparações estáveis
+
+- [ ] **Step 3: Commit final se houver ajustes**
+
+```bash
+git add -A
+git commit -m "chore: verificação performance realizado embalagem"
+```
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Tipos `CargaEmbalagemResponse` | Task 1 |
+| Snapshots leves | Task 2 |
+| Batch findByIds | Task 3 |
+| Queries de data no repo | Task 4 |
+| Remover `clientePossuiEtiqueta` | Task 5 |
+| `getCargaCompleta` | Task 6 |
+| Rota `/carga` | Task 7 |
+| Frontend carga + cache + polling | Task 8 |
+| Critérios aceite / verificação | Task 9 |

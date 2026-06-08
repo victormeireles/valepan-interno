@@ -1,0 +1,225 @@
+# Design: Modal de lote de embalagem — layout unificado (criar + editar)
+
+**Data:** 2026-06-05  
+**Status:** Aprovado pelo stakeholder
+
+## Contexto
+
+O fluxo de embalagem em `/realizado/embalagem` usa `ProducaoModal` tanto para **novo lote** (botão +) quanto para **editar lote** (tap no card). O modal atual:
+
+- Compartilha layout com modos forno/fermentação/resfriamento
+- Empilha 3 seções de foto completas (PhotoManager + PhotoUploader + botão Tirar Foto cada), gerando scroll excessivo no chão de fábrica
+- Exibe botão **Salvar Parcial** no novo lote com semântica confusa (ambos os fluxos chamam `executeSaveNovoLote`)
+- Usa emojis como ícones estruturais e `window.confirm` para descartar rascunho
+- Label **Salvar Produção** não reflete a ação de criar lote
+
+Dispositivo alvo: **mix celular + tablet**, prioridade mobile (operadores na linha de embalagem).
+
+Dependências já implementadas: campos condicionais por tipo de pedido (`resolverCamposRealizadoEmbalagem`, spec `2026-06-05-realizado-embalagem-campos-por-tipo`).
+
+## Objetivo
+
+Redesenhar o modal de embalagem (criar e editar) com layout unificado, mobile-first, fotos sempre visíveis em formato compacto, mantendo o botão **Tirar Foto** com o comportamento atual.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Dispositivo | Mix celular + tablet; prioridade mobile |
+| Escopo visual | Layout único para **novo lote** e **editar lote** |
+| Modos forno/fermentação/resfriamento | **Inalterados** — refactor só em `mode === 'embalagem'` |
+| Fotos | **Sempre visíveis** (não colapsar); ocupar menos espaço vertical |
+| Botão Tirar Foto | **Manter comportamento atual** (`capture="environment"`, input file separado) |
+| Salvar Parcial | Apenas em **edição**, quando produção < saldo do pedido |
+| CTA primário | **Criar lote** (novo) / **Salvar** (editar) |
+| Atalho de quantidade | **Preencher restante** nos campos visíveis |
+| Confirmações | Substituir `window.confirm` por sheet/banner inline no modal |
+| Ícones | Material Icons; remover emojis estruturais |
+
+## Fora de escopo
+
+- Redesign de outras telas de realizado ou meta/embalagem
+- Wizard obrigatório em múltiplas telas
+- Mudanças na API de lotes ou regras de `PhotoValidator` / clientes especiais
+- Remover drag-and-drop do PhotoUploader em desktop
+- Modos forno, fermentação e resfriamento
+
+## Abordagem técnica
+
+**Extrair layout de embalagem** do `ProducaoModal` em subcomponentes, mantendo lógica de save/upload existente (ou hook `useEmbalagemLoteForm`). O `ProducaoModal` continua como entry point; quando `mode === 'embalagem'`, renderiza o novo shell.
+
+Alternativa descartada: dois modais separados (criar vs editar) — risco de divergência visual e duplicação de lógica.
+
+## Layout
+
+### Estrutura (mobile-first)
+
+```
+┌─────────────────────────────────────┐
+│ ─── (handle)                        │
+│ [Novo lote | Editar lote]      [✕]  │
+│ {produto}                           │
+│ {cliente} · {congelado?}            │
+├─────────────────────────────────────┤
+│ ▓▓▓▓▓▓▓▓░░░░  {produzido}/{meta}    │
+│ Restante: {saldo}                   │
+├─────────────────────────────────────┤
+│ Quantidade embalada                 │
+│ [NumberInput condicionais]          │
+│ [Preencher restante]                │
+├─────────────────────────────────────┤
+│ Observação (opcional)               │
+│ [textarea 2 rows]                   │
+├─────────────────────────────────────┤
+│ Fotos · {n}/{total}                 │
+│ ┌────────┐ ┌────────┐ ┌────────┐    │
+│ │ Pacote │ │Etiqueta│ │ Pallet │    │  grid 3 col (2 se cliente especial)
+│ │ uploader│ │uploader│ │uploader│    │  versão compacta
+│ │[Tirar  │ │[Tirar  │ │[Tirar  │    │  botão por coluna
+│ │ Foto]  │ │ Foto]  │ │ Foto]  │    │
+│ └────────┘ └────────┘ └────────┘    │
+├─────────────────────────────────────┤
+│ [Cancelar] [Parcial*] [CTA primário]│  sticky footer
+└─────────────────────────────────────┘
+```
+
+- **Mobile:** bottom sheet (`items-end`, `rounded-t-2xl`), `max-h-[92dvh]`, corpo scrollável, rodapé fixo.
+- **Tablet/desktop:** sheet centralizado `max-w-lg`, mesma hierarquia.
+
+### Header (`EmbalagemLoteModalHeader`)
+
+- Título dinâmico: `Novo lote` | `Editar lote`
+- Subtítulo: nome do produto (tipografia menor, truncar com ellipsis)
+- Chips: cliente; badge congelado se `congelado === 'Sim'`
+- Barra de progresso: `soma produzido do pedido / meta original` (dimensão principal do pedido)
+- Linha auxiliar: `Restante: {badges do saldo}` derivado de `pedidoQuantidades`
+- Remove o bloco cinza atual (`bg-gray-50` com cliente/produto/pedido duplicado)
+
+### Quantidade (`EmbalagemQuantidadeSection`)
+
+- Reutiliza `resolverCamposRealizadoEmbalagem(pedidoMetaOriginal)` — sem mudança de regra
+- `NumberInput` existente; se apenas 1 campo visível, ocupa largura total (`grid-cols-1`)
+- Botão secundário **Preencher restante**: preenche `pedidoQuantidades` nos campos visíveis (cap no saldo)
+- Validação: ao menos um campo visível > 0 antes de submit (mensagem inline abaixo da seção)
+
+### Observação
+
+- Textarea 2 linhas por padrão (`rows={2}`, `resize-y` permitido)
+- Label: `Observação (opcional)`
+
+### Fotos (`EmbalagemFotosGrid`)
+
+**Requisito do stakeholder:** manter botão **Tirar Foto** com comportamento atual do `PhotoUploader`:
+- Input hidden `accept="image/*"` + `capture="environment"`
+- Botão verde full-width **Tirar Foto** abaixo da área de upload de cada slot
+- Área de upload: clique/arraste para selecionar arquivo, compressão, preview, remover
+
+**Compactação** (sem alterar comportamento):
+
+| Hoje (por foto) | Proposto (por foto) |
+|-----------------|---------------------|
+| PhotoManager separado + dropzone alta + botão câmera | Tile em coluna: preview/upload compacto (`h-20`–`h-24`) + botão Tirar Foto menor (`py-2 text-sm`) |
+| 3 seções empilhadas verticalmente | Grid `grid-cols-3 gap-2` (ou `grid-cols-2` se etiqueta oculta) |
+| Títulos com emoji | Label curto acima do tile + ícone Material no empty state |
+| PhotoManager como bloco extra | Foto existente (edição) integrada no tile: thumbnail + overlay ver/remover |
+
+Implementação sugerida:
+
+- Novo prop `variant="compact"` em `PhotoUploader` (ou `PhotoSlotColumn` que compõe PhotoUploader compacto + label)
+- `PhotoManager` embutido no tile quando `currentPhotoUrl` existe (edição), sem bloco duplicado
+- Contador no heading: `Fotos · 2/3` (etiqueta excluída do total para cliente especial)
+- Cliente especial: ocultar coluna etiqueta (mesma regra `isSpecialPhotoClient`)
+
+### Rodapé (`EmbalagemLoteModalFooter`)
+
+Sticky dentro do modal, `border-t`, safe-area padding.
+
+| Botão | Novo lote | Editar lote |
+|-------|-----------|-------------|
+| Cancelar | Sim | Sim |
+| Salvar Parcial | **Oculto** | Visível se `isPartialProduction()` |
+| Primário | **Criar lote** | **Salvar** |
+
+Estados de loading: desabilitar ações; primário mostra spinner + `Criando lote…` / `Salvando…` / `Enviando fotos…`.
+
+### Confirmações
+
+| Situação | Hoje | Proposto |
+|----------|------|----------|
+| Descartar rascunho | `window.confirm` | Sheet leve no modal (Descartar / Continuar editando) |
+| Fotos faltantes | Modal aninhado z-60 | Banner amarelo acima do rodapé + Continuar sem fotos / Voltar |
+| Remover foto existente | `window.confirm` no PhotoManager | Confirm inline no tile ou sheet leve (sem `window.confirm`) |
+
+## Diferenças criar vs editar
+
+| Aspecto | Novo lote (`isNewLote`) | Editar lote |
+|---------|-------------------------|-------------|
+| Título | Novo lote | Editar lote |
+| CTA | Criar lote | Salvar |
+| `initialData` | Zeros | Valores + URLs de foto |
+| Salvar Parcial | Oculto | Condicional |
+| API save | `POST /api/producao/embalagem/pedido/{id}/lote` | `PUT /[rowId]` ou `POST /[rowId]/partial` |
+| `rowId` | Ausente até resposta da API | Presente |
+
+## Arquitetura de componentes
+
+```
+src/components/EmbalagemLoteModal/
+├── EmbalagemLoteModalShell.tsx      # composição + scroll + sticky footer
+├── EmbalagemLoteModalHeader.tsx
+├── EmbalagemQuantidadeSection.tsx
+├── EmbalagemObservacaoField.tsx
+├── EmbalagemFotosGrid.tsx           # grid de PhotoSlotColumn
+├── EmbalagemLoteModalFooter.tsx
+├── EmbalagemDiscardSheet.tsx
+└── EmbalagemPhotoWarningBanner.tsx
+
+src/components/FormControls/
+└── PhotoUploader.tsx                # + variant compact (opcional)
+
+src/components/ProducaoModal.tsx     # branch embalagem → shell novo; demais modos inalterados
+```
+
+Hook opcional `useEmbalagemLoteForm` extrai state/validação/submit de `ProducaoModal` para reduzir tamanho do arquivo.
+
+## Fluxo de dados
+
+Sem mudança nas props da page (`realizado/embalagem/page.tsx`):
+
+- `pedidoMetaOriginal`, `pedidoQuantidades`, `pedidoEmbalagemId`, `isNewLote`, `rowId`, `initialData`, etc.
+
+## Acessibilidade e UX (ui-ux-pro-max)
+
+- Touch targets ≥ 44px (fechar, Tirar Foto, CTAs)
+- `role="dialog"`, `aria-labelledby`, focus trap
+- Contraste AA em erros/banners
+- `prefers-reduced-motion` em transições do sheet
+- Corpo scrollável com rodapé fixo — evita CTAs fora da viewport
+- Sem emoji como ícone estrutural
+- Feedback de loading nos botões durante async
+
+## Testes
+
+| Tipo | Cobertura |
+|------|-----------|
+| Unit | Lógica inalterada em `resolverCamposRealizadoEmbalagem`; opcional teste de contador fotos |
+| Manual | Novo lote mobile: qty + 3 fotos + criar; editar com parcial; cliente especial (2 fotos); Preencher restante; descartar rascunho |
+
+## Arquivos impactados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/ProducaoModal.tsx` | Delegar layout embalagem ao shell; manter save logic |
+| `src/components/EmbalagemLoteModal/*` | Novos subcomponentes |
+| `src/components/FormControls/PhotoUploader.tsx` | Variant compact (se necessário) |
+| `src/components/PhotoManager.tsx` | Suporte inline no tile; remover `window.confirm` opcional |
+| `src/app/realizado/embalagem/page.tsx` | Sem mudança de contrato esperada |
+
+## Riscos e mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| Grid 3 colunas apertado em celular estreito | `gap-2`, labels curtos, upload `h-20`; testar 320px |
+| Regressão em modos forno/etc. | Branch explícito `mode !== 'embalagem'` → JSX legado |
+| PhotoUploader compact quebra drag | Manter dropzone no tile; só reduzir padding/altura |
+| Duplicação lógica create/edit | Hook compartilhado ou funções existentes em ProducaoModal |

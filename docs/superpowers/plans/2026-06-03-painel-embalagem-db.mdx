@@ -1,0 +1,91 @@
+# Painel embalagem lê Supabase (Fase B.3) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Migrar leitura do painel embalagem para Supabase com UI hierárquica pedido→lotes, botão Novo lote, e meta editando pedido canônico.
+
+**Architecture:** `PainelEmbalagemService` monta `pedidos[]` com `lotes[]` aninhados; GET painel só DB; realizado/meta refatorados; novas rotas pedido CRUD e resolver-linha para escrita legada na planilha.
+
+**Tech Stack:** Next.js 15, Supabase, Google Sheets (escrita), Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-06-03-painel-embalagem-db-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/types/painel-embalagem.ts` | tipos response |
+| `src/lib/services/painel-embalagem-service.ts` | montagem pedidos+lotes |
+| `EmbalagemLoteRepository.ts` | `listByPedidoEmbalagemId`, `sumQuantidadeByPedidoId` |
+| `PedidoEmbalagemRepository.ts` | `findById` |
+| `painel/embalagem/route.ts` | GET refatorado |
+| `api/embalagem/pedido/[id]/route.ts` | GET/PUT/DELETE canônico |
+| `api/producao/embalagem/pedido/[id]/resolver-linha/route.ts` | rowId saldo |
+| `realizado/embalagem/page.tsx` | UI hierárquica + Novo lote |
+| `meta/embalagem/page.tsx` | lista canônica |
+| `EmbalagemProductAccordion.tsx` | prop `onNovoLote` |
+| `painel-embalagem-service.test.ts` | agregação |
+
+---
+
+### Task 1: Tipos + repository
+
+- [ ] `painel-embalagem.ts` types
+- [ ] `EmbalagemLoteRepository.listByPedidoEmbalagemIds(ids[])`
+- [ ] `PedidoEmbalagemRepository.findById`
+
+---
+
+### Task 2: PainelEmbalagemService + testes
+
+- [ ] Montar pedidos + lotes + SUM produzido
+- [ ] Vitest agregação
+
+---
+
+### Task 3: GET painel
+
+- [ ] Substituir leitura planilha por serviço
+- [ ] Remover `revalidate = 3600` ou reduzir
+
+---
+
+### Task 4: Meta APIs pedido canônico
+
+- [ ] `GET/PUT/DELETE /api/embalagem/pedido/[id]`
+- [ ] PUT: dual-write planilha + reconcile
+- [ ] DELETE: todas linhas chave + reconcile; bloquear se produzido > 0
+
+---
+
+### Task 5: Resolver linha novo lote
+
+- [ ] `POST .../resolver-linha` — menor rowId com saldo G–J
+
+---
+
+### Task 6: Realizado UI
+
+- [ ] Response `pedidos[]` em vez de `items[]`
+- [ ] 1 accordion por pedido; expand = lotes
+- [ ] Botão Novo lote → resolver-linha → modal
+- [ ] Remover render de linha saldo fantasma
+- [ ] Dashboard usa novos totais
+
+---
+
+### Task 7: Meta UI
+
+- [ ] Lista por pedido canônico
+- [ ] Edit/delete por `pedidoEmbalagemId`
+
+---
+
+### Task 8: Verificação
+
+- [ ] `npm run build`
+- [ ] Vitest painel service
+- [ ] Comparar totais cx data hoje DB vs tela
+- [ ] Smoke Novo lote + expand
