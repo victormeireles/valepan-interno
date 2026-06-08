@@ -120,6 +120,7 @@ export async function DELETE(request: Request) {
           delta: quantidade,
           allowNegative: true,
           origem: 'saida',
+          clienteDestino: existingRow.cliente,
         });
       }
     }

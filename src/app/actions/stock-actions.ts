@@ -108,6 +108,7 @@ export async function registerOutflowAction(input: RegisterOutflowInput) {
       kg: -(payload.quantidade.kg || 0),
     },
     origem: 'saida',
+    clienteDestino: payload.clienteDestino,
   });
 
   revalidatePath('/api/painel/estoque');

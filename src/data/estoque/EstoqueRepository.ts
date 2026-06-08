@@ -128,6 +128,7 @@ export class EstoqueRepository {
         saldo_kg: input.saldo.kg,
         origem: input.origem,
         embalagem_lote_id: input.embalagemLoteId ?? null,
+        cliente: input.clienteDestino ?? null,
       })
       .select()
       .single();
@@ -238,6 +239,7 @@ export class EstoqueRepository {
         kg: Number(row.saldo_kg),
       },
       origem: row.origem as EstoqueMovimentoOrigem,
+      clienteDestino: row.cliente ?? null,
     };
   }
 }

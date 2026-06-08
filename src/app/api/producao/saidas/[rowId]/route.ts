@@ -175,6 +175,7 @@ async function atualizarEstoque(
       },
       allowNegative: true,
       origem: 'saida',
+      clienteDestino: row.cliente,
     });
   }
 }

@@ -158,6 +158,7 @@ export async function POST(
         },
         allowNegative: true,
         origem: 'saida',
+        clienteDestino: cliente,
       });
     }
 

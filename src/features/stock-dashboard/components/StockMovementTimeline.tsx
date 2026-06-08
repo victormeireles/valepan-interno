@@ -88,6 +88,15 @@ export function StockMovementTimeline({
               </p>
             )}
 
+            {mov.origem === 'saida' && mov.clienteDestino ? (
+              <p className="mt-1 text-xs text-gray-500">
+                Para{' '}
+                <span className="font-semibold text-gray-700">
+                  {mov.clienteDestino}
+                </span>
+              </p>
+            ) : null}
+
             <p className="mt-1 text-xs text-gray-500">
               Saldo após{' '}
               <span className="font-semibold tabular-nums text-gray-800">

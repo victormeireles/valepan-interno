@@ -69,6 +69,7 @@ describe('POST /api/public/saidas estoque', () => {
       expect.objectContaining({
         allowNegative: true,
         origem: 'saida',
+        clienteDestino: 'Cliente A',
         delta: expect.objectContaining({ caixas: -2 }),
       }),
     );
@@ -98,6 +99,7 @@ describe('DELETE /api/public/saidas/delete estoque', () => {
     expect(res.status).toBe(200);
     expect(aplicarDeltaMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        clienteDestino: 'Cliente A',
         delta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
         allowNegative: true,
         origem: 'saida',

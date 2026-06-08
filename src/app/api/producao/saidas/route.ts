@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       },
       allowNegative: true,
       origem: 'saida',
+      clienteDestino: payload.cliente,
     });
 
     // Só envia notificação se não foi solicitado para pular

@@ -1529,6 +1529,7 @@ export type Database = {
       }
       estoque_movimentos: {
         Row: {
+          cliente: string | null
           created_at: string
           delta_caixas: number
           delta_kg: number
@@ -1545,6 +1546,7 @@ export type Database = {
           tipo_estoque_id: string
         }
         Insert: {
+          cliente?: string | null
           created_at?: string
           delta_caixas?: number
           delta_kg?: number
@@ -1561,6 +1563,7 @@ export type Database = {
           tipo_estoque_id: string
         }
         Update: {
+          cliente?: string | null
           created_at?: string
           delta_caixas?: number
           delta_kg?: number

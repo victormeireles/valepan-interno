@@ -127,6 +127,7 @@ export default function EstoqueAuditoriaPage() {
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Data/hora</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Tipo estoque</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Produto</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-700">Cliente</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Delta</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Saldo</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-700">Origem</th>
@@ -140,6 +141,11 @@ export default function EstoqueAuditoriaPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-900">{mov.tipoEstoqueNome}</td>
                     <td className="px-4 py-3 text-gray-900">{mov.produtoNome}</td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {mov.clienteDestino ?? (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono text-gray-700">
                       cx {formatDelta(mov.delta.caixas)} · pct {formatDelta(mov.delta.pacotes)} · un{' '}
                       {formatDelta(mov.delta.unidades)} · kg {formatDelta(mov.delta.kg)}

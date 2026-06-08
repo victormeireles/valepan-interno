@@ -42,6 +42,7 @@ type RegistrarMovimentoByNomesInput = AjusteQuantidadeInput & {
   allowNegative?: boolean;
   origem?: EstoqueMovimentoOrigem;
   embalagemLoteId?: string;
+  clienteDestino?: string;
 };
 
 export class EstoqueService {
@@ -229,6 +230,7 @@ export class EstoqueService {
     allowNegative = false,
     origem = 'ajuste_manual',
     embalagemLoteId,
+    clienteDestino,
   }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord> {
     const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(cliente);
     const produtoId = await estoqueResolverService.resolveProdutoId(produto);
@@ -242,6 +244,7 @@ export class EstoqueService {
       allowNegative,
       origem,
       embalagemLoteId,
+      clienteDestino,
     });
 
     return record;
@@ -275,6 +278,7 @@ export class EstoqueService {
     allowNegative?: boolean;
     origem: EstoqueMovimentoOrigem;
     embalagemLoteId?: string;
+    clienteDestino?: string;
   }): Promise<EstoqueRecord> {
     const saldoAtualRow = await estoqueRepository.findSaldo(
       input.tipoEstoqueId,
@@ -303,6 +307,7 @@ export class EstoqueService {
       saldo,
       origem: input.origem,
       embalagemLoteId: input.embalagemLoteId ?? null,
+      clienteDestino: input.clienteDestino ?? null,
     });
 
     await estoqueRepository.upsertSaldo(

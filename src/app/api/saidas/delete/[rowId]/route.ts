@@ -43,6 +43,7 @@ export async function DELETE(
             delta: quantidade,
             allowNegative: true,
             origem: 'saida',
+            clienteDestino: existingRow.cliente,
           });
         }
       }
