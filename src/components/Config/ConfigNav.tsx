@@ -12,7 +12,11 @@ export default function ConfigNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Configurações" className="mb-6">
+    <nav aria-label="Seções de configuração" className="mb-6 lg:mb-0 lg:w-52 shrink-0">
+      <p className="hidden lg:block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 px-1">
+        Seções
+      </p>
+
       <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden snap-x">
         {NAV.map((item) => {
           const active = pathname === item.href;
@@ -34,10 +38,7 @@ export default function ConfigNav() {
         })}
       </div>
 
-      <div className="hidden lg:flex lg:w-56 lg:flex-col lg:gap-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
-          Configurações
-        </p>
+      <div className="hidden lg:flex lg:flex-col lg:gap-1">
         {NAV.map((item) => {
           const active = pathname === item.href;
           return (

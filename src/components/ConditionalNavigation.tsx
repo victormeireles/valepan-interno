@@ -13,6 +13,7 @@ export default function ConditionalNavigation() {
   const isInsumosPage = pathname?.startsWith('/insumos');
   const isReceitasPage = pathname?.startsWith('/receitas');
   const isProdutoReceitasPage = pathname?.startsWith('/produtos/receitas');
+  const isConfigPage = pathname?.startsWith('/config');
 
   if (
     isRealizadoPage ||
@@ -20,7 +21,8 @@ export default function ConditionalNavigation() {
     isProducaoPage ||
     isInsumosPage ||
     isReceitasPage ||
-    isProdutoReceitasPage
+    isProdutoReceitasPage ||
+    isConfigPage
   ) {
     // Nessas páginas, só renderizar o menu lateral (sem o header)
     return <Navigation hideHeader />;

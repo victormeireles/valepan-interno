@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 
 type ConfigResponse = {
   embalagem: boolean;
@@ -76,9 +77,14 @@ export default function WhatsAppConfigPage() {
   };
 
   return (
-    <div className="max-w-lg mx-auto">
-      <div className="rounded-3xl bg-[#0a0e14] text-gray-100 px-4 py-8 sm:p-8 border border-white/10 shadow-xl">
-        <h1 className="text-2xl font-bold mb-2">Notificações WhatsApp</h1>
+    <div className="max-w-2xl">
+      <ConfigPageHeader
+        title="Notificações WhatsApp"
+        description="Controle quais etapas da produção enviam avisos no grupo."
+        icon="chat"
+      />
+
+      <div className="rounded-3xl bg-[#0a0e14] text-gray-100 px-4 py-6 sm:p-8 border border-white/10 shadow-xl">
         <p className="text-sm text-gray-400 mb-6">
           Com o envio desligado, a produção continua sendo salva normalmente — apenas a mensagem no
           grupo não é enviada.

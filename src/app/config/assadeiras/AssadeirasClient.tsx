@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import DashboardHeader from '@/components/DashboardHeader';
+import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import AssadeiraModal from '@/components/Assadeiras/AssadeiraModal';
 import AssadeirasMobileList from '@/components/Assadeiras/AssadeirasMobileList';
 import AssadeirasTable, {
@@ -116,11 +116,14 @@ export default function AssadeirasClient({ initialAssadeiras }: Props) {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50/50 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
-      <DashboardHeader title="Gestão de Assadeiras" icon="bakery_dining" />
+    <div className="space-y-6">
+      <ConfigPageHeader
+        title="Gestão de Assadeiras"
+        description="Tipos de assadeira, pães por assadeira e quantidade em estoque."
+        icon="bakery_dining"
+      />
 
-      <div className="py-6 md:py-8 space-y-6">
-        {toast && (
+      {toast && (
           <p role="status" aria-live="polite" className="text-sm text-emerald-600 font-medium">
             {toast}
           </p>
@@ -197,11 +200,11 @@ export default function AssadeirasClient({ initialAssadeiras }: Props) {
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
               <span className="material-icons text-3xl text-gray-300">bakery_dining</span>
             </div>
-            <h3 className="text-lg font-medium text-gray-900">
+            <h2 className="text-lg font-medium text-gray-900">
               {searchTerm || statusFilter !== 'todas'
                 ? 'Nenhuma assadeira encontrada'
                 : 'Nenhuma assadeira cadastrada'}
-            </h3>
+            </h2>
             <p className="text-gray-500 max-w-sm text-center mt-1">
               {searchTerm || statusFilter !== 'todas'
                 ? 'Tente ajustar a busca ou limpar os filtros.'
@@ -246,7 +249,6 @@ export default function AssadeirasClient({ initialAssadeiras }: Props) {
             />
           </>
         )}
-      </div>
 
       <AssadeiraModal
         isOpen={modalOpen}

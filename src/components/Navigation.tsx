@@ -335,6 +335,40 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
               {/* Separador */}
               <div className="my-4 border-t border-gray-200" />
 
+              {/* Configurações */}
+              <div className="space-y-1">
+                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                  Configurações
+                </h3>
+                <Link
+                  href="/config/assadeiras"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    pathname?.startsWith('/config/assadeiras')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">bakery_dining</span>
+                  Assadeiras
+                </Link>
+                <Link
+                  href="/config/whatsapp"
+                  onClick={closeMenu}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
+                    isActive('/config/whatsapp')
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="material-icons text-xl mr-3">chat</span>
+                  WhatsApp
+                </Link>
+              </div>
+
+              {/* Separador */}
+              <div className="my-4 border-t border-gray-200" />
+
               {/* Fila de Produção */}
               <div className="space-y-1">
                 <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
