@@ -28,6 +28,7 @@ export async function POST(
     const planilhaRowId = await resolveLinhaComSaldoParaPedido(
       pedido,
       (c, p) => pedidoEmbalagemService.resolveIds(c, p),
+      ({ produtoId }) => pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
       { produtoNome: produto?.nome, clienteNome: tipo?.nome },
     );
     const tEnd = Date.now();

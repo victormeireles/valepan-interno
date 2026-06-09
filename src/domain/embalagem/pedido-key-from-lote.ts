@@ -7,6 +7,7 @@ export function loteToPedidoKey(input: {
   tipoEstoqueId: string;
   produtoId: string;
   observacaoCliente: string;
+  assadeiraId: string;
 }): PedidoEmbalagemKey {
   return {
     dataProducao: input.dataPedido,
@@ -14,5 +15,6 @@ export function loteToPedidoKey(input: {
     tipoEstoqueId: input.tipoEstoqueId,
     produtoId: input.produtoId,
     observacao: normalizeObservacao(input.observacaoCliente),
+    assadeiraId: input.assadeiraId,
   };
 }

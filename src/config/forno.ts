@@ -14,6 +14,8 @@ export type PedidoFornoItem = {
   unidades: number;
   kg: number;
   observacao?: string;
+  assadeiras?: number;
+  assadeiraId?: string;
 };
 
 export type PedidoFornoPayload = {

@@ -1,0 +1,662 @@
+# Ordens de Produção — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Evoluir `pedidos_embalagem` → `ordens_producao` com quantidade canônica em assadeiras (LT), tipo de assadeira, conversões derivadas (`unidades`, `caixas`), e reconcile da planilha normalizando para LT.
+
+**Architecture:** Migration em etapas (nullable assadeiras, rename legada, rename pedidos_embalagem). Domínio puro em `src/domain/producao/` para fator efetivo e derivados. Repository/service renomeados mantendo reconcile B.2 com chave estendida (`assadeira_id`). UI (D.3) entra após domínio estável.
+
+**Tech Stack:** Next.js 15 App Router, Supabase JS, Google Sheets API, Vitest, `tsx` CLI.
+
+**Spec:** `docs/superpowers/specs/2026-06-09-ordens-producao-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `MIGRATE_ORDENS_PRODUCAO_UNIFICADA.sql` | nullable, rename, novas colunas, FK |
+| `ORDENS_PRODUCAO_RLS.sql` | RLS (evolução de `PEDIDOS_EMBALAGEM_RLS.sql`) |
+| `scripts/backfill-ordens-producao-assadeiras.ts` | backfill assadeira_id/assadeiras |
+| `src/domain/types/ordem-producao.ts` | tipos domain (substitui `pedido-embalagem.ts`) |
+| `src/domain/producao/assadeira-factor.ts` | `resolveUnidadesPorAssadeiraEfetiva` |
+| `src/domain/producao/assadeira-factor.test.ts` | testes fator nullable |
+| `src/domain/producao/ordem-derivados.ts` | `deriveQuantidadesFromAssadeiras` |
+| `src/domain/producao/ordem-derivados.test.ts` | testes unidades + caixas floor |
+| `src/domain/embalagem/pedido-key.ts` | chave + `assadeiraId`, soma `assadeiras` |
+| `src/domain/embalagem/pedido-key.test.ts` | testes chave estendida |
+| `src/domain/embalagem/map-sheet-rows-to-pedidos.ts` | normalizar planilha → assadeiras |
+| `src/data/producao/OrdemProducaoRepository.ts` | CRUD (evolução do repository) |
+| `src/lib/services/ordem-producao-service.ts` | reconcile (evolução do service) |
+| `scripts/sync-ordens-producao-from-sheet.ts` | job sync (rename do script) |
+| `scripts/link-embalagem-lotes-pedidos.ts` | `ordem_producao_id` |
+| `src/app/api/ordens-producao/reorder/route.ts` | PATCH reorder (D.3) |
+| `package.json` | scripts npm renomeados |
+
+---
+
+### Task 1: Migration SQL
+
+**Files:**
+- Create: `MIGRATE_ORDENS_PRODUCAO_UNIFICADA.sql`
+- Create: `ORDENS_PRODUCAO_RLS.sql`
+
+- [ ] **Step 1: Escrever migration completa**
+
+```sql
+-- MIGRATE_ORDENS_PRODUCAO_UNIFICADA.sql
+-- Aplicar no SQL Editor do Supabase antes de npm run gen:types
+
+-- 1. assadeiras: rename + nullable
+ALTER TABLE assadeiras
+  RENAME COLUMN numero_buracos TO unidades_por_assadeira;
+
+ALTER TABLE assadeiras
+  ALTER COLUMN unidades_por_assadeira DROP NOT NULL;
+
+-- 2. produto_assadeiras: nullable override
+ALTER TABLE produto_assadeiras
+  ALTER COLUMN unidades_por_assadeira DROP NOT NULL;
+
+-- 3. isolar ordens_producao legada
+ALTER TABLE IF EXISTS ordens_producao RENAME TO _ordens_producao_legacy;
+
+-- 4. pedidos_embalagem → ordens_producao
+ALTER TABLE pedidos_embalagem RENAME TO ordens_producao;
+
+-- 5. novas colunas (nullable temporário para backfill)
+ALTER TABLE ordens_producao
+  ADD COLUMN IF NOT EXISTS assadeira_id uuid REFERENCES assadeiras(id),
+  ADD COLUMN IF NOT EXISTS assadeiras numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS ordem_planejamento integer NOT NULL DEFAULT 0;
+
+-- 6. trocar constraint única
+ALTER TABLE ordens_producao
+  DROP CONSTRAINT IF EXISTS pedidos_embalagem_chave_natural;
+
+ALTER TABLE ordens_producao
+  ADD CONSTRAINT ordens_producao_chave_natural UNIQUE (
+    data_producao,
+    data_fabricacao_etiqueta,
+    tipo_estoque_id,
+    produto_id,
+    observacao,
+    assadeira_id
+  );
+
+CREATE INDEX IF NOT EXISTS idx_ordens_producao_data_ordem
+  ON ordens_producao(data_producao DESC, ordem_planejamento);
+
+-- 7. embalagem_lotes FK rename
+ALTER TABLE embalagem_lotes
+  RENAME COLUMN pedido_embalagem_id TO ordem_producao_id;
+
+ALTER TABLE embalagem_lotes
+  DROP CONSTRAINT IF EXISTS embalagem_lotes_pedido_embalagem_id_fkey;
+
+ALTER TABLE embalagem_lotes
+  ADD CONSTRAINT embalagem_lotes_ordem_producao_id_fkey
+  FOREIGN KEY (ordem_producao_id) REFERENCES ordens_producao(id);
+
+-- 8. producao_etapas_log: apontar para nova tabela (FK já existe por nome de coluna)
+-- Nenhum ALTER necessário se ordem_producao_id já referencia por id uuid.
+```
+
+- [ ] **Step 2: Criar `ORDENS_PRODUCAO_RLS.sql`** copiando políticas de `PEDIDOS_EMBALAGEM_RLS.sql` trocando nome da tabela para `ordens_producao`
+
+- [ ] **Step 3: Aplicar no Supabase e rodar `npm run gen:types`**
+
+Run: `npm run gen:types`  
+Expected: `src/types/database.ts` com tabela `ordens_producao` (ex-pedidos_embalagem) e `assadeiras.unidades_por_assadeira`
+
+---
+
+### Task 2: Domínio — fator efetivo de assadeira
+
+**Files:**
+- Create: `src/domain/producao/assadeira-factor.ts`
+- Create: `src/domain/producao/assadeira-factor.test.ts`
+
+- [ ] **Step 1: Escrever testes**
+
+```typescript
+// src/domain/producao/assadeira-factor.test.ts
+import { describe, expect, it } from 'vitest';
+import { resolveUnidadesPorAssadeiraEfetiva } from './assadeira-factor';
+
+describe('resolveUnidadesPorAssadeiraEfetiva', () => {
+  it('usa override do produto quando presente', () => {
+    expect(
+      resolveUnidadesPorAssadeiraEfetiva({ produto: 24, assadeira: 18 }),
+    ).toBe(24);
+  });
+
+  it('cai para default da assadeira quando produto é null', () => {
+    expect(
+      resolveUnidadesPorAssadeiraEfetiva({ produto: null, assadeira: 18 }),
+    ).toBe(18);
+  });
+
+  it('retorna null quando ambos são null', () => {
+    expect(
+      resolveUnidadesPorAssadeiraEfetiva({ produto: null, assadeira: null }),
+    ).toBeNull();
+  });
+
+  it('retorna null quando fator <= 0', () => {
+    expect(
+      resolveUnidadesPorAssadeiraEfetiva({ produto: 0, assadeira: 18 }),
+    ).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste — deve falhar**
+
+Run: `npx vitest run src/domain/producao/assadeira-factor.test.ts`  
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implementar**
+
+```typescript
+// src/domain/producao/assadeira-factor.ts
+export type AssadeiraFactorInput = {
+  produto: number | null | undefined;
+  assadeira: number | null | undefined;
+};
+
+export function resolveUnidadesPorAssadeiraEfetiva(
+  input: AssadeiraFactorInput,
+): number | null {
+  const fator = input.produto ?? input.assadeira ?? null;
+  if (fator == null || fator <= 0) return null;
+  return fator;
+}
+```
+
+- [ ] **Step 4: Rodar teste — deve passar**
+
+Run: `npx vitest run src/domain/producao/assadeira-factor.test.ts`  
+Expected: PASS (4 tests)
+
+---
+
+### Task 3: Domínio — derivados ao salvar
+
+**Files:**
+- Create: `src/domain/producao/ordem-derivados.ts`
+- Create: `src/domain/producao/ordem-derivados.test.ts`
+
+- [ ] **Step 1: Escrever testes**
+
+```typescript
+// src/domain/producao/ordem-derivados.test.ts
+import { describe, expect, it } from 'vitest';
+import { deriveQuantidadesFromAssadeiras } from './ordem-derivados';
+
+describe('deriveQuantidadesFromAssadeiras', () => {
+  it('calcula unidades e caixas com floor', () => {
+    const result = deriveQuantidadesFromAssadeiras({
+      assadeiras: 5,
+      unidadesPorAssadeira: 24,
+      boxUnits: 12,
+    });
+    expect(result).toEqual({
+      unidades: 120,
+      caixas: 10,
+      pacotes: 0,
+      kg: 0,
+    });
+  });
+
+  it('caixas = 0 sem box_units', () => {
+    const result = deriveQuantidadesFromAssadeiras({
+      assadeiras: 3,
+      unidadesPorAssadeira: 20,
+      boxUnits: null,
+    });
+    expect(result.unidades).toBe(60);
+    expect(result.caixas).toBe(0);
+  });
+
+  it('floor não arredonda para cima', () => {
+    const result = deriveQuantidadesFromAssadeiras({
+      assadeiras: 1,
+      unidadesPorAssadeira: 25,
+      boxUnits: 12,
+    });
+    expect(result.unidades).toBe(25);
+    expect(result.caixas).toBe(2); // floor(25/12) = 2
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste — deve falhar**
+
+Run: `npx vitest run src/domain/producao/ordem-derivados.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implementar**
+
+```typescript
+// src/domain/producao/ordem-derivados.ts
+export type DeriveQuantidadesInput = {
+  assadeiras: number;
+  unidadesPorAssadeira: number;
+  boxUnits?: number | null;
+};
+
+export type DerivedQuantidades = {
+  unidades: number;
+  caixas: number;
+  pacotes: number;
+  kg: number;
+};
+
+export function deriveQuantidadesFromAssadeiras(
+  input: DeriveQuantidadesInput,
+): DerivedQuantidades {
+  const unidades = Math.round(input.assadeiras * input.unidadesPorAssadeira);
+  const caixas =
+    input.boxUnits && input.boxUnits > 0
+      ? Math.floor(unidades / input.boxUnits)
+      : 0;
+  return { unidades, caixas, pacotes: 0, kg: 0 };
+}
+```
+
+- [ ] **Step 4: Rodar teste — deve passar**
+
+Run: `npx vitest run src/domain/producao/ordem-derivados.test.ts`  
+Expected: PASS
+
+---
+
+### Task 4: Tipos e chave natural
+
+**Files:**
+- Create: `src/domain/types/ordem-producao.ts`
+- Modify: `src/domain/embalagem/pedido-key.ts`
+- Modify: `src/domain/embalagem/pedido-key.test.ts`
+
+- [ ] **Step 1: Criar tipos**
+
+```typescript
+// src/domain/types/ordem-producao.ts
+import type { DerivedQuantidades } from '@/domain/producao/ordem-derivados';
+
+export type OrdemProducaoKey = {
+  dataProducao: string;
+  dataFabricacaoEtiqueta: string;
+  tipoEstoqueId: string;
+  produtoId: string;
+  observacao: string;
+  assadeiraId: string;
+};
+
+export type OrdemProducaoUpsert = OrdemProducaoKey & {
+  assadeiras: number;
+  ordemPlanejamento: number;
+  quantidade: DerivedQuantidades;
+};
+
+export type OrdemProducaoRecord = OrdemProducaoUpsert & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** @deprecated use OrdemProducaoUpsert — alias temporário para migração incremental */
+export type { OrdemProducaoKey as PedidoEmbalagemKey };
+```
+
+- [ ] **Step 2: Atualizar `pedido-key.ts`**
+
+```typescript
+// pedidoKeyToString — adicionar assadeiraId ao final
+export function pedidoKeyToString(key: OrdemProducaoKey): string {
+  return [
+    key.dataProducao,
+    key.dataFabricacaoEtiqueta,
+    key.tipoEstoqueId,
+    key.produtoId,
+    key.observacao,
+    key.assadeiraId,
+  ].join('|');
+}
+
+// mergePedidoIntoMap — somar assadeiras em vez de quantidade caixas/pacotes
+export function mergeOrdemIntoMap(
+  map: Map<string, OrdemProducaoUpsert>,
+  ordem: OrdemProducaoUpsert,
+): void {
+  const id = pedidoKeyToString(ordem);
+  const existing = map.get(id);
+  if (!existing) {
+    map.set(id, { ...ordem, quantidade: { ...ordem.quantidade } });
+    return;
+  }
+  map.set(id, {
+    ...existing,
+    assadeiras: existing.assadeiras + ordem.assadeiras,
+    quantidade: deriveQuantidadesFromAssadeiras({
+      assadeiras: existing.assadeiras + ordem.assadeiras,
+      unidadesPorAssadeira: /* recalcular com fator conhecido no caller */,
+      boxUnits: /* idem */,
+    }),
+  });
+}
+```
+
+> **Nota de implementação:** `mergeOrdemIntoMap` deve receber `unidadesPorAssadeira` e `boxUnits` como parâmetro ou struct `ProductConversionContext` para recalcular derivados após soma — não duplicar lógica fora de `deriveQuantidadesFromAssadeiras`.
+
+- [ ] **Step 3: Atualizar testes** — duas linhas mesma chave + `assadeiraId` diferente → dois grupos; mesma chave completa → soma `assadeiras`
+
+Run: `npx vitest run src/domain/embalagem/pedido-key.test.ts`  
+Expected: PASS
+
+---
+
+### Task 5: Map sheet → assadeiras
+
+**Files:**
+- Modify: `src/domain/embalagem/map-sheet-rows-to-pedidos.ts`
+- Modify: `src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts`
+
+- [ ] **Step 1: Estender `MapSheetPedidosOptions`**
+
+```typescript
+export type ResolveAssadeiraContext = {
+  produtoId: string;
+  assadeiraNomePlanilha?: string;
+};
+
+export type ResolveAssadeira = (
+  ctx: ResolveAssadeiraContext,
+) => Promise<{
+  assadeiraId: string;
+  unidadesPorAssadeiraEfetiva: number;
+  boxUnits: number | null;
+}>;
+
+export type MapSheetPedidosOptions = {
+  dataProducaoFilter?: string;
+  resolveIds: ResolvePedidoIds;
+  resolveAssadeira: ResolveAssadeira;
+  sheetToAssadeiras: (quantidade: Quantidade, fator: number) => number;
+  onResolveError?: (rowNumber: number, message: string) => void;
+};
+```
+
+- [ ] **Step 2: Implementar `sheetToAssadeiras` em `ordem-derivados.ts`**
+
+```typescript
+export function assadeirasFromSheetQuantidade(
+  q: { caixas: number; pacotes: number; unidades: number; kg: number },
+  ctx: { unidadesPorAssadeira: number; boxUnits: number | null },
+): number {
+  let totalUnidades = q.unidades;
+  if (totalUnidades <= 0 && q.caixas > 0 && ctx.boxUnits && ctx.boxUnits > 0) {
+    totalUnidades = q.caixas * ctx.boxUnits;
+  }
+  if (totalUnidades <= 0 || ctx.unidadesPorAssadeira <= 0) return 0;
+  return totalUnidades / ctx.unidadesPorAssadeira;
+}
+```
+
+- [ ] **Step 3: Teste** — linha com 120 un, fator 24 → 5 assadeiras; duas linhas mesma chave → soma assadeiras
+
+Run: `npx vitest run src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts`  
+Expected: PASS
+
+---
+
+### Task 6: Repository
+
+**Files:**
+- Create: `src/data/producao/OrdemProducaoRepository.ts`
+- Delete (após migração refs): `src/data/embalagem/PedidoEmbalagemRepository.ts`
+
+- [ ] **Step 1: Copiar repository** adaptando:
+  - tabela `ordens_producao`
+  - `CONFLICT_COLUMNS` inclui `assadeira_id`
+  - `toDbInsert` persiste `assadeiras`, `assadeira_id`, `ordem_planejamento`, derivados
+  - `listByDataProducao` ordena por `ordem_planejamento ASC`
+  - método `reorderForDate(dataProducao, orderedIds[])`
+
+```typescript
+async reorderForDate(dataProducao: string, orderedIds: string[]): Promise<void> {
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await this.supabase
+      .from('ordens_producao')
+      .update({ ordem_planejamento: i + 1, updated_at: new Date().toISOString() })
+      .eq('id', orderedIds[i])
+      .eq('data_producao', dataProducao);
+    if (error) throw new Error(`Erro ao reordenar: ${error.message}`);
+  }
+}
+
+async nextOrdemPlanejamento(dataProducao: string): Promise<number> {
+  const { data } = await this.supabase
+    .from('ordens_producao')
+    .select('ordem_planejamento')
+    .eq('data_producao', dataProducao)
+    .order('ordem_planejamento', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.ordem_planejamento ?? 0) + 1;
+}
+```
+
+- [ ] **Step 2: Exportar singleton `ordemProducaoRepository`**
+
+- [ ] **Step 3: Atualizar todos os imports** (grep `PedidoEmbalagemRepository` / `pedidoEmbalagemRepository`)
+
+Arquivos conhecidos:
+- `src/lib/services/pedido-embalagem-service.ts`
+- `src/lib/services/painel-embalagem-service.ts`
+- `src/lib/services/embalagem-lote-service.ts`
+- `src/app/api/embalagem/pedido/[pedidoEmbalagemId]/route.ts`
+- `src/app/api/producao/embalagem/pedido/[pedidoEmbalagemId]/resolver-linha/route.ts`
+- `src/app/api/producao/embalagem/pedido/[pedidoEmbalagemId]/lote/route.ts`
+- `scripts/link-embalagem-lotes-pedidos.ts`
+
+---
+
+### Task 7: Service + reconcile
+
+**Files:**
+- Create: `src/lib/services/ordem-producao-service.ts`
+- Modify: imports nas APIs submit/edit/delete embalagem
+
+- [ ] **Step 1: Renomear `PedidoEmbalagemService` → `OrdemProducaoService`**
+
+Injetar `resolveAssadeira` no reconcile:
+
+```typescript
+async resolveAssadeiraDefault(produtoId: string): Promise<{
+  assadeiraId: string;
+  unidadesPorAssadeiraEfetiva: number;
+  boxUnits: number | null;
+}> {
+  const { data: link } = await supabase
+    .from('produto_assadeiras')
+    .select('assadeira_id, unidades_por_assadeira, produtos(box_units), assadeiras(unidades_por_assadeira)')
+    .eq('produto_id', produtoId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!link) throw new EstoqueResolverError(`Produto sem assadeira: ${produtoId}`);
+  const fator = resolveUnidadesPorAssadeiraEfetiva({
+    produto: link.unidades_por_assadeira,
+    assadeira: link.assadeiras?.unidades_por_assadeira,
+  });
+  if (!fator) throw new EstoqueResolverError(`Fator assadeira inválido: ${produtoId}`);
+  return {
+    assadeiraId: link.assadeira_id,
+    unidadesPorAssadeiraEfetiva: fator,
+    boxUnits: link.produtos?.box_units ?? null,
+  };
+}
+```
+
+- [ ] **Step 2: `reconcileForDate`** usa `aggregatePedidosFromSheetRows` com novo mapper
+
+- [ ] **Step 3: Manter alias export** `pedidoEmbalagemService` apontando para `ordemProducaoService` temporariamente (evita quebrar APIs num único PR)
+
+---
+
+### Task 8: Backfill script
+
+**Files:**
+- Create: `scripts/backfill-ordens-producao-assadeiras.ts`
+
+- [ ] **Step 1: Script CLI**
+
+```typescript
+// Para cada ordem com assadeira_id IS NULL:
+// 1. resolveAssadeiraDefault(produto_id)
+// 2. calcular assadeiras reversamente (unidades ou caixas)
+// 3. recalcular derivados
+// 4. atribuir ordem_planejamento sequencial por data_producao
+// 5. --dry-run lista ordens sem assadeira configurada
+```
+
+- [ ] **Step 2: Adicionar npm scripts**
+
+```json
+"backfill:ordens-producao": "npx tsx scripts/backfill-ordens-producao-assadeiras.ts",
+"backfill:ordens-producao:dry": "npx tsx scripts/backfill-ordens-producao-assadeiras.ts --dry-run"
+```
+
+- [ ] **Step 3: Após backfill, tornar assadeira_id NOT NULL**
+
+```sql
+ALTER TABLE ordens_producao ALTER COLUMN assadeira_id SET NOT NULL;
+```
+
+- [ ] **Step 4: Dropar legada**
+
+```sql
+DROP TABLE IF EXISTS _ordens_producao_legacy CASCADE;
+```
+
+---
+
+### Task 9: Sync job rename
+
+**Files:**
+- Create: `scripts/sync-ordens-producao-from-sheet.ts` (copiar e adaptar)
+- Modify: `package.json`
+
+- [ ] **Step 1: Renomear script** mantendo alias deprecated:
+
+```json
+"sync:ordens-producao": "npx tsx scripts/sync-ordens-producao-from-sheet.ts",
+"sync:ordens-producao:dry": "npx tsx scripts/sync-ordens-producao-from-sheet.ts --dry-run",
+"sync:pedidos-embalagem": "npm run sync:ordens-producao"
+```
+
+- [ ] **Step 2: Rodar dry-run em staging**
+
+Run: `npm run sync:ordens-producao:dry`  
+Expected: log de grupos com `assadeiras` agregadas, zero erros de fator
+
+---
+
+### Task 10: link-embalagem-lotes
+
+**Files:**
+- Modify: `scripts/link-embalagem-lotes-pedidos.ts`
+
+- [ ] **Step 1: Trocar** `pedido_embalagem_id` → `ordem_producao_id`, tabela `ordens_producao`, chave com `assadeiraId`
+
+- [ ] **Step 2: Rodar dry-run**
+
+Run: `npm run link:embalagem-lotes-pedidos:dry`
+
+---
+
+### Task 11: Verificação D.1 + D.2
+
+- [ ] **Step 1: Rodar suite de testes domain**
+
+Run: `npx vitest run src/domain/producao src/domain/embalagem/pedido-key.test.ts src/domain/embalagem/map-sheet-rows-to-pedidos.test.ts`  
+Expected: PASS
+
+- [ ] **Step 2: Rodar build**
+
+Run: `npm run build`  
+Expected: sem erros de tipo
+
+---
+
+### Task 12: UI meta — input LT + assadeira (D.3)
+
+**Files:**
+- Modify: `src/components/CreatePedidoModal.tsx`
+- Modify: `src/app/meta/embalagem/page.tsx` (ou equivalente)
+- Modify: `src/app/meta/producao/page.tsx`
+- Create: `src/app/api/produtos/[id]/assadeiras/route.ts`
+
+- [ ] **Step 1: API listar assadeiras do produto**
+
+```typescript
+// GET /api/produtos/[id]/assadeiras
+// Retorna: { assadeiras: [{ id, nome, unidadesPorAssadeiraEfetiva }] }
+```
+
+- [ ] **Step 2: CreatePedidoModal** — substituir inputs caixas/pacotes/unidades/kg por:
+  - `assadeiras` (NumberInput)
+  - `assadeiraId` (select)
+  - preview read-only: unidades + caixas derivados (chama `deriveQuantidadesFromAssadeiras` client-side)
+
+- [ ] **Step 3: Submit APIs** — payload com `assadeiras` + `assadeiraId`; service deriva antes de persistir
+
+---
+
+### Task 13: Reorder API (D.3)
+
+**Files:**
+- Create: `src/app/api/ordens-producao/reorder/route.ts`
+
+- [ ] **Step 1: PATCH handler**
+
+```typescript
+// Body: { dataProducao: string; orderedIds: string[] }
+// Valida: todos ids pertencem à dataProducao
+// Chama ordemProducaoRepository.reorderForDate
+```
+
+- [ ] **Step 2: UI drag-and-drop** na tela de planejamento do dia (usar biblioteca já no projeto ou HTML5 DnD nativo)
+
+---
+
+## Fases futuras (fora deste plano)
+
+| Fase | Escopo |
+|------|--------|
+| D.4 | Painéis fermentação/forno/embalagem leem `ordens_producao` |
+| D.5 | Deprecar `produtos.unidades_assadeira`; desligar planilha |
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| nullable assadeiras | Task 1 |
+| rename numero_buracos | Task 1 |
+| pedidos_embalagem → ordens_producao | Task 1, 6 |
+| assadeiras + assadeira_id canônico | Task 3, 6 |
+| derivados unidades + caixas | Task 3 |
+| pacotes/kg = 0 | Task 3 |
+| chave + assadeira_id | Task 4 |
+| ordem_planejamento | Task 6, 13 |
+| reconcile normaliza LT | Task 5, 7 |
+| embalagem_lotes FK | Task 1, 10 |
+| backfill | Task 8 |
+| drop legada | Task 8 |
+| UI LT + assadeira | Task 12 |
+| reorder manual | Task 13 |

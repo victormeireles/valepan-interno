@@ -116,14 +116,16 @@ export async function PUT(
 
     const originalDataPedido = pedido.dataProducao;
     const key = pedidoRecordToKey(pedido);
-    const matches = await findSheetRowsForPedidoKey(key, (c, p) =>
-      pedidoEmbalagemService.resolveIds(c, p),
-    {
-      dataProducaoFilter: pedido.dataProducao,
-      dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
-      observacao: pedido.observacao,
-      produtoNome: produto,
-    },
+    const matches = await findSheetRowsForPedidoKey(
+      key,
+      (c, p) => pedidoEmbalagemService.resolveIds(c, p),
+      ({ produtoId }) => pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
+      {
+        dataProducaoFilter: pedido.dataProducao,
+        dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
+        observacao: pedido.observacao,
+        produtoNome: produto,
+      },
     );
 
     const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
@@ -220,8 +222,10 @@ export async function DELETE(
     }
 
     const dataProducao = pedido.dataProducao;
-    await deleteAllSheetRowsForPedido(pedido, (c, p) =>
-      pedidoEmbalagemService.resolveIds(c, p),
+    await deleteAllSheetRowsForPedido(
+      pedido,
+      (c, p) => pedidoEmbalagemService.resolveIds(c, p),
+      ({ produtoId }) => pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
     );
 
     try {

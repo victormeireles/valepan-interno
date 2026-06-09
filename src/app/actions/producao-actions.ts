@@ -30,7 +30,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
     
     // Busca última OP do dia para incrementar sequencial
     const { data: lastOp } = await supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .select('lote_codigo')
       .ilike('lote_codigo', `OP-${dateStr}-%`)
       .order('lote_codigo', { ascending: false })
@@ -53,7 +53,7 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
       : new Date().toISOString();
 
     const { data, error } = await supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .insert({
         produto_id: params.produtoId,
         qtd_planejada: params.qtdPlanejada,
@@ -91,7 +91,7 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
     }
 
     const { data, error } = await supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .update(updateData)
       .eq('id', params.ordemId)
       .select()
@@ -111,7 +111,7 @@ export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data, error } = await supabase
-    .from('ordens_producao')
+    .from('_ordens_producao_legacy')
     .select(`
       *,
       produtos (

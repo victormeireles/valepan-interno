@@ -12,6 +12,9 @@ const basePedido: PedidoEmbalagemRecord = {
   tipoEstoqueId: 'tipo-1',
   produtoId: 'prod-1',
   observacao: 'Damiao',
+  assadeiraId: 'assadeira-1',
+  assadeiras: 15,
+  ordemPlanejamento: 1,
   quantidade: { caixas: 225, pacotes: 0, unidades: 0, kg: 0 },
 };
 

@@ -9,6 +9,7 @@ describe('loteToPedidoKey', () => {
       tipoEstoqueId: 'tipo-1',
       produtoId: 'prod-1',
       observacaoCliente: '  obs cliente  ',
+      assadeiraId: 'ass-1',
     });
     expect(key).toEqual({
       dataProducao: '2026-06-03',
@@ -16,6 +17,7 @@ describe('loteToPedidoKey', () => {
       tipoEstoqueId: 'tipo-1',
       produtoId: 'prod-1',
       observacao: 'obs cliente',
+      assadeiraId: 'ass-1',
     });
   });
 
@@ -26,6 +28,7 @@ describe('loteToPedidoKey', () => {
       tipoEstoqueId: 't',
       produtoId: 'p',
       observacaoCliente: '',
+      assadeiraId: 'ass-1',
     });
     expect(key.observacao).toBe('');
   });
