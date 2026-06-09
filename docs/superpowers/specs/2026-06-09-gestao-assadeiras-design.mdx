@@ -1,0 +1,231 @@
+# Design: Gestão de Assadeiras (Fase A)
+
+**Data:** 2026-06-09  
+**Status:** Aprovado pelo stakeholder  
+**Roadmap:** A (esta spec) → B (produto × assadeira) → C (regras por cliente)
+
+## Contexto
+
+O banco já possui tabelas relacionais para assadeiras (`assadeiras`, `produto_assadeiras`, `cliente_assadeiras`, `cliente_assadeira_bloqueios`), mas **não existe tela de configuração** no app — os dados são mantidos diretamente no Supabase.
+
+Pedidos de forno/embalagem já consomem `produto_assadeiras` + seleção de `assadeira_id`, porém três rotas de API usam incorretamente `quantidade_latas` como fator de conversão (campo que representa estoque físico, não capacidade).
+
+**Objetivo da Fase A:** entregar tela de **gestão de assadeiras** em `/config/assadeiras`, com CRUD completo, terminologia unificada em "assadeiras" e "pães por assadeira", e corrigir o uso indevido de `quantidade` nas APIs de conversão.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Prioridade | A agora; B (produto × assadeira) e C (cliente) depois |
+| Terminologia UI | **Pães por assadeira**, **Quantidade de assadeiras** — nunca "buracos" |
+| Campo de estoque | Renomear `quantidade_latas` → `quantidade` |
+| Significado de `quantidade` | Quantidade de assadeiras desse tipo em estoque (editável na tela) |
+| Significado de `unidades_por_assadeira` | Pães por assadeira — capacidade padrão do tipo |
+| Layout | Lista + modal (padrão Insumos, otimizado para dados numéricos) |
+| Navegação | Nova seção **Configurações** na home → `/config/assadeiras` |
+| Estoque na tela | Editável — esta é a tela de gestão completa |
+| Desativação | Soft delete via `ativo = false` |
+| Ícones | Material Icons (vetorial) — sem emoji em nav/header/ações |
+| Estilo visual | Alinhado a Insumos (`gray-50`, cards brancos, CTA `gray-900`) |
+
+## Fora de escopo (Fase A)
+
+- Fase B: vínculo produto × assadeira com override de pães (`/config/produto-assadeiras`)
+- Fase C: regras por cliente (`/config/cliente-assadeiras`)
+- Consumo automático de estoque na produção
+- Deprecar `produtos.unidades_assadeira` no código legado (fase B+)
+- Renomear coluna `diametro_buracos_mm` no banco (mantém nome interno; label UI: "Diâmetro do pão (mm)")
+
+## Schema
+
+### Migration: renomear estoque
+
+```sql
+ALTER TABLE assadeiras
+  RENAME COLUMN quantidade_latas TO quantidade;
+
+COMMENT ON COLUMN assadeiras.quantidade IS
+  'Quantidade de assadeiras deste tipo em estoque';
+
+COMMENT ON COLUMN assadeiras.unidades_por_assadeira IS
+  'Pães por assadeira — capacidade padrão do tipo';
+```
+
+Após migration: `npm run gen:types`.
+
+### Tabela `assadeiras` — campos na UI
+
+| Coluna DB | Label na tela | Obrigatório | Notas |
+|-----------|---------------|-------------|-------|
+| `nome` | Nome | Sim | trim, máx. 100 chars |
+| `codigo` | Código | Não | único quando preenchido |
+| `descricao` | Descrição | Não | textarea, máx. 500 chars |
+| `unidades_por_assadeira` | Pães por assadeira | Sim | inteiro ≥ 1 |
+| `quantidade` | Quantidade de assadeiras | Sim | inteiro ≥ 0 (estoque) |
+| `ordem` | Ordem de exibição | Não | default 0 |
+| `ativo` | Ativo | Sim | default true |
+| `diametro_buracos_mm` | Diâmetro do pão (mm) | Não | seção avançada colapsável |
+
+**Importante:** `quantidade` (estoque) **não** participa de conversões de produção. Fator de conversão:
+
+```
+fator = produto_assadeiras.unidades_por_assadeira
+     ?? assadeiras.unidades_por_assadeira
+```
+
+## Arquitetura
+
+### Estrutura de arquivos
+
+```
+src/app/config/
+  layout.tsx                      # Shell Configurações
+  assadeiras/
+    page.tsx                        # Server Component
+    AssadeirasClient.tsx            # Client: lista, filtros, modal
+src/components/Assadeiras/
+  AssadeiraModal.tsx
+  AssadeiraCapacityPreview.tsx
+  AssadeirasTable.tsx               # Desktop sortável
+  AssadeirasMobileList.tsx          # Mobile empilhado
+src/app/actions/assadeiras-actions.ts
+src/domain/assadeiras/assadeira-validation.ts
+supabase/migrations/YYYYMMDD_rename_quantidade_latas.sql
+```
+
+### Server Actions
+
+| Action | Comportamento |
+|--------|---------------|
+| `getAssadeiras(includeInactive?)` | `SELECT * ORDER BY ordem ASC, nome ASC` |
+| `createAssadeira(data)` | Insert validado + `revalidatePath('/config/assadeiras')` |
+| `updateAssadeira(id, data)` | Update parcial validado + revalidate |
+| `deactivateAssadeira(id)` | `ativo = false` + revalidate |
+
+Validação compartilhada (Zod) entre client e server.
+
+### Correção de APIs existentes
+
+Substituir fallback `assadeiras.quantidade_latas` por `assadeiras.unidades_por_assadeira` em:
+
+- `src/app/api/submit/forno-pedido/route.ts`
+- `src/app/api/submit/embalagem-pedido/route.ts`
+- `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts`
+
+Usar `resolveUnidadesPorAssadeiraEfetiva` de `src/domain/producao/assadeira-factor.ts`.
+
+### Fluxo de dados
+
+```
+page.tsx (SSR getAssadeiras)
+  → AssadeirasClient (filtros, sort client-side)
+    → AssadeiraModal (create/update via Server Actions)
+      → Supabase assadeiras
+      → revalidatePath
+
+Pedidos forno/embalagem (inalterado nesta fase, exceto fix do fator)
+  → produto_assadeiras.unidades_por_assadeira ?? assadeiras.unidades_por_assadeira
+```
+
+## Interface (ui-ux-pro-max)
+
+### Home — seção Configurações
+
+Nova seção em `src/app/page.tsx`:
+
+| Card | Ícone Material | Rota | Descrição |
+|------|----------------|------|-----------|
+| Assadeiras | `bakery_dining` | `/config/assadeiras` | Tipos, capacidade e estoque |
+| WhatsApp | `chat` | `/config/whatsapp` | Notificações de produção |
+
+### Shell `/config/layout.tsx`
+
+- **Desktop (≥1024px):** sidebar `w-56`, item ativo com `border-l-2 border-slate-900`
+- **Mobile:** pills horizontais scrolláveis com ícone + label
+- Breadcrumb: `Início › Configurações › [página]`
+- Deep link: `/config/assadeiras` com filtros em query (`?status=ativas`)
+
+### Página `/config/assadeiras`
+
+**Header:** `DashboardHeader` com `icon="bakery_dining"` (Material, não emoji)
+
+**Resumo (4 cards):** Total · Ativas · Média pães/assadeira · Estoque total  
+- Skeleton shimmer no load  
+- Números `tabular-nums`
+
+**Barra de ações:** busca (label visível) + filtro segmentado (Todas/Ativas/Inativas) + CTA `+ Nova assadeira`
+
+**Lista adaptativa:**
+
+| Breakpoint | Componente |
+|------------|------------|
+| ≥768px | `AssadeirasTable` — sortável, `aria-sort`, linha clicável |
+| <768px | `AssadeirasMobileList` — empilhado, botões Editar sempre visíveis |
+
+Colunas: Nome · Código · Pães/assadeira · Qtd estoque · Status (ícone + texto) · Ações
+
+**Empty state:** ícone `bakery_dining`, mensagem contextual (sem dados vs. filtro vazio), CTA criar
+
+### Modal (`AssadeiraModal`)
+
+| Breakpoint | Padrão |
+|------------|--------|
+| Desktop | Dialog centralizado `max-w-lg`, scrim `bg-black/50` |
+| Mobile | Sheet bottom `~90dvh`, scroll interno |
+
+**Acessibilidade:** `role="dialog"`, `aria-modal`, focus trap, Esc fecha, confirmação ao descartar alterações
+
+**Seções (`fieldset`):**
+
+1. Identificação — Nome*, Código, Descrição
+2. Capacidade — Pães por assadeira* + `AssadeiraCapacityPreview`
+3. Estoque — Quantidade de assadeiras*
+4. Avançado (colapsável) — Ordem, Diâmetro do pão (mm), Ativo
+
+**Preview:** grade até 6×6 círculos; acima de 36 mostra parcial + contador; `aria-hidden` + `sr-only` para leitores de tela; respeita `prefers-reduced-motion`
+
+**Validação:** on blur; erros abaixo do campo; `role="alert"` no submit; foco no primeiro inválido
+
+**Rodapé:** Cancelar · Desativar (só edição, `rose-700`) · Salvar (loading/disabled)
+
+**Feedback:** toast `aria-live="polite"`, auto-dismiss 4s
+
+### Tokens visuais
+
+```
+Fundo:        bg-gray-50/50
+Superfície:   bg-white border-gray-100 rounded-2xl shadow-sm
+CTA primário: bg-gray-900 hover:bg-gray-800
+Perigo:       text-rose-700 border-rose-200
+Sucesso:      text-emerald-600
+Foco:         ring-2 ring-blue-500 ring-offset-2
+Transição:    200ms ease-out (transform/opacity)
+Touch:        min-h-11 em inputs e botões
+```
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---------|---------------|
+| Nome vazio / pães < 1 / quantidade < 0 | Erro no campo com mensagem clara |
+| Código duplicado | "Já existe assadeira com este código" |
+| Falha Supabase | Toast + opção de retry |
+| Desativar com vínculos em `produto_assadeiras` | Permitir; some dos selects (`ativo = true` only) |
+| Desativar última assadeira ativa de um produto | Aviso informativo, não bloqueia (Fase B) |
+
+## Testes
+
+| Tipo | Escopo |
+|------|--------|
+| Unit | `assadeira-validation.ts` — casos válidos e inválidos |
+| Unit | Rotas de submit não usam `quantidade` como fator de conversão |
+| Manual | CRUD, modal mobile sheet, sort tabela, desativar, filtros, empty states |
+
+## Fases futuras (referência)
+
+| Fase | Rota | Escopo |
+|------|------|--------|
+| B | `/config/produto-assadeiras` | Override de pães por produto × tipo de assadeira |
+| C | `/config/cliente-assadeiras` | Assadeiras permitidas/bloqueadas por cliente |
+
+O shell `/config/layout.tsx` deve ser extensível para adicionar itens B e C sem refatorar a Fase A.
