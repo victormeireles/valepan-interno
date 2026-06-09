@@ -1,4 +1,8 @@
 import type { Quantidade } from '@/domain/types/inventario';
+import {
+  QuantityBreakdown,
+  type QuantityBreakdownEntry,
+} from '@/domain/valueObjects/QuantityBreakdown';
 
 export type UnidadePrincipal = 'cx' | 'pct' | 'un' | 'kg';
 
@@ -23,6 +27,25 @@ export function derivarUnidadePrincipal(q: Quantidade): {
   if (q.unidades > 0) return { unidade: 'un', valor: q.unidades };
   if (q.kg > 0) return { unidade: 'kg', valor: q.kg };
   return { unidade: 'cx', valor: 0 };
+}
+
+/** Exibição e farol na tela de embalagem: apenas caixas e pacotes. */
+export function derivarUnidadeEmbalagem(q: Pick<Quantidade, 'caixas' | 'pacotes'>): {
+  unidade: 'cx' | 'pct';
+  valor: number;
+} {
+  if (q.caixas > 0) return { unidade: 'cx', valor: q.caixas };
+  if (q.pacotes > 0) return { unidade: 'pct', valor: q.pacotes };
+  return { unidade: 'cx', valor: 0 };
+}
+
+export function buildEmbalagemDisplayEntries(
+  q: Pick<Quantidade, 'caixas' | 'pacotes'>,
+): QuantityBreakdownEntry[] {
+  return QuantityBreakdown.buildEntries([
+    { quantidade: q.caixas, unidade: 'cx' },
+    { quantidade: q.pacotes, unidade: 'pct' },
+  ]);
 }
 
 export function quantidadeTemSaldoPedido(q: Quantidade): boolean {

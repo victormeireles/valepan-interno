@@ -1,8 +1,9 @@
-import { derivarUnidadePrincipal } from '@/domain/embalagem/painel-quantidade';
+import { derivarUnidadeEmbalagem } from '@/domain/embalagem/painel-quantidade';
 import type { PainelLoteEmbalagem, PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { RealizadoItemEmbalagem } from '@/domain/types/realizado';
 
 export type PainelLoteItem = RealizadoItemEmbalagem & {
+  loteId?: string;
   pedidoEmbalagemId?: string;
   pacoteFotoId?: string;
   pacoteFotoUploadedAt?: string;
@@ -26,9 +27,10 @@ export function loteToPainelItem(
   pedido: PainelPedidoEmbalagem,
   lote: PainelLoteEmbalagem,
 ): PainelLoteItem {
-  const { unidade, valor } = derivarUnidadePrincipal(lote.quantidade);
+  const { unidade, valor } = derivarUnidadeEmbalagem(lote.quantidade);
 
   return {
+    loteId: lote.loteId,
     cliente: pedido.cliente,
     produto: pedido.produto,
     observacao: pedido.observacao,
@@ -66,5 +68,7 @@ export function loteToPainelItem(
 }
 
 export function isPedidoEmbalagemFinalizado(pedido: PainelPedidoEmbalagem): boolean {
-  return pedido.aProduzir > 0 && pedido.produzidoScalar >= pedido.aProduzir;
+  const meta = derivarUnidadeEmbalagem(pedido.pedido);
+  const produzido = derivarUnidadeEmbalagem(pedido.produzido);
+  return meta.valor > 0 && produzido.valor >= meta.valor;
 }

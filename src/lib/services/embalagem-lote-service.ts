@@ -1,5 +1,13 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
-import { appendEmbalagemProducaoRow } from '@/domain/embalagem/pedido-sheet-ops';
+import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
+import {
+  loteTemQuantidadeProduzida,
+  montarObservacaoSaidaExclusaoEmbalagem,
+} from '@/domain/embalagem/embalagem-lote-exclusao';
+import {
+  appendEmbalagemProducaoRow,
+  clearEmbalagemProducaoSheetRow,
+} from '@/domain/embalagem/pedido-sheet-ops';
 import { loteToPedidoKey } from '@/domain/embalagem/pedido-key-from-lote';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
@@ -12,7 +20,13 @@ import {
   estoqueResolverService,
   EstoqueResolverError,
 } from '@/lib/services/estoque-resolver-service';
+import { estoqueService } from '@/lib/services/estoque-service';
 import { pedidoEmbalagemService } from '@/lib/services/pedido-embalagem-service';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
+import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
+import { deleteSheetRow } from '@/lib/googleSheets';
+import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { normalizeToISODate } from '@/lib/utils/date-utils';
 
 export { EstoqueResolverError };
@@ -248,6 +262,64 @@ export class EmbalagemLoteService {
   }
 
   async compensarLote(loteId: string): Promise<void> {
+    await embalagemLoteRepository.deleteById(loteId);
+  }
+
+  async excluirLote(loteId: string): Promise<void> {
+    const lote = await embalagemLoteRepository.findById(loteId);
+    if (!lote) {
+      throw new Error('Lote não encontrado');
+    }
+
+    const q = lote.quantidade;
+    const productService = new SupabaseProductService();
+    const [tipo, produto] = await Promise.all([
+      tiposEstoqueService.findById(lote.tipoEstoqueId),
+      productService.findById(lote.produtoId),
+    ]);
+
+    if (!tipo || !produto) {
+      throw new Error('Cliente ou produto não encontrado');
+    }
+
+    if (loteTemQuantidadeProduzida(q)) {
+      await saidasSheetManager.appendNovaSaida({
+        data: lote.dataPedido,
+        cliente: tipo.nome,
+        produto: produto.nome,
+        meta: { ...q },
+        observacao: montarObservacaoSaidaExclusaoEmbalagem(produto.nome),
+        skipNotification: true,
+      });
+
+      const clienteEstoque =
+        (await estoqueService.obterTipoEstoqueCliente(tipo.nome)) ?? tipo.nome;
+
+      await estoqueService.aplicarDelta({
+        cliente: clienteEstoque,
+        produto: produto.nome,
+        delta: {
+          caixas: -q.caixas,
+          pacotes: -q.pacotes,
+          unidades: -q.unidades,
+          kg: -q.kg,
+        },
+        allowNegative: true,
+        origem: 'saida',
+        clienteDestino: tipo.nome,
+      });
+    }
+
+    if (lote.planilhaRowId && lote.planilhaRowId >= 2) {
+      const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+      if (lote.modo === 'parcial') {
+        await deleteSheetRow(spreadsheetId, tabName, lote.planilhaRowId);
+      } else {
+        await clearEmbalagemProducaoSheetRow(lote.planilhaRowId);
+      }
+    }
+
+    await estoqueRepository.clearEmbalagemLoteId(loteId);
     await embalagemLoteRepository.deleteById(loteId);
   }
 }

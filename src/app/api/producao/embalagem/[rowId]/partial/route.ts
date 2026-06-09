@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { buildEmbalagemRealizadoSheetRowValues } from '@/domain/embalagem/pedido-sheet-ops';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 import { estoqueService } from '@/lib/services/estoque-service';
 import {
@@ -109,65 +110,32 @@ export async function POST(
       throw e;
     }
 
-    // 3. Calcular novo valor do pedido da linha original (descontar o produzido)
-    const novoPedidoCaixas = Math.max(0, pedidoCaixas - c);
-    const novoPedidoPacotes = Math.max(0, pedidoPacotes - p);
-    const novoPedidoUnidades = Math.max(0, pedidoUnidades - u);
-    const novoPedidoKg = Math.max(0, pedidoKg - k);
-
-    // 4. Atualizar APENAS colunas G-J da linha original (pedido) - NÃO TOCAR na produção (M-Q)
-    const rangePedido = `${tabName}!G${rowNumber}:J${rowNumber}`;
-    const valuesPedido = [
-      novoPedidoCaixas || 0,      // G - caixas
-      novoPedidoPacotes || 0,     // H - pacotes
-      novoPedidoUnidades || 0,    // I - unidades
-      novoPedidoKg || 0,          // J - kg
-    ];
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: rangePedido,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [valuesPedido]
-      }
-    });
-
-    // 5. Criar nova linha
+    // 3. Criar nova linha de realizado (meta permanece na linha original — G–J intactos)
     const now = new Date().toISOString();
-    const novaLinhaValues = [
-      dataPedido,           // A - data_pedido (copiado)
-      dataFabricacao,       // B - data_fabricacao (copiado)
-      cliente,              // C - cliente (copiado)
-      observacao,           // D - observacao (copiado)
-      produto,              // E - produto (copiado)
-      congelado,            // F - congelado (copiado)
-      c,                    // G - caixas pedido = produzido
-      p,                    // H - pacotes pedido = produzido
-      u,                    // I - unidades pedido = produzido
-      k,                    // J - kg pedido = produzido
-      now,                  // K - created_at (novo)
-      now,                  // L - updated_at (novo)
-      // M-Q produção (valores preenchidos pelo usuário)
-      c,                    // M - producao_caixas
-      p,                    // N - producao_pacotes
-      u,                    // O - producao_unidades
-      k,                    // P - producao_kg
-      now,                  // Q - producao_updated_at
-      // R-Z fotos (dados das fotos)
-      pacoteFotoUrl || '',         // R - pacote_foto_url
-      pacoteFotoId || '',          // S - pacote_foto_id
-      pacoteFotoUploadedAt || '',  // T - pacote_foto_uploaded_at
-      etiquetaFotoUrl || '',       // U - etiqueta_foto_url
-      etiquetaFotoId || '',        // V - etiqueta_foto_id
-      etiquetaFotoUploadedAt || '',// W - etiqueta_foto_uploaded_at
-      palletFotoUrl || '',         // X - pallet_foto_url
-      palletFotoId || '',          // Y - pallet_foto_id
-      palletFotoUploadedAt || '', // Z - pallet_foto_uploaded_at
-      lotePlanilha || '',          // AA (26) - Lote (copiado da linha original)
-      etiquetaGerada || '',        // AB (27) - Etiqueta Gerada (copiada da linha original)
-      obsEmbalagem || '',          // AC (28) - Obs embalagem
-    ];
+    const novaLinhaValues = buildEmbalagemRealizadoSheetRowValues({
+      dataPedido: dataPedido.toString(),
+      dataFabricacao: dataFabricacao.toString(),
+      cliente: cliente.toString(),
+      observacao: observacao.toString(),
+      produto: produto.toString(),
+      congelado: congelado.toString(),
+      quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
+      produzidoEm: now,
+      obsEmbalagem: obsEmbalagem || '',
+      lote: lotePlanilha,
+      etiquetaGerada,
+      fotos: {
+        pacoteFotoUrl: pacoteFotoUrl || undefined,
+        pacoteFotoId: pacoteFotoId || undefined,
+        pacoteFotoUploadedAt: pacoteFotoUploadedAt || undefined,
+        etiquetaFotoUrl: etiquetaFotoUrl || undefined,
+        etiquetaFotoId: etiquetaFotoId || undefined,
+        etiquetaFotoUploadedAt: etiquetaFotoUploadedAt || undefined,
+        palletFotoUrl: palletFotoUrl || undefined,
+        palletFotoId: palletFotoId || undefined,
+        palletFotoUploadedAt: palletFotoUploadedAt || undefined,
+      },
+    });
 
     // Inserir nova linha
     const appendResponse = await sheets.spreadsheets.values.append({
@@ -281,17 +249,17 @@ export async function POST(
       message: 'Produção parcial salva com sucesso',
       novaLinhaRowId, // Retornar o rowId da nova linha para o frontend
       linhaOriginal: {
-        novoPedido: {
-          caixas: novoPedidoCaixas,
-          pacotes: novoPedidoPacotes,
-          unidades: novoPedidoUnidades,
-          kg: novoPedidoKg,
-        }
+        pedido: {
+          caixas: pedidoCaixas,
+          pacotes: pedidoPacotes,
+          unidades: pedidoUnidades,
+          kg: pedidoKg,
+        },
       },
       novaLinha: {
-        pedido: { caixas: c, pacotes: p, unidades: u, kg: k },
+        pedido: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
         producao: { caixas: c, pacotes: p, unidades: u, kg: k },
-      }
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import EditModal from '@/components/EditModal';
 import CreatePedidoModal from '@/components/CreatePedidoModal';
 import EtiquetaModal from '@/components/EtiquetaModal';
+import MetaEmbalagemBatchModal from '@/components/MetaEmbalagem/MetaEmbalagemBatchModal';
 
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 
@@ -147,6 +148,9 @@ export default function PedidoEmbalagemPage() {
   const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
   const [etiquetaItem, setEtiquetaItem] = useState<PainelItem | null>(null);
 
+  // Importação em lote
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -165,11 +169,11 @@ export default function PedidoEmbalagemPage() {
     load();
     
     // Pausar atualização automática quando modal estiver aberto
-    if (!editModalOpen && !createModalOpen && !etiquetaModalOpen) {
+    if (!editModalOpen && !createModalOpen && !etiquetaModalOpen && !batchModalOpen) {
       const interval = setInterval(load, 60_000); // atualizar a cada minuto
       return () => clearInterval(interval);
     }
-  }, [selectedDate, editModalOpen, createModalOpen, etiquetaModalOpen]);
+  }, [selectedDate, editModalOpen, createModalOpen, etiquetaModalOpen, batchModalOpen]);
 
   // Carregar opções para o modal de edição
   useEffect(() => {
@@ -333,30 +337,30 @@ export default function PedidoEmbalagemPage() {
   const handleDeleteOrder = async () => {
     if (!editingItem?.pedidoEmbalagemId) return;
 
+    setEditLoading(true);
+    setMessage(null);
+
     try {
-      setEditLoading(true);
-      setMessage(null);
-      
       const res = await fetch(`/api/embalagem/pedido/${editingItem.pedidoEmbalagemId}`, {
         method: 'DELETE',
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao deletar pedido');
-      
-      setMessage('Pedido deletado com sucesso!');
-      
-      // Recarregar dados do painel
+      if (!res.ok) throw new Error(data.error || 'Falha ao excluir meta');
+
+      setMessage('Meta de embalagem excluída com sucesso!');
+
       const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
       const painelData = await painelRes.json();
       if (painelRes.ok) {
         const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
         setItems(pedidosReload.map(pedidoToMetaItem));
       }
-      
-      // Limpar mensagem após 3 segundos
+
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Erro ao deletar pedido');
+      const text = err instanceof Error ? err.message : 'Erro ao excluir meta';
+      setMessage(text);
+      throw err instanceof Error ? err : new Error(text);
     } finally {
       setEditLoading(false);
     }
@@ -429,6 +433,14 @@ export default function PedidoEmbalagemPage() {
               >
                 + Novo Pedido
               </button>
+              <button
+                type="button"
+                onClick={() => setBatchModalOpen(true)}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 border border-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <span className="material-icons text-base" aria-hidden="true">upload_file</span>
+                Importar em lote
+              </button>
               
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <label htmlFor="date-filter" className="text-gray-300 text-sm font-medium whitespace-nowrap">
@@ -450,7 +462,7 @@ export default function PedidoEmbalagemPage() {
 
         {message && (
           <div className={`mb-4 p-4 rounded-md border ${
-            message.includes('sucesso') || message.includes('criado') || message.includes('editado') || message.includes('deletado')
+            message.includes('sucesso') || message.includes('criado') || message.includes('editado') || message.includes('deletado') || message.includes('excluíd')
               ? 'bg-green-800/30 border-green-600 text-green-100'
               : 'bg-red-800/30 border-red-600 text-red-100'
           }`}>
@@ -581,6 +593,13 @@ export default function PedidoEmbalagemPage() {
         }}
         onSave={handleSaveEdit}
         onDelete={!isNewOrder ? handleDeleteOrder : undefined}
+        canDelete={!editingItem || editingItem.produzido === 0}
+        deleteBlockedMessage="Não é possível excluir: já há embalagem registrada. Exclua os lotes em Realizado: Embalagem primeiro."
+        deleteLabel="Excluir meta"
+        deleteConfirmMessage="Excluir esta meta de embalagem? A ordem de produção será removida permanentemente."
+        labelsOverride={{
+          title: isNewOrder ? 'Nova meta de embalagem' : 'Editar meta de embalagem',
+        }}
         rowId={undefined}
         initialData={isNewOrder ? {
           dataPedido: selectedDate,
@@ -637,6 +656,25 @@ export default function PedidoEmbalagemPage() {
           onSuccess={handleEtiquetaSuccess}
         />
       )}
+
+      <MetaEmbalagemBatchModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        onSuccess={async () => {
+          setMessage('Metas importadas com sucesso!');
+          try {
+            const painelRes = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+            const painelData = await painelRes.json();
+            if (painelRes.ok) {
+              const pedidosReload = (painelData.pedidos || []) as PainelPedidoEmbalagem[];
+              setItems(pedidosReload.map(pedidoToMetaItem));
+            }
+          } catch {
+            /* painel recarrega no próximo poll */
+          }
+          setTimeout(() => setMessage(null), 4000);
+        }}
+      />
     </div>
   );
 }

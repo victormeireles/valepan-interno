@@ -15,6 +15,10 @@ import {
   pedidosToDashboardItems,
   snapshotsToDashboardItems,
 } from '@/domain/embalagem/painel-dashboard-adapter';
+import {
+  buildEmbalagemDisplayEntries,
+  derivarUnidadeEmbalagem,
+} from '@/domain/embalagem/painel-quantidade';
 import { hasEmbalagemQuantity } from '@/domain/realizado/embalagem-group-by-produto';
 import {
   isPedidoEmbalagemFinalizado,
@@ -28,7 +32,6 @@ import type {
 import { RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
-import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import {
   addCalendarDaysISO,
   formatLocalTimeHHmm,
@@ -72,18 +75,10 @@ function renderPedidoAccordion(
     productionStatusOverride?: 'not-started' | 'partial' | 'complete';
   },
 ) {
-  const parentProduzido = QuantityBreakdown.buildEntries([
-    { quantidade: pedido.produzido.caixas, unidade: 'cx' },
-    { quantidade: pedido.produzido.pacotes, unidade: 'pct' },
-    { quantidade: pedido.produzido.unidades, unidade: 'un' },
-    { quantidade: pedido.produzido.kg, unidade: 'kg' },
-  ]);
-  const parentMeta = QuantityBreakdown.buildEntries([
-    { quantidade: pedido.pedido.caixas, unidade: 'cx' },
-    { quantidade: pedido.pedido.pacotes, unidade: 'pct' },
-    { quantidade: pedido.pedido.unidades, unidade: 'un' },
-    { quantidade: pedido.pedido.kg, unidade: 'kg' },
-  ]);
+  const metaEmbalagem = derivarUnidadeEmbalagem(pedido.pedido);
+  const produzidoEmbalagem = derivarUnidadeEmbalagem(pedido.produzido);
+  const parentProduzido = buildEmbalagemDisplayEntries(pedido.produzido);
+  const parentMeta = buildEmbalagemDisplayEntries(pedido.pedido);
   const instanceId = `${groupKey}|${pedido.pedidoEmbalagemId}`;
 
   return (
@@ -91,9 +86,9 @@ function renderPedidoAccordion(
       key={instanceId}
       instanceId={instanceId}
       produto={pedido.produto}
-      somaProduzido={pedido.produzidoScalar}
-      somaAProduzir={pedido.aProduzir}
-      unidade={pedido.unidade}
+      somaProduzido={produzidoEmbalagem.valor}
+      somaAProduzir={metaEmbalagem.valor}
+      unidade={metaEmbalagem.unidade}
       congelado={pedido.congelado === 'Sim'}
       detalhesProduzido={parentProduzido}
       detalhesMeta={parentMeta}
@@ -125,6 +120,7 @@ export default function ProducaoEmbalagemPage() {
   const [editingItem, setEditingItem] = useState<PainelLoteItem | null>(null);
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+  const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
   const [photoDropdownOpen, setPhotoDropdownOpen] = useState<string | null>(null);
   const [comparisonWeekItems, setComparisonWeekItems] = useState<EmbalagemDashboardItem[]>(
     [],
@@ -260,6 +256,36 @@ export default function ProducaoEmbalagemPage() {
     }
   }, []);
 
+  const handleDeleteLote = useCallback(
+    async (item: PainelLoteItem) => {
+      if (!item.loteId) {
+        setMessage('Este lote não pode ser excluído');
+        return;
+      }
+
+      const confirmado = window.confirm(
+        'Excluir este lote?\n\nSerá registrada uma saída de estoque com observação de exclusão por preenchimento incorreto.',
+      );
+      if (!confirmado) return;
+
+      setDeletingLoteId(item.loteId);
+      setMessage(null);
+      try {
+        const res = await fetch(`/api/producao/embalagem/lote/${item.loteId}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao excluir lote');
+        await refreshPedidosOnly();
+      } catch (err) {
+        setMessage(getVisibleErrorMessage(err, 'Erro ao excluir lote'));
+      } finally {
+        setDeletingLoteId(null);
+      }
+    },
+    [refreshPedidosOnly],
+  );
+
   const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
     setIsNewLoteModal(true);
     setEditingItem({
@@ -298,12 +324,43 @@ export default function ProducaoEmbalagemPage() {
       const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
       const isItemLoading = loadingCardId === itemKey;
       const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
-      const produzidoDetalhes = QuantityBreakdown.buildEntries([
-        { quantidade: embalagemItem.caixas, unidade: 'cx' },
-        { quantidade: embalagemItem.pacotes, unidade: 'pct' },
-        { quantidade: embalagemItem.unidades, unidade: 'un' },
-        { quantidade: embalagemItem.kg, unidade: 'kg' },
-      ]);
+      const produzidoDetalhes = buildEmbalagemDisplayEntries({
+        caixas: embalagemItem.caixas ?? 0,
+        pacotes: embalagemItem.pacotes ?? 0,
+      });
+
+      const isDeleting = deletingLoteId === embalagemItem.loteId;
+
+      const deleteButton = embalagemItem.loteId ? (
+        <button
+          type="button"
+          className="
+            inline-flex items-center justify-center
+            min-h-11 min-w-11 rounded-md text-red-400
+            hover:bg-gray-700/50 hover:text-red-300
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500
+            disabled:opacity-60 disabled:cursor-wait
+          "
+          aria-label={`Excluir lote de ${embalagemItem.produto}`}
+          aria-busy={isDeleting}
+          disabled={isDeleting || isItemLoading}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleDeleteLote(embalagemItem);
+          }}
+        >
+          {isDeleting ? (
+            <span
+              className="inline-block h-5 w-5 rounded-full border-2 border-red-400/30 border-t-red-400 animate-spin motion-reduce:animate-none"
+              aria-hidden
+            />
+          ) : (
+            <span className="material-icons text-xl" aria-hidden>
+              delete_outline
+            </span>
+          )}
+        </button>
+      ) : null;
 
       return (
         <div key={itemKey} className="relative">
@@ -320,6 +377,7 @@ export default function ProducaoEmbalagemPage() {
             isLoading={isItemLoading}
             detalhesProduzido={produzidoDetalhes}
             horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
+            trailingSlot={deleteButton}
           />
 
           {photoDropdownOpen === itemKey &&
@@ -368,7 +426,7 @@ export default function ProducaoEmbalagemPage() {
         </div>
       );
     },
-    [loadingCardId, photoDropdownOpen, handlePhotoClick, handleEditProducao],
+    [loadingCardId, deletingLoteId, photoDropdownOpen, handlePhotoClick, handleEditProducao, handleDeleteLote],
   );
 
   const refreshPainelData = async () => {
@@ -527,7 +585,9 @@ export default function ProducaoEmbalagemPage() {
                                 ...accordionOpts,
                                 showNovoLote: true,
                                 productionStatusOverride:
-                                  pedido.produzidoScalar === 0 ? 'not-started' : 'partial',
+                                  derivarUnidadeEmbalagem(pedido.produzido).valor === 0
+                                    ? 'not-started'
+                                    : 'partial',
                               }),
                             )}
                           </ClientGroup>

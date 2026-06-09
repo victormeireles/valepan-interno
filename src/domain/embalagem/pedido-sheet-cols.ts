@@ -10,3 +10,11 @@ export const PEDIDO_SHEET_COL = {
   pedidoUnidades: 8,
   pedidoKg: 9,
 } as const;
+
+/** Colunas M–P (realizado de embalagem na mesma aba). */
+export const PRODUCAO_SHEET_COL = {
+  caixas: 12,
+  pacotes: 13,
+  unidades: 14,
+  kg: 15,
+} as const;

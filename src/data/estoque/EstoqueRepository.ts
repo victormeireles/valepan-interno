@@ -112,6 +112,17 @@ export class EstoqueRepository {
     return data;
   }
 
+  async clearEmbalagemLoteId(embalagemLoteId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('estoque_movimentos')
+      .update({ embalagem_lote_id: null })
+      .eq('embalagem_lote_id', embalagemLoteId);
+
+    if (error) {
+      throw new Error(`Erro ao desvincular movimentos do lote: ${error.message}`);
+    }
+  }
+
   async insertMovimento(input: RegistrarMovimentoInput): Promise<MovimentoRow> {
     const { data, error } = await this.supabase
       .from('estoque_movimentos')

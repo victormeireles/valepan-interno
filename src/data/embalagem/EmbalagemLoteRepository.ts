@@ -116,6 +116,20 @@ export class EmbalagemLoteRepository {
     return fromDbRow(data);
   }
 
+  async findById(id: string): Promise<EmbalagemLoteRecord | null> {
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select()
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar lote: ${error.message}`);
+    }
+
+    return data ? fromDbRow(data) : null;
+  }
+
   async findByPlanilhaRowId(planilhaRowId: number): Promise<EmbalagemLoteRecord | null> {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')

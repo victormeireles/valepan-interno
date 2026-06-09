@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolverCamposRealizadoEmbalagem } from '@/domain/embalagem/painel-quantidade';
+import {
+  buildEmbalagemDisplayEntries,
+  derivarUnidadeEmbalagem,
+  resolverCamposRealizadoEmbalagem,
+} from '@/domain/embalagem/painel-quantidade';
 
 describe('resolverCamposRealizadoEmbalagem', () => {
   it('meta com caixas libera caixas e pacotes', () => {
@@ -36,5 +40,36 @@ describe('resolverCamposRealizadoEmbalagem', () => {
     expect(
       resolverCamposRealizadoEmbalagem({ caixas: 0, pacotes: 0, unidades: 0, kg: 0 }),
     ).toEqual({ caixas: true, pacotes: true, unidades: true, kg: true });
+  });
+});
+
+describe('derivarUnidadeEmbalagem', () => {
+  it('prioriza caixas e ignora unidades/kg', () => {
+    expect(
+      derivarUnidadeEmbalagem({ caixas: 10, pacotes: 5, unidades: 100, kg: 3 }),
+    ).toEqual({ unidade: 'cx', valor: 10 });
+  });
+
+  it('usa pacotes quando não há caixas', () => {
+    expect(
+      derivarUnidadeEmbalagem({ caixas: 0, pacotes: 30, unidades: 0, kg: 0 }),
+    ).toEqual({ unidade: 'pct', valor: 30 });
+  });
+
+  it('retorna zero quando só há unidades ou kg', () => {
+    expect(
+      derivarUnidadeEmbalagem({ caixas: 0, pacotes: 0, unidades: 500, kg: 12 }),
+    ).toEqual({ unidade: 'cx', valor: 0 });
+  });
+});
+
+describe('buildEmbalagemDisplayEntries', () => {
+  it('inclui apenas caixas e pacotes', () => {
+    expect(
+      buildEmbalagemDisplayEntries({ caixas: 10, pacotes: 5, unidades: 100, kg: 3 }),
+    ).toEqual([
+      { quantidade: 10, unidade: 'cx' },
+      { quantidade: 5, unidade: 'pct' },
+    ]);
   });
 });

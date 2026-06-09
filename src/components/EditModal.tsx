@@ -43,6 +43,11 @@ type EditModalProps = {
     unidades?: string;
     kg?: string;
   };
+  deleteLabel?: string;
+  deleteConfirmMessage?: string;
+  /** Quando false, exibe botão desabilitado com deleteBlockedMessage. */
+  canDelete?: boolean;
+  deleteBlockedMessage?: string;
 };
 
 export default function EditModal({
@@ -56,7 +61,11 @@ export default function EditModal({
   produtosOptions,
   loading = false,
   visibleFields,
-  labelsOverride
+  labelsOverride,
+  deleteLabel = 'Deletar',
+  deleteConfirmMessage = 'Tem certeza que deseja deletar este pedido? Esta ação não pode ser desfeita.',
+  canDelete = true,
+  deleteBlockedMessage,
 }: EditModalProps) {
   const [formData, setFormData] = useState<EditData>({
     dataPedido: '',
@@ -96,7 +105,7 @@ export default function EditModal({
   const handleDelete = async () => {
     if (!onDelete) return;
     
-    const confirmed = window.confirm('Tem certeza que deseja deletar este pedido? Esta ação não pode ser desfeita.');
+    const confirmed = window.confirm(deleteConfirmMessage);
     if (!confirmed) return;
 
     try {
@@ -249,16 +258,31 @@ export default function EditModal({
             </div>
 
             <div className="flex justify-between pt-4">
-              <div>
-                {rowId && onDelete && (
+              <div className="flex flex-col gap-1">
+                {onDelete && canDelete && (
                   <button
                     type="button"
                     onClick={handleDelete}
                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
                     disabled={loading}
                   >
-                    {loading ? 'Deletando...' : 'Deletar'}
+                    {loading ? 'Excluindo...' : deleteLabel}
                   </button>
+                )}
+                {onDelete && !canDelete && (
+                  <>
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-red-300 text-white rounded-md cursor-not-allowed opacity-60"
+                      disabled
+                      title={deleteBlockedMessage}
+                    >
+                      {deleteLabel}
+                    </button>
+                    {deleteBlockedMessage ? (
+                      <p className="text-xs text-red-600 max-w-xs">{deleteBlockedMessage}</p>
+                    ) : null}
+                  </>
                 )}
               </div>
               

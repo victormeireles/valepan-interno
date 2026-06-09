@@ -269,8 +269,8 @@ export async function deleteAllSheetRowsForPedido(
   return rowNumbers.length;
 }
 
-/** Append de uma linha de produção (dual-write legado). Retorna o número da linha criada. */
-export async function appendEmbalagemProducaoRow(params: {
+/** Valores de uma linha de realizado (lote parcial). G–J ficam zerados — meta fica na linha do pedido. */
+export function buildEmbalagemRealizadoSheetRowValues(params: {
   dataPedido: string;
   dataFabricacao: string;
   cliente: string;
@@ -278,29 +278,27 @@ export async function appendEmbalagemProducaoRow(params: {
   produto: string;
   congelado: string;
   quantidade: Quantidade;
+  produzidoEm?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
-}): Promise<number> {
-  const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-  const sheets = await getGoogleSheetsClient();
-  const now = new Date().toISOString();
-  const c = params.quantidade.caixas;
-  const p = params.quantidade.pacotes;
-  const u = params.quantidade.unidades;
-  const k = params.quantidade.kg;
+  lote?: string | number | null;
+  etiquetaGerada?: string;
+}): (string | number)[] {
+  const now = params.produzidoEm ?? new Date().toISOString();
+  const { caixas: c, pacotes: p, unidades: u, kg: k } = params.quantidade;
   const fotos = params.fotos;
 
-  const novaLinhaValues = [
+  return [
     params.dataPedido,
     params.dataFabricacao,
     params.cliente,
     params.observacao,
     params.produto,
     params.congelado,
-    c,
-    p,
-    u,
-    k,
+    0,
+    0,
+    0,
+    0,
     now,
     now,
     c,
@@ -317,10 +315,112 @@ export async function appendEmbalagemProducaoRow(params: {
     fotos?.palletFotoUrl || '',
     fotos?.palletFotoId || '',
     fotos?.palletFotoUploadedAt || '',
-    '',
-    '',
+    params.lote ?? '',
+    params.etiquetaGerada ?? '',
     params.obsEmbalagem || '',
   ];
+}
+
+/**
+ * Atualiza a linha de meta (G–J com saldo) na planilha e zera G–J em duplicatas da mesma chave.
+ */
+export async function updateMetaQuantidadeOnSheetForPedido(params: {
+  pedido: PedidoEmbalagemRecord;
+  clienteNome: string;
+  produtoNome: string;
+  quantidade: Quantidade;
+  dataPedido?: string;
+  dataFabricacao?: string;
+  observacao?: string;
+  resolveIds: ResolvePedidoIds;
+  resolveAssadeira: ResolveAssadeira;
+}): Promise<number> {
+  const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+  const sheets = await getGoogleSheetsClient();
+  const now = new Date().toISOString();
+
+  const rowNumber = await resolveLinhaComSaldoParaPedido(
+    params.pedido,
+    params.resolveIds,
+    params.resolveAssadeira,
+    { produtoNome: params.produtoNome, clienteNome: params.clienteNome },
+  );
+
+  if (!rowNumber) {
+    throw new Error('Linha de meta não encontrada na planilha');
+  }
+
+  const originalRange = `${tabName}!A${rowNumber}:L${rowNumber}`;
+  const originalResponse = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: originalRange,
+  });
+  const originalValues = originalResponse.data.values?.[0] || [];
+  const originalCreatedAt = originalValues[10] || now;
+
+  const dataPedido = params.dataPedido ?? params.pedido.dataProducao;
+  const dataFabricacao = params.dataFabricacao ?? params.pedido.dataFabricacaoEtiqueta;
+  const observacao = params.observacao ?? params.pedido.observacao;
+
+  const values = [
+    dataPedido,
+    dataFabricacao,
+    params.clienteNome,
+    normalizeObservacao(observacao),
+    params.produtoNome,
+    originalValues[5] || 'Não',
+    params.quantidade.caixas,
+    params.quantidade.pacotes,
+    params.quantidade.unidades,
+    params.quantidade.kg,
+    originalCreatedAt,
+    now,
+  ];
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${tabName}!A${rowNumber}:L${rowNumber}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [values] },
+  });
+
+  const duplicateMatches = await findSheetRowsForPedidoRecord(
+    params.pedido,
+    params.clienteNome,
+    params.produtoNome,
+  );
+
+  for (const match of duplicateMatches) {
+    if (match.rowNumber === rowNumber) continue;
+    const q = rowToPedidoQuantidade(match.row);
+    if (!quantidadeTemSaldoPedido(q)) continue;
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${tabName}!G${match.rowNumber}:J${match.rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[0, 0, 0, 0]] },
+    });
+  }
+
+  return rowNumber;
+}
+
+/** Append de uma linha de produção (dual-write legado). Retorna o número da linha criada. */
+export async function appendEmbalagemProducaoRow(params: {
+  dataPedido: string;
+  dataFabricacao: string;
+  cliente: string;
+  observacao: string;
+  produto: string;
+  congelado: string;
+  quantidade: Quantidade;
+  obsEmbalagem?: string;
+  fotos?: EmbalagemLoteFotos;
+}): Promise<number> {
+  const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+  const sheets = await getGoogleSheetsClient();
+  const novaLinhaValues = buildEmbalagemRealizadoSheetRowValues(params);
 
   const appendResponse = await sheets.spreadsheets.values.append({
     spreadsheetId,
@@ -337,4 +437,39 @@ export async function appendEmbalagemProducaoRow(params: {
     throw new Error('Não foi possível determinar a linha criada na planilha');
   }
   return rowNumber;
+}
+
+/** Zera colunas de realizado (M–AC) sem remover a linha do pedido. */
+export async function clearEmbalagemProducaoSheetRow(rowNumber: number): Promise<void> {
+  const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+  const sheets = await getGoogleSheetsClient();
+  const range = `${tabName}!M${rowNumber}:AC${rowNumber}`;
+  const values = [
+    [
+      0,
+      0,
+      0,
+      0,
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
+  ];
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values },
+  });
 }

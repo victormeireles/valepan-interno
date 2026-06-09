@@ -58,4 +58,40 @@ describe('aggregatePedidosFromSheetRows', () => {
     expect(map.size).toBe(1);
     expect([...map.values()][0].quantidade.caixas).toBe(2);
   });
+
+  it('ignora linhas de lote parcial legado (G–J = M–P) na soma da meta', async () => {
+    const resolveIds = vi.fn().mockResolvedValue({
+      tipoEstoqueId: 't1',
+      produtoId: 'p1',
+    });
+    const resolveAssadeira = vi.fn().mockResolvedValue({
+      assadeiraId: 'ass-1',
+      unidadesPorAssadeiraEfetiva: 24,
+      boxUnits: 12,
+    });
+
+    const metaRow = Array<string | number>(16).fill('');
+    metaRow[0] = '2026-06-09';
+    metaRow[1] = '2026-06-09';
+    metaRow[2] = 'Valepan';
+    metaRow[4] = 'HB Brioche 65g';
+    metaRow[6] = 3;
+
+    const loteRow = Array<string | number>(16).fill('');
+    loteRow[0] = '2026-06-09';
+    loteRow[1] = '2026-06-09';
+    loteRow[2] = 'Valepan';
+    loteRow[4] = 'HB Brioche 65g';
+    loteRow[6] = 2;
+    loteRow[12] = 2;
+
+    const map = await aggregatePedidosFromSheetRows([metaRow, loteRow], {
+      dataProducaoFilter: '2026-06-09',
+      resolveIds,
+      resolveAssadeira,
+    });
+
+    expect(map.size).toBe(1);
+    expect([...map.values()][0].quantidade.caixas).toBe(3);
+  });
 });

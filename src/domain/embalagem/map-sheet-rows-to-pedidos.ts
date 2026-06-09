@@ -2,8 +2,9 @@ import type {
   AggregatedPedidoFromSheet,
   PedidoEmbalagemUpsert,
 } from '@/domain/types/pedido-embalagem';
-import { mergeOrdemIntoMap, normalizeObservacao } from '@/domain/embalagem/pedido-key';
-import { PEDIDO_SHEET_COL } from '@/domain/embalagem/pedido-sheet-cols';
+import { mergeOrdemIntoMap, normalizeObservacao, pedidoKeyToString } from '@/domain/embalagem/pedido-key';
+import { quantidadeTemSaldoPedido } from '@/domain/embalagem/painel-quantidade';
+import { PEDIDO_SHEET_COL, PRODUCAO_SHEET_COL } from '@/domain/embalagem/pedido-sheet-cols';
 import {
   assadeirasFromSheetQuantidade,
   deriveQuantidadesFromAssadeiras,
@@ -52,12 +53,52 @@ export function rowToPedidoQuantidade(row: (string | number)[]) {
   };
 }
 
+export function rowToProducaoQuantidade(row: (string | number)[]) {
+  return {
+    caixas: Number(row[PRODUCAO_SHEET_COL.caixas] || 0) || 0,
+    pacotes: Number(row[PRODUCAO_SHEET_COL.pacotes] || 0) || 0,
+    unidades: Number(row[PRODUCAO_SHEET_COL.unidades] || 0) || 0,
+    kg: Number(row[PRODUCAO_SHEET_COL.kg] || 0) || 0,
+  };
+}
+
+/** Linha de lote parcial legado: G–J repetem M–P (não é meta). */
+export function isLinhaRealizadoDuplicandoMeta(
+  row: (string | number)[],
+  rowNumber: number,
+  primaryMetaRowNumber: number | undefined,
+): boolean {
+  if (primaryMetaRowNumber === undefined || rowNumber === primaryMetaRowNumber) {
+    return false;
+  }
+  const pedido = rowToPedidoQuantidade(row);
+  const produzido = rowToProducaoQuantidade(row);
+  const temProduzido =
+    produzido.caixas + produzido.pacotes + produzido.unidades + Number(produzido.kg) > 0;
+  if (!temProduzido || !quantidadeTemSaldoPedido(pedido)) return false;
+  return (
+    pedido.caixas === produzido.caixas &&
+    pedido.pacotes === produzido.pacotes &&
+    pedido.unidades === produzido.unidades &&
+    Number(pedido.kg) === Number(produzido.kg)
+  );
+}
+
+type SheetRowCandidate = {
+  row: (string | number)[];
+  rowNumber: number;
+  key: string;
+  ordem: PedidoEmbalagemUpsert;
+  mergeCtx: { unidadesPorAssadeira: number; boxUnits: number | null };
+};
+
 export async function aggregatePedidosFromSheetRows(
   dataRows: (string | number)[][],
   options: MapSheetPedidosOptions,
   rowOffset = 2,
 ): Promise<Map<string, AggregatedPedidoFromSheet>> {
   const map = new Map<string, AggregatedPedidoFromSheet>();
+  const candidates: SheetRowCandidate[] = [];
 
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i];
@@ -94,7 +135,10 @@ export async function aggregatePedidosFromSheetRows(
       await options.resolveAssadeira({
         produtoId: resolved.produtoId,
       });
+
     const sheetQ = rowToPedidoQuantidade(row);
+    if (!quantidadeTemSaldoPedido(sheetQ)) continue;
+
     const assadeiras = assadeirasFromSheetQuantidade(sheetQ, {
       unidadesPorAssadeira: fator,
       boxUnits,
@@ -115,10 +159,34 @@ export async function aggregatePedidosFromSheetRows(
       }),
     };
 
-    mergeOrdemIntoMap(map, ordem, {
-      unidadesPorAssadeira: fator,
-      boxUnits,
+    candidates.push({
+      row,
+      rowNumber,
+      key: pedidoKeyToString(ordem),
+      ordem,
+      mergeCtx: { unidadesPorAssadeira: fator, boxUnits },
     });
+  }
+
+  const primaryMetaRowByKey = new Map<string, number>();
+  for (const candidate of candidates) {
+    const prev = primaryMetaRowByKey.get(candidate.key);
+    if (prev === undefined || candidate.rowNumber < prev) {
+      primaryMetaRowByKey.set(candidate.key, candidate.rowNumber);
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (
+      isLinhaRealizadoDuplicandoMeta(
+        candidate.row,
+        candidate.rowNumber,
+        primaryMetaRowByKey.get(candidate.key),
+      )
+    ) {
+      continue;
+    }
+    mergeOrdemIntoMap(map, candidate.ordem, candidate.mergeCtx);
   }
 
   return map;
