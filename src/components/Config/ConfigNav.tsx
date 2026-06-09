@@ -48,8 +48,8 @@ export default function ConfigNav() {
               aria-current={active ? 'page' : undefined}
               className={`inline-flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${
                 active
-                  ? 'border-l-2 border-slate-900 bg-white font-semibold text-gray-900 shadow-sm'
-                  : 'text-gray-700 hover:bg-white'
+                  ? 'border-l-2 border-slate-900 bg-gray-50 font-semibold text-gray-900 shadow-sm'
+                  : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
               <span className="material-icons text-base">{item.icon}</span>

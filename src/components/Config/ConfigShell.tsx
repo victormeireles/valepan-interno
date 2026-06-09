@@ -9,7 +9,7 @@ function openGlobalMenu() {
 
 export default function ConfigShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-gray-50/50">
+    <div className="min-h-dvh bg-white text-gray-900 [color-scheme:light]">
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-14 items-center justify-between gap-4">

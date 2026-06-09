@@ -10,7 +10,6 @@ import {
 export type Assadeira = {
   id: string;
   nome: string;
-  codigo: string | null;
   descricao: string | null;
   unidades_por_assadeira: number | null;
   quantidade: number;
@@ -63,7 +62,6 @@ export async function createAssadeira(
     .from('assadeiras')
     .insert({
       nome: parsed.data.nome,
-      codigo: parsed.data.codigo ?? null,
       descricao: parsed.data.descricao ?? null,
       unidades_por_assadeira: parsed.data.unidades_por_assadeira,
       quantidade: parsed.data.quantidade,
@@ -75,9 +73,6 @@ export async function createAssadeira(
     .single();
 
   if (error) {
-    if (error.code === '23505') {
-      return { success: false, error: 'Já existe assadeira com este código' };
-    }
     console.error('Erro ao criar assadeira:', error);
     return { success: false, error: 'Erro ao criar assadeira' };
   }
@@ -103,7 +98,6 @@ export async function updateAssadeira(
     .from('assadeiras')
     .update({
       nome: parsed.data.nome,
-      codigo: parsed.data.codigo ?? null,
       descricao: parsed.data.descricao ?? null,
       unidades_por_assadeira: parsed.data.unidades_por_assadeira,
       quantidade: parsed.data.quantidade,
@@ -117,9 +111,6 @@ export async function updateAssadeira(
     .single();
 
   if (error) {
-    if (error.code === '23505') {
-      return { success: false, error: 'Já existe assadeira com este código' };
-    }
     console.error('Erro ao atualizar assadeira:', error);
     return { success: false, error: 'Erro ao atualizar assadeira' };
   }

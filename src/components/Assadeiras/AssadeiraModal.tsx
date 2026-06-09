@@ -29,7 +29,6 @@ export default function AssadeiraModal({
 }: AssadeiraModalProps) {
   const titleId = useId();
   const [nome, setNome] = useState('');
-  const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [unidadesPorAssadeira, setUnidadesPorAssadeira] = useState(1);
   const [quantidade, setQuantidade] = useState(0);
@@ -49,16 +48,14 @@ export default function AssadeiraModal({
       setAnimating(true);
       const next = {
         nome: assadeira?.nome ?? '',
-        codigo: assadeira?.codigo ?? '',
         descricao: assadeira?.descricao ?? '',
         unidadesPorAssadeira: assadeira?.unidades_por_assadeira ?? 1,
         quantidade: assadeira?.quantidade ?? 0,
         ordem: assadeira?.ordem ?? 0,
         ativo: assadeira?.ativo ?? true,
-        diametro: assadeira?.diametro_buracos_mm ?? '',
+        diametro: (assadeira?.diametro_buracos_mm ?? '') as number | '',
       };
       setNome(next.nome);
-      setCodigo(next.codigo);
       setDescricao(next.descricao);
       setUnidadesPorAssadeira(next.unidadesPorAssadeira);
       setQuantidade(next.quantidade);
@@ -80,7 +77,6 @@ export default function AssadeiraModal({
     if (!isOpen) return;
     const current = JSON.stringify({
       nome,
-      codigo,
       descricao,
       unidadesPorAssadeira,
       quantidade,
@@ -92,7 +88,6 @@ export default function AssadeiraModal({
   }, [
     isOpen,
     nome,
-    codigo,
     descricao,
     unidadesPorAssadeira,
     quantidade,
@@ -134,7 +129,6 @@ export default function AssadeiraModal({
 
     const payload = {
       nome: nome.trim(),
-      codigo: codigo.trim() || null,
       descricao: descricao.trim() || null,
       unidades_por_assadeira: unidadesPorAssadeira,
       quantidade,
@@ -254,18 +248,6 @@ export default function AssadeiraModal({
                     {fieldErrors.nome}
                   </p>
                 )}
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="assadeira-codigo" className="text-sm font-semibold text-gray-700 ml-1">
-                  Código
-                </label>
-                <input
-                  id="assadeira-codigo"
-                  type="text"
-                  value={codigo}
-                  onChange={(e) => setCodigo(e.target.value)}
-                  className={inputClassName}
-                />
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="assadeira-descricao" className="text-sm font-semibold text-gray-700 ml-1">

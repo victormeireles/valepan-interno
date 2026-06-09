@@ -5,10 +5,6 @@ const emptyToNull = (v: unknown) =>
 
 export const assadeiraFormSchema = z.object({
   nome: z.string().trim().min(1, 'Nome é obrigatório').max(100),
-  codigo: z.preprocess(
-    emptyToNull,
-    z.string().trim().max(20).nullable().optional(),
-  ),
   descricao: z.preprocess(
     emptyToNull,
     z.string().trim().max(500).nullable().optional(),

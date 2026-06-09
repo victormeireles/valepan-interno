@@ -4,7 +4,6 @@ import { parseAssadeiraForm } from './assadeira-validation';
 describe('assadeiraFormSchema', () => {
   const valid = {
     nome: 'Assadeira 24',
-    codigo: 'A24',
     descricao: null,
     unidades_por_assadeira: 24,
     quantidade: 10,
@@ -32,15 +31,13 @@ describe('assadeiraFormSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('aceita codigo e descricao vazios como null', () => {
+  it('aceita descricao vazia como null', () => {
     const result = parseAssadeiraForm({
       ...valid,
-      codigo: '',
       descricao: '',
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.codigo).toBeNull();
       expect(result.data.descricao).toBeNull();
     }
   });
