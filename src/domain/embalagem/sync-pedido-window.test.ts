@@ -3,6 +3,7 @@ import {
   enumerateDatesInclusive,
   isDataProducaoInWindow,
   resolvePedidoSyncWindow,
+  resolvePedidoSyncWindowForApi,
 } from './sync-pedido-window';
 
 describe('resolvePedidoSyncWindow', () => {
@@ -14,6 +15,22 @@ describe('resolvePedidoSyncWindow', () => {
   it('respects overrides', () => {
     const w = resolvePedidoSyncWindow(
       { dryRun: false, from: '2026-06-01', until: '2026-06-02' },
+      '2026-06-03',
+    );
+    expect(w.from).toBe('2026-06-01');
+    expect(w.to).toBe('2026-06-02');
+  });
+});
+
+describe('resolvePedidoSyncWindowForApi', () => {
+  it('defaults to today through tomorrow', () => {
+    const w = resolvePedidoSyncWindowForApi({}, '2026-06-03');
+    expect(w).toEqual({ from: '2026-06-03', to: '2026-06-04' });
+  });
+
+  it('respects overrides', () => {
+    const w = resolvePedidoSyncWindowForApi(
+      { from: '2026-06-01', until: '2026-06-02' },
       '2026-06-03',
     );
     expect(w.from).toBe('2026-06-01');

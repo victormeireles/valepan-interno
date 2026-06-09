@@ -35,6 +35,17 @@ export function resolvePedidoSyncWindow(
   };
 }
 
+/** Janela default da API: hoje até amanhã (fuso BR). */
+export function resolvePedidoSyncWindowForApi(
+  params: Pick<SyncPedidoArgs, 'from' | 'until'>,
+  today: string = getTodayISOInBrazilTimezone(),
+): PedidoSyncWindow {
+  return {
+    from: params.from ?? today,
+    to: params.until ?? addCalendarDaysISO(today, 1),
+  };
+}
+
 export function isDataProducaoInWindow(
   dataProducao: string,
   window: PedidoSyncWindow,
