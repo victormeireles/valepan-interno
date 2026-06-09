@@ -2,8 +2,12 @@ import type {
   AggregatedPedidoFromSheet,
   PedidoEmbalagemUpsert,
 } from '@/domain/types/pedido-embalagem';
-import { mergePedidoIntoMap, normalizeObservacao } from '@/domain/embalagem/pedido-key';
+import { mergeOrdemIntoMap, normalizeObservacao } from '@/domain/embalagem/pedido-key';
 import { PEDIDO_SHEET_COL } from '@/domain/embalagem/pedido-sheet-cols';
+import {
+  assadeirasFromSheetQuantidade,
+  deriveQuantidadesFromAssadeiras,
+} from '@/domain/producao/ordem-derivados';
 function strictISODate(value: unknown): string {
   if (value == null) return '';
   const str = value.toString().trim();
@@ -24,9 +28,18 @@ export type ResolvePedidoIds = (
   produto: string,
 ) => Promise<{ tipoEstoqueId: string; produtoId: string }>;
 
+export type ResolveAssadeira = (ctx: {
+  produtoId: string;
+}) => Promise<{
+  assadeiraId: string;
+  unidadesPorAssadeiraEfetiva: number;
+  boxUnits: number | null;
+}>;
+
 export type MapSheetPedidosOptions = {
   dataProducaoFilter?: string;
   resolveIds: ResolvePedidoIds;
+  resolveAssadeira: ResolveAssadeira;
   onResolveError?: (rowNumber: number, message: string) => void;
 };
 
@@ -77,16 +90,35 @@ export async function aggregatePedidosFromSheetRows(
       continue;
     }
 
-    const pedido: PedidoEmbalagemUpsert = {
+    const { assadeiraId, unidadesPorAssadeiraEfetiva: fator, boxUnits } =
+      await options.resolveAssadeira({
+        produtoId: resolved.produtoId,
+      });
+    const sheetQ = rowToPedidoQuantidade(row);
+    const assadeiras = assadeirasFromSheetQuantidade(sheetQ, {
+      unidadesPorAssadeira: fator,
+      boxUnits,
+    });
+    const ordem: PedidoEmbalagemUpsert = {
       dataProducao,
       dataFabricacaoEtiqueta,
       tipoEstoqueId: resolved.tipoEstoqueId,
       produtoId: resolved.produtoId,
       observacao: normalizeObservacao(row[PEDIDO_SHEET_COL.observacao]),
-      quantidade: rowToPedidoQuantidade(row),
+      assadeiraId,
+      assadeiras,
+      ordemPlanejamento: 0,
+      quantidade: deriveQuantidadesFromAssadeiras({
+        assadeiras,
+        unidadesPorAssadeira: fator,
+        boxUnits,
+      }),
     };
 
-    mergePedidoIntoMap(map, pedido);
+    mergeOrdemIntoMap(map, ordem, {
+      unidadesPorAssadeira: fator,
+      boxUnits,
+    });
   }
 
   return map;

@@ -7,7 +7,10 @@ import type { PedidoEmbalagemKey, PedidoEmbalagemRecord } from '@/domain/types/p
 import type { EmbalagemLoteFotos } from '@/domain/types/embalagem-lote';
 import type { Quantidade } from '@/domain/types/inventario';
 import { deleteSheetRow, getGoogleSheetsClient, readSheetValues } from '@/lib/googleSheets';
-import type { ResolvePedidoIds } from '@/domain/embalagem/map-sheet-rows-to-pedidos';
+import type {
+  ResolveAssadeira,
+  ResolvePedidoIds,
+} from '@/domain/embalagem/map-sheet-rows-to-pedidos';
 
 function strictISODate(value: unknown): string {
   if (value == null) return '';
@@ -60,9 +63,29 @@ function createResolveIdsCache(resolveIds: ResolvePedidoIds) {
   };
 }
 
+function createResolveAssadeiraCache(resolveAssadeira: ResolveAssadeira) {
+  const cache = new Map<string, { assadeiraId: string } | null>();
+
+  return async (produtoId: string) => {
+    if (cache.has(produtoId)) {
+      return cache.get(produtoId);
+    }
+    try {
+      const resolved = await resolveAssadeira({ produtoId });
+      const value = { assadeiraId: resolved.assadeiraId };
+      cache.set(produtoId, value);
+      return value;
+    } catch {
+      cache.set(produtoId, null);
+      return null;
+    }
+  };
+}
+
 export async function findSheetRowsForPedidoKey(
   pedidoKey: PedidoEmbalagemKey,
   resolveIds: ResolvePedidoIds,
+  resolveAssadeira: ResolveAssadeira,
   hints?: SheetRowLookupHints,
 ): Promise<SheetRowMatch[]> {
   const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
@@ -70,6 +93,7 @@ export async function findSheetRowsForPedidoKey(
   const dataRows = sheetRows.slice(1);
   const matches: SheetRowMatch[] = [];
   const cachedResolveIds = createResolveIdsCache(resolveIds);
+  const cachedResolveAssadeira = createResolveAssadeiraCache(resolveAssadeira);
 
   const produtoHint = hints?.produtoNome
     ? normalizeNome(hints.produtoNome)
@@ -110,6 +134,8 @@ export async function findSheetRowsForPedidoKey(
 
     const resolved = await cachedResolveIds(cliente, produto);
     if (!resolved) continue;
+    const assadeiraResolved = await cachedResolveAssadeira(resolved.produtoId);
+    if (!assadeiraResolved) continue;
 
     const key: PedidoEmbalagemKey = {
       dataProducao,
@@ -117,6 +143,7 @@ export async function findSheetRowsForPedidoKey(
       tipoEstoqueId: resolved.tipoEstoqueId,
       produtoId: resolved.produtoId,
       observacao,
+      assadeiraId: assadeiraResolved.assadeiraId,
     };
 
     if (keysEqual(key, pedidoKey)) {
@@ -134,6 +161,7 @@ export function pedidoRecordToKey(pedido: PedidoEmbalagemRecord): PedidoEmbalage
     tipoEstoqueId: pedido.tipoEstoqueId,
     produtoId: pedido.produtoId,
     observacao: pedido.observacao,
+    assadeiraId: pedido.assadeiraId,
   };
 }
 
@@ -186,17 +214,23 @@ export async function findSheetRowsForPedidoRecord(
 export async function resolveLinhaComSaldoParaPedido(
   pedido: PedidoEmbalagemRecord,
   resolveIds: ResolvePedidoIds,
+  resolveAssadeira: ResolveAssadeira,
   hints?: Pick<SheetRowLookupHints, 'produtoNome'> & { clienteNome?: string },
 ): Promise<number | null> {
   const matches =
     hints?.clienteNome && hints?.produtoNome
       ? await findSheetRowsForPedidoRecord(pedido, hints.clienteNome, hints.produtoNome)
-      : await findSheetRowsForPedidoKey(pedidoRecordToKey(pedido), resolveIds, {
+      : await findSheetRowsForPedidoKey(
+          pedidoRecordToKey(pedido),
+          resolveIds,
+          resolveAssadeira,
+          {
           dataProducaoFilter: pedido.dataProducao,
           dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
           observacao: pedido.observacao,
           produtoNome: hints?.produtoNome,
-        });
+          },
+        );
 
   for (const match of matches) {
     const q = rowToPedidoQuantidade(match.row);
@@ -211,13 +245,19 @@ export async function resolveLinhaComSaldoParaPedido(
 export async function deleteAllSheetRowsForPedido(
   pedido: PedidoEmbalagemRecord,
   resolveIds: ResolvePedidoIds,
+  resolveAssadeira: ResolveAssadeira,
 ): Promise<number> {
   const key = pedidoRecordToKey(pedido);
-  const matches = await findSheetRowsForPedidoKey(key, resolveIds, {
-    dataProducaoFilter: pedido.dataProducao,
-    dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
-    observacao: pedido.observacao,
-  });
+  const matches = await findSheetRowsForPedidoKey(
+    key,
+    resolveIds,
+    resolveAssadeira,
+    {
+      dataProducaoFilter: pedido.dataProducao,
+      dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
+      observacao: pedido.observacao,
+    },
+  );
 
   const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
   const rowNumbers = matches.map((m) => m.rowNumber).sort((a, b) => b - a);

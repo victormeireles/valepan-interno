@@ -68,6 +68,9 @@ export class EmbalagemLoteService {
     dataFabricacao: string,
     observacaoCliente: string,
   ): Promise<string | null> {
+    const { assadeiraId } = await pedidoEmbalagemService.resolveAssadeiraDefault(
+      produtoId,
+    );
     return pedidoEmbalagemService.resolvePedidoEmbalagemId(
       loteToPedidoKey({
         dataPedido,
@@ -75,6 +78,7 @@ export class EmbalagemLoteService {
         tipoEstoqueId,
         produtoId,
         observacaoCliente,
+        assadeiraId,
       }),
     );
   }

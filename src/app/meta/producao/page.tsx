@@ -25,7 +25,13 @@ type PainelItem = {
 
 type CreatePedidoData = {
   dataProducao: string;
-  itens: { produto: string; latas: number; unidades: number; kg: number; tipoCliente?: string | null; observacao?: string }[];
+  itens: {
+    produto: string;
+    assadeiras: number;
+    assadeiraId: string;
+    tipoCliente?: string | null;
+    observacao?: string;
+  }[];
 };
 
 type EditData = {
@@ -172,11 +178,24 @@ export default function PedidoFornoPage() {
       setCreateLoading(true);
       setMessage(null);
 
+      const payloadForno = {
+        dataProducao: createData.dataProducao,
+        itens: createData.itens.map((item) => ({
+          produto: item.produto,
+          latas: item.assadeiras,
+          unidades: 0,
+          kg: 0,
+          observacao: item.observacao,
+          assadeiras: item.assadeiras,
+          assadeiraId: item.assadeiraId,
+        })),
+      };
+
       // Criar meta de produção
       const res = await fetch('/api/submit/forno-pedido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createData),
+        body: JSON.stringify(payloadForno),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao criar pedido');
@@ -186,20 +205,6 @@ export default function PedidoFornoPage() {
       
       for (const item of itensComEmbalagem) {
         try {
-          // Buscar dados do produto para conversão
-          const produtoRes = await fetch(`/api/produtos/${encodeURIComponent(item.produto)}/conversao`);
-          const produtoData = await produtoRes.json();
-          
-          if (!produtoRes.ok || !produtoData.box_units || produtoData.box_units === 0 || 
-              !produtoData.unidades_assadeiras || produtoData.unidades_assadeiras === 0) {
-            console.warn(`Produto ${item.produto} não possui dados de conversão configurados, pulando criação de meta de embalagem`);
-            continue;
-          }
-          
-          // Calcular caixas: (latas * unidades_assadeiras) / box_units
-          // Arredondar para baixo (floor) para garantir que não exceda a quantidade disponível
-          const caixas = Math.floor((item.latas * produtoData.unidades_assadeiras) / produtoData.box_units);
-          
           // Criar meta de embalagem
           const embalagemRes = await fetch('/api/submit/embalagem-pedido', {
             method: 'POST',
@@ -212,10 +217,12 @@ export default function PedidoFornoPage() {
               itens: [{
                 produto: item.produto,
                 congelado: false,
-                caixas: caixas,
+                caixas: 0,
                 pacotes: 0,
                 unidades: 0,
                 kg: 0,
+                assadeiras: item.assadeiras,
+                assadeiraId: item.assadeiraId,
               }]
             }),
           });
@@ -436,9 +443,8 @@ export default function PedidoFornoPage() {
           dataProducao: data.dataPedido,
           itens: data.itens.map(i => ({ 
             produto: i.produto, 
-            latas: i.caixas, 
-            unidades: i.unidades, 
-            kg: i.kg,
+            assadeiras: i.assadeiras,
+            assadeiraId: i.assadeiraId,
             tipoCliente: i.tipoCliente || null,
             observacao: data.observacao || '' // Usar observação geral do pedido para cada item
           }))

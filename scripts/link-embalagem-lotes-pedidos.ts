@@ -1,8 +1,8 @@
 /**
- * Vincula embalagem_lotes.pedido_embalagem_id ao pedidos_embalagem canônico.
+ * Vincula embalagem_lotes.ordem_producao_id ao ordens_producao canônico.
  *
  * Janela: data_pedido (col A) hoje ±3 dias (fuso BR).
- * Só processa lotes com pedido_embalagem_id NULL.
+ * Só processa lotes com ordem_producao_id NULL.
  *
  * Uso:
  *   npx tsx scripts/link-embalagem-lotes-pedidos.ts [--dry-run]
@@ -87,6 +87,9 @@ async function main() {
     }
 
     const observacaoCliente = observacaoPorLinha.get(lote.planilhaRowId) ?? '';
+    const { assadeiraId } = await pedidoEmbalagemService.resolveAssadeiraDefault(
+      lote.produtoId,
+    );
 
     const key = loteToPedidoKey({
       dataPedido: lote.dataPedido,
@@ -94,6 +97,7 @@ async function main() {
       tipoEstoqueId: lote.tipoEstoqueId,
       produtoId: lote.produtoId,
       observacaoCliente,
+      assadeiraId,
     });
 
     const pedidoId = await pedidoEmbalagemService.resolvePedidoEmbalagemId(key);

@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      _ordens_producao_legacy: {
+        Row: {
+          assadeira_id: string | null
+          created_at: string | null
+          data_producao: string | null
+          id: string
+          lote_codigo: string
+          ordem_planejamento: number | null
+          pedido_id: string | null
+          prioridade: number | null
+          produto_id: string
+          qtd_planejada: number
+          status: string | null
+        }
+        Insert: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id: string
+          qtd_planejada: number
+          status?: string | null
+        }
+        Update: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo?: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id?: string
+          qtd_planejada?: number
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
       assadeiras: {
         Row: {
           ativo: boolean
@@ -23,9 +115,9 @@ export type Database = {
           diametro_buracos_mm: number | null
           id: string
           nome: string
-          numero_buracos: number
           ordem: number
           quantidade_latas: number
+          unidades_por_assadeira: number | null
           updated_at: string
         }
         Insert: {
@@ -36,9 +128,9 @@ export type Database = {
           diametro_buracos_mm?: number | null
           id?: string
           nome: string
-          numero_buracos?: number
           ordem?: number
           quantidade_latas?: number
+          unidades_por_assadeira?: number | null
           updated_at?: string
         }
         Update: {
@@ -49,9 +141,9 @@ export type Database = {
           diametro_buracos_mm?: number | null
           id?: string
           nome?: string
-          numero_buracos?: number
           ordem?: number
           quantidade_latas?: number
+          unidades_por_assadeira?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -499,6 +591,8 @@ export type Database = {
           notificado_distribuidor: boolean
           notificado_interno: boolean
           parcela_padrao_id: string | null
+          pedido_cutoff_hora_brt: number | null
+          pedido_lead_time_dias: number | null
           prazo_aprovacao: string | null
           razao_social: string
           regiao: string | null
@@ -555,6 +649,8 @@ export type Database = {
           notificado_distribuidor?: boolean
           notificado_interno?: boolean
           parcela_padrao_id?: string | null
+          pedido_cutoff_hora_brt?: number | null
+          pedido_lead_time_dias?: number | null
           prazo_aprovacao?: string | null
           razao_social: string
           regiao?: string | null
@@ -611,6 +707,8 @@ export type Database = {
           notificado_distribuidor?: boolean
           notificado_interno?: boolean
           parcela_padrao_id?: string | null
+          pedido_cutoff_hora_brt?: number | null
+          pedido_lead_time_dias?: number | null
           prazo_aprovacao?: string | null
           razao_social?: string
           regiao?: string | null
@@ -1128,66 +1226,6 @@ export type Database = {
           },
         ]
       }
-      pedidos_embalagem: {
-        Row: {
-          caixas: number
-          created_at: string
-          data_fabricacao_etiqueta: string
-          data_producao: string
-          id: string
-          kg: number
-          observacao: string
-          pacotes: number
-          produto_id: string
-          tipo_estoque_id: string
-          unidades: number
-          updated_at: string
-        }
-        Insert: {
-          caixas?: number
-          created_at?: string
-          data_fabricacao_etiqueta: string
-          data_producao: string
-          id?: string
-          kg?: number
-          observacao?: string
-          pacotes?: number
-          produto_id: string
-          tipo_estoque_id: string
-          unidades?: number
-          updated_at?: string
-        }
-        Update: {
-          caixas?: number
-          created_at?: string
-          data_fabricacao_etiqueta?: string
-          data_producao?: string
-          id?: string
-          kg?: number
-          observacao?: string
-          pacotes?: number
-          produto_id?: string
-          tipo_estoque_id?: string
-          unidades?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pedidos_embalagem_tipo_estoque_id_fkey"
-            columns: ["tipo_estoque_id"]
-            isOneToOne: false
-            referencedRelation: "tipos_estoque"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       embalagem_lotes: {
         Row: {
           caixas: number
@@ -1203,6 +1241,7 @@ export type Database = {
           lote: number | null
           modo: Database["public"]["Enums"]["embalagem_lote_modo"]
           obs_embalagem: string | null
+          ordem_producao_id: string | null
           pacote_foto_id: string | null
           pacote_foto_uploaded_at: string | null
           pacote_foto_url: string | null
@@ -1210,7 +1249,6 @@ export type Database = {
           pallet_foto_id: string | null
           pallet_foto_uploaded_at: string | null
           pallet_foto_url: string | null
-          pedido_embalagem_id: string | null
           planilha_row_id: number | null
           planilha_row_id_origem: number | null
           producao_anterior: Json | null
@@ -1233,6 +1271,7 @@ export type Database = {
           lote?: number | null
           modo: Database["public"]["Enums"]["embalagem_lote_modo"]
           obs_embalagem?: string | null
+          ordem_producao_id?: string | null
           pacote_foto_id?: string | null
           pacote_foto_uploaded_at?: string | null
           pacote_foto_url?: string | null
@@ -1240,7 +1279,6 @@ export type Database = {
           pallet_foto_id?: string | null
           pallet_foto_uploaded_at?: string | null
           pallet_foto_url?: string | null
-          pedido_embalagem_id?: string | null
           planilha_row_id?: number | null
           planilha_row_id_origem?: number | null
           producao_anterior?: Json | null
@@ -1263,6 +1301,7 @@ export type Database = {
           lote?: number | null
           modo?: Database["public"]["Enums"]["embalagem_lote_modo"]
           obs_embalagem?: string | null
+          ordem_producao_id?: string | null
           pacote_foto_id?: string | null
           pacote_foto_uploaded_at?: string | null
           pacote_foto_url?: string | null
@@ -1270,7 +1309,6 @@ export type Database = {
           pallet_foto_id?: string | null
           pallet_foto_uploaded_at?: string | null
           pallet_foto_url?: string | null
-          pedido_embalagem_id?: string | null
           planilha_row_id?: number | null
           planilha_row_id_origem?: number | null
           producao_anterior?: Json | null
@@ -1280,6 +1318,13 @@ export type Database = {
           unidades?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "embalagem_lotes_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "embalagem_lotes_produto_id_fkey"
             columns: ["produto_id"]
@@ -1325,6 +1370,8 @@ export type Database = {
           id: string
           nome: string
           parcelas_empresa_sem_cobranca_id: string | null
+          pedido_cutoff_hora_brt: number
+          pedido_lead_time_dias: number
           razao_social: string | null
           updated_at: string | null
         }
@@ -1342,6 +1389,8 @@ export type Database = {
           id?: string
           nome: string
           parcelas_empresa_sem_cobranca_id?: string | null
+          pedido_cutoff_hora_brt?: number
+          pedido_lead_time_dias?: number
           razao_social?: string | null
           updated_at?: string | null
         }
@@ -1359,6 +1408,8 @@ export type Database = {
           id?: string
           nome?: string
           parcelas_empresa_sem_cobranca_id?: string | null
+          pedido_cutoff_hora_brt?: number
+          pedido_lead_time_dias?: number
           razao_social?: string | null
           updated_at?: string | null
         }
@@ -2183,92 +2234,90 @@ export type Database = {
       ordens_producao: {
         Row: {
           assadeira_id: string | null
-          created_at: string | null
-          data_producao: string | null
+          assadeiras: number
+          caixas: number
+          created_at: string
+          data_fabricacao_etiqueta: string
+          data_producao: string
           id: string
-          lote_codigo: string
-          ordem_planejamento: number | null
-          pedido_id: string | null
-          prioridade: number | null
+          kg: number
+          observacao: string
+          ordem_planejamento: number
+          pacotes: number
           produto_id: string
-          qtd_planejada: number
-          status: string | null
+          tipo_estoque_id: string
+          unidades: number
+          updated_at: string
         }
         Insert: {
           assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
+          assadeiras?: number
+          caixas?: number
+          created_at?: string
+          data_fabricacao_etiqueta: string
+          data_producao: string
           id?: string
-          lote_codigo: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
+          kg?: number
+          observacao?: string
+          ordem_planejamento?: number
+          pacotes?: number
           produto_id: string
-          qtd_planejada: number
-          status?: string | null
+          tipo_estoque_id: string
+          unidades?: number
+          updated_at?: string
         }
         Update: {
           assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
+          assadeiras?: number
+          caixas?: number
+          created_at?: string
+          data_fabricacao_etiqueta?: string
+          data_producao?: string
           id?: string
-          lote_codigo?: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
+          kg?: number
+          observacao?: string
+          ordem_planejamento?: number
+          pacotes?: number
           produto_id?: string
-          qtd_planejada?: number
-          status?: string | null
+          tipo_estoque_id?: string
+          unidades?: number
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            foreignKeyName: "ordens_producao_assadeira_id_fkey1"
             columns: ["assadeira_id"]
             isOneToOne: false
             referencedRelation: "assadeiras"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "relatorio_producao_pedidos_v"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
+            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
+            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "vw_dashboard_producao"
             referencedColumns: ["produto_id"]
           },
           {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
+            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "pedidos_embalagem_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2697,7 +2746,7 @@ export type Database = {
             foreignKeyName: "producao_etapas_log_ordem_producao_id_fkey"
             columns: ["ordem_producao_id"]
             isOneToOne: false
-            referencedRelation: "ordens_producao"
+            referencedRelation: "_ordens_producao_legacy"
             referencedColumns: ["id"]
           },
           {
@@ -2781,7 +2830,7 @@ export type Database = {
           created_at: string
           id: string
           produto_id: string
-          unidades_por_assadeira: number
+          unidades_por_assadeira: number | null
           updated_at: string
         }
         Insert: {
@@ -2789,7 +2838,7 @@ export type Database = {
           created_at?: string
           id?: string
           produto_id: string
-          unidades_por_assadeira: number
+          unidades_por_assadeira?: number | null
           updated_at?: string
         }
         Update: {
@@ -2797,7 +2846,7 @@ export type Database = {
           created_at?: string
           id?: string
           produto_id?: string
-          unidades_por_assadeira?: number
+          unidades_por_assadeira?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -3655,6 +3704,7 @@ export type Database = {
       }
       usuarios: {
         Row: {
+          ativo: boolean
           cliente_id: string | null
           codigo_whatsapp: string | null
           codigo_whatsapp_bloqueado_ate: string | null
@@ -3663,6 +3713,8 @@ export type Database = {
           created_at: string | null
           email: string | null
           id: string
+          inativado_em: string | null
+          inativado_por: string | null
           nome: string
           telefone: string | null
           telefone_verificado: boolean | null
@@ -3670,6 +3722,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ativo?: boolean
           cliente_id?: string | null
           codigo_whatsapp?: string | null
           codigo_whatsapp_bloqueado_ate?: string | null
@@ -3678,6 +3731,8 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           id?: string
+          inativado_em?: string | null
+          inativado_por?: string | null
           nome: string
           telefone?: string | null
           telefone_verificado?: boolean | null
@@ -3685,6 +3740,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ativo?: boolean
           cliente_id?: string | null
           codigo_whatsapp?: string | null
           codigo_whatsapp_bloqueado_ate?: string | null
@@ -3693,6 +3749,8 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           id?: string
+          inativado_em?: string | null
+          inativado_por?: string | null
           nome?: string
           telefone?: string | null
           telefone_verificado?: boolean | null
@@ -3705,6 +3763,13 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuarios_inativado_por_fkey"
+            columns: ["inativado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -4145,12 +4210,12 @@ export type Database = {
         | "resgate"
         | "expiracao"
         | "ajuste_manual"
+      embalagem_lote_modo: "parcial" | "substituicao" | "importado"
       estoque_consignado_tipo_mov_enum:
         | "entrada_remessa"
         | "saida_venda"
         | "ajuste_entrada"
         | "ajuste_saida"
-      embalagem_lote_modo: "parcial" | "substituicao" | "importado"
       estoque_movimento_origem:
         | "embalagem"
         | "saida"
@@ -4366,13 +4431,13 @@ export const Constants = {
         "expiracao",
         "ajuste_manual",
       ],
+      embalagem_lote_modo: ["parcial", "substituicao", "importado"],
       estoque_consignado_tipo_mov_enum: [
         "entrada_remessa",
         "saida_venda",
         "ajuste_entrada",
         "ajuste_saida",
       ],
-      embalagem_lote_modo: ["parcial", "substituicao", "importado"],
       estoque_movimento_origem: [
         "embalagem",
         "saida",

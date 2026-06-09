@@ -7,6 +7,14 @@ import type { Database, Json } from '@/types/database';
 
 type LoteRow = Database['public']['Tables']['embalagem_lotes']['Row'];
 type LoteInsertRow = Database['public']['Tables']['embalagem_lotes']['Insert'];
+type LoteRowCompat = LoteRow & {
+  ordem_producao_id?: string | null;
+  pedido_embalagem_id?: string | null;
+};
+type LoteInsertCompat = LoteInsertRow & {
+  ordem_producao_id?: string | null;
+};
+const ORDEM_PRODUCAO_COLUMN = 'ordem_producao_id';
 
 function quantidadeToJson(q: EmbalagemLoteInsert['producaoAnterior']): Json | null {
   if (!q) return null;
@@ -24,7 +32,7 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
     modo: input.modo,
     planilha_row_id: input.planilhaRowId,
     planilha_row_id_origem: input.planilhaRowIdOrigem ?? null,
-    pedido_embalagem_id: input.pedidoEmbalagemId ?? null,
+    ordem_producao_id: input.pedidoEmbalagemId ?? null,
     data_pedido: input.dataPedido,
     data_fabricacao: input.dataFabricacao,
     tipo_estoque_id: input.tipoEstoqueId,
@@ -47,17 +55,19 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
     pallet_foto_id: fotos?.palletFotoId ?? null,
     pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
-  };
+  } as LoteInsertCompat;
 }
 
 function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
+  const compatRow = row as LoteRowCompat;
   return {
     id: row.id,
     createdAt: row.created_at,
     modo: row.modo,
     planilhaRowId: row.planilha_row_id ?? 0,
     planilhaRowIdOrigem: row.planilha_row_id_origem,
-    pedidoEmbalagemId: row.pedido_embalagem_id,
+    pedidoEmbalagemId:
+      compatRow.ordem_producao_id ?? compatRow.pedido_embalagem_id ?? null,
     dataPedido: row.data_pedido,
     dataFabricacao: row.data_fabricacao,
     tipoEstoqueId: row.tipo_estoque_id,
@@ -155,7 +165,7 @@ export class EmbalagemLoteRepository {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
       .select()
-      .in('pedido_embalagem_id', pedidoIds)
+      .in(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, pedidoIds)
       .order('produzido_em', { ascending: true });
 
     if (error) {
@@ -164,7 +174,10 @@ export class EmbalagemLoteRepository {
 
     for (const row of data ?? []) {
       const record = fromDbRow(row);
-      const pid = row.pedido_embalagem_id as string;
+      const pid =
+        (row as LoteRowCompat).ordem_producao_id ??
+        (row as LoteRowCompat).pedido_embalagem_id;
+      if (!pid) continue;
       const list = map.get(pid) ?? [];
       list.push(record);
       map.set(pid, list);
@@ -182,7 +195,7 @@ export class EmbalagemLoteRepository {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
       .select('caixas, pacotes, unidades, kg')
-      .eq('pedido_embalagem_id', pedidoId);
+      .eq(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, pedidoId);
 
     if (error) {
       throw new Error(`Erro ao somar lotes: ${error.message}`);
@@ -230,7 +243,7 @@ export class EmbalagemLoteRepository {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
       .select()
-      .is('pedido_embalagem_id', null)
+      .is(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, null)
       .gte('data_pedido', from)
       .lte('data_pedido', to);
 
@@ -241,18 +254,26 @@ export class EmbalagemLoteRepository {
     return (data ?? []).map(fromDbRow);
   }
 
+  async updateOrdemProducaoId(id: string, ordemProducaoId: string): Promise<void> {
+    const payload = {
+      ordem_producao_id: ordemProducaoId,
+    } as LoteInsertCompat;
+
+    const { error } = await this.supabase
+      .from('embalagem_lotes')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao vincular lote à ordem de produção: ${error.message}`);
+    }
+  }
+
   async updatePedidoEmbalagemId(
     id: string,
     pedidoEmbalagemId: string,
   ): Promise<void> {
-    const { error } = await this.supabase
-      .from('embalagem_lotes')
-      .update({ pedido_embalagem_id: pedidoEmbalagemId })
-      .eq('id', id);
-
-    if (error) {
-      throw new Error(`Erro ao vincular lote ao pedido: ${error.message}`);
-    }
+    await this.updateOrdemProducaoId(id, pedidoEmbalagemId);
   }
 }
 

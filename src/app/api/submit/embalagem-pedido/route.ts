@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { appendRow, calculateLoteFromDataFabricacao } from '@/lib/googleSheets';
 import { PEDIDOS_EMBALAGEM_CONFIG, PedidoEmbalagemPayload } from '@/config/embalagem';
+import { deriveQuantidadesFromAssadeiras } from '@/domain/producao/ordem-derivados';
+import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import {
   pedidoEmbalagemService,
   EstoqueResolverError,
@@ -10,6 +14,13 @@ import {
 function isValidDateISO(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
 }
+
+const productService = new SupabaseProductService();
+
+type ProdutoAssadeiraFactorRow = {
+  unidades_por_assadeira: number | null;
+  assadeiras: { quantidade_latas: number | null } | null;
+};
 
 export async function POST(request: Request) {
   try {
@@ -44,7 +55,58 @@ export async function POST(request: Request) {
     // Persistir cada item como linha separada (regra 4: manter histórico)
     const now = new Date().toISOString();
     
+    const supabase = supabaseClientFactory.createServiceRoleClient();
     for (const item of payload.itens) {
+      let caixas = item.caixas || 0;
+      let pacotes = item.pacotes || 0;
+      let unidades = item.unidades || 0;
+
+      if (item.assadeiras && item.assadeiras > 0 && item.assadeiraId) {
+        const produto = await productService.findByName(item.produto);
+        if (!produto) {
+          return NextResponse.json(
+            { error: `Produto não encontrado: ${item.produto}` },
+            { status: 400 },
+          );
+        }
+
+        const { data: factorRow, error: factorError } = await supabase
+          .from('produto_assadeiras')
+          .select('unidades_por_assadeira, assadeiras(quantidade_latas)')
+          .eq('produto_id', produto.id)
+          .eq('assadeira_id', item.assadeiraId)
+          .maybeSingle();
+
+        if (factorError || !factorRow) {
+          return NextResponse.json(
+            { error: `Assadeira inválida para o produto ${item.produto}` },
+            { status: 400 },
+          );
+        }
+
+        const factorData = factorRow as ProdutoAssadeiraFactorRow;
+        const unidadesPorAssadeira = resolveUnidadesPorAssadeiraEfetiva({
+          produto: factorData.unidades_por_assadeira,
+          assadeira: factorData.assadeiras?.quantidade_latas,
+        });
+
+        if (!unidadesPorAssadeira) {
+          return NextResponse.json(
+            { error: `Fator de assadeira inválido para ${item.produto}` },
+            { status: 400 },
+          );
+        }
+
+        const derivado = deriveQuantidadesFromAssadeiras({
+          assadeiras: item.assadeiras,
+          unidadesPorAssadeira,
+          boxUnits: produto.boxUnits,
+        });
+        caixas = derivado.caixas;
+        pacotes = derivado.pacotes;
+        unidades = derivado.unidades;
+      }
+
       // Construir array de valores com todas as colunas até AB
       // A-J: dados básicos do pedido (0-9)
       // K-L: timestamps (10-11)
@@ -60,10 +122,10 @@ export async function POST(request: Request) {
         payload.cliente,         // C (2)
         payload.observacao || '', // D (3)
         item.produto,            // E (4)
-        item.congelado,          // F (5)
-        item.caixas || 0,        // G (6)
-        item.pacotes || 0,       // H (7)
-        item.unidades || 0,       // I (8)
+        item.congelado === true || item.congelado === 'Sim' ? 'Sim' : 'Não', // F (5)
+        caixas,                  // G (6)
+        pacotes,                 // H (7)
+        unidades,                // I (8)
         item.kg || 0,            // J (9)
         now,                     // K (10) - created_at
         now,                     // L (11) - updated_at

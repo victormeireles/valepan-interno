@@ -55,10 +55,10 @@ type CreatePedidoData = {
   itens: {
     produto: string;
     congelado: boolean;
-    caixas: number;
-    pacotes: number;
-    unidades: number;
-    kg: number;
+    assadeiras: number;
+    assadeiraId: string;
+    tipoCliente?: string | null;
+    observacao?: string;
   }[];
 };
 

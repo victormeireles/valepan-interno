@@ -21,11 +21,13 @@ export const EMBALAGEM_PRODUCAO_DESTINO = {
 
 export type PedidoItem = {
   produto: string;
-  congelado: 'Sim' | 'Não';
+  congelado: 'Sim' | 'Não' | boolean;
   caixas: number;
   pacotes: number;
   unidades: number;
   kg: number;
+  assadeiras?: number;
+  assadeiraId?: string;
 };
 
 export type PedidoEmbalagemPayload = {

@@ -7,9 +7,9 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 import { ProductionOrderStatus } from '@/domain/types/producao-etapas';
 
-type ProductionOrderRow = Database['public']['Tables']['ordens_producao']['Row'];
-type ProductionOrderInsert = Database['public']['Tables']['ordens_producao']['Insert'];
-type ProductionOrderUpdate = Database['public']['Tables']['ordens_producao']['Update'];
+type ProductionOrderRow = Database['public']['Tables']['_ordens_producao_legacy']['Row'];
+type ProductionOrderInsert = Database['public']['Tables']['_ordens_producao_legacy']['Insert'];
+type ProductionOrderUpdate = Database['public']['Tables']['_ordens_producao_legacy']['Update'];
 
 export interface ProductionOrder {
   id: string;
@@ -59,7 +59,7 @@ export class ProductionOrderRepository {
     };
 
     const { data, error } = await this.supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .insert(insertData)
       .select()
       .single();
@@ -94,7 +94,7 @@ export class ProductionOrderRepository {
     });
 
     const { data, error } = await this.supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -115,7 +115,7 @@ export class ProductionOrderRepository {
     
     try {
       const { data, error } = await this.supabase
-        .from('ordens_producao')
+        .from('_ordens_producao_legacy')
         .select('*')
         .eq('id', id)
         .maybeSingle();
@@ -148,7 +148,7 @@ export class ProductionOrderRepository {
    */
   async findByStatus(status: ProductionOrderStatus): Promise<ProductionOrder[]> {
     const { data, error } = await this.supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .select('*')
       .eq('status', status)
       .order('prioridade', { ascending: false })
@@ -166,7 +166,7 @@ export class ProductionOrderRepository {
    */
   async findActive(): Promise<ProductionOrder[]> {
     const { data, error } = await this.supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .select('*')
       .neq('status', 'concluido')
       .neq('status', 'cancelado')
@@ -189,7 +189,7 @@ export class ProductionOrderRepository {
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
 
     const { data: lastOp } = await this.supabase
-      .from('ordens_producao')
+      .from('_ordens_producao_legacy')
       .select('lote_codigo')
       .ilike('lote_codigo', `OP-${dateStr}-%`)
       .order('lote_codigo', { ascending: false })

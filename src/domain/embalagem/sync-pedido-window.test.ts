@@ -8,7 +8,7 @@ import {
 
 describe('resolvePedidoSyncWindow', () => {
   it('defaults to today ± 3', () => {
-    const w = resolvePedidoSyncWindow({}, '2026-06-03');
+    const w = resolvePedidoSyncWindow({ dryRun: false }, '2026-06-03');
     expect(w).toEqual({ from: '2026-05-31', to: '2026-06-06' });
   });
 

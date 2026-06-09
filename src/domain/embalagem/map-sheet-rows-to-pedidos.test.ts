@@ -7,6 +7,11 @@ describe('aggregatePedidosFromSheetRows', () => {
       tipoEstoqueId: 't1',
       produtoId: 'p1',
     });
+    const resolveAssadeira = vi.fn().mockResolvedValue({
+      assadeiraId: 'ass-1',
+      unidadesPorAssadeiraEfetiva: 24,
+      boxUnits: 12,
+    });
 
     const rows = [
       ['2026-06-03', '2026-06-04', 'Cliente X', '', 'Pão', 'Não', 10, 0, 0, 0],
@@ -16,18 +21,27 @@ describe('aggregatePedidosFromSheetRows', () => {
     const map = await aggregatePedidosFromSheetRows(rows, {
       dataProducaoFilter: '2026-06-03',
       resolveIds,
+      resolveAssadeira,
     });
 
     expect(map.size).toBe(1);
     const entry = [...map.values()][0];
+    expect(entry.assadeiras).toBe(7.5);
     expect(entry.quantidade.caixas).toBe(15);
+    expect(entry.quantidade.unidades).toBe(180);
     expect(resolveIds).toHaveBeenCalledTimes(2);
+    expect(resolveAssadeira).toHaveBeenCalledTimes(2);
   });
 
   it('filters by dataProducao', async () => {
     const resolveIds = vi.fn().mockResolvedValue({
       tipoEstoqueId: 't1',
       produtoId: 'p1',
+    });
+    const resolveAssadeira = vi.fn().mockResolvedValue({
+      assadeiraId: 'ass-1',
+      unidadesPorAssadeiraEfetiva: 24,
+      boxUnits: 12,
     });
 
     const rows = [
@@ -38,6 +52,7 @@ describe('aggregatePedidosFromSheetRows', () => {
     const map = await aggregatePedidosFromSheetRows(rows, {
       dataProducaoFilter: '2026-06-03',
       resolveIds,
+      resolveAssadeira,
     });
 
     expect(map.size).toBe(1);

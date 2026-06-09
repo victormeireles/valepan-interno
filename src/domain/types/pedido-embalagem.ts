@@ -1,21 +1,7 @@
-import type { Quantidade } from '@/domain/types/inventario';
+export type {
+  OrdemProducaoKey as PedidoEmbalagemKey,
+  OrdemProducaoUpsert as PedidoEmbalagemUpsert,
+  OrdemProducaoRecord as PedidoEmbalagemRecord,
+} from '@/domain/types/ordem-producao';
 
-export type PedidoEmbalagemKey = {
-  dataProducao: string;
-  dataFabricacaoEtiqueta: string;
-  tipoEstoqueId: string;
-  produtoId: string;
-  observacao: string;
-};
-
-export type PedidoEmbalagemUpsert = PedidoEmbalagemKey & {
-  quantidade: Quantidade;
-};
-
-export type PedidoEmbalagemRecord = PedidoEmbalagemUpsert & {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type AggregatedPedidoFromSheet = PedidoEmbalagemUpsert;
+export type { OrdemProducaoUpsert as AggregatedPedidoFromSheet } from '@/domain/types/ordem-producao';
