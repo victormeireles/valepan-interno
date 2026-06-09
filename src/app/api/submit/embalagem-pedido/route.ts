@@ -19,7 +19,7 @@ const productService = new SupabaseProductService();
 
 type ProdutoAssadeiraFactorRow = {
   unidades_por_assadeira: number | null;
-  assadeiras: { quantidade_latas: number | null } | null;
+  assadeiras: { unidades_por_assadeira: number | null; ativo: boolean } | null;
 };
 
 export async function POST(request: Request) {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
         const { data: factorRow, error: factorError } = await supabase
           .from('produto_assadeiras')
-          .select('unidades_por_assadeira, assadeiras(quantidade_latas)')
+          .select('unidades_por_assadeira, assadeiras(unidades_por_assadeira, ativo)')
           .eq('produto_id', produto.id)
           .eq('assadeira_id', item.assadeiraId)
           .maybeSingle();
@@ -85,9 +85,16 @@ export async function POST(request: Request) {
         }
 
         const factorData = factorRow as ProdutoAssadeiraFactorRow;
+        if (!factorData.assadeiras?.ativo) {
+          return NextResponse.json(
+            { error: `Assadeira inativa para o produto ${item.produto}` },
+            { status: 400 },
+          );
+        }
+
         const unidadesPorAssadeira = resolveUnidadesPorAssadeiraEfetiva({
           produto: factorData.unidades_por_assadeira,
-          assadeira: factorData.assadeiras?.quantidade_latas,
+          assadeira: factorData.assadeiras?.unidades_por_assadeira,
         });
 
         if (!unidadesPorAssadeira) {

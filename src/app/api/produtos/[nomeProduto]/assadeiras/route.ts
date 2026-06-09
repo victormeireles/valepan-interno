@@ -11,7 +11,11 @@ const UUID_REGEX =
 type ProdutoAssadeiraRow = {
   assadeira_id: string;
   unidades_por_assadeira: number | null;
-  assadeiras: { nome: string | null; quantidade_latas: number | null } | null;
+  assadeiras: {
+    nome: string | null;
+    unidades_por_assadeira: number | null;
+    ativo: boolean;
+  } | null;
 };
 
 export async function GET(
@@ -42,7 +46,7 @@ export async function GET(
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const { data, error } = await supabase
       .from('produto_assadeiras')
-      .select('assadeira_id, unidades_por_assadeira, assadeiras(nome, quantidade_latas)')
+      .select('assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)')
       .eq('produto_id', produto.id)
       .order('created_at', { ascending: true });
 
@@ -52,9 +56,10 @@ export async function GET(
 
     const assadeiras = ((data ?? []) as ProdutoAssadeiraRow[])
       .map((row) => {
+        if (!row.assadeiras?.ativo) return null;
         const unidadesPorAssadeiraEfetiva = resolveUnidadesPorAssadeiraEfetiva({
           produto: row.unidades_por_assadeira,
-          assadeira: row.assadeiras?.quantidade_latas,
+          assadeira: row.assadeiras?.unidades_por_assadeira,
         });
         if (!unidadesPorAssadeiraEfetiva) return null;
         return {

@@ -76,8 +76,8 @@ export default function WhatsAppConfigPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-gray-100 px-4 py-10">
-      <div className="max-w-lg mx-auto">
+    <div className="max-w-lg mx-auto">
+      <div className="rounded-3xl bg-[#0a0e14] text-gray-100 px-4 py-8 sm:p-8 border border-white/10 shadow-xl">
         <h1 className="text-2xl font-bold mb-2">Notificações WhatsApp</h1>
         <p className="text-sm text-gray-400 mb-6">
           Com o envio desligado, a produção continua sendo salva normalmente — apenas a mensagem no

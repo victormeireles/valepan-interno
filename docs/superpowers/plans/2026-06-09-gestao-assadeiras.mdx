@@ -1,0 +1,839 @@
+# Gestão de Assadeiras (Fase A) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Entregar tela de gestão de assadeiras em `/config/assadeiras` com CRUD completo, rename `quantidade_latas` → `quantidade`, e corrigir APIs que usavam estoque como fator de conversão.
+
+**Architecture:** Migration SQL no padrão do repo (arquivo raiz) + `npm run gen:types`. Domínio Zod em `src/domain/assadeiras/`. Server Actions espelhando `insumos-actions.ts`. UI em componentes focados (tabela desktop, lista mobile, modal). Shell `/config/layout.tsx` extensível para fases B/C.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase JS, Zod, Tailwind CSS 4, Vitest, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-09-gestao-assadeiras-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `RENAME_ASSADEIRAS_QUANTIDADE.sql` | Rename coluna estoque |
+| `src/domain/assadeiras/assadeira-validation.ts` | Schema Zod + tipo `AssadeiraFormData` |
+| `src/domain/assadeiras/assadeira-validation.test.ts` | Testes de validação |
+| `src/domain/assadeiras/assadeira-factor-routes.test.ts` | Regressão: rotas não usam estoque como fator |
+| `src/app/actions/assadeiras-actions.ts` | CRUD Server Actions |
+| `src/app/api/submit/forno-pedido/route.ts` | Fix fator + filtro ativo |
+| `src/app/api/submit/embalagem-pedido/route.ts` | Fix fator + filtro ativo |
+| `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts` | Fix fator + filtro ativo |
+| `src/components/Assadeiras/AssadeiraCapacityPreview.tsx` | Preview visual pães/assadeira |
+| `src/components/Assadeiras/AssadeiraModal.tsx` | Form criar/editar/desativar |
+| `src/components/Assadeiras/AssadeirasTable.tsx` | Tabela sortável desktop |
+| `src/components/Assadeiras/AssadeirasMobileList.tsx` | Lista mobile |
+| `src/app/config/layout.tsx` | Shell Configurações |
+| `src/app/config/assadeiras/page.tsx` | Server Component |
+| `src/app/config/assadeiras/AssadeirasClient.tsx` | Client: stats, filtros, lista |
+| `src/app/page.tsx` | Seção Configurações na home |
+
+---
+
+### Task 1: Migration — rename `quantidade_latas`
+
+**Files:**
+- Create: `RENAME_ASSADEIRAS_QUANTIDADE.sql`
+- Modify: `src/types/database.ts` (via gen:types)
+- Modify: `types/database.ts` (via gen:types)
+
+- [ ] **Step 1: Criar SQL**
+
+```sql
+-- RENAME_ASSADEIRAS_QUANTIDADE.sql
+-- Aplicar no SQL Editor do Supabase antes de npm run gen:types
+
+ALTER TABLE assadeiras
+  RENAME COLUMN quantidade_latas TO quantidade;
+
+COMMENT ON COLUMN assadeiras.quantidade IS
+  'Quantidade de assadeiras deste tipo em estoque';
+
+COMMENT ON COLUMN assadeiras.unidades_por_assadeira IS
+  'Pães por assadeira — capacidade padrão do tipo';
+```
+
+- [ ] **Step 2: Aplicar no Supabase** (SQL Editor → Run)
+
+- [ ] **Step 3: Regenerar types**
+
+Run: `npm run gen:types`  
+Expected: `assadeiras.Row` contém `quantidade: number` e **não** contém `quantidade_latas`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add RENAME_ASSADEIRAS_QUANTIDADE.sql src/types/database.ts types/database.ts
+git commit -m "chore(db): renomear quantidade_latas para quantidade em assadeiras"
+```
+
+---
+
+### Task 2: Validação Zod
+
+**Files:**
+- Create: `src/domain/assadeiras/assadeira-validation.ts`
+- Create: `src/domain/assadeiras/assadeira-validation.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+// src/domain/assadeiras/assadeira-validation.test.ts
+import { describe, expect, it } from 'vitest';
+import { assadeiraFormSchema, parseAssadeiraForm } from './assadeira-validation';
+
+describe('assadeiraFormSchema', () => {
+  const valid = {
+    nome: 'Assadeira 24',
+    codigo: 'A24',
+    descricao: null,
+    unidades_por_assadeira: 24,
+    quantidade: 10,
+    ordem: 0,
+    ativo: true,
+    diametro_buracos_mm: null,
+  };
+
+  it('aceita payload válido', () => {
+    expect(parseAssadeiraForm(valid).success).toBe(true);
+  });
+
+  it('rejeita nome vazio', () => {
+    const result = parseAssadeiraForm({ ...valid, nome: '   ' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejeita pães por assadeira < 1', () => {
+    const result = parseAssadeiraForm({ ...valid, unidades_por_assadeira: 0 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejeita quantidade negativa', () => {
+    const result = parseAssadeiraForm({ ...valid, quantidade: -1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('aceita codigo e descricao vazios como null', () => {
+    const result = parseAssadeiraForm({
+      ...valid,
+      codigo: '',
+      descricao: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.codigo).toBeNull();
+      expect(result.data.descricao).toBeNull();
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes — devem falhar**
+
+Run: `npm test -- src/domain/assadeiras/assadeira-validation.test.ts`  
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implementar schema**
+
+```typescript
+// src/domain/assadeiras/assadeira-validation.ts
+import { z } from 'zod';
+
+const emptyToNull = (v: unknown) =>
+  typeof v === 'string' && v.trim() === '' ? null : v;
+
+export const assadeiraFormSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome é obrigatório').max(100),
+  codigo: z.preprocess(
+    emptyToNull,
+    z.string().trim().max(20).nullable().optional(),
+  ),
+  descricao: z.preprocess(
+    emptyToNull,
+    z.string().trim().max(500).nullable().optional(),
+  ),
+  unidades_por_assadeira: z
+    .number({ error: 'Pães por assadeira é obrigatório' })
+    .int('Deve ser um número inteiro')
+    .min(1, 'Mínimo 1 pão por assadeira'),
+  quantidade: z
+    .number({ error: 'Quantidade de assadeiras é obrigatória' })
+    .int('Deve ser um número inteiro')
+    .min(0, 'Não pode ser negativo'),
+  ordem: z.number().int().min(0).default(0),
+  ativo: z.boolean().default(true),
+  diametro_buracos_mm: z
+    .number()
+    .positive('Diâmetro deve ser positivo')
+    .nullable()
+    .optional(),
+});
+
+export type AssadeiraFormData = z.infer<typeof assadeiraFormSchema>;
+
+export function parseAssadeiraForm(input: unknown) {
+  return assadeiraFormSchema.safeParse(input);
+}
+```
+
+- [ ] **Step 4: Rodar testes — devem passar**
+
+Run: `npm test -- src/domain/assadeiras/assadeira-validation.test.ts`  
+Expected: PASS (5 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/assadeiras/assadeira-validation.ts src/domain/assadeiras/assadeira-validation.test.ts
+git commit -m "feat(assadeiras): schema Zod de validação do formulário"
+```
+
+---
+
+### Task 3: Server Actions CRUD
+
+**Files:**
+- Create: `src/app/actions/assadeiras-actions.ts`
+
+- [ ] **Step 1: Implementar actions**
+
+```typescript
+// src/app/actions/assadeiras-actions.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import {
+  parseAssadeiraForm,
+  type AssadeiraFormData,
+} from '@/domain/assadeiras/assadeira-validation';
+
+export type Assadeira = {
+  id: string;
+  nome: string;
+  codigo: string | null;
+  descricao: string | null;
+  unidades_por_assadeira: number | null;
+  quantidade: number;
+  ordem: number;
+  ativo: boolean;
+  diametro_buracos_mm: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ActionResult<T = Assadeira> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+export async function getAssadeiras(
+  includeInactive = true,
+): Promise<Assadeira[]> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  let query = supabase
+    .from('assadeiras')
+    .select('*')
+    .order('ordem', { ascending: true })
+    .order('nome', { ascending: true });
+
+  if (!includeInactive) {
+    query = query.eq('ativo', true);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Erro ao buscar assadeiras:', error);
+    return [];
+  }
+  return (data ?? []) as Assadeira[];
+}
+
+export async function createAssadeira(
+  input: AssadeiraFormData,
+): Promise<ActionResult> {
+  const parsed = parseAssadeiraForm(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Dados inválidos' };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('assadeiras')
+    .insert({
+      nome: parsed.data.nome,
+      codigo: parsed.data.codigo ?? null,
+      descricao: parsed.data.descricao ?? null,
+      unidades_por_assadeira: parsed.data.unidades_por_assadeira,
+      quantidade: parsed.data.quantidade,
+      ordem: parsed.data.ordem ?? 0,
+      ativo: parsed.data.ativo ?? true,
+      diametro_buracos_mm: parsed.data.diametro_buracos_mm ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return { success: false, error: 'Já existe assadeira com este código' };
+    }
+    console.error('Erro ao criar assadeira:', error);
+    return { success: false, error: 'Erro ao criar assadeira' };
+  }
+
+  revalidatePath('/config/assadeiras');
+  return { success: true, data: data as Assadeira };
+}
+
+export async function updateAssadeira(
+  id: string,
+  input: AssadeiraFormData,
+): Promise<ActionResult> {
+  const parsed = parseAssadeiraForm(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Dados inválidos' };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('assadeiras')
+    .update({
+      nome: parsed.data.nome,
+      codigo: parsed.data.codigo ?? null,
+      descricao: parsed.data.descricao ?? null,
+      unidades_por_assadeira: parsed.data.unidades_por_assadeira,
+      quantidade: parsed.data.quantidade,
+      ordem: parsed.data.ordem ?? 0,
+      ativo: parsed.data.ativo ?? true,
+      diametro_buracos_mm: parsed.data.diametro_buracos_mm ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return { success: false, error: 'Já existe assadeira com este código' };
+    }
+    console.error('Erro ao atualizar assadeira:', error);
+    return { success: false, error: 'Erro ao atualizar assadeira' };
+  }
+
+  revalidatePath('/config/assadeiras');
+  return { success: true, data: data as Assadeira };
+}
+
+export async function deactivateAssadeira(id: string): Promise<ActionResult<void>> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { error } = await supabase
+    .from('assadeiras')
+    .update({ ativo: false, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Erro ao desativar assadeira:', error);
+    return { success: false, error: 'Erro ao desativar assadeira' };
+  }
+
+  revalidatePath('/config/assadeiras');
+  return { success: true, data: undefined as void };
+}
+```
+
+- [ ] **Step 2: Verificar build de types**
+
+Run: `npx tsc --noEmit 2>&1 | head -20`  
+Expected: sem erros em `assadeiras-actions.ts` (ajustar se `deactivateAssadeira` precisar retorno sem `data`)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/actions/assadeiras-actions.ts
+git commit -m "feat(assadeiras): server actions de CRUD"
+```
+
+---
+
+### Task 4: Corrigir APIs de fator de conversão
+
+**Files:**
+- Modify: `src/app/api/submit/forno-pedido/route.ts`
+- Modify: `src/app/api/submit/embalagem-pedido/route.ts`
+- Modify: `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts`
+- Create: `src/domain/assadeiras/assadeira-factor-routes.test.ts`
+
+- [ ] **Step 1: Escrever teste de regressão**
+
+```typescript
+// src/domain/assadeiras/assadeira-factor-routes.test.ts
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { describe, expect, it } from 'vitest';
+
+const ROUTES = [
+  'src/app/api/submit/forno-pedido/route.ts',
+  'src/app/api/submit/embalagem-pedido/route.ts',
+  'src/app/api/produtos/[nomeProduto]/assadeiras/route.ts',
+];
+
+describe('rotas de fator de assadeira', () => {
+  for (const route of ROUTES) {
+    it(`${route} usa unidades_por_assadeira como fallback da assadeira`, () => {
+      const content = readFileSync(join(process.cwd(), route), 'utf8');
+      expect(content).toMatch(/assadeiras\?\.unidades_por_assadeira|assadeiras\(unidades_por_assadeira/);
+      expect(content).not.toContain('quantidade_latas');
+    });
+  }
+});
+```
+
+- [ ] **Step 2: Rodar teste — deve falhar**
+
+Run: `npm test -- src/domain/assadeiras/assadeira-factor-routes.test.ts`  
+Expected: FAIL — `quantidade_latas` ainda presente
+
+- [ ] **Step 3: Corrigir `forno-pedido/route.ts`**
+
+Trocar tipo e select:
+
+```typescript
+type ProdutoAssadeiraFactorRow = {
+  unidades_por_assadeira: number | null;
+  assadeiras: { unidades_por_assadeira: number | null; ativo: boolean } | null;
+};
+
+// select:
+.select('unidades_por_assadeira, assadeiras(unidades_por_assadeira, ativo)')
+
+// resolve:
+const unidadesPorAssadeira = resolveUnidadesPorAssadeiraEfetiva({
+  produto: factorData.unidades_por_assadeira,
+  assadeira: factorData.assadeiras?.unidades_por_assadeira,
+});
+
+// após fetch, rejeitar assadeira inativa:
+if (!factorData.assadeiras?.ativo) {
+  return NextResponse.json(
+    { error: `Assadeira inativa para o produto ${item.produto}` },
+    { status: 400 },
+  );
+}
+```
+
+- [ ] **Step 4: Aplicar mesma correção em `embalagem-pedido/route.ts`**
+
+- [ ] **Step 5: Corrigir `produtos/.../assadeiras/route.ts`**
+
+```typescript
+type ProdutoAssadeiraRow = {
+  assadeira_id: string;
+  unidades_por_assadeira: number | null;
+  assadeiras: {
+    nome: string | null;
+    unidades_por_assadeira: number | null;
+    ativo: boolean;
+  } | null;
+};
+
+// select:
+.select('assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)')
+
+// no map, pular inativas:
+if (!row.assadeiras?.ativo) return null;
+
+const unidadesPorAssadeiraEfetiva = resolveUnidadesPorAssadeiraEfetiva({
+  produto: row.unidades_por_assadeira,
+  assadeira: row.assadeiras?.unidades_por_assadeira,
+});
+```
+
+- [ ] **Step 6: Rodar testes**
+
+Run: `npm test -- src/domain/assadeiras/`  
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/app/api/submit/forno-pedido/route.ts src/app/api/submit/embalagem-pedido/route.ts src/app/api/produtos/[nomeProduto]/assadeiras/route.ts src/domain/assadeiras/assadeira-factor-routes.test.ts
+git commit -m "fix(api): usar unidades_por_assadeira como fator e filtrar inativas"
+```
+
+---
+
+### Task 5: Preview visual de capacidade
+
+**Files:**
+- Create: `src/components/Assadeiras/AssadeiraCapacityPreview.tsx`
+
+- [ ] **Step 1: Implementar componente**
+
+```tsx
+// src/components/Assadeiras/AssadeiraCapacityPreview.tsx
+'use client';
+
+type Props = {
+  paesPorAssadeira: number;
+};
+
+const MAX_DOTS = 36;
+const COLS = 6;
+
+export default function AssadeiraCapacityPreview({ paesPorAssadeira }: Props) {
+  const safe = Number.isFinite(paesPorAssadeira) && paesPorAssadeira > 0
+    ? Math.floor(paesPorAssadeira)
+    : 0;
+
+  const visible = Math.min(safe, MAX_DOTS);
+  const dots = Array.from({ length: visible }, (_, i) => i);
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+        Capacidade
+      </p>
+      <div
+        className="grid gap-1.5 w-fit motion-reduce:transition-none"
+        style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
+        aria-hidden="true"
+      >
+        {dots.map((i) => (
+          <span
+            key={i}
+            className="h-3 w-3 rounded-full bg-emerald-500/80"
+          />
+        ))}
+      </div>
+      <p className="sr-only">
+        Capacidade: {safe} pães por assadeira
+      </p>
+      {safe > MAX_DOTS && (
+        <p className="mt-2 text-xs text-gray-500 tabular-nums">
+          Exibindo {MAX_DOTS} de {safe} pães
+        </p>
+      )}
+      {safe === 0 && (
+        <p className="text-xs text-gray-400">Informe os pães por assadeira</p>
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/Assadeiras/AssadeiraCapacityPreview.tsx
+git commit -m "feat(assadeiras): preview visual de capacidade"
+```
+
+---
+
+### Task 6: Modal de criar/editar
+
+**Files:**
+- Create: `src/components/Assadeiras/AssadeiraModal.tsx`
+
+- [ ] **Step 1: Implementar modal** (espelhar `InsumoModal.tsx` com seções fieldset)
+
+Campos de estado:
+- `nome`, `codigo`, `descricao`, `unidades_por_assadeira`, `quantidade`, `ordem`, `ativo`, `diametro_buracos_mm`
+- `showAdvanced` boolean para seção colapsável
+- `dirty` para confirm ao fechar
+
+Props:
+```typescript
+type AssadeiraModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  assadeira?: Assadeira;
+  onSaved?: () => void;
+};
+```
+
+Submit chama `createAssadeira` ou `updateAssadeira` de `assadeiras-actions.ts`.
+
+Botão "Desativar" (só em edição, `assadeira.ativo`) chama `deactivateAssadeira` após `confirm()`.
+
+Layout responsivo:
+- `md:` dialog centralizado (`max-w-lg`)
+- mobile: `items-end`, painel `rounded-t-3xl max-h-[90dvh] overflow-y-auto`
+
+Atributos a11y no container do dialog:
+`role="dialog"` `aria-modal="true"` `aria-labelledby="assadeira-modal-title"`
+
+Incluir `<AssadeiraCapacityPreview paesPorAssadeira={unidades_por_assadeira} />` na seção Capacidade.
+
+Labels obrigatórios na UI:
+- "Pães por assadeira" (nunca "buracos")
+- "Quantidade de assadeiras"
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/Assadeiras/AssadeiraModal.tsx
+git commit -m "feat(assadeiras): modal de criar e editar"
+```
+
+---
+
+### Task 7: Tabela desktop e lista mobile
+
+**Files:**
+- Create: `src/components/Assadeiras/AssadeirasTable.tsx`
+- Create: `src/components/Assadeiras/AssadeirasMobileList.tsx`
+
+- [ ] **Step 1: `AssadeirasTable.tsx`**
+
+Props:
+```typescript
+type SortKey = 'nome' | 'codigo' | 'unidades_por_assadeira' | 'quantidade' | 'ativo';
+type Props = {
+  items: Assadeira[];
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (key: SortKey) => void;
+  onEdit: (item: Assadeira) => void;
+  onRowClick: (item: Assadeira) => void;
+};
+```
+
+- `<table>` com `<th>` clicáveis, `aria-sort="ascending|descending|none"`
+- Colunas com `tabular-nums` nos números
+- Status: ícone Material `check_circle` / `pause_circle` + texto
+- `hidden md:block` no wrapper
+
+- [ ] **Step 2: `AssadeirasMobileList.tsx`**
+
+- `md:hidden` wrapper
+- Cada item: nome, badge status, pães/assadeira + estoque, botão Editar `min-h-11`
+- onClick na área principal abre modal
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Assadeiras/AssadeirasTable.tsx src/components/Assadeiras/AssadeirasMobileList.tsx
+git commit -m "feat(assadeiras): tabela desktop e lista mobile"
+```
+
+---
+
+### Task 8: Página client + server
+
+**Files:**
+- Create: `src/app/config/assadeiras/page.tsx`
+- Create: `src/app/config/assadeiras/AssadeirasClient.tsx`
+
+- [ ] **Step 1: `page.tsx`**
+
+```typescript
+import { getAssadeiras } from '@/app/actions/assadeiras-actions';
+import AssadeirasClient from './AssadeirasClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function AssadeirasPage() {
+  const assadeiras = await getAssadeiras(true);
+  return <AssadeirasClient initialAssadeiras={assadeiras} />;
+}
+```
+
+- [ ] **Step 2: `AssadeirasClient.tsx`**
+
+Espelhar estrutura de `InsumosClient.tsx`:
+- `DashboardHeader title="Gestão de Assadeiras" icon="bakery_dining"`
+- 4 stat cards: total, ativas, média `unidades_por_assadeira`, soma `quantidade`
+- Busca por nome/código (client-side)
+- Filtro segmentado: `todas | ativas | inativas` — sincronizar com `?status=` via `useSearchParams` + `router.replace`
+- CTA `+ Nova assadeira`
+- Render condicional: `AssadeirasTable` + `AssadeirasMobileList`
+- Empty states distintos (sem dados vs filtro vazio)
+- Toast `role="status"` `aria-live="polite"` com auto-clear 4s
+- `AssadeiraModal` no final
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/config/assadeiras/page.tsx src/app/config/assadeiras/AssadeirasClient.tsx
+git commit -m "feat(assadeiras): página de gestão com filtros e stats"
+```
+
+---
+
+### Task 9: Shell de Configurações
+
+**Files:**
+- Create: `src/app/config/layout.tsx`
+- Modify: `src/app/config/whatsapp/page.tsx` (ajustar padding se necessário)
+
+- [ ] **Step 1: Criar layout**
+
+```tsx
+// src/app/config/layout.tsx
+import Link from 'next/link';
+
+const NAV = [
+  { href: '/config/assadeiras', label: 'Assadeiras', icon: 'bakery_dining' },
+  { href: '/config/whatsapp', label: 'WhatsApp', icon: 'chat' },
+] as const;
+
+export default function ConfigLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-dvh bg-gray-50/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <nav aria-label="Configurações" className="mb-6">
+          {/* mobile: pills scrolláveis */}
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700"
+              >
+                <span className="material-icons text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          {/* desktop: sidebar */}
+          <div className="hidden lg:flex lg:w-56 lg:flex-col lg:gap-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+              Configurações
+            </p>
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="inline-flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                <span className="material-icons text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+        <div className="lg:pl-0">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+Nota: destacar item ativo com `usePathname` pode ser feito em um `ConfigNav.tsx` client component — preferível para estado ativo correto.
+
+- [ ] **Step 2: Extrair `ConfigNav.tsx` client** com `usePathname()` e classe ativa `border-l-2 border-slate-900 bg-white font-semibold`
+
+- [ ] **Step 3: Ajustar WhatsApp page** — remover `min-h-screen` duplicado se conflitar; manter conteúdo legível dentro do layout
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/config/layout.tsx src/components/Config/ConfigNav.tsx src/app/config/whatsapp/page.tsx
+git commit -m "feat(config): shell de navegação para configurações"
+```
+
+---
+
+### Task 10: Home — seção Configurações
+
+**Files:**
+- Modify: `src/app/page.tsx`
+
+- [ ] **Step 1: Adicionar seção antes do Footer**
+
+```tsx
+{/* Seção de Configurações */}
+<section className="mb-8 sm:mb-10">
+  <div className="flex items-center gap-4 mb-8 sm:mb-10">
+    <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-slate-600 via-gray-600 to-transparent" />
+    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+      Configurações
+    </h2>
+  </div>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+    <Link href="/config/assadeiras" className="group relative bg-white/80 ...">
+      <div className="w-16 h-16 ... bg-slate-700 rounded-2xl flex items-center justify-center">
+        <span className="material-icons text-3xl text-white">bakery_dining</span>
+      </div>
+      <h3>Assadeiras</h3>
+      <p>Tipos de assadeira, capacidade e estoque</p>
+    </Link>
+    <Link href="/config/whatsapp" className="group relative bg-white/80 ...">
+      <div className="w-16 h-16 ... bg-emerald-600 rounded-2xl flex items-center justify-center">
+        <span className="material-icons text-3xl text-white">chat</span>
+      </div>
+      <h3>WhatsApp</h3>
+      <p>Notificações de produção</p>
+    </Link>
+  </div>
+</section>
+```
+
+(Reutilizar classes de card existentes na home — copiar padrão de Meta de Produção, trocando emoji por Material Icon.)
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/page.tsx
+git commit -m "feat(home): seção Configurações com links Assadeiras e WhatsApp"
+```
+
+---
+
+### Task 11: Verificação final
+
+- [ ] **Step 1: Rodar suite de testes**
+
+Run: `npm test`  
+Expected: PASS (inclui validation + factor-routes)
+
+- [ ] **Step 2: Rodar lint**
+
+Run: `npm run lint`  
+Expected: sem erros novos
+
+- [ ] **Step 3: Smoke manual**
+
+1. `npm run dev` → abrir `/config/assadeiras`
+2. Criar assadeira: nome "Teste 24", 24 pães, 5 em estoque
+3. Editar quantidade para 8 — toast de sucesso
+4. Ordenar tabela por estoque
+5. Desativar — some do filtro "Ativas", permanece em "Todas"
+6. Abrir modal de pedido forno/embalagem — assadeira inativa não aparece
+7. Home → card Configurações → Assadeiras
+
+- [ ] **Step 4: Commit final se houver ajustes**
+
+```bash
+git add -A
+git commit -m "chore(assadeiras): ajustes pós verificação fase A"
+```
+
+---
+
+## Checklist de cobertura da spec
+
+| Requisito spec | Task |
+|----------------|------|
+| Rename `quantidade_latas` → `quantidade` | Task 1 |
+| CRUD completo | Task 3, 6, 8 |
+| Terminologia pães/quantidade de assadeiras | Task 6 (labels) |
+| Lista + modal | Task 6, 7, 8 |
+| Material Icons, sem emoji estrutural | Task 8, 9, 10 |
+| Fix APIs fator conversão | Task 4 |
+| Assadeiras inativas fora dos selects | Task 4 |
+| Shell `/config` extensível | Task 9 |
+| Home seção Configurações | Task 10 |
+| Testes validação + regressão rotas | Task 2, 4 |
+| Preview visual capacidade | Task 5 |
+
+## Fora deste plano (fases B/C)
+
+- `/config/produto-assadeiras`
+- `/config/cliente-assadeiras`
+- Deprecar `produtos.unidades_assadeira` no código legado
