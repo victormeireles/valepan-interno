@@ -315,13 +315,13 @@ export default function ProducaoEmbalagemPage() {
   }, []);
 
   const handlePhotoClick = useCallback((item: PainelLoteItem) => {
-    const itemKey = `${item.cliente}-${item.produto}-${item.loteId ?? item.rowId}`;
+    const itemKey = `${item.cliente}-${item.produto}-${item.loteId}`;
     setPhotoDropdownOpen((prev) => (prev === itemKey ? null : itemKey));
   }, []);
 
   const renderEmbalagemLot = useCallback(
     (embalagemItem: PainelLoteItem) => {
-      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.loteId ?? embalagemItem.rowId}`;
+      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.loteId}`;
       const isItemLoading = loadingCardId === itemKey;
       const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
       const produzidoDetalhes = buildEmbalagemDisplayEntries({
@@ -685,7 +685,6 @@ export default function ProducaoEmbalagemPage() {
         }
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}
-        rowId={editingItem?.rowId}
         loteId={editingItem?.loteId}
         pedidoEmbalagemId={editingItem?.pedidoEmbalagemId}
         congelado={editingItem?.congelado ?? 'Não'}

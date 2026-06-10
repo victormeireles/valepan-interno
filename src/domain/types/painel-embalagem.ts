@@ -2,7 +2,6 @@ import type { Quantidade } from '@/domain/types/inventario';
 
 export type PainelLoteEmbalagem = {
   loteId: string;
-  planilhaRowId: number;
   modo: 'parcial' | 'substituicao' | 'importado';
   quantidade: Quantidade;
   produzidoEm: string;

@@ -16,8 +16,6 @@ export interface EmbalagemLoteFotos {
 
 export interface EmbalagemLoteInsert {
   modo: EmbalagemLoteModo;
-  planilhaRowId: number;
-  planilhaRowIdOrigem?: number | null;
   pedidoEmbalagemId?: string | null;
   dataPedido: string;
   dataFabricacao: string;

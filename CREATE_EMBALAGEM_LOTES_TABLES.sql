@@ -13,8 +13,6 @@ CREATE TABLE IF NOT EXISTS embalagem_lotes (
   created_at timestamptz NOT NULL DEFAULT now(),
   produzido_em timestamptz NOT NULL DEFAULT now(),
   modo embalagem_lote_modo NOT NULL,
-  planilha_row_id integer,
-  planilha_row_id_origem integer,
   pedido_embalagem_id uuid,
   data_pedido date NOT NULL,
   data_fabricacao date NOT NULL,
@@ -38,10 +36,6 @@ CREATE TABLE IF NOT EXISTS embalagem_lotes (
   pallet_foto_uploaded_at timestamptz,
   producao_anterior jsonb
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_embalagem_lotes_planilha_row_id
-  ON embalagem_lotes(planilha_row_id)
-  WHERE planilha_row_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_embalagem_lotes_data_pedido
   ON embalagem_lotes(data_pedido DESC);

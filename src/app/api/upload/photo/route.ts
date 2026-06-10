@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadPhotoToDrive } from '@/lib/googleDrive';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
 
-// Aumentar tempo máximo de execução para upload de fotos
-export const maxDuration = 30; // 30 segundos
+export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,15 +14,22 @@ export async function POST(request: NextRequest) {
     const photo = formData.get('photo') as File;
     const rowId = formData.get('rowId') as string;
     const loteId = formData.get('loteId') as string;
-    const photoType = formData.get('photoType') as string; // pacote|etiqueta|pallet|forno
-    const processType = (formData.get('process') as string) || 'embalagem'; // embalagem|forno
+    const photoType = formData.get('photoType') as string;
+    const processType = (formData.get('process') as string) || 'embalagem';
 
     if (!photo) {
       return NextResponse.json({ error: 'Nenhuma foto foi enviada' }, { status: 400 });
     }
 
-    if (!rowId && !loteId) {
-      return NextResponse.json({ error: 'ID da linha ou do lote é obrigatório' }, { status: 400 });
+    if (processType === 'embalagem') {
+      if (!loteId) {
+        return NextResponse.json(
+          { error: 'loteId é obrigatório para fotos de embalagem (DB-only).' },
+          { status: 400 },
+        );
+      }
+    } else if (!rowId) {
+      return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
     }
 
     if (
@@ -48,26 +53,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rowNumber = rowId ? parseInt(rowId) : parseInt(loteId.replace(/-/g, '').slice(0, 8), 16) % 1_000_000 || 1;
+    const rowNumber = rowId
+      ? parseInt(rowId)
+      : parseInt(loteId.replace(/-/g, '').slice(0, 8), 16) % 1_000_000 || 1;
     if (rowId && (isNaN(rowNumber) || rowNumber < 2)) {
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
-    // Validar tipo de arquivo
     if (!photo.type.startsWith('image/')) {
       return NextResponse.json({ error: 'Arquivo deve ser uma imagem' }, { status: 400 });
     }
 
-    // Validar tamanho (4MB máximo - limite seguro para Vercel)
     if (photo.size > 4 * 1024 * 1024) {
-      return NextResponse.json({ error: 'Imagem deve ter no máximo 4MB. A imagem deveria ter sido comprimida automaticamente.' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            'Imagem deve ter no máximo 4MB. A imagem deveria ter sido comprimida automaticamente.',
+        },
+        { status: 400 },
+      );
     }
 
-    // Converter File para Buffer
     const arrayBuffer = await photo.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Fazer upload para Google Drive
     const uploadResult = await uploadPhotoToDrive(
       buffer,
       photo.name,
@@ -83,8 +92,7 @@ export async function POST(request: NextRequest) {
         | 'saida',
     );
 
-    // Lote DB-only (Fase C): salva no Supabase, sem planilha
-    if (loteId && processType === 'embalagem') {
+    if (processType === 'embalagem') {
       const prefix =
         photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
       const { embalagemLoteService } = await import('@/lib/services/embalagem-lote-service');
@@ -98,12 +106,11 @@ export async function POST(request: NextRequest) {
         success: true,
         photoUrl: uploadResult.photoUrl,
         photoId: uploadResult.photoId,
-        photoType: photoType,
+        photoType,
         message: 'Foto enviada com sucesso',
       });
     }
 
-    // Salvar dados da foto na planilha
     const sheets = await getGoogleSheetsClient();
     let config;
     if (processType === 'saidas') {
@@ -115,69 +122,44 @@ export async function POST(request: NextRequest) {
     } else if (processType === 'resfriamento') {
       config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
     } else {
-      config = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
+      return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
     }
     const { spreadsheetId, tabName } = config;
-    
-    // Determinar as colunas baseado no tipo de foto
+
     let startColumn: string;
     let columnsCount = 3;
     if (processType === 'saidas') {
       startColumn = 'P';
       columnsCount = 2;
     } else if (processType === 'forno') {
-      // Forno usa colunas L, M, N e sempre um único tipo 'forno'
       startColumn = 'L';
     } else if (processType === 'fermentacao') {
-      // Fermentacao usa colunas S, T, U e sempre um único tipo 'fermentacao'
       startColumn = 'S';
-    } else if (processType === 'resfriamento') {
-      // Resfriamento usa colunas Z, AA, AB e sempre um único tipo 'resfriamento'
-      startColumn = 'Z';
     } else {
-      switch (photoType) {
-        case 'pacote':
-          startColumn = 'R'; // R, S, T
-          break;
-        case 'etiqueta':
-          startColumn = 'U'; // U, V, W
-          break;
-        case 'pallet':
-          startColumn = 'X'; // X, Y, Z
-          break;
-        default:
-          throw new Error('Tipo de foto inválido');
-      }
+      startColumn = 'Z';
     }
-    
+
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
     const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
     const values =
       columnsCount === 3
-        ? [
-            uploadResult.photoUrl, // URL da foto
-            uploadResult.photoId, // ID do arquivo no Drive
-            new Date().toISOString(), // Timestamp do upload
-          ]
+        ? [uploadResult.photoUrl, uploadResult.photoId, new Date().toISOString()]
         : [uploadResult.photoUrl, uploadResult.photoId];
 
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
       valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [values]
-      }
+      requestBody: { values: [values] },
     });
 
     return NextResponse.json({
       success: true,
       photoUrl: uploadResult.photoUrl,
       photoId: uploadResult.photoId,
-      photoType: photoType,
-      message: 'Foto enviada com sucesso'
+      photoType,
+      message: 'Foto enviada com sucesso',
     });
-
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -51,7 +51,6 @@ function parseOptionalTimestamp(value: unknown): string | undefined {
 
 export function mapRowToLoteInsert(
   row: (string | number)[],
-  planilhaRowId: number,
   resolved: { tipoEstoqueId: string; produtoId: string },
 ): EmbalagemLoteInsert {
   const congeladoRaw = (row[SHEET_COL.congelado] || 'Não').toString().trim();
@@ -61,7 +60,6 @@ export function mapRowToLoteInsert(
 
   return {
     modo: 'importado',
-    planilhaRowId,
     dataPedido: normalizeToISODate(row[SHEET_COL.dataPedido]),
     dataFabricacao: normalizeToISODate(row[SHEET_COL.dataFabricacao]),
     tipoEstoqueId: resolved.tipoEstoqueId,

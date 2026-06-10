@@ -30,8 +30,6 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
   const fotos = input.fotos;
   return {
     modo: input.modo,
-    planilha_row_id: input.planilhaRowId,
-    planilha_row_id_origem: input.planilhaRowIdOrigem ?? null,
     ordem_producao_id: input.pedidoEmbalagemId ?? null,
     data_pedido: input.dataPedido,
     data_fabricacao: input.dataFabricacao,
@@ -64,8 +62,6 @@ function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
     id: row.id,
     createdAt: row.created_at,
     modo: row.modo,
-    planilhaRowId: row.planilha_row_id ?? 0,
-    planilhaRowIdOrigem: row.planilha_row_id_origem,
     pedidoEmbalagemId:
       compatRow.ordem_producao_id ?? compatRow.pedido_embalagem_id ?? null,
     dataPedido: row.data_pedido,
@@ -128,40 +124,6 @@ export class EmbalagemLoteRepository {
     }
 
     return data ? fromDbRow(data) : null;
-  }
-
-  async findByPlanilhaRowId(planilhaRowId: number): Promise<EmbalagemLoteRecord | null> {
-    if (planilhaRowId === 0) return null;
-
-    const { data, error } = await this.supabase
-      .from('embalagem_lotes')
-      .select()
-      .eq('planilha_row_id', planilhaRowId)
-      .maybeSingle();
-
-    if (error) {
-      throw new Error(`Erro ao buscar lote: ${error.message}`);
-    }
-
-    return data ? fromDbRow(data) : null;
-  }
-
-  async updateByPlanilhaRowId(
-    planilhaRowId: number,
-    input: EmbalagemLoteInsert,
-  ): Promise<EmbalagemLoteRecord> {
-    const { data, error } = await this.supabase
-      .from('embalagem_lotes')
-      .update(toDbInsert(input))
-      .eq('planilha_row_id', planilhaRowId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Erro ao atualizar lote: ${error.message}`);
-    }
-
-    return fromDbRow(data);
   }
 
   async deleteById(id: string): Promise<void> {
@@ -228,30 +190,54 @@ export class EmbalagemLoteRepository {
     );
   }
 
-  async updateFotosByPlanilhaRowId(
-    planilhaRowId: number,
-    fotos: EmbalagemLoteInsert['fotos'],
-  ): Promise<void> {
-    if (planilhaRowId === 0) return;
+  async clearPhotoReferences(deletedPhotoIds: string[]): Promise<number> {
+    const uniqueIds = [...new Set(deletedPhotoIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return 0;
 
-    const { error } = await this.supabase
+    const inList = uniqueIds.join(',');
+    const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .update({
-        pacote_foto_url: fotos?.pacoteFotoUrl ?? null,
-        pacote_foto_id: fotos?.pacoteFotoId ?? null,
-        pacote_foto_uploaded_at: fotos?.pacoteFotoUploadedAt ?? null,
-        etiqueta_foto_url: fotos?.etiquetaFotoUrl ?? null,
-        etiqueta_foto_id: fotos?.etiquetaFotoId ?? null,
-        etiqueta_foto_uploaded_at: fotos?.etiquetaFotoUploadedAt ?? null,
-        pallet_foto_url: fotos?.palletFotoUrl ?? null,
-        pallet_foto_id: fotos?.palletFotoId ?? null,
-        pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
-      })
-      .eq('planilha_row_id', planilhaRowId);
+      .select('id, pacote_foto_id, etiqueta_foto_id, pallet_foto_id')
+      .or(
+        `pacote_foto_id.in.(${inList}),etiqueta_foto_id.in.(${inList}),pallet_foto_id.in.(${inList})`,
+      );
 
     if (error) {
-      throw new Error(`Erro ao atualizar fotos do lote: ${error.message}`);
+      throw new Error(`Erro ao buscar lotes com fotos removidas: ${error.message}`);
     }
+
+    let updated = 0;
+    for (const row of data ?? []) {
+      const patch: Record<string, null> = {};
+      if (row.pacote_foto_id && uniqueIds.includes(row.pacote_foto_id)) {
+        patch.pacote_foto_url = null;
+        patch.pacote_foto_id = null;
+        patch.pacote_foto_uploaded_at = null;
+      }
+      if (row.etiqueta_foto_id && uniqueIds.includes(row.etiqueta_foto_id)) {
+        patch.etiqueta_foto_url = null;
+        patch.etiqueta_foto_id = null;
+        patch.etiqueta_foto_uploaded_at = null;
+      }
+      if (row.pallet_foto_id && uniqueIds.includes(row.pallet_foto_id)) {
+        patch.pallet_foto_url = null;
+        patch.pallet_foto_id = null;
+        patch.pallet_foto_uploaded_at = null;
+      }
+      if (Object.keys(patch).length === 0) continue;
+
+      const { error: updateError } = await this.supabase
+        .from('embalagem_lotes')
+        .update(patch)
+        .eq('id', row.id);
+
+      if (updateError) {
+        throw new Error(`Erro ao limpar fotos do lote ${row.id}: ${updateError.message}`);
+      }
+      updated += 1;
+    }
+
+    return updated;
   }
 
   async updateById(

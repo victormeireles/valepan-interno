@@ -71,7 +71,6 @@ describe('EmbalagemDailySummaryService', () => {
           lotes: [
             {
               loteId: 'l1',
-              planilhaRowId: 0,
               modo: 'parcial',
               quantidade: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
               produzidoEm: '2026-06-09T12:00:00Z',
@@ -92,7 +91,6 @@ describe('EmbalagemDailySummaryService', () => {
           lotes: [
             {
               loteId: 'l2',
-              planilhaRowId: 0,
               modo: 'parcial',
               quantidade: { caixas: 40, pacotes: 0, unidades: 0, kg: 0 },
               produzidoEm: '2026-06-09T13:00:00Z',
@@ -128,7 +126,6 @@ describe('EmbalagemDailySummaryService', () => {
           lotes: [
             {
               loteId: 'l1',
-              planilhaRowId: 0,
               modo: 'parcial',
               quantidade: { caixas: 50, pacotes: 0, unidades: 0, kg: 0 },
               produzidoEm: '2026-06-09T12:00:00Z',

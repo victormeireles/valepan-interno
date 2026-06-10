@@ -15,8 +15,8 @@ async function main() {
   const { parseSyncPedidoArgs, resolvePedidoSyncWindow } = await import(
     '../src/domain/embalagem/sync-pedido-window'
   );
-  const { ordemProducaoService } = await import(
-    '../src/lib/services/ordem-producao-service'
+  const { reconcileOrdensProducaoWindow } = await import(
+    '../src/lib/services/ordem-producao-sheet-reconcile-service'
   );
 
   if (!process.env.SUPABASE_URL) {
@@ -32,7 +32,7 @@ async function main() {
     `[sync-ordens-producao] janela ${window.from} .. ${window.to}${args.dryRun ? ' (dry-run)' : ''}`,
   );
 
-  const result = await ordemProducaoService.reconcileWindow(window, {
+  const result = await reconcileOrdensProducaoWindow(window, {
     dryRun: args.dryRun,
   });
 

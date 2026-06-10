@@ -127,10 +127,14 @@ export default function ProducaoModal({
       setFormData(initialData);
       return;
     }
-    if (!rowId && !loteId) return;
+    if (mode === 'embalagem') {
+      if (!loteId) return;
+    } else if (!rowId) {
+      return;
+    }
     setFormData(initialData);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
-  }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId]);
+  }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId, mode]);
 
   const buildLotePayload = useCallback(
     (data: ProducaoData) => ({
@@ -154,7 +158,7 @@ export default function ProducaoModal({
   );
 
   const uploadPendingPhotos = useCallback(
-    async (target: { rowId?: number; loteId?: string }) => {
+    async (target: { loteId: string }) => {
       const hasPhotos = Object.values(photoFiles).some((file) => file !== null);
       if (!hasPhotos) return;
 
@@ -167,11 +171,8 @@ export default function ProducaoModal({
         const formDataPhoto = new FormData();
         formDataPhoto.append('photo', photoFile);
         formDataPhoto.append('photoType', photoType);
-        if (target.loteId) {
-          formDataPhoto.append('loteId', target.loteId);
-        } else if (target.rowId) {
-          formDataPhoto.append('rowId', target.rowId.toString());
-        }
+        formDataPhoto.append('loteId', target.loteId);
+        formDataPhoto.append('process', 'embalagem');
         uploadPromises.push(
           fetch('/api/upload/photo', { method: 'POST', body: formDataPhoto }),
         );
@@ -201,25 +202,12 @@ export default function ProducaoModal({
         fotos[`${prefix}FotoUploadedAt`] = now;
       }
 
-      if (Object.keys(fotos).length > 0 && target.loteId) {
+      if (Object.keys(fotos).length > 0) {
         const syncRes = await fetch(`/api/producao/embalagem/lote/${target.loteId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fotos),
         });
-        if (!syncRes.ok) {
-          const syncData = await syncRes.json().catch(() => ({}));
-          throw new Error(syncData.error || 'Erro ao sincronizar fotos no banco');
-        }
-      } else if (Object.keys(fotos).length > 0 && target.rowId) {
-        const syncRes = await fetch(
-          `/api/producao/embalagem/planilha/${target.rowId}/fotos`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fotos),
-          },
-        );
         if (!syncRes.ok) {
           const syncData = await syncRes.json().catch(() => ({}));
           throw new Error(syncData.error || 'Erro ao sincronizar fotos no banco');
@@ -329,10 +317,12 @@ export default function ProducaoModal({
       const hasPhotos = mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? Boolean(photoFiles.pacote) : Object.values(photoFiles).some(file => file !== null);
       
       // Upload de fotos se houver
-      if ((rowId || loteId) && hasPhotos) {
+      const canUploadPhotos =
+        mode === 'embalagem' ? Boolean(loteId) : Boolean(rowId);
+
+      if (canUploadPhotos && hasPhotos) {
         setPhotoLoading(true);
         
-        // Fazer upload de todas as fotos primeiro
         const uploadPromises = [];
         const photoTypes = [];
         
@@ -340,8 +330,9 @@ export default function ProducaoModal({
           if (photoFile) {
             const formDataPhoto = new FormData();
             formDataPhoto.append('photo', photoFile);
-            if (loteId) {
+            if (mode === 'embalagem' && loteId) {
               formDataPhoto.append('loteId', loteId);
+              formDataPhoto.append('process', 'embalagem');
             } else if (rowId) {
               formDataPhoto.append('rowId', rowId.toString());
             }
@@ -432,7 +423,11 @@ export default function ProducaoModal({
   };
 
   const handlePhotoManagerRemove = async (photoType: 'pacote' | 'etiqueta' | 'pallet') => {
-    if (!rowId && !loteId) return;
+    if (mode === 'embalagem') {
+      if (!loteId) return;
+    } else if (!rowId) {
+      return;
+    }
     
     try {
       setPhotoLoading(true);
@@ -521,7 +516,7 @@ export default function ProducaoModal({
       return;
     }
 
-    if (!rowId && !pedidoEmbalagemId) return;
+    if (!loteId && !pedidoEmbalagemId) return;
 
     // Validação de fotos obrigatórias
     const validator = new PhotoValidator(formData, photoFiles, cliente);
@@ -545,7 +540,7 @@ export default function ProducaoModal({
       return;
     }
 
-    if (!rowId && !loteId) return;
+    if (!loteId && !pedidoEmbalagemId) return;
 
     if (totalQtyVisivel(formData) <= 0) {
       setMessage({

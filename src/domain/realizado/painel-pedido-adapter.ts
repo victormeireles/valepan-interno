@@ -39,7 +39,6 @@ export function loteToPainelItem(
     aProduzir: valor,
     produzido: valor,
     dataFabricacao: pedido.dataFabricacao,
-    rowId: lote.planilhaRowId,
     caixas: lote.quantidade.caixas,
     pacotes: lote.quantidade.pacotes,
     unidades: lote.quantidade.unidades,

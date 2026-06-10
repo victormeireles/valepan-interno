@@ -1246,8 +1246,6 @@ export type Database = {
           pallet_foto_id: string | null
           pallet_foto_uploaded_at: string | null
           pallet_foto_url: string | null
-          planilha_row_id: number | null
-          planilha_row_id_origem: number | null
           producao_anterior: Json | null
           produto_id: string
           produzido_em: string
@@ -1276,8 +1274,6 @@ export type Database = {
           pallet_foto_id?: string | null
           pallet_foto_uploaded_at?: string | null
           pallet_foto_url?: string | null
-          planilha_row_id?: number | null
-          planilha_row_id_origem?: number | null
           producao_anterior?: Json | null
           produto_id: string
           produzido_em?: string
@@ -1306,8 +1302,6 @@ export type Database = {
           pallet_foto_id?: string | null
           pallet_foto_uploaded_at?: string | null
           pallet_foto_url?: string | null
-          planilha_row_id?: number | null
-          planilha_row_id_origem?: number | null
           producao_anterior?: Json | null
           produto_id?: string
           produzido_em?: string

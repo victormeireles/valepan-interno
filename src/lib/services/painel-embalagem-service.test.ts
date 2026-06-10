@@ -18,16 +18,11 @@ const basePedido: PedidoEmbalagemRecord = {
   quantidade: { caixas: 225, pacotes: 0, unidades: 0, kg: 0 },
 };
 
-function makeLote(
-  id: string,
-  caixas: number,
-  planilhaRowId: number,
-): EmbalagemLoteRecord {
+function makeLote(id: string, caixas: number): EmbalagemLoteRecord {
   return {
     id,
     createdAt: '2026-06-03T12:00:00Z',
     modo: 'parcial',
-    planilhaRowId,
     dataPedido: '2026-06-03',
     dataFabricacao: '2026-06-04',
     tipoEstoqueId: 'tipo-1',
@@ -40,7 +35,7 @@ function makeLote(
 
 describe('buildPainelPedido', () => {
   it('agrega produzido como SUM dos lotes', () => {
-    const lotes = [makeLote('l1', 50, 10), makeLote('l2', 3, 11)];
+    const lotes = [makeLote('l1', 50), makeLote('l2', 3)];
     const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', lotes, true, 'Não');
 
     expect(painel.produzido.caixas).toBe(53);
@@ -64,7 +59,7 @@ describe('buildPainelPedido', () => {
   });
 
   it('usa congelado vindo do tipo de estoque', () => {
-    const lotes = [{ ...makeLote('l1', 50, 42), congelado: 'Não' as const }];
+    const lotes = [{ ...makeLote('l1', 50), congelado: 'Não' as const }];
     const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', lotes, true, 'Sim');
 
     expect(painel.congelado).toBe('Sim');
@@ -73,11 +68,10 @@ describe('buildPainelPedido', () => {
 
 describe('mapLoteToPainel', () => {
   it('mapeia campos do lote', () => {
-    const lote = makeLote('l1', 50, 42);
+    const lote = makeLote('l1', 50);
     const mapped = mapLoteToPainel(lote, 'Sim');
 
     expect(mapped.loteId).toBe('l1');
-    expect(mapped.planilhaRowId).toBe(42);
     expect(mapped.quantidade.caixas).toBe(50);
   });
 });

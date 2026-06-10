@@ -21,7 +21,6 @@ const pedido: PainelPedidoEmbalagem = {
   lotes: [
     {
       loteId: 'l1',
-      planilhaRowId: 1,
       modo: 'parcial',
       quantidade: { caixas: 50, pacotes: 0, unidades: 0, kg: 0 },
       produzidoEm: '2026-06-05T15:56:00Z',

@@ -39,13 +39,12 @@ describe('mapRowToLoteInsert', () => {
     row[SHEET_COL.producaoCaixas] = '3';
     row[SHEET_COL.lote] = '42';
 
-    const insert = mapRowToLoteInsert(row, 10, {
+    const insert = mapRowToLoteInsert(row, {
       tipoEstoqueId: 'tipo-1',
       produtoId: 'prod-1',
     });
 
     expect(insert.modo).toBe('importado');
-    expect(insert.planilhaRowId).toBe(10);
     expect(insert.quantidade.caixas).toBe(3);
     expect(insert.congelado).toBe('Sim');
     expect(insert.lote).toBe(42);

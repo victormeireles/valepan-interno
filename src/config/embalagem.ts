@@ -1,3 +1,7 @@
+/** Planilha Google compartilhada (Inventário/Estoque/Saídas — fora do escopo embalagem DB). */
+export const EMBALAGEM_LEGACY_SPREADSHEET_ID =
+  '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM';
+
 export const PEDIDOS_EMBALAGEM_CONFIG = {
   origemClientes: {
     spreadsheetId: process.env.NEXT_PUBLIC_CLIENTES_SHEET_ID || '1-YyKoGWHUWKBLnqK35mf9varGS-DA104AldE_APS6qw',
@@ -8,14 +12,10 @@ export const PEDIDOS_EMBALAGEM_CONFIG = {
   origemProdutos: {
     provider: 'supabase' as const,
   },
-  destinoPedidos: {
-    spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
-    tabName: 'Pedido de embalagem',
-  }
 } as const;
 
 export const EMBALAGEM_PRODUCAO_DESTINO = {
-  spreadsheetId: '1oqcxI5Qy2NsnYr5vdDtnI1Le7Mb5izKD-kQLYlj3VJM',
+  spreadsheetId: EMBALAGEM_LEGACY_SPREADSHEET_ID,
   tabName: '6 - Embalagem',
 } as const;
 
@@ -38,5 +38,3 @@ export type PedidoEmbalagemPayload = {
   observacao?: string;
   itens: PedidoItem[];
 };
-
-

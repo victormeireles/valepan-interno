@@ -1,4 +1,4 @@
-import { PEDIDOS_EMBALAGEM_CONFIG } from './embalagem';
+import { EMBALAGEM_LEGACY_SPREADSHEET_ID, PEDIDOS_EMBALAGEM_CONFIG } from './embalagem';
 
 const DEFAULT_SAIDAS_TAB_NAME =
   process.env.NEXT_PUBLIC_PRODUCAO_TAB_SAIDAS || 'Pedido de saídas';
@@ -38,7 +38,7 @@ export const SAIDAS_SHEET_CONFIG = {
   origemClientes: PEDIDOS_EMBALAGEM_CONFIG.origemClientes,
   origemProdutos: PEDIDOS_EMBALAGEM_CONFIG.origemProdutos,
   destino: {
-    spreadsheetId: PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos.spreadsheetId,
+    spreadsheetId: EMBALAGEM_LEGACY_SPREADSHEET_ID,
     tabName: DEFAULT_SAIDAS_TAB_NAME,
     quantidadeColumns: SAIDAS_SHEET_COLUMNS.meta,
     realizadoColumns: SAIDAS_SHEET_COLUMNS.realizado,

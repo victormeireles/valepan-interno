@@ -1,4 +1,4 @@
-import { PEDIDOS_EMBALAGEM_CONFIG } from './embalagem';
+import { EMBALAGEM_LEGACY_SPREADSHEET_ID, PEDIDOS_EMBALAGEM_CONFIG } from './embalagem';
 
 const DEFAULT_INVENTARIO_TAB_NAME =
   process.env.NEXT_PUBLIC_PRODUCAO_TAB_INVENTARIO || 'Inventário';
@@ -44,12 +44,12 @@ export const INVENTARIO_SHEET_CONFIG = {
   origemClientes: PEDIDOS_EMBALAGEM_CONFIG.origemClientes,
   origemProdutos: PEDIDOS_EMBALAGEM_CONFIG.origemProdutos,
   destinoInventario: {
-    spreadsheetId: PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos.spreadsheetId,
+    spreadsheetId: EMBALAGEM_LEGACY_SPREADSHEET_ID,
     tabName: DEFAULT_INVENTARIO_TAB_NAME,
     quantidadeColumns: INVENTARIO_SHEET_COLUMNS.quantidade,
   },
   destinoEstoque: {
-    spreadsheetId: PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos.spreadsheetId,
+    spreadsheetId: EMBALAGEM_LEGACY_SPREADSHEET_ID,
     tabName: DEFAULT_ESTOQUE_TAB_NAME,
     quantidadeColumns: ESTOQUE_SHEET_COLUMNS.quantidade,
   },

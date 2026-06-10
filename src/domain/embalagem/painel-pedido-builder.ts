@@ -16,7 +16,6 @@ export function mapLoteToPainel(
 ): PainelLoteEmbalagem {
   return {
     loteId: lote.id,
-    planilhaRowId: lote.planilhaRowId,
     modo: lote.modo,
     quantidade: { ...lote.quantidade },
     produzidoEm: lote.produzidoEm,
