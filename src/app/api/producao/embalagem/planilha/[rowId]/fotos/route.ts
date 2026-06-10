@@ -1,25 +1,13 @@
 import { NextResponse } from 'next/server';
 
-import type { EmbalagemLoteFotos } from '@/domain/types/embalagem-lote';
-import { embalagemLoteService } from '@/lib/services/embalagem-lote-service';
+const GONE_MESSAGE =
+  'Rota legada descontinuada — fotos de lote via PATCH /api/producao/embalagem/lote/[loteId] (Fase C).';
 
-export async function PATCH(
-  request: Request,
-  context: { params: Promise<{ rowId: string }> },
-) {
-  try {
-    const { rowId } = await context.params;
-    const planilhaRowId = parseInt(rowId, 10);
-    if (Number.isNaN(planilhaRowId) || planilhaRowId < 2) {
-      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
-    }
+function gone() {
+  return NextResponse.json({ error: GONE_MESSAGE }, { status: 410 });
+}
 
-    const body = (await request.json()) as EmbalagemLoteFotos;
-    await embalagemLoteService.syncFotosFromPlanilhaRow(planilhaRowId, body);
-
-    return NextResponse.json({ message: 'Fotos sincronizadas' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+/** @deprecated Fase C */
+export async function PATCH() {
+  return gone();
 }

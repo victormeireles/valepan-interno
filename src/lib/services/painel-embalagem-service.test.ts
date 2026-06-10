@@ -41,7 +41,7 @@ function makeLote(
 describe('buildPainelPedido', () => {
   it('agrega produzido como SUM dos lotes', () => {
     const lotes = [makeLote('l1', 50, 10), makeLote('l2', 3, 11)];
-    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', lotes, true);
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', lotes, true, 'Não');
 
     expect(painel.produzido.caixas).toBe(53);
     expect(painel.produzidoScalar).toBe(53);
@@ -50,7 +50,7 @@ describe('buildPainelPedido', () => {
   });
 
   it('retorna produzido zero quando não há lotes', () => {
-    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], false);
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], false, 'Não');
 
     expect(painel.produzido.caixas).toBe(0);
     expect(painel.produzidoScalar).toBe(0);
@@ -58,16 +58,23 @@ describe('buildPainelPedido', () => {
   });
 
   it('deriva lote da data de fabricação da etiqueta', () => {
-    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], true);
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], true, 'Não');
 
     expect(painel.lote).toBe(155);
+  });
+
+  it('usa congelado vindo do tipo de estoque', () => {
+    const lotes = [{ ...makeLote('l1', 50, 42), congelado: 'Não' as const }];
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', lotes, true, 'Sim');
+
+    expect(painel.congelado).toBe('Sim');
   });
 });
 
 describe('mapLoteToPainel', () => {
   it('mapeia campos do lote', () => {
     const lote = makeLote('l1', 50, 42);
-    const mapped = mapLoteToPainel(lote);
+    const mapped = mapLoteToPainel(lote, 'Sim');
 
     expect(mapped.loteId).toBe('l1');
     expect(mapped.planilhaRowId).toBe(42);

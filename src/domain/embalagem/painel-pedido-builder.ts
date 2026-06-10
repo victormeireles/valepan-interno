@@ -10,7 +10,10 @@ import type {
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 
-export function mapLoteToPainel(lote: EmbalagemLoteRecord): PainelLoteEmbalagem {
+export function mapLoteToPainel(
+  lote: EmbalagemLoteRecord,
+  congeladoFromTipo: 'Sim' | 'Não' = 'Não',
+): PainelLoteEmbalagem {
   return {
     loteId: lote.id,
     planilhaRowId: lote.planilhaRowId,
@@ -18,7 +21,7 @@ export function mapLoteToPainel(lote: EmbalagemLoteRecord): PainelLoteEmbalagem 
     quantidade: { ...lote.quantidade },
     produzidoEm: lote.produzidoEm,
     obsEmbalagem: lote.obsEmbalagem ?? undefined,
-    congelado: lote.congelado,
+    congelado: congeladoFromTipo,
     lote: lote.lote,
     pacoteFotoUrl: lote.fotos?.pacoteFotoUrl,
     pacoteFotoId: lote.fotos?.pacoteFotoId,
@@ -38,8 +41,9 @@ export function buildPainelPedido(
   produto: string,
   lotes: EmbalagemLoteRecord[],
   possuiEtiqueta: boolean,
+  congeladoFromTipo: 'Sim' | 'Não',
 ): PainelPedidoEmbalagem {
-  const painelLotes = lotes.map(mapLoteToPainel);
+  const painelLotes = lotes.map((l) => mapLoteToPainel(l, congeladoFromTipo));
   const produzido = somarQuantidades(painelLotes.map((l) => l.quantidade));
   const { unidade, valor: aProduzir } = derivarUnidadePrincipal(pedido.quantidade);
   const { valor: produzidoScalar } = derivarUnidadePrincipal(produzido);
@@ -50,8 +54,6 @@ export function buildPainelPedido(
     .sort()
     .at(-1);
 
-  const congelado = lotes.find((l) => l.congelado === 'Sim') ? 'Sim' : lotes[0]?.congelado;
-
   return {
     pedidoEmbalagemId: pedido.id,
     cliente,
@@ -59,7 +61,7 @@ export function buildPainelPedido(
     observacao: pedido.observacao,
     dataPedido: pedido.dataProducao,
     dataFabricacao: pedido.dataFabricacaoEtiqueta,
-    congelado,
+    congelado: congeladoFromTipo,
     pedido: { ...pedido.quantidade },
     produzido,
     unidade,

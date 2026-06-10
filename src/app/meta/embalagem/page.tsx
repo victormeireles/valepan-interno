@@ -17,6 +17,7 @@ type PainelItem = {
   observacao: string;
   aProduzir: number;
   produzido: number;
+  possuiEtiqueta: boolean;
   dataPedido?: string;
   dataFabricacao?: string;
   caixas?: number;
@@ -24,7 +25,6 @@ type PainelItem = {
   unidades?: number;
   kg?: number;
   lote?: number;
-  etiquetaGerada?: boolean;
 };
 
 function pedidoToMetaItem(p: PainelPedidoEmbalagem): PainelItem {
@@ -37,6 +37,7 @@ function pedidoToMetaItem(p: PainelPedidoEmbalagem): PainelItem {
     observacao: p.observacao,
     aProduzir: p.aProduzir,
     produzido: p.produzidoScalar,
+    possuiEtiqueta: p.possuiEtiqueta,
     dataPedido: p.dataPedido,
     dataFabricacao: p.dataFabricacao,
     caixas: p.pedido.caixas,
@@ -44,7 +45,6 @@ function pedidoToMetaItem(p: PainelPedidoEmbalagem): PainelItem {
     unidades: p.pedido.unidades,
     kg: p.pedido.kg,
     lote: p.lote,
-    etiquetaGerada: p.etiquetaGerada,
   };
 }
 
@@ -55,7 +55,6 @@ type CreatePedidoData = {
   observacao: string;
   itens: {
     produto: string;
-    congelado: boolean;
     assadeiras: number;
     assadeiraId: string;
     tipoCliente?: string | null;
@@ -69,7 +68,6 @@ type EditData = {
   cliente: string;
   observacao: string;
   produto: string;
-  congelado: boolean;
   caixas: number;
   pacotes: number;
   unidades: number;
@@ -215,9 +213,7 @@ export default function PedidoEmbalagemPage() {
         cliente: data.data.cliente,
         observacao: data.data.observacao,
         produto: data.data.produto,
-        congelado: data.data.congelado ? 'Sim' : 'Não',
         aProduzir: data.data.caixas || data.data.pacotes || data.data.unidades || data.data.kg,
-        // Adicionar os valores individuais para o modal
         caixas: data.data.caixas || 0,
         pacotes: data.data.pacotes || 0,
         unidades: data.data.unidades || 0,
@@ -289,11 +285,11 @@ export default function PedidoEmbalagemPage() {
             observacao: editData.observacao,
             itens: [{
               produto: editData.produto,
-              congelado: editData.congelado ? 'Sim' : 'Não',
               caixas: editData.caixas || 0,
               pacotes: editData.pacotes || 0,
               unidades: editData.unidades || 0,
               kg: editData.kg || 0,
+              congelado: 'Não',
             }]
           }),
         });
@@ -536,15 +532,11 @@ export default function PedidoEmbalagemPage() {
                                         <span className="material-icons text-blue-300 text-xs ml-1">ac_unit</span>
                                       )}
                                     </span>
-                                    {item.lote && (
+                                    {item.possuiEtiqueta && item.lote && (
                                       <button
                                         onClick={(e) => handleEtiquetaClick(item, e)}
-                                        className={`ml-2 transition-colors cursor-pointer ${
-                                          item.etiquetaGerada 
-                                            ? 'text-green-500 hover:text-green-400' 
-                                            : 'text-white hover:text-gray-300'
-                                        }`}
-                                        title={item.etiquetaGerada ? 'Etiqueta já gerada' : 'Gerar etiqueta'}
+                                        className="ml-2 text-white hover:text-gray-300 transition-colors cursor-pointer"
+                                        title="Gerar etiqueta"
                                       >
                                         <span className="material-icons text-lg">label</span>
                                       </button>
@@ -600,6 +592,7 @@ export default function PedidoEmbalagemPage() {
         labelsOverride={{
           title: isNewOrder ? 'Nova meta de embalagem' : 'Editar meta de embalagem',
         }}
+        visibleFields={{ congelado: false }}
         rowId={undefined}
         initialData={isNewOrder ? {
           dataPedido: selectedDate,
@@ -637,6 +630,7 @@ export default function PedidoEmbalagemPage() {
         clientesOptions={clientesOptions}
         produtosOptions={produtosOptions}
         loading={createLoading}
+        visibleFields={{ congelado: false }}
       />
 
       {/* Modal de Etiqueta */}
@@ -652,7 +646,6 @@ export default function PedidoEmbalagemPage() {
           congeladoInicial={etiquetaItem.congelado === 'Sim'}
           cliente={etiquetaItem.cliente}
           lote={etiquetaItem.lote || 0}
-          rowId={undefined}
           onSuccess={handleEtiquetaSuccess}
         />
       )}

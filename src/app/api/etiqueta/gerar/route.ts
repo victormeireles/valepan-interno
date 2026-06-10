@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { readSheetValues, updateCell } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
+import { readSheetValues } from '@/lib/googleSheets';
+import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import fs from 'fs';
 import path from 'path';
 
@@ -12,7 +12,7 @@ interface GerarEtiquetaRequest {
   congelado: boolean;
   mostrarTextoCongelado: boolean;
   lote: number;
-  rowId?: number;
+  cliente?: string;
   nomeEtiqueta?: string;
 }
 
@@ -532,9 +532,17 @@ export async function POST(request: Request) {
 
     const nomeEtiqueta = body.nomeEtiqueta?.trim() || body.produto;
 
+    let congelado = Boolean(body.congelado);
+    if (body.cliente?.trim()) {
+      const tipo = await tiposEstoqueService.findByName(body.cliente.trim());
+      if (tipo) {
+        congelado = tipo.congelado;
+      }
+    }
+
     // Calcular valores
     // Se for congelado, usa diasValidadeCongelado, senão usa diasValidade
-    const dataValidade = body.congelado 
+    const dataValidade = congelado
       ? addDays(body.dataFabricacao, body.diasValidadeCongelado)
       : addDays(body.dataFabricacao, body.diasValidade);
     
@@ -555,7 +563,7 @@ export async function POST(request: Request) {
       dataFabricacao: formatDate(body.dataFabricacao),
       dataValidade: formatDate(dataValidade),
       mostrarTextoCongelado: body.mostrarTextoCongelado,
-      congelado: body.congelado,
+      congelado,
       diasValidade: body.diasValidade,
       diasValidadeCongelado: body.diasValidadeCongelado,
       lote: body.lote,
@@ -565,12 +573,6 @@ export async function POST(request: Request) {
       unPorCaixa: produtoData.unPorCaixa,
       pacotesPorCaixa,
     });
-
-    // Marcar etiqueta como gerada na planilha
-    if (body.rowId) {
-      const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-      await updateCell(spreadsheetId, tabName, body.rowId, 'AB', 'Sim'); // Coluna AB = Etiqueta Gerada
-    }
 
     return NextResponse.json({ html });
   } catch (error) {

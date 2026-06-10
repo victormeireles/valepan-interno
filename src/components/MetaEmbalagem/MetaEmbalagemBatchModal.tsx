@@ -361,7 +361,7 @@ function PreviewRow({ item }: { item: BatchPreviewItem }) {
           <div className="text-xs text-gray-500">{item.observacao}</div>
         ) : null}
         {item.caixasDerivadas != null && item.caixasDerivadas > 0 ? (
-          <div className="text-xs text-gray-600">≈ {item.caixasDerivadas} cx na planilha</div>
+          <div className="text-xs text-gray-600">≈ {item.caixasDerivadas} cx</div>
         ) : null}
         {item.erro ? (
           <div className="mt-1 text-xs text-red-400">{item.erro}</div>

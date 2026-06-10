@@ -34,7 +34,7 @@ export function loteToPainelItem(
     cliente: pedido.cliente,
     produto: pedido.produto,
     observacao: pedido.observacao,
-    congelado: lote.congelado,
+    congelado: pedido.congelado ?? 'Não',
     unidade,
     aProduzir: valor,
     produzido: valor,

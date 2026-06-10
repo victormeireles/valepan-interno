@@ -4,10 +4,6 @@ import {
   loteTemQuantidadeProduzida,
   montarObservacaoSaidaExclusaoEmbalagem,
 } from '@/domain/embalagem/embalagem-lote-exclusao';
-import {
-  appendEmbalagemProducaoRow,
-  clearEmbalagemProducaoSheetRow,
-} from '@/domain/embalagem/pedido-sheet-ops';
 import { loteToPedidoKey } from '@/domain/embalagem/pedido-key-from-lote';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
@@ -25,8 +21,6 @@ import { pedidoEmbalagemService } from '@/lib/services/pedido-embalagem-service'
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
-import { deleteSheetRow } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { normalizeToISODate } from '@/lib/utils/date-utils';
 
 export { EstoqueResolverError };
@@ -67,7 +61,6 @@ export type CriarLotePorPedidoInput = {
   pedidoEmbalagemId: string;
   clienteNome: string;
   produtoNome: string;
-  congelado: string;
   quantidade: Quantidade;
   produzidoEm?: string;
   obsEmbalagem?: string;
@@ -108,13 +101,15 @@ export class EmbalagemLoteService {
   }
 
   async criarLote(input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord> {
-    const existing = await embalagemLoteRepository.findByPlanilhaRowId(
-      input.planilhaRowId,
-    );
-    if (existing) {
-      throw new Error(
-        `Lote já existe para planilha_row_id=${input.planilhaRowId}`,
+    if (input.planilhaRowId !== 0) {
+      const existing = await embalagemLoteRepository.findByPlanilhaRowId(
+        input.planilhaRowId,
       );
+      if (existing) {
+        throw new Error(
+          `Lote já existe para planilha_row_id=${input.planilhaRowId}`,
+        );
+      }
     }
     return embalagemLoteRepository.insert(input);
   }
@@ -222,30 +217,18 @@ export class EmbalagemLoteService {
       throw new Error('Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).');
     }
 
-    const planilhaRowId = await appendEmbalagemProducaoRow({
-      dataPedido: pedido.dataProducao,
-      dataFabricacao: pedido.dataFabricacaoEtiqueta,
-      cliente: input.clienteNome,
-      observacao: pedido.observacao,
-      produto: input.produtoNome,
-      congelado: input.congelado,
-      quantidade: q,
-      obsEmbalagem: input.obsEmbalagem,
-      fotos: input.fotos,
-    });
-
     const produzidoEm = input.produzidoEm ?? new Date().toISOString();
 
     return this.criarLote({
       modo: 'parcial',
-      planilhaRowId,
+      planilhaRowId: 0,
       planilhaRowIdOrigem: null,
       pedidoEmbalagemId: pedido.id,
       dataPedido: pedido.dataProducao,
       dataFabricacao: pedido.dataFabricacaoEtiqueta,
       tipoEstoqueId: pedido.tipoEstoqueId,
       produtoId: pedido.produtoId,
-      congelado: input.congelado === 'Sim' ? 'Sim' : 'Não',
+      congelado: 'Não',
       lote: null,
       quantidade: q,
       produzidoEm,
@@ -254,11 +237,82 @@ export class EmbalagemLoteService {
     });
   }
 
+  async atualizarLote(
+    loteId: string,
+    input: {
+      quantidade: Quantidade;
+      obsEmbalagem?: string;
+      fotos?: EmbalagemLoteFotos;
+    },
+  ): Promise<EmbalagemLoteRecord> {
+    const existing = await embalagemLoteRepository.findById(loteId);
+    if (!existing) {
+      throw new Error('Lote não encontrado');
+    }
+
+    const productService = new SupabaseProductService();
+    const [tipo, produto] = await Promise.all([
+      tiposEstoqueService.findById(existing.tipoEstoqueId),
+      productService.findById(existing.produtoId),
+    ]);
+
+    if (!tipo || !produto) {
+      throw new Error('Cliente ou produto não encontrado');
+    }
+
+    const anterior = existing.quantidade;
+    const novo = input.quantidade;
+    const fotos = input.fotos
+      ? { ...existing.fotos, ...input.fotos }
+      : existing.fotos;
+
+    const updated = await embalagemLoteRepository.updateById(loteId, {
+      quantidade: novo,
+      obsEmbalagem: input.obsEmbalagem ?? existing.obsEmbalagem ?? null,
+      fotos,
+      produzidoEm: new Date().toISOString(),
+    });
+
+    const delta = {
+      caixas: novo.caixas - anterior.caixas,
+      pacotes: novo.pacotes - anterior.pacotes,
+      unidades: novo.unidades - anterior.unidades,
+      kg: novo.kg - anterior.kg,
+    };
+    const houveMudanca =
+      delta.caixas !== 0 ||
+      delta.pacotes !== 0 ||
+      delta.unidades !== 0 ||
+      delta.kg !== 0;
+
+    if (houveMudanca) {
+      const clienteEstoque =
+        (await estoqueService.obterTipoEstoqueCliente(tipo.nome)) ?? tipo.nome;
+      await estoqueService.aplicarDelta({
+        cliente: clienteEstoque,
+        produto: produto.nome,
+        delta,
+        origem: 'embalagem',
+        embalagemLoteId: loteId,
+      });
+    }
+
+    return updated;
+  }
+
   async syncFotosFromPlanilhaRow(
     planilhaRowId: number,
     fotos: EmbalagemLoteFotos,
   ): Promise<void> {
     await embalagemLoteRepository.updateFotosByPlanilhaRowId(planilhaRowId, fotos);
+  }
+
+  async syncFotosFromLoteId(loteId: string, fotos: EmbalagemLoteFotos): Promise<void> {
+    const existing = await embalagemLoteRepository.findById(loteId);
+    if (!existing) {
+      throw new Error('Lote não encontrado');
+    }
+    await embalagemLoteRepository.updateFotosById(loteId, { ...existing.fotos, ...fotos });
   }
 
   async compensarLote(loteId: string): Promise<void> {
@@ -308,15 +362,6 @@ export class EmbalagemLoteService {
         origem: 'saida',
         clienteDestino: tipo.nome,
       });
-    }
-
-    if (lote.planilhaRowId && lote.planilhaRowId >= 2) {
-      const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-      if (lote.modo === 'parcial') {
-        await deleteSheetRow(spreadsheetId, tabName, lote.planilhaRowId);
-      } else {
-        await clearEmbalagemProducaoSheetRow(lote.planilhaRowId);
-      }
     }
 
     await estoqueRepository.clearEmbalagemLoteId(loteId);

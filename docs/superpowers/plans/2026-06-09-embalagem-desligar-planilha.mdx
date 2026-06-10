@@ -1,0 +1,428 @@
+# Embalagem — Desligar planilha (Fase C) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Meta e realizado de embalagem passam a gravar e ler **somente Supabase**; planilha `Pedido de embalagem` congelada; sync desligado.
+
+**Architecture:** Strangler por endpoint — substituir dual-write + `reconcileForDate` por serviços DB-only (`OrdemProducaoMetaService`, refatoração de `EmbalagemLoteService`). `congelado` vem de `tipos_estoque`; remove `etiqueta_gerada`. Rollout: Pré → Meta → Realizado → Limpeza.
+
+**Tech Stack:** Next.js App Router, Supabase, Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-06-09-embalagem-desligar-planilha-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `ALTER_TIPOS_ESTOQUE_CONGELADO.sql` | Coluna `congelado` em `tipos_estoque` |
+| `src/lib/services/tipos-estoque-service.ts` | Expor `congelado` no DTO |
+| `src/lib/services/ordem-producao-meta-service.ts` | **Novo** — create/update/delete/batch meta DB-only |
+| `src/lib/services/meta-embalagem-batch-service.ts` | Remover planilha; delegar ao meta service |
+| `src/app/api/submit/embalagem-pedido/route.ts` | DB-only create |
+| `src/app/api/embalagem/pedido/[pedidoEmbalagemId]/route.ts` | DB-only PUT/DELETE/GET |
+| `src/lib/services/embalagem-lote-service.ts` | DB-only lotes; sem append planilha |
+| `src/app/api/producao/embalagem/lote/[loteId]/route.ts` | GET/PUT lote (expandir) |
+| `src/domain/embalagem/painel-pedido-builder.ts` | `congelado` via tipo |
+| `src/app/meta/embalagem/page.tsx` | UI: sem congelado toggle, sem etiquetaGerada |
+| `src/lib/services/daily-summary/embalagem-daily-summary-service.ts` | Ler DB (Fase 3) |
+
+---
+
+## Fase 0 — Pré-requisito
+
+### Task 0: Migration `tipos_estoque.congelado`
+
+**Files:**
+- Create: `ALTER_TIPOS_ESTOQUE_CONGELADO.sql`
+- Modify: `src/lib/services/tipos-estoque-service.ts`
+- Modify: `src/domain/embalagem/painel-pedido-builder.ts`
+
+- [ ] **Step 1: SQL**
+
+```sql
+ALTER TABLE tipos_estoque
+  ADD COLUMN IF NOT EXISTS congelado boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN tipos_estoque.congelado IS
+  'Produtos deste tipo de estoque exigem fluxo congelado (embalagem/etiqueta).';
+```
+
+- [ ] **Step 2: Aplicar no Supabase** e backfill tipos conhecidos (manual ou UPDATE por nome).
+
+- [ ] **Step 3: Atualizar `TipoEstoqueDTO` e selects**
+
+```typescript
+export type TipoEstoqueDTO = {
+  readonly id: string;
+  readonly nome: string;
+  readonly ativo: boolean;
+  readonly possuiEtiqueta: boolean;
+  readonly congelado: boolean;
+};
+
+// Em todos os .select(...):
+.select('id, nome, ativo, possui_etiqueta, congelado')
+
+// mapRecord:
+congelado: record.congelado ?? false,
+```
+
+- [ ] **Step 4: Painel — passar congelado do tipo**
+
+Em `painel-embalagem-service.ts`, ao chamar `buildPainelPedido`, derivar:
+
+```typescript
+const congelado: 'Sim' | 'Não' = tipo?.congelado ? 'Sim' : 'Não';
+```
+
+Ajustar `buildPainelPedido` para receber `congelado` do tipo (não do lote agregado).
+
+- [ ] **Step 5: `npm run gen:types`** (se aplicável)
+
+- [ ] **Step 6: Commit** — `feat(db): add tipos_estoque.congelado`
+
+---
+
+### Task 1: Desligar sync planilha → banco (embalagem)
+
+**Files:**
+- Modify: `src/app/api/sync/pedidos-embalagem/route.ts`
+- Modify: `package.json` (script `sync:pedidos-embalagem` — documentar deprecated)
+- Modify: `docs/superpowers/specs/2026-06-09-embalagem-desligar-planilha-design.mdx` (nota data desligamento)
+
+- [ ] **Step 1: Retornar 410 Gone na rota sync**
+
+```typescript
+export async function GET(request: Request) {
+  return NextResponse.json(
+    { error: 'Sync pedidos embalagem desligado — banco é fonte de verdade (Fase C).' },
+    { status: 410 },
+  );
+}
+// Idem POST
+```
+
+- [ ] **Step 2: Remover/desabilitar cron externo** que chama essa rota (Vercel cron, manual — documentar no PR).
+
+- [ ] **Step 3: Commit** — `chore(embalagem): disable sheet sync route`
+
+---
+
+## Fase 1 — Meta DB-only
+
+### Task 2: `OrdemProducaoMetaService` (core)
+
+**Files:**
+- Create: `src/lib/services/ordem-producao-meta-service.ts`
+- Create: `src/lib/services/ordem-producao-meta-service.test.ts`
+- Modify: `src/data/producao/OrdemProducaoRepository.ts` (se faltar `insertOne`)
+
+- [ ] **Step 1: Teste — criar ordem a partir de latas**
+
+```typescript
+// ordem-producao-meta-service.test.ts
+import { describe, expect, it, vi } from 'vitest';
+
+describe('OrdemProducaoMetaService.createFromLatas', () => {
+  it('persiste assadeiras e quantidade derivada', async () => {
+    const upsertMock = vi.fn().mockResolvedValue([{ id: 'op-1' }]);
+    // ... mock repo + resolveAssadeira (24 un, box 48)
+    const result = await service.createFromLatas({
+      dataProducao: '2026-06-09',
+      dataEtiqueta: '2026-06-09',
+      tipoEstoque: 'Valepan',
+      produto: 'HB Brioche 65g',
+      latas: 430,
+      observacao: '',
+    });
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assadeiras: 430,
+        quantidade: expect.objectContaining({ caixas: 215, unidades: 10320 }),
+      }),
+    );
+  });
+});
+```
+
+- [ ] **Step 2: Implementar serviço**
+
+Responsabilidades:
+- `buildUpsertFromLatas(row)` — resolve IDs + assadeira + `deriveQuantidadesFromAssadeiras`
+- `createFromLatas(...)` — `ordemProducaoRepository.upsertMany([upsert])`
+- `updateQuantidade(id, latas)` — valida produzido; `updateQuantidades`
+- `updateFields(id, {...})` — datas, obs, produto (re-resolve se produto mudou)
+- `delete(id)` — valida produzido = 0; `deleteById`
+
+**Sem** imports de `googleSheets`, `pedido-sheet-ops`, `reconcileForDate`.
+
+- [ ] **Step 3: `npx vitest run src/lib/services/ordem-producao-meta-service.test.ts`**
+
+- [ ] **Step 4: Commit** — `feat(embalagem): OrdemProducaoMetaService DB-only`
+
+---
+
+### Task 3: Batch apply DB-only (prioridade — fix bug latas)
+
+**Files:**
+- Modify: `src/lib/services/meta-embalagem-batch-service.ts`
+- Modify: `src/components/MetaEmbalagem/MetaEmbalagemBatchModal.tsx`
+
+- [ ] **Step 1: Substituir `apply()`**
+
+Remover:
+- `appendRow`, `updateMetaQuantidadeOnSheetForPedido`
+- `pedidoEmbalagemService.reconcileForDate`
+
+Usar `ordemProducaoMetaService.createFromLatas` / `updateQuantidade` por linha.
+
+- [ ] **Step 2: UI — trocar hint**
+
+`≈ N cx na planilha` → `≈ N cx` (derivadas)
+
+- [ ] **Step 3: Teste manual**
+
+Linha batch `430 latas` → query:
+
+```sql
+SELECT assadeiras, caixas, unidades FROM ordens_producao
+WHERE data_producao = '2026-06-09' AND observacao = 'lata antiga';
+```
+
+Esperado: `430`, `215`, `10320`.
+
+- [ ] **Step 4: Commit** — `fix(embalagem): batch meta writes DB only`
+
+---
+
+### Task 4: POST `/api/submit/embalagem-pedido`
+
+**Files:**
+- Modify: `src/app/api/submit/embalagem-pedido/route.ts`
+
+- [ ] **Step 1: Remover loop `appendRow`**
+
+Para cada item com `assadeiras` ou caixas/pacotes/unidades:
+- Se `assadeiras > 0`: `createFromLatas`
+- Senão: upsert com quantidade explícita (compat CreatePedidoModal legado)
+
+- [ ] **Step 2: Remover `reconcileForDate`**
+
+- [ ] **Step 3: Manter `revalidatePath('/api/painel/embalagem')`**
+
+- [ ] **Step 4: Commit** — `feat(embalagem): create pedido DB only`
+
+---
+
+### Task 5: PUT/DELETE `/api/embalagem/pedido/[id]`
+
+**Files:**
+- Modify: `src/app/api/embalagem/pedido/[pedidoEmbalagemId]/route.ts`
+
+- [ ] **Step 1: PUT** — delegar a `ordemProducaoMetaService.updateFields` + quantidade
+
+Remover: `findSheetRowsForPedidoKey`, `getGoogleSheetsClient`, `deleteSheetRow`, reconcile.
+
+- [ ] **Step 2: DELETE** — `ordemProducaoMetaService.delete(id)`
+
+Remover: `deleteAllSheetRowsForPedido`.
+
+- [ ] **Step 3: GET** — incluir `congelado: tipo.congelado` (não hardcoded `false`)
+
+- [ ] **Step 4: Commit** — `feat(embalagem): edit/delete pedido DB only`
+
+---
+
+### Task 6: UI Meta — congelado e etiqueta
+
+**Files:**
+- Modify: `src/app/meta/embalagem/page.tsx`
+- Modify: `src/components/CreatePedidoModal.tsx` / `CreatePedidoModalAssadeiras.tsx`
+- Modify: `src/components/EditModal.tsx` (campos embalagem)
+- Modify: `src/domain/types/painel-embalagem.ts` (remover `etiquetaGerada?`)
+
+- [ ] **Step 1: Remover `etiquetaGerada`** — badge, ícone estado, props
+
+- [ ] **Step 2: Remover toggle `congelado`** dos modais create/edit meta
+
+- [ ] **Step 3: Badge congelado** — `item.congelado === 'Sim'` já vem do painel (Task 0)
+
+- [ ] **Step 4: Botão Gerar etiqueta** — só se `possuiEtiqueta` (sem check "já gerada")
+
+- [ ] **Step 5: Commit** — `refactor(meta/embalagem): congelado from tipo, drop etiquetaGerada`
+
+---
+
+## Fase 2 — Realizado DB-only
+
+### Task 7: Novo lote sem planilha
+
+**Files:**
+- Modify: `src/lib/services/embalagem-lote-service.ts`
+- Modify: `src/app/api/producao/embalagem/pedido/[pedidoEmbalagemId]/lote/route.ts`
+
+- [ ] **Step 1: `criarLotePorPedidoEmbalagem`**
+
+Remover `appendEmbalagemProducaoRow`. Usar `planilhaRowId: 0` ou nullable.
+
+```typescript
+return this.criarLote({
+  modo: 'parcial',
+  planilhaRowId: 0,
+  planilhaRowIdOrigem: null,
+  pedidoEmbalagemId: pedido.id,
+  // ... resto igual
+});
+```
+
+- [ ] **Step 2: Relaxar unique em `findByPlanilhaRowId(0)`** — não colidir: skip check se `planilhaRowId === 0` ou usar UUID negativo interno.
+
+- [ ] **Step 3: `ProducaoModal`** — após POST lote, fotos por `loteId` (Task 8)
+
+- [ ] **Step 4: Commit** — `feat(embalagem): create lote DB only`
+
+---
+
+### Task 8: Editar lote por `loteId`
+
+**Files:**
+- Modify: `src/app/api/producao/embalagem/lote/[loteId]/route.ts` — add GET + PUT
+- Modify: `src/app/realizado/embalagem/page.tsx`
+- Modify: `src/components/ProducaoModal.tsx`
+
+- [ ] **Step 1: GET `/api/producao/embalagem/lote/[loteId]`**
+
+Retorna quantidade, fotos, obsEmbalagem, pedidoEmbalagemId.
+
+- [ ] **Step 2: PUT `/api/producao/embalagem/lote/[loteId]`**
+
+Atualiza quantidade + fotos + estoque delta (extrair lógica de `[rowId]/route.ts`).
+
+- [ ] **Step 3: Realizado page** — `handleEditProducao` usa `loteId` fetch em vez de `rowId`
+
+- [ ] **Step 4: ProducaoModal** — save edit via PUT loteId; upload fotos associado a loteId
+
+- [ ] **Step 5: Commit** — `feat(realizado/embalagem): edit lote by loteId`
+
+---
+
+### Task 9: Exclusão lote + congelado derivado
+
+**Files:**
+- Modify: `src/lib/services/embalagem-lote-service.ts` — `excluirLote`
+- Modify: `src/components/EmbalagemLoteModal/*`
+- Modify: `src/domain/realizado/embalagem-group-by-produto.ts`
+
+- [ ] **Step 1: Remover `deleteSheetRow` / `clearEmbalagemProducaoSheetRow` de `excluirLote`**
+
+- [ ] **Step 2: Remover `congelado` dos inserts de lote** — não gravar coluna
+
+- [ ] **Step 3: Accordion** — `algumCongelado` via lookup `tipos_estoque.congelado` por pedido (ou campo no painel)
+
+- [ ] **Step 4: Modal header** — `congelado` prop do tipo, não do lote
+
+- [ ] **Step 5: Commit** — `refactor(embalagem): lote congelado from tipo, no sheet on delete`
+
+---
+
+### Task 10: Deprecar rotas legadas realizado (sheet)
+
+**Files:**
+- Modify: `src/app/api/producao/embalagem/[rowId]/route.ts` → retornar 410
+- Modify: `src/app/api/producao/embalagem/[rowId]/partial/route.ts` → 410
+- Delete or 410: `resolver-linha`, `planilha/[rowId]/fotos`
+
+- [ ] **Step 1: 410 com mensagem de migração**
+
+- [ ] **Step 2: Grep usages de `/api/producao/embalagem/${rowId}` — zero restantes**
+
+- [ ] **Step 3: Commit** — `chore(embalagem): deprecate rowId producao routes`
+
+---
+
+## Fase 3 — Limpeza
+
+### Task 11: Etiqueta sem planilha
+
+**Files:**
+- Modify: `src/app/api/etiqueta/gerar/route.ts`
+
+- [ ] **Step 1: Remover bloco `updateCell(..., 'AB', 'Sim')`**
+
+- [ ] **Step 2: `congeladoInicial` de `tiposEstoqueService.findByName(cliente)`**
+
+- [ ] **Step 3: Commit** — `refactor(etiqueta): no sheet write, congelado from tipo`
+
+---
+
+### Task 12: WhatsApp summary DB
+
+**Files:**
+- Modify: `src/lib/services/daily-summary/embalagem-daily-summary-service.ts`
+
+- [ ] **Step 1: Substituir `loadRows()` por query via `painelEmbalagemService.getPainelForDate(date)`**
+
+- [ ] **Step 2: Mapear `PainelPedidoEmbalagem` → totais complete/partial/not-produced**
+
+- [ ] **Step 3: Teste unitário com painel mockado**
+
+- [ ] **Step 4: Commit** — `feat(whatsapp): embalagem summary from DB`
+
+---
+
+### Task 13: Remover código morto reconcile/sheet meta
+
+**Files:**
+- Modify: `src/lib/services/ordem-producao-service.ts` — remover ou guard `reconcileForDate` só se usado fora embalagem
+- Delete/guard: `updateMetaQuantidadeOnSheetForPedido`, partes de `pedido-sheet-ops` só embalagem meta
+
+- [ ] **Step 1: Grep `reconcileForDate` — só referências embalagem removidas**
+
+- [ ] **Step 2: Grep `PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos` — zero em runtime embalagem**
+
+- [ ] **Step 3: Commit** — `chore(embalagem): remove sheet reconcile dead code`
+
+---
+
+## Critérios de verificação final
+
+- [ ] Batch 430 latas → DB correto sem tocar planilha
+- [ ] Criar/editar/excluir meta reflete no painel imediatamente
+- [ ] Novo/editar/excluir lote sem Google Sheets API calls
+- [ ] `/api/sync/pedidos-embalagem` → 410
+- [ ] Sem `etiquetaGerada` na UI
+- [ ] Congelado consistente via `tipos_estoque`
+- [ ] `npx vitest run` nos testes embalagem/meta/lote
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Planilha congelada | 1, 3–13 |
+| Meta DB-only | 2–5 |
+| Realizado DB-only | 7–10 |
+| tipos_estoque.congelado | 0, 6, 9 |
+| Remove etiqueta_gerada | 6, 11 |
+| Remove lote.congelado | 9 |
+| WhatsApp DB | 12 |
+| Sync desligado | 1 |
+| Fora escopo outros processos | — |
+
+---
+
+## Execução
+
+**Plan complete and saved to `docs/superpowers/plans/2026-06-09-embalagem-desligar-planilha.mdx`.**
+
+**Opções de execução:**
+
+1. **Subagent-Driven (recomendado)** — subagent por task, review entre tasks  
+2. **Inline Execution** — implementar nesta sessão, checkpoint por fase (0 → 1 → 2 → 3)
+
+**Sugestão:** começar por **Task 0 + Task 1 + Task 3** (sync off + batch DB-only) — corrige o bug das latas no mesmo dia.
+
+Qual abordagem prefere?

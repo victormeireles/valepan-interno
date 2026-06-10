@@ -131,6 +131,8 @@ export class EmbalagemLoteRepository {
   }
 
   async findByPlanilhaRowId(planilhaRowId: number): Promise<EmbalagemLoteRecord | null> {
+    if (planilhaRowId === 0) return null;
+
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
       .select()
@@ -230,6 +232,8 @@ export class EmbalagemLoteRepository {
     planilhaRowId: number,
     fotos: EmbalagemLoteInsert['fotos'],
   ): Promise<void> {
+    if (planilhaRowId === 0) return;
+
     const { error } = await this.supabase
       .from('embalagem_lotes')
       .update({
@@ -244,6 +248,76 @@ export class EmbalagemLoteRepository {
         pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
       })
       .eq('planilha_row_id', planilhaRowId);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar fotos do lote: ${error.message}`);
+    }
+  }
+
+  async updateById(
+    id: string,
+    fields: {
+      quantidade?: EmbalagemLoteInsert['quantidade'];
+      obsEmbalagem?: string | null;
+      fotos?: EmbalagemLoteInsert['fotos'];
+      produzidoEm?: string;
+    },
+  ): Promise<EmbalagemLoteRecord> {
+    const q = fields.quantidade;
+    const fotos = fields.fotos;
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .update({
+        ...(q
+          ? {
+              caixas: q.caixas,
+              pacotes: q.pacotes,
+              unidades: q.unidades,
+              kg: q.kg,
+            }
+          : {}),
+        ...(fields.obsEmbalagem !== undefined ? { obs_embalagem: fields.obsEmbalagem } : {}),
+        ...(fields.produzidoEm ? { produzido_em: fields.produzidoEm } : {}),
+        ...(fotos
+          ? {
+              pacote_foto_url: fotos.pacoteFotoUrl ?? null,
+              pacote_foto_id: fotos.pacoteFotoId ?? null,
+              pacote_foto_uploaded_at: fotos.pacoteFotoUploadedAt ?? null,
+              etiqueta_foto_url: fotos.etiquetaFotoUrl ?? null,
+              etiqueta_foto_id: fotos.etiquetaFotoId ?? null,
+              etiqueta_foto_uploaded_at: fotos.etiquetaFotoUploadedAt ?? null,
+              pallet_foto_url: fotos.palletFotoUrl ?? null,
+              pallet_foto_id: fotos.palletFotoId ?? null,
+              pallet_foto_uploaded_at: fotos.palletFotoUploadedAt ?? null,
+            }
+          : {}),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Erro ao atualizar lote: ${error.message}`);
+    }
+
+    return fromDbRow(data);
+  }
+
+  async updateFotosById(id: string, fotos: EmbalagemLoteInsert['fotos']): Promise<void> {
+    const { error } = await this.supabase
+      .from('embalagem_lotes')
+      .update({
+        pacote_foto_url: fotos?.pacoteFotoUrl ?? null,
+        pacote_foto_id: fotos?.pacoteFotoId ?? null,
+        pacote_foto_uploaded_at: fotos?.pacoteFotoUploadedAt ?? null,
+        etiqueta_foto_url: fotos?.etiquetaFotoUrl ?? null,
+        etiqueta_foto_id: fotos?.etiquetaFotoId ?? null,
+        etiqueta_foto_uploaded_at: fotos?.etiquetaFotoUploadedAt ?? null,
+        pallet_foto_url: fotos?.palletFotoUrl ?? null,
+        pallet_foto_id: fotos?.palletFotoId ?? null,
+        pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
+      })
+      .eq('id', id);
 
     if (error) {
       throw new Error(`Erro ao atualizar fotos do lote: ${error.message}`);

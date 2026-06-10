@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { calculateLoteFromDataFabricacao, getGoogleSheetsClient, updateCell } from '@/lib/googleSheets';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
-import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
 import {
-  deleteAllSheetRowsForPedido,
-  findSheetRowsForPedidoKey,
-  pedidoRecordToKey,
-} from '@/domain/embalagem/pedido-sheet-ops';
-import {
-  pedidoEmbalagemService,
+  ordemProducaoMetaService,
   EstoqueResolverError,
-} from '@/lib/services/pedido-embalagem-service';
+} from '@/lib/services/ordem-producao-meta-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
@@ -60,7 +52,7 @@ export async function GET(
         cliente: tipo?.nome ?? '',
         observacao: pedido.observacao,
         produto: produto?.nome ?? '',
-        congelado: false,
+        congelado: tipo?.congelado ?? false,
         caixas: pedido.quantidade.caixas,
         pacotes: pedido.quantidade.pacotes,
         unidades: pedido.quantidade.unidades,
@@ -91,7 +83,6 @@ export async function PUT(
       cliente,
       observacao,
       produto,
-      congelado,
       caixas,
       pacotes,
       unidades,
@@ -106,90 +97,26 @@ export async function PUT(
     }
 
     try {
-      await pedidoEmbalagemService.resolveIds(cliente, produto);
+      await ordemProducaoMetaService.updateFields(pedidoEmbalagemId, {
+        dataProducao: normalizedDataPedido,
+        dataEtiqueta: normalizedDataFabricacao,
+        tipoEstoque: cliente,
+        produto,
+        observacao: observacao || '',
+        quantidade: {
+          caixas: caixas || 0,
+          pacotes: pacotes || 0,
+          unidades: unidades || 0,
+          kg: kg || 0,
+        },
+      });
     } catch (e) {
       if (e instanceof EstoqueResolverError) {
         return NextResponse.json({ error: e.message }, { status: 400 });
       }
-      throw e;
-    }
-
-    const originalDataPedido = pedido.dataProducao;
-    const key = pedidoRecordToKey(pedido);
-    const matches = await findSheetRowsForPedidoKey(
-      key,
-      (c, p) => pedidoEmbalagemService.resolveIds(c, p),
-      ({ produtoId }) => pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
-      {
-        dataProducaoFilter: pedido.dataProducao,
-        dataFabricacaoEtiqueta: pedido.dataFabricacaoEtiqueta,
-        observacao: pedido.observacao,
-        produtoNome: produto,
-      },
-    );
-
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const sheets = await getGoogleSheetsClient();
-
-    if (matches.length > 0) {
-      const first = matches[0];
-      const originalRange = `${tabName}!A${first.rowNumber}:AB${first.rowNumber}`;
-      const originalResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: originalRange,
-      });
-      const originalValues = originalResponse.data.values?.[0] || [];
-      const originalCreatedAt = originalValues[10] || new Date().toISOString();
-      const originalDataFabricacao = originalValues[1]
-        ? normalizeToISODate(originalValues[1])
-        : '';
-
-      const range = `${tabName}!A${first.rowNumber}:L${first.rowNumber}`;
-      const values = [
-        normalizedDataPedido,
-        normalizedDataFabricacao,
-        cliente,
-        observacao || '',
-        produto,
-        congelado ? 'Sim' : 'Não',
-        caixas || 0,
-        pacotes || 0,
-        unidades || 0,
-        kg || 0,
-        originalCreatedAt,
-        new Date().toISOString(),
-      ];
-
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [values] },
-      });
-
-      if (originalDataFabricacao !== normalizedDataFabricacao) {
-        const novoLote = calculateLoteFromDataFabricacao(normalizedDataFabricacao);
-        await updateCell(spreadsheetId, tabName, first.rowNumber, 'AA', novoLote);
-      }
-
-      const extraRows = matches.slice(1).map((m) => m.rowNumber).sort((a, b) => b - a);
-      const { deleteSheetRow } = await import('@/lib/googleSheets');
-      for (const rowNumber of extraRows) {
-        await deleteSheetRow(spreadsheetId, tabName, rowNumber);
-      }
-    }
-
-    try {
-      await pedidoEmbalagemService.reconcileForDate(normalizedDataPedido);
-      if (originalDataPedido && originalDataPedido !== normalizedDataPedido) {
-        await pedidoEmbalagemService.reconcileForDate(originalDataPedido);
-      }
-    } catch (reconcileError) {
-      const message =
-        reconcileError instanceof Error
-          ? reconcileError.message
-          : 'Erro ao sincronizar pedido no banco';
-      return NextResponse.json({ error: message }, { status: 500 });
+      const message = e instanceof Error ? e.message : 'Erro ao atualizar pedido';
+      const status = message.includes('produzido') ? 400 : 500;
+      return NextResponse.json({ error: message }, { status });
     }
 
     revalidatePath('/api/painel/embalagem');
@@ -211,31 +138,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 });
     }
 
-    const produzido = await embalagemLoteRepository.sumQuantidadeByPedidoId(pedido.id);
-    const totalProduzido =
-      produzido.caixas + produzido.pacotes + produzido.unidades + produzido.kg;
-    if (totalProduzido > 0) {
-      return NextResponse.json(
-        { error: 'Não é possível excluir pedido com produção registrada' },
-        { status: 400 },
-      );
-    }
-
-    const dataProducao = pedido.dataProducao;
-    await deleteAllSheetRowsForPedido(
-      pedido,
-      (c, p) => pedidoEmbalagemService.resolveIds(c, p),
-      ({ produtoId }) => pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
-    );
-
     try {
-      await pedidoEmbalagemService.reconcileForDate(dataProducao);
-    } catch (reconcileError) {
-      const message =
-        reconcileError instanceof Error
-          ? reconcileError.message
-          : 'Erro ao sincronizar pedido no banco';
-      return NextResponse.json({ error: message }, { status: 500 });
+      await ordemProducaoMetaService.delete(pedidoEmbalagemId);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erro ao excluir pedido';
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     revalidatePath('/api/painel/embalagem');

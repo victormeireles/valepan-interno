@@ -213,15 +213,15 @@ export default function ProducaoEmbalagemPage() {
   }, [selectedDate, producaoModalOpen, refreshPedidosOnly]);
 
   const handleEditProducao = useCallback(async (item: PainelLoteItem) => {
-    if (!item.rowId) {
+    if (!item.loteId) {
       setMessage('Este item não pode ser editado');
       return;
     }
 
     try {
-      setLoadingCardId(`${item.cliente}-${item.produto}-${item.rowId}`);
+      setLoadingCardId(`${item.cliente}-${item.produto}-${item.loteId}`);
       setProducaoLoading(true);
-      const res = await fetch(`/api/producao/embalagem/${item.rowId}`);
+      const res = await fetch(`/api/producao/embalagem/lote/${item.loteId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados de produção');
 
@@ -315,13 +315,13 @@ export default function ProducaoEmbalagemPage() {
   }, []);
 
   const handlePhotoClick = useCallback((item: PainelLoteItem) => {
-    const itemKey = `${item.cliente}-${item.produto}-${item.rowId}`;
+    const itemKey = `${item.cliente}-${item.produto}-${item.loteId ?? item.rowId}`;
     setPhotoDropdownOpen((prev) => (prev === itemKey ? null : itemKey));
   }, []);
 
   const renderEmbalagemLot = useCallback(
     (embalagemItem: PainelLoteItem) => {
-      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.rowId}`;
+      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.loteId ?? embalagemItem.rowId}`;
       const isItemLoading = loadingCardId === itemKey;
       const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
       const produzidoDetalhes = buildEmbalagemDisplayEntries({
@@ -434,13 +434,13 @@ export default function ProducaoEmbalagemPage() {
   };
 
   const handleSaveProducao = async (producaoData: ProducaoData) => {
-    if (!editingItem?.rowId) return;
+    if (!editingItem?.loteId) return;
 
     try {
       setProducaoLoading(true);
       setMessage(null);
 
-      const res = await fetch(`/api/producao/embalagem/${editingItem.rowId}`, {
+      const res = await fetch(`/api/producao/embalagem/lote/${editingItem.loteId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(producaoData),
@@ -686,6 +686,7 @@ export default function ProducaoEmbalagemPage() {
         produto={editingItem?.produto || ''}
         cliente={editingItem?.cliente || ''}
         rowId={editingItem?.rowId}
+        loteId={editingItem?.loteId}
         pedidoEmbalagemId={editingItem?.pedidoEmbalagemId}
         congelado={editingItem?.congelado ?? 'Não'}
         pedidoQuantidades={

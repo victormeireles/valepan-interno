@@ -1,27 +1,16 @@
 import { revalidatePath } from 'next/cache';
-import { PEDIDOS_EMBALAGEM_CONFIG } from '@/config/embalagem';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
-import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
-import { updateMetaQuantidadeOnSheetForPedido } from '@/domain/embalagem/pedido-sheet-ops';
 import {
   parseMetaEmbalagemBatchText,
   type MetaEmbalagemBatchRow,
 } from '@/domain/embalagem/meta-embalagem-batch';
 import type { OrdemProducaoKey } from '@/domain/types/ordem-producao';
-import {
-  assadeirasFromSheetQuantidade,
-  deriveQuantidadesFromAssadeiras,
-} from '@/domain/producao/ordem-derivados';
-import {
-  appendRow,
-  calculateLoteFromDataFabricacao,
-} from '@/lib/googleSheets';
+import { deriveQuantidadesFromAssadeiras } from '@/domain/producao/ordem-derivados';
 import {
   pedidoEmbalagemService,
   EstoqueResolverError,
 } from '@/lib/services/pedido-embalagem-service';
-import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
-import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
+import { ordemProducaoMetaService } from '@/lib/services/ordem-producao-meta-service';
 
 export type MetaEmbalagemBatchPreviewItem = {
   linha: number;
@@ -217,9 +206,6 @@ export class MetaEmbalagemBatchService {
     }
 
     const parsed = parseMetaEmbalagemBatchText(text);
-    const productService = new SupabaseProductService();
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const now = new Date().toISOString();
     const datas = new Set<string>();
     let criados = 0;
     let alterados = 0;
@@ -236,98 +222,32 @@ export class MetaEmbalagemBatchService {
       if (seenKeys.has(dedupeKey)) continue;
       seenKeys.add(dedupeKey);
 
-      const { key, assadeira, quantidade } = await resolveRowContext(row);
+      const { key } = await resolveRowContext(row);
       const existing = await ordemProducaoRepository.findByKey(key);
       datas.add(row.dataProducao);
 
       if (!existing) {
         try {
-          await pedidoEmbalagemService.validatePayloadItems(row.tipoEstoque, [row.produto]);
+          await ordemProducaoMetaService.createFromLatas({
+            dataProducao: row.dataProducao,
+            dataEtiqueta: row.dataEtiqueta,
+            tipoEstoque: row.tipoEstoque,
+            produto: row.produto,
+            latas: row.latas,
+            observacao: row.observacao,
+          });
         } catch (e) {
           if (e instanceof EstoqueResolverError) throw e;
           throw e;
         }
-
-        const lote = calculateLoteFromDataFabricacao(row.dataEtiqueta);
-        const values = [
-          row.dataProducao,
-          row.dataEtiqueta,
-          row.tipoEstoque,
-          row.observacao,
-          row.produto,
-          'Não',
-          quantidade.caixas,
-          quantidade.pacotes,
-          quantidade.unidades,
-          quantidade.kg,
-          now,
-          now,
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          lote,
-          '',
-        ];
-        await appendRow(spreadsheetId, tabName, values);
         criados += 1;
         continue;
       }
 
       if (latasEqual(existing.assadeiras, row.latas)) continue;
 
-      const produzido = await embalagemLoteRepository.sumQuantidadeByPedidoId(existing.id);
-      const totalProduzido =
-        produzido.caixas + produzido.pacotes + produzido.unidades + produzido.kg;
-      if (totalProduzido > 0) {
-        const produzidoLatas = assadeirasFromSheetQuantidade(produzido, {
-          unidadesPorAssadeira: assadeira.unidadesPorAssadeiraEfetiva,
-          boxUnits: assadeira.boxUnits,
-        });
-        if (row.latas < produzidoLatas - 1e-6) {
-          const produto = await productService.findById(existing.produtoId);
-          throw new Error(
-            `Linha ${row.linha}: meta (${row.latas} latas) menor que produzido (~${produzidoLatas.toFixed(2)} latas) para ${produto?.nome ?? row.produto}`,
-          );
-        }
-      }
-
-      const [tipo, produto] = await Promise.all([
-        tiposEstoqueService.findById(existing.tipoEstoqueId),
-        productService.findById(existing.produtoId),
-      ]);
-
-      const clienteNome = tipo?.nome ?? row.tipoEstoque;
-      const produtoNome = produto?.nome ?? row.produto;
-
-      await updateMetaQuantidadeOnSheetForPedido({
-        pedido: existing,
-        clienteNome,
-        produtoNome,
-        quantidade,
-        dataPedido: row.dataProducao,
-        dataFabricacao: row.dataEtiqueta,
-        observacao: row.observacao,
-        resolveIds: (c, p) => pedidoEmbalagemService.resolveIds(c, p),
-        resolveAssadeira: ({ produtoId }) =>
-          pedidoEmbalagemService.resolveAssadeiraDefault(produtoId),
-      });
-
+      await ordemProducaoMetaService.updateQuantidade(existing.id, row.latas);
       alterados += 1;
-    }
-
-    for (const data of datas) {
-      await pedidoEmbalagemService.reconcileForDate(data);
     }
 
     revalidatePath('/api/painel/embalagem');

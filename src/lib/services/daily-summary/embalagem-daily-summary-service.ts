@@ -1,6 +1,9 @@
-import { PEDIDOS_EMBALAGEM_CONFIG } from "@/config/embalagem";
+import { hasEmbalagemQuantity } from "@/domain/realizado/embalagem-group-by-produto";
+import type { Quantidade } from "@/domain/types/inventario";
+import type { PainelPedidoEmbalagem } from "@/domain/types/painel-embalagem";
 import { getProductionStatus } from "@/domain/types/realizado";
 import { isSpecialPhotoClient } from "@/config/photoRules";
+import { painelEmbalagemService } from "@/lib/services/painel-embalagem-service";
 
 import {
   BaseDailySummaryService,
@@ -10,9 +13,7 @@ import {
   StageSummaryTotals,
 } from "./base-daily-summary-service";
 
-type EmbalagemRow = string[];
-
-interface EmbalagemParsedRow {
+interface EmbalagemParsedPedido {
   produto: string;
   cliente: string;
   unit: "cx" | "pct" | "un" | "kg";
@@ -30,23 +31,36 @@ export interface EmbalagemSummaryResult extends StageSummaryResult {
   };
 }
 
+function quantidadeToBreakdown(q: Quantidade): QuantityByUnit {
+  const breakdown: QuantityByUnit = {};
+  if (q.caixas > 0) breakdown.cx = q.caixas;
+  if (q.pacotes > 0) breakdown.pct = q.pacotes;
+  if (q.unidades > 0) breakdown.un = q.unidades;
+  if (q.kg > 0) breakdown.kg = q.kg;
+  return breakdown;
+}
+
 export class EmbalagemDailySummaryService extends BaseDailySummaryService {
   protected stage = "embalagem";
 
-  protected async loadRows(): Promise<string[][]> {
-    const { spreadsheetId, tabName } = PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos;
-    const rows = await this.readSheet(spreadsheetId, `${tabName}!A:AB`);
-    return rows.slice(1);
+  protected async loadRows(date: string): Promise<string[][]> {
+    void date;
+    return [];
   }
 
   async build(date: string): Promise<EmbalagemSummaryResult> {
-    const rows = await this.loadRows();
-    return this.buildSummary(date, rows);
+    const { pedidos } = await painelEmbalagemService.getPainelForDate(date);
+    return this.buildSummaryFromPedidos(date, pedidos);
   }
 
-  protected buildSummary(
+  protected buildSummary(date: string, rows: string[][]): EmbalagemSummaryResult {
+    void rows;
+    return this.buildSummaryFromPedidos(date, []);
+  }
+
+  protected buildSummaryFromPedidos(
     date: string,
-    rows: EmbalagemRow[],
+    pedidos: PainelPedidoEmbalagem[],
   ): EmbalagemSummaryResult {
     const completeTotals = this.createEmptyTotals();
     const partialTotals = this.createEmptyTotals();
@@ -56,11 +70,8 @@ export class EmbalagemDailySummaryService extends BaseDailySummaryService {
 
     let missingRequiredCount = 0;
 
-    rows.forEach((row) => {
-      const dataPedido = this.normalizeDate(row[0]);
-      if (dataPedido !== date) return;
-
-      const parsed = this.parseRow(row);
+    pedidos.forEach((pedido) => {
+      const parsed = this.parsePedido(pedido);
       if (!parsed) return;
 
       const status = getProductionStatus(parsed.produzido, parsed.meta);
@@ -141,77 +152,42 @@ export class EmbalagemDailySummaryService extends BaseDailySummaryService {
     }
   }
 
-  private parseRow(row: EmbalagemRow): EmbalagemParsedRow | null {
-    const produto = (row[4] || "").toString().trim();
-    const cliente = (row[2] || "").toString().trim();
+  private parsePedido(pedido: PainelPedidoEmbalagem): EmbalagemParsedPedido | null {
+    const produto = pedido.produto.trim();
+    const cliente = pedido.cliente.trim();
     if (!produto || !cliente) return null;
 
-    const metaCaixas = Number(row[6] || 0);
-    const metaPacotes = Number(row[7] || 0);
-    const metaUnidades = Number(row[8] || 0);
-    const metaKg = Number(row[9] || 0);
-
-    const prodCaixas = Number(row[12] || 0);
-    const prodPacotes = Number(row[13] || 0);
-    const prodUnidades = Number(row[14] || 0);
-    const prodKg = Number(row[15] || 0);
-
-    const pacoteFotoUrl = (row[17] || "").toString().trim();
-    const etiquetaFotoUrl = (row[20] || "").toString().trim();
-    const palletFotoUrl = (row[23] || "").toString().trim();
-
-    const metaBreakdown: QuantityByUnit = {};
-    if (metaCaixas > 0) metaBreakdown.cx = metaCaixas;
-    if (metaPacotes > 0) metaBreakdown.pct = metaPacotes;
-    if (metaUnidades > 0) metaBreakdown.un = metaUnidades;
-    if (metaKg > 0) metaBreakdown.kg = metaKg;
-
-    const produzidoBreakdown: QuantityByUnit = {};
-    if (prodCaixas > 0) produzidoBreakdown.cx = prodCaixas;
-    if (prodPacotes > 0) produzidoBreakdown.pct = prodPacotes;
-    if (prodUnidades > 0) produzidoBreakdown.un = prodUnidades;
-    if (prodKg > 0) produzidoBreakdown.kg = prodKg;
-
-    let unit: "cx" | "pct" | "un" | "kg" | null = null;
-    let meta = 0;
-    let produzido = 0;
-
-    if (metaCaixas > 0) {
-      unit = "cx";
-      meta = metaCaixas;
-      produzido = prodCaixas;
-    } else if (metaPacotes > 0) {
-      unit = "pct";
-      meta = metaPacotes;
-      produzido = prodPacotes;
-    } else if (metaUnidades > 0) {
-      unit = "un";
-      meta = metaUnidades;
-      produzido = prodUnidades;
-    } else if (metaKg > 0) {
-      unit = "kg";
-      meta = metaKg;
-      produzido = prodKg;
-    }
-
-    if (!unit || meta <= 0) return null;
-
-    const hasRequiredPhotos = this.hasRequiredPhotos(cliente, {
-      pacote: Boolean(pacoteFotoUrl),
-      etiqueta: Boolean(etiquetaFotoUrl),
-      pallet: Boolean(palletFotoUrl),
-    });
+    const meta = pedido.aProduzir;
+    if (meta <= 0) return null;
 
     return {
       produto,
       cliente,
-      unit,
+      unit: pedido.unidade,
       meta,
-      produzido,
-      metaBreakdown,
-      produzidoBreakdown,
-      hasRequiredPhotos,
+      produzido: pedido.produzidoScalar,
+      metaBreakdown: quantidadeToBreakdown(pedido.pedido),
+      produzidoBreakdown: quantidadeToBreakdown(pedido.produzido),
+      hasRequiredPhotos: this.pedidoHasRequiredPhotos(pedido),
     };
+  }
+
+  private pedidoHasRequiredPhotos(pedido: PainelPedidoEmbalagem): boolean {
+    const lotesComQty = pedido.lotes.filter((lote) =>
+      hasEmbalagemQuantity(lote.quantidade),
+    );
+
+    if (lotesComQty.length === 0) {
+      return pedido.produzidoScalar <= 0;
+    }
+
+    return lotesComQty.every((lote) =>
+      this.hasRequiredPhotos(pedido.cliente, {
+        pacote: Boolean(lote.pacoteFotoUrl),
+        etiqueta: Boolean(lote.etiquetaFotoUrl),
+        pallet: Boolean(lote.palletFotoUrl),
+      }),
+    );
   }
 
   private hasRequiredPhotos(
@@ -229,5 +205,3 @@ export class EmbalagemDailySummaryService extends BaseDailySummaryService {
 }
 
 export const embalagemDailySummaryService = new EmbalagemDailySummaryService();
-
-

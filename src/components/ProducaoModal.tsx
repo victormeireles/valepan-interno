@@ -23,6 +23,7 @@ interface ProducaoModalProps {
   produto?: string;
   cliente?: string;
   rowId?: number;
+  loteId?: string;
   /** Novo lote via botão + — salva por pedido canônico no DB. */
   pedidoEmbalagemId?: string;
   congelado?: 'Sim' | 'Não';
@@ -53,6 +54,7 @@ export default function ProducaoModal({
   produto = '',
   cliente = '',
   rowId,
+  loteId,
   pedidoEmbalagemId,
   congelado = 'Não',
   pedidoQuantidades,
@@ -125,10 +127,10 @@ export default function ProducaoModal({
       setFormData(initialData);
       return;
     }
-    if (rowId == null) return;
+    if (!rowId && !loteId) return;
     setFormData(initialData);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
-  }, [isOpen, rowId, isNewLote, pedidoEmbalagemId]);
+  }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId]);
 
   const buildLotePayload = useCallback(
     (data: ProducaoData) => ({
@@ -152,7 +154,7 @@ export default function ProducaoModal({
   );
 
   const uploadPendingPhotos = useCallback(
-    async (targetRowId: number) => {
+    async (target: { rowId?: number; loteId?: string }) => {
       const hasPhotos = Object.values(photoFiles).some((file) => file !== null);
       if (!hasPhotos) return;
 
@@ -164,8 +166,12 @@ export default function ProducaoModal({
         if (!photoFile) continue;
         const formDataPhoto = new FormData();
         formDataPhoto.append('photo', photoFile);
-        formDataPhoto.append('rowId', targetRowId.toString());
         formDataPhoto.append('photoType', photoType);
+        if (target.loteId) {
+          formDataPhoto.append('loteId', target.loteId);
+        } else if (target.rowId) {
+          formDataPhoto.append('rowId', target.rowId.toString());
+        }
         uploadPromises.push(
           fetch('/api/upload/photo', { method: 'POST', body: formDataPhoto }),
         );
@@ -195,9 +201,19 @@ export default function ProducaoModal({
         fotos[`${prefix}FotoUploadedAt`] = now;
       }
 
-      if (Object.keys(fotos).length > 0) {
+      if (Object.keys(fotos).length > 0 && target.loteId) {
+        const syncRes = await fetch(`/api/producao/embalagem/lote/${target.loteId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fotos),
+        });
+        if (!syncRes.ok) {
+          const syncData = await syncRes.json().catch(() => ({}));
+          throw new Error(syncData.error || 'Erro ao sincronizar fotos no banco');
+        }
+      } else if (Object.keys(fotos).length > 0 && target.rowId) {
         const syncRes = await fetch(
-          `/api/producao/embalagem/planilha/${targetRowId}/fotos`,
+          `/api/producao/embalagem/planilha/${target.rowId}/fotos`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -243,9 +259,9 @@ export default function ProducaoModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
 
-      const planilhaRowId = data.planilhaRowId ?? data.novaLinhaRowId;
-      if (planilhaRowId) {
-        await uploadPendingPhotos(Number(planilhaRowId));
+      const createdLoteId = data.loteId as string | undefined;
+      if (createdLoteId) {
+        await uploadPendingPhotos({ loteId: createdLoteId });
       }
 
       if (onSaveSuccess) await onSaveSuccess();
@@ -313,7 +329,7 @@ export default function ProducaoModal({
       const hasPhotos = mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? Boolean(photoFiles.pacote) : Object.values(photoFiles).some(file => file !== null);
       
       // Upload de fotos se houver
-      if (rowId && hasPhotos) {
+      if ((rowId || loteId) && hasPhotos) {
         setPhotoLoading(true);
         
         // Fazer upload de todas as fotos primeiro
@@ -324,7 +340,11 @@ export default function ProducaoModal({
           if (photoFile) {
             const formDataPhoto = new FormData();
             formDataPhoto.append('photo', photoFile);
-            formDataPhoto.append('rowId', rowId.toString());
+            if (loteId) {
+              formDataPhoto.append('loteId', loteId);
+            } else if (rowId) {
+              formDataPhoto.append('rowId', rowId.toString());
+            }
             formDataPhoto.append('photoType', mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : photoType);
             if (mode === 'forno') formDataPhoto.append('process', 'forno');
             if (mode === 'fermentacao') formDataPhoto.append('process', 'fermentacao');
@@ -412,10 +432,23 @@ export default function ProducaoModal({
   };
 
   const handlePhotoManagerRemove = async (photoType: 'pacote' | 'etiqueta' | 'pallet') => {
-    if (!rowId) return;
+    if (!rowId && !loteId) return;
     
     try {
       setPhotoLoading(true);
+      if (loteId && mode === 'embalagem') {
+        const photoFieldPrefix =
+          photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+        setFormData((prev) => ({
+          ...prev,
+          [`${photoFieldPrefix}FotoUrl`]: undefined,
+          [`${photoFieldPrefix}FotoId`]: undefined,
+          [`${photoFieldPrefix}FotoUploadedAt`]: undefined,
+        }));
+        setMessage({ type: 'success', text: `Foto ${photoType} removida. Salve para confirmar.` });
+        return;
+      }
+
       const typeParam = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : photoType;
       const processParam = mode === 'forno' ? '&process=forno' : mode === 'fermentacao' ? '&process=fermentacao' : mode === 'resfriamento' ? '&process=resfriamento' : '';
       const res = await fetch(`/api/photo/${rowId}?type=${typeParam}${processParam}`, {
@@ -488,7 +521,7 @@ export default function ProducaoModal({
       return;
     }
 
-    if (!rowId) return;
+    if (!rowId && !pedidoEmbalagemId) return;
 
     // Validação de fotos obrigatórias
     const validator = new PhotoValidator(formData, photoFiles, cliente);
@@ -512,7 +545,7 @@ export default function ProducaoModal({
       return;
     }
 
-    if (!rowId) return;
+    if (!rowId && !loteId) return;
 
     if (totalQtyVisivel(formData) <= 0) {
       setMessage({
@@ -523,103 +556,38 @@ export default function ProducaoModal({
     }
 
     const payload = sanitizeQuantidades(formData);
-    
+
     try {
       setIsSubmitting(true);
       setMessage(null);
 
-      // 1. Chamar API de salvar parcial PRIMEIRO (sem fazer upload de fotos)
-      const res = await fetch(`/api/producao/embalagem/${rowId}/partial`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          caixas: payload.caixas,
-          pacotes: payload.pacotes,
-          unidades: payload.unidades,
-          kg: payload.kg,
-          // Incluir dados de fotos JÁ EXISTENTES (não novas)
-          pacoteFotoUrl: formData.pacoteFotoUrl,
-          pacoteFotoId: formData.pacoteFotoId,
-          pacoteFotoUploadedAt: formData.pacoteFotoUploadedAt,
-          etiquetaFotoUrl: formData.etiquetaFotoUrl,
-          etiquetaFotoId: formData.etiquetaFotoId,
-          etiquetaFotoUploadedAt: formData.etiquetaFotoUploadedAt,
-          palletFotoUrl: formData.palletFotoUrl,
-          palletFotoId: formData.palletFotoId,
-          palletFotoUploadedAt: formData.palletFotoUploadedAt,
-          obsEmbalagem: formData.obsEmbalagem || '',
-        }),
-      });
+      if (pedidoEmbalagemId) {
+        const res = await fetch(
+          `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildLotePayload(payload)),
+          },
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar produção parcial');
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao salvar produção parcial');
-      }
-
-      // 2. Se houver fotos novas para upload, fazer upload para a NOVA LINHA
-      const hasPhotos = Object.values(photoFiles).some(file => file !== null);
-      const novaLinhaRowId = data.novaLinhaRowId;
-
-      if (hasPhotos && novaLinhaRowId) {
-        setPhotoLoading(true);
-
-        // Fazer upload de todas as fotos para a NOVA linha
-        const uploadPromises = [];
-        const photoTypes = [];
-
-        for (const [photoType, photoFile] of Object.entries(photoFiles)) {
-          if (photoFile) {
-            const formDataPhoto = new FormData();
-            formDataPhoto.append('photo', photoFile);
-            formDataPhoto.append('rowId', novaLinhaRowId.toString()); // Usar rowId da NOVA linha
-            formDataPhoto.append('photoType', photoType);
-
-            uploadPromises.push(
-              fetch('/api/upload/photo', {
-                method: 'POST',
-                body: formDataPhoto,
-              })
-            );
-            photoTypes.push(photoType);
-          }
+        const createdLoteId = data.loteId as string | undefined;
+        if (createdLoteId) {
+          await uploadPendingPhotos({ loteId: createdLoteId });
         }
-
-        // Aguardar todos os uploads
-        const uploadResults = await Promise.all(uploadPromises);
-
-        // Verificar se todos os uploads foram bem-sucedidos
-        for (let i = 0; i < uploadResults.length; i++) {
-          const uploadRes = uploadResults[i];
-          const photoType = photoTypes[i];
-
-          if (!uploadRes.ok) {
-            try {
-              const uploadData = await uploadRes.json();
-              throw new Error(uploadData.error || `Erro ao fazer upload da foto ${photoType}`);
-            } catch {
-              if (uploadRes.status === 413) {
-                throw new Error(`Foto ${photoType} muito grande. Tente reduzir o tamanho ou qualidade da imagem (máx. 4MB)`);
-              }
-              throw new Error(`Erro ao fazer upload da foto ${photoType}. Status: ${uploadRes.status}`);
-            }
-          }
-        }
-
-        setPhotoLoading(false);
+      } else {
+        throw new Error('Pedido de embalagem não informado para salvar parcial');
       }
 
-      // 3. Recarregar dados do painel se callback fornecido
-      if (onSaveSuccess) {
-        await onSaveSuccess();
-      }
-
+      if (onSaveSuccess) await onSaveSuccess();
       resetAndClose();
     } catch (error) {
       setPhotoLoading(false);
-      setMessage({ 
-        type: 'error', 
-        text: error instanceof Error ? error.message : 'Erro ao salvar produção parcial' 
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Erro ao salvar produção parcial',
       });
     } finally {
       setIsSubmitting(false);

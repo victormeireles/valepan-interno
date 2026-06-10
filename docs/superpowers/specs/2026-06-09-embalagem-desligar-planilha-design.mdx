@@ -1,0 +1,263 @@
+# Design: Embalagem — Desligar planilha (Fase C)
+
+**Data:** 2026-06-09  
+**Status:** Aprovado pelo stakeholder  
+**Depende de:** Fase B.1 (`embalagem_lotes`), B.2/B.3 (`ordens_producao`, painel lê Supabase), link lote→pedido
+
+## Contexto
+
+As fases B migraram **leitura** dos painéis meta/realizado para o Supabase, mas **escrita** ainda passa pela planilha `Pedido de embalagem` com `reconcileForDate` (planilha → banco). Isso causa bugs de sincronização (ex.: batch altera `updated_at` sem mudar quantidade quando a linha errada é atualizada ou o reconcile relê valores antigos).
+
+O stakeholder decidiu:
+
+- **Planilha congelada** — banco = única fonte de verdade (sem espelho export).
+- **Rollout por camada:** Meta → Realizado → Limpeza.
+- **`congelado`** passa a ser propriedade de `tipos_estoque` (derivado em runtime).
+- **`etiqueta_gerada`** removido — não rastrear se etiqueta já foi gerada.
+- **`embalagem_lotes.congelado`** removido — sempre derivar do tipo de estoque.
+- **Outros processos** (meta produção, fermentação, forno, resfriamento, saídas) **mantêm planilha**.
+
+## Objetivos (Fase C)
+
+1. Toda escrita de **meta embalagem** (`ordens_producao`) direto no Supabase, sem planilha nem reconcile.
+2. Toda escrita de **realizado embalagem** (`embalagem_lotes`) direto no Supabase, sem append/update na planilha.
+3. Desligar sync planilha→banco e rotas legadas baseadas em `rowId` / `planilhaRowId`.
+4. Modelo de domínio alinhado: `congelado` e `possui_etiqueta` em `tipos_estoque`.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Planilha embalagem | **Congelada** — sem leitura nem escrita pelo app |
+| Rollout | **Meta → Realizado → Limpeza** (strangler por endpoint) |
+| Abordagem técnica | Strangler por rota (sem feature flag permanente) |
+| Sync cron | **Desligar no início da Fase 1** (`/api/sync/pedidos-embalagem` embalagem) |
+| `congelado` | Coluna em `tipos_estoque`; UI deriva em runtime |
+| `embalagem_lotes.congelado` | **Remover** — derivar de `tipos_estoque` |
+| `etiqueta_gerada` | **Remover** (UI, API, coluna AB planilha) |
+| `possui_etiqueta` | **Manter** em `tipos_estoque` — só controla se exibe botão "Gerar etiqueta" |
+| Quantidade meta batch | Entrada em **latas** → `assadeiras` + `deriveQuantidadesFromAssadeiras` |
+| Fermentação / forno / etc. | **Fora de escopo** — planilha intacta |
+
+## Fora de escopo
+
+- Migrar outros painéis (fermentação, forno, resfriamento, meta produção)
+- Export planilha banco→Google Sheets
+- Sync bidirecional
+- Redesign completo do fluxo de impressão de etiquetas (só remove tracking `etiqueta_gerada`)
+
+## Estado atual vs alvo
+
+```text
+HOJE (híbrido):
+  Meta write:    UI → Planilha → reconcile → ordens_producao
+  Meta read:     UI → ordens_producao (painel)
+  Realizado write: UI → Planilha + embalagem_lotes
+  Realizado read:  UI → ordens_producao + embalagem_lotes (painel)
+  Cron:          Planilha → reconcile → ordens_producao
+
+ALVO (Fase C):
+  Meta write:    UI → ordens_producao
+  Meta read:     UI → ordens_producao
+  Realizado write: UI → embalagem_lotes (+ estoque)
+  Realizado read:  UI → ordens_producao + embalagem_lotes
+  Cron embalagem: desligado
+```
+
+---
+
+## Pré-requisito (antes da Fase 1)
+
+### Schema
+
+```sql
+ALTER TABLE tipos_estoque
+  ADD COLUMN IF NOT EXISTS congelado boolean NOT NULL DEFAULT false;
+```
+
+- Backfill manual dos tipos existentes (ex.: clientes congelados = `true`).
+- Atualizar `tiposEstoqueService` para expor `congelado` no DTO.
+
+### Sync e scripts
+
+- **Desabilitar** chamadas a `/api/sync/pedidos-embalagem` para embalagem (cron, automações).
+- Documentar scripts one-shot como históricos:
+  - `scripts/sync-pedidos-embalagem-from-sheet.ts`
+  - `scripts/sync-embalagem-lotes-from-sheet.ts`
+- Opcional: rodar **último backfill** planilha→banco antes de desligar sync, se houver divergência conhecida.
+
+### Risco crítico
+
+Se o sync continuar rodando durante Fase 1, a planilha **sobrescreve** correções no banco. Desligar sync é **bloqueante** para iniciar Fase 1.
+
+---
+
+## Fase 1 — Meta (`ordens_producao`)
+
+### Escopo
+
+Substituir dual-write + reconcile por escrita direta no repositório.
+
+| Operação | Rotas atuais | Alvo |
+|----------|--------------|------|
+| Criar | `POST /api/submit/embalagem-pedido` | Insert/upsert `ordens_producao` |
+| Editar | `PUT /api/embalagem/pedido/[id]` | `updatePedidoFields` / `updateQuantidades` |
+| Batch | `POST .../batch/apply` | Mesmo repo; **sem planilha** |
+| Excluir | `DELETE /api/embalagem/pedido/[id]` | `deleteById` + validação produzido |
+| Preview batch | `POST .../batch/preview` | Inalterado (já usa DB) |
+
+### Regras de negócio (preservar)
+
+- Chave única: `data_producao`, `data_fabricacao_etiqueta`, `tipo_estoque_id`, `produto_id`, `observacao`, `assadeira_id`.
+- Batch: quantidade em **latas** → `assadeiras` + quantidade derivada (caixas/unidades).
+- Não permitir meta menor que produzido agregado dos lotes.
+- Resolver `tipo_estoque_id`, `produto_id`, `assadeira_id` via serviços existentes.
+
+### UI meta (`/meta/embalagem`)
+
+- Remover toggle **congelado** de `CreatePedidoModal` / `EditModal`.
+- Exibir badge congelado derivado de `tipos_estoque.congelado` (via painel ou lookup tipo).
+- Remover estado **etiquetaGerada** (ícone/check "já gerada").
+- Manter botão **Gerar etiqueta** apenas se `tipos_estoque.possui_etiqueta === true`.
+- Batch modal: remover texto "≈ N cx na planilha" (opcional: "≈ N cx derivadas").
+
+### Código a remover/substituir (Fase 1)
+
+- `appendRow` / `updateMetaQuantidadeOnSheetForPedido` em fluxos de meta.
+- `pedidoEmbalagemService.reconcileForDate` após operações de meta.
+- Dependência de `map-sheet-rows-to-pedidos` para **escrita** de meta.
+
+### Deprecar (Fase 1 ou 3)
+
+- `PUT/DELETE/GET /api/embalagem/edit/[rowId]`
+- `GET /api/duplicate/embalagem-pedido` (migrar para duplicar via DB ou remover)
+
+### Testes Fase 1
+
+- Criar/editar/excluir meta; batch latas; meta &lt; produzido bloqueado.
+- Congelado exibido conforme tipo, não editável na meta.
+- Painel meta reflete DB imediatamente (sem reconcile).
+
+---
+
+## Fase 2 — Realizado (`embalagem_lotes`)
+
+### Escopo
+
+Lotes gravados só no Supabase; estoque inalterado (já via `EstoqueService`).
+
+| Operação | Rotas atuais | Alvo |
+|----------|--------------|------|
+| Novo lote | `POST .../pedido/[id]/lote` | Insert lote; **sem** `appendEmbalagemProducaoRow` |
+| Editar | `GET/PUT /api/producao/embalagem/[rowId]` | `GET/PUT /api/producao/embalagem/lote/[loteId]` |
+| Excluir | `DELETE .../lote/[loteId]` | Já DB-first; remover cleanup planilha |
+| Fotos | upload + `planilha/[rowId]/fotos` | Persistir só em `embalagem_lotes` por `loteId` |
+
+### Schema lote
+
+```sql
+-- planilha_row_id: nullable ou deprecated (0 = sem planilha)
+ALTER TABLE embalagem_lotes
+  ALTER COLUMN planilha_row_id DROP NOT NULL; -- se aplicável
+
+-- Remover coluna após migração de código (migration separada):
+-- ALTER TABLE embalagem_lotes DROP COLUMN congelado;
+```
+
+Até drop da coluna: código deixa de ler/escrever `congelado` no lote.
+
+### UI realizado (`/realizado/embalagem`)
+
+- `ProducaoModal` / `EmbalagemLoteModal`: remover toggle congelado.
+- Header/modal: `congelado` de `tipos_estoque`.
+- Editar lote: usar **`loteId`** (já no painel); remover dependência de `rowId` para load/save.
+- Remover chamadas a `resolver-linha`.
+
+### Serviços
+
+- `EmbalagemLoteService.criarLotePorPedidoEmbalagem`: insert DB only.
+- `excluirLote`: remover `deleteSheetRow` / `clearEmbalagemProducaoSheetRow`.
+- Fotos: `updateFotosByLoteId` (ou existente por id); deprecar `updateFotosByPlanilhaRowId`.
+
+### Rotas legadas a deprecar
+
+- `GET/PUT /api/producao/embalagem/[rowId]`
+- `POST /api/producao/embalagem/[rowId]/partial`
+- `POST .../resolver-linha`
+- `PATCH .../planilha/[rowId]/fotos`
+
+### Testes Fase 2
+
+- CRUD lote por `loteId`; fotos; estoque credita/debita.
+- Exclusão lote sem tocar planilha.
+- Congelado correto via tipo em accordion/modal.
+
+---
+
+## Fase 3 — Limpeza
+
+### Remover ou arquivar
+
+- `aggregatePedidosFromSheetRows`, reconcile embalagem em `ordem-producao-service`.
+- Helpers de meta em `pedido-sheet-ops` usados só para embalagem meta (manter apenas o que outros domínios não usam — embalagem realizado sheet ops vão embora).
+- Referências ativas a `PEDIDOS_EMBALAGEM_CONFIG.destinoPedidos` no código de runtime.
+- Rotas legadas listadas nas fases 1–2.
+
+### Migrar consumidores restantes
+
+| Consumidor | Ação |
+|------------|------|
+| `EmbalagemDailySummaryService` (WhatsApp) | Ler `ordens_producao` + `embalagem_lotes` como o painel |
+| `POST /api/etiqueta/gerar` | Remover `updateCell` coluna AB; `congelado` de `tipos_estoque` |
+| Upload foto `/api/photo/[rowId]` embalagem | Associar a `loteId` onde ainda usado |
+
+### Documentação
+
+- Atualizar specs B.2/B.3 com nota "supersedido por Fase C".
+- README interno: planilha embalagem = histórico até data X.
+
+---
+
+## Ordem de implementação recomendada
+
+1. Pré-requisito: migration `tipos_estoque.congelado` + desligar sync.
+2. Fase 1.1: batch apply DB-only (corrige bug imediato).
+3. Fase 1.2: create/edit/delete meta DB-only.
+4. Fase 1.3: UI meta (congelado/etiqueta).
+5. Fase 2.1: novo lote DB-only.
+6. Fase 2.2: editar lote por `loteId`.
+7. Fase 2.3: fotos + exclusão sem planilha.
+8. Fase 3: limpeza + WhatsApp + etiqueta.
+
+Cada sub-fase = PR reviewável; painel já lê DB em todas.
+
+---
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---------|---------------|
+| Falha DB em write | 500/400 ao usuário; nada na planilha (Fase C+) |
+| Meta &lt; produzido | 400 com mensagem clara (latas ou cx) |
+| Tipo sem `congelado` backfill | Default `false` |
+| Lote legado com `planilha_row_id` | Continua no DB; UI usa `loteId` |
+
+---
+
+## Critérios de aceite (Fase C completa)
+
+- [ ] Nenhuma rota embalagem meta/realizado chama Google Sheets API em write/read operacional.
+- [ ] Cron sync pedidos embalagem desligado.
+- [ ] Batch 430 latas persiste `assadeiras=430` e quantidade derivada no DB sem reconcile.
+- [ ] Meta/realizado painéis idênticos antes/depois para mesma data (pós backfill).
+- [ ] WhatsApp summary embalagem usa DB.
+- [ ] Sem referência UI a `etiquetaGerada` / coluna AB.
+- [ ] Congelado consistente via `tipos_estoque` em meta, realizado e etiqueta.
+
+---
+
+## Referências
+
+- `2026-06-03-pedidos-embalagem-design.mdx` (B.2)
+- `2026-06-03-painel-embalagem-db-design.mdx` (B.3)
+- `2026-06-03-embalagem-lotes-realizado-design.mdx` (B.1)

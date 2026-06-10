@@ -3580,6 +3580,7 @@ export type Database = {
       tipos_estoque: {
         Row: {
           ativo: boolean | null
+          congelado: boolean
           created_at: string | null
           id: string
           nome: string
@@ -3588,6 +3589,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          congelado?: boolean
           created_at?: string | null
           id?: string
           nome: string
@@ -3596,6 +3598,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          congelado?: boolean
           created_at?: string | null
           id?: string
           nome?: string

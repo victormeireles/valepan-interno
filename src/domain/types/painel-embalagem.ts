@@ -35,7 +35,6 @@ export type PainelPedidoEmbalagem = {
   produzidoScalar: number;
   possuiEtiqueta: boolean;
   lote?: number;
-  etiquetaGerada?: boolean;
   lotes: PainelLoteEmbalagem[];
   producaoUpdatedAt?: string;
 };

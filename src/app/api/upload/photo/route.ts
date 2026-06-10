@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const photo = formData.get('photo') as File;
     const rowId = formData.get('rowId') as string;
+    const loteId = formData.get('loteId') as string;
     const photoType = formData.get('photoType') as string; // pacote|etiqueta|pallet|forno
     const processType = (formData.get('process') as string) || 'embalagem'; // embalagem|forno
 
@@ -22,8 +23,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nenhuma foto foi enviada' }, { status: 400 });
     }
 
-    if (!rowId) {
-      return NextResponse.json({ error: 'ID da linha é obrigatório' }, { status: 400 });
+    if (!rowId && !loteId) {
+      return NextResponse.json({ error: 'ID da linha ou do lote é obrigatório' }, { status: 400 });
     }
 
     if (
@@ -47,8 +48,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rowNumber = parseInt(rowId);
-    if (isNaN(rowNumber) || rowNumber < 2) {
+    const rowNumber = rowId ? parseInt(rowId) : parseInt(loteId.replace(/-/g, '').slice(0, 8), 16) % 1_000_000 || 1;
+    if (rowId && (isNaN(rowNumber) || rowNumber < 2)) {
       return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
     }
 
@@ -81,6 +82,26 @@ export async function POST(request: NextRequest) {
         | 'resfriamento'
         | 'saida',
     );
+
+    // Lote DB-only (Fase C): salva no Supabase, sem planilha
+    if (loteId && processType === 'embalagem') {
+      const prefix =
+        photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet';
+      const { embalagemLoteService } = await import('@/lib/services/embalagem-lote-service');
+      await embalagemLoteService.syncFotosFromLoteId(loteId, {
+        [`${prefix}FotoUrl`]: uploadResult.photoUrl,
+        [`${prefix}FotoId`]: uploadResult.photoId,
+        [`${prefix}FotoUploadedAt`]: new Date().toISOString(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        photoUrl: uploadResult.photoUrl,
+        photoId: uploadResult.photoId,
+        photoType: photoType,
+        message: 'Foto enviada com sucesso',
+      });
+    }
 
     // Salvar dados da foto na planilha
     const sheets = await getGoogleSheetsClient();

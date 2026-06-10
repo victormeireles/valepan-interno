@@ -28,6 +28,7 @@ export type PedidoItem = {
   kg: number;
   assadeiras?: number;
   assadeiraId?: string;
+  observacao?: string;
 };
 
 export type PedidoEmbalagemPayload = {

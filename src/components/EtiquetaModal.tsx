@@ -10,7 +10,6 @@ interface EtiquetaModalProps {
   congeladoInicial?: boolean;
   cliente?: string;
   lote: number;
-  rowId?: number;
   onSuccess?: () => void;
 }
 
@@ -22,7 +21,6 @@ export default function EtiquetaModal({
   congeladoInicial = false,
   cliente,
   lote,
-  rowId,
   onSuccess,
 }: EtiquetaModalProps) {
   const [diasValidade, setDiasValidade] = useState(21);
@@ -111,7 +109,7 @@ export default function EtiquetaModal({
           congelado,
           mostrarTextoCongelado,
           lote,
-          rowId,
+          cliente,
         }),
       });
 
