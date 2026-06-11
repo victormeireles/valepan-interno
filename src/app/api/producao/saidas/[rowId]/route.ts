@@ -1,21 +1,15 @@
 import { NextResponse } from 'next/server';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
-import { SaidaRealizadoPayload, SaidaQuantidade } from '@/domain/types/saidas';
+import { SaidaQuantidade } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
-import { estoqueService } from '@/lib/services/estoque-service';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
+import { parseSaidaId } from '@/domain/saidas/saida-id';
 
 type UpdateBody = {
   realizado: SaidaQuantidade;
   fotoUrl?: string;
   fotoId?: string;
-  quantidadeInicial?: SaidaQuantidade; // Quantidade inicial do formulário para cálculo correto de diferença
+  quantidadeInicial?: SaidaQuantidade;
 };
-
-function parseRowId(rowId: string): number | null {
-  const parsed = Number(rowId);
-  if (Number.isNaN(parsed) || parsed < 2) return null;
-  return parsed;
-}
 
 function isQuantidadeValida(realizado: SaidaQuantidade): boolean {
   return (
@@ -27,19 +21,19 @@ function isQuantidadeValida(realizado: SaidaQuantidade): boolean {
 }
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ rowId: string }> },
 ) {
   try {
     const { rowId } = await context.params;
-    const rowNumber = parseRowId(rowId);
-    if (!rowNumber) {
+    const movimentoId = parseSaidaId(rowId);
+    if (!movimentoId) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
-    const row = await saidasSheetManager.getRow(rowNumber);
+    const row = await saidaMovimentoService.getById(movimentoId);
     if (!row) {
-      return NextResponse.json({ error: 'Linha não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Saída não encontrada' }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -50,7 +44,7 @@ export async function GET(
         fotoId: row.fotoId || '',
         saidaUpdatedAt: row.saidaUpdatedAt || '',
       },
-      rowId: rowNumber,
+      rowId: movimentoId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -64,8 +58,8 @@ export async function PUT(
 ) {
   try {
     const { rowId } = await context.params;
-    const rowNumber = parseRowId(rowId);
-    if (!rowNumber) {
+    const movimentoId = parseSaidaId(rowId);
+    if (!movimentoId) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
@@ -84,49 +78,35 @@ export async function PUT(
       );
     }
 
-    const existingRow = await saidasSheetManager.getRow(rowNumber);
+    const existingRow = await saidaMovimentoService.getById(movimentoId);
     if (!existingRow) {
-      return NextResponse.json({ error: 'Linha não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Saída não encontrada' }, { status: 404 });
     }
 
-    const payload: SaidaRealizadoPayload = {
-      rowIndex: rowNumber,
-      realizado: body.realizado,
-    };
-
-    const photoPayload =
-      body.fotoUrl || body.fotoId
-        ? { url: body.fotoUrl, id: body.fotoId }
-        : undefined;
-
-    // Verifica se é apenas adicionar foto (criação com foto)
     const isAddingPhotoOnly =
-      photoPayload &&
+      (body.fotoUrl || body.fotoId) &&
       !existingRow.fotoUrl &&
       existingRow.realizado.caixas === body.realizado.caixas &&
       existingRow.realizado.pacotes === body.realizado.pacotes &&
       existingRow.realizado.unidades === body.realizado.unidades &&
       existingRow.realizado.kg === body.realizado.kg;
 
-    await saidasSheetManager.updateRealizado(payload, photoPayload);
-    // Usar quantidade inicial do formulário se fornecida, senão usar valor do banco
-    const quantidadeBase = body.quantidadeInicial || existingRow.realizado;
-    await atualizarEstoque(existingRow, body.realizado, quantidadeBase);
+    const updatedRow = await saidaMovimentoService.ajustarRealizado(
+      movimentoId,
+      body.realizado,
+      body.quantidadeInicial,
+    );
 
-    const updatedRow = await saidasSheetManager.getRow(rowNumber);
-    if (updatedRow) {
-      await whatsAppNotificationService.notifySaidasProduction({
-        produto: updatedRow.produto,
-        cliente: updatedRow.cliente,
-        meta: updatedRow.meta,
-        realizado: updatedRow.realizado,
-        data: updatedRow.data,
-        observacao: updatedRow.observacao || undefined,
-        // Se é apenas adicionar foto, trata como criação
-        origem: isAddingPhotoOnly ? 'criada' : 'atualizada',
-        fotoUrl: updatedRow.fotoUrl || undefined,
-      });
-    }
+    await whatsAppNotificationService.notifySaidasProduction({
+      produto: updatedRow.produto,
+      cliente: updatedRow.cliente,
+      meta: updatedRow.meta,
+      realizado: updatedRow.realizado,
+      data: updatedRow.data,
+      observacao: updatedRow.observacao || undefined,
+      origem: isAddingPhotoOnly ? 'criada' : 'atualizada',
+      fotoUrl: body.fotoUrl || updatedRow.fotoUrl,
+    });
 
     return NextResponse.json({ message: 'Saída atualizada com sucesso' });
   } catch (error) {
@@ -134,50 +114,3 @@ export async function PUT(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-type SaidaRow = NonNullable<Awaited<ReturnType<typeof saidasSheetManager.getRow>>>;
-
-async function atualizarEstoque(
-  row: SaidaRow,
-  realizadoNovo: SaidaQuantidade,
-  quantidadeInicial?: SaidaQuantidade,
-) {
-  // Usar quantidade inicial fornecida ou valor do banco como base
-  const quantidadeBase = quantidadeInicial || row.realizado;
-  
-  const delta = {
-    caixas: (realizadoNovo.caixas || 0) - (quantidadeBase.caixas || 0),
-    pacotes: (realizadoNovo.pacotes || 0) - (quantidadeBase.pacotes || 0),
-    unidades: (realizadoNovo.unidades || 0) - (quantidadeBase.unidades || 0),
-    kg: (realizadoNovo.kg || 0) - (quantidadeBase.kg || 0),
-  };
-
-  const houveMudanca =
-    delta.caixas !== 0 ||
-    delta.pacotes !== 0 ||
-    delta.unidades !== 0 ||
-    delta.kg !== 0;
-
-  if (!houveMudanca) return;
-
-  // Obter tipo de estoque do cliente
-  const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(row.cliente);
-
-  if (tipoEstoque) {
-    await estoqueService.aplicarDelta({
-      cliente: tipoEstoque,
-      produto: row.produto,
-      delta: {
-        caixas: -delta.caixas,
-        pacotes: -delta.pacotes,
-        unidades: -delta.unidades,
-        kg: -delta.kg,
-      },
-      allowNegative: true,
-      origem: 'saida',
-      clienteDestino: row.cliente,
-    });
-  }
-}
-
-

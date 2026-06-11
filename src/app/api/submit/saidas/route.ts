@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { SaidaSubmitPayload } from '@/domain/types/saidas';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -54,12 +54,11 @@ export async function POST(request: Request) {
     }
 
     for (const item of payload.itens) {
-      await saidasSheetManager.appendMeta({
+      await saidaMovimentoService.registrarSaida({
         data: payload.data,
         cliente: payload.cliente,
-        observacao: payload.observacao ?? '',
         produto: item.produto,
-        meta: item.meta,
+        quantidade: item.meta,
       });
     }
 
@@ -69,5 +68,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-

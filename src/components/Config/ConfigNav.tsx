@@ -5,6 +5,9 @@ import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/config/assadeiras', label: 'Assadeiras', icon: 'bakery_dining' },
+  { href: '/config/regras-assadeiras', label: 'Regras de assadeira', icon: 'rule' },
+  { href: '/config/tipos-estoque', label: 'Tipos de estoque', icon: 'warehouse' },
+  { href: '/config/produtos', label: 'Produtos', icon: 'inventory_2' },
   { href: '/config/whatsapp', label: 'WhatsApp', icon: 'chat' },
 ] as const;
 

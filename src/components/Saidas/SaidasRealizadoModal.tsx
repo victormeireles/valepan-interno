@@ -21,7 +21,7 @@ interface SaidasRealizadoModalProps {
   existingPhotoId?: string;
   cliente: string;
   produto: string;
-  rowId?: number;
+  rowId?: string;
 }
 
 type FormState = SaidaQuantidade;

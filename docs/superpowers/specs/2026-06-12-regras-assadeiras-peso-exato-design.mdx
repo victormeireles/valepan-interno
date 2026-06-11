@@ -1,0 +1,182 @@
+# Design: Regras de Assadeira por Categoria + Peso Exato
+
+**Data:** 2026-06-12  
+**Status:** Aguardando revisão do stakeholder  
+**Substitui (parcialmente):** `2026-06-11-regras-assadeiras-categoria-peso-design.mdx` — modelo de **faixa** → **peso exato**  
+**Relacionado:** Fase D implementada (resolver, `/config/regras-assadeiras`, badges em `/config/produtos`)
+
+## Contexto
+
+A Fase D foi implementada com faixas contínuas (`peso_min_g` / `peso_max_g`). Na prática a operação trabalha com **gramaturas discretas** (65 g, 80 g, 100 g…). O stakeholder pediu migrar para **peso exato** para:
+
+- Simplificar o modelo mental (categoria + peso → assadeira)
+- Acelerar o resolver (`eq` em vez de `lte`/`gte`)
+- Eliminar validação de sobreposição de faixas
+
+A tabela `categoria_assadeira_regras` está **vazia** — alteração de schema sem migração de dados.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Match de peso | **Igualdade exata** em gramas inteiras (`peso_g = resolvePesoGramas(produto)`) |
+| Sem regra para o peso | **Pendente** — sem fallback para peso mais próximo |
+| Multi-assadeira | **Sim** — várias assadeiras por `(categoria_id, peso_g)`, ordenadas por `ordem` |
+| Default em pedidos | Primeira assadeira da lista (comportamento atual) |
+| Exceções | `produto_assadeiras` continua prevalecendo sobre regra |
+| Cascata resolver | exceção → regra (peso exato) → pendente |
+| Snapshot em ordens | Inalterado — `ordens_producao.assadeira_id` na criação |
+| Dados existentes na tabela | Nenhum — `ALTER TABLE` direto |
+
+## Fora de escopo
+
+- Match por peso aproximado ou faixas
+- Migração automática de faixas legadas (tabela vazia)
+- Renomear tabela ou rota `/config/regras-assadeiras`
+- Fase C (regras por cliente)
+
+## Schema
+
+### Alteração: `categoria_assadeira_regras`
+
+```sql
+-- ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql
+-- Pré-requisito: tabela vazia (confirmado)
+
+ALTER TABLE categoria_assadeira_regras
+  DROP CONSTRAINT IF EXISTS categoria_assadeira_regras_categoria_id_peso_min_g_peso_max_g_key;
+
+ALTER TABLE categoria_assadeira_regras
+  DROP COLUMN peso_min_g,
+  DROP COLUMN peso_max_g;
+
+ALTER TABLE categoria_assadeira_regras
+  ADD COLUMN peso_g integer NOT NULL CHECK (peso_g > 0);
+
+ALTER TABLE categoria_assadeira_regras
+  ADD CONSTRAINT categoria_assadeira_regras_categoria_peso_assadeira_key
+  UNIQUE (categoria_id, peso_g, assadeira_id);
+
+CREATE INDEX idx_categoria_assadeira_regras_lookup
+  ON categoria_assadeira_regras (categoria_id, peso_g)
+  WHERE ativo = true;
+
+COMMENT ON TABLE categoria_assadeira_regras IS
+  'Regra padrão: categoria + peso exato (gramas) → tipo(s) de assadeira';
+
+COMMENT ON COLUMN categoria_assadeira_regras.peso_g IS
+  'Peso em gramas inteiras; deve coincidir com resolvePesoGramas do produto';
+```
+
+Após migration: `npm run gen:types` + sync `src/types/database.ts`.
+
+### Peso efetivo do produto (inalterado)
+
+```
+peso_g = resolvePesoGramas({ unit_weight, nome })
+       → inteiro em gramas (arredondado)
+       → null se indisponível → produto pendente
+```
+
+## Arquitetura
+
+### Resolver — mudança no passo 3
+
+```
+ANTES:
+  peso_min_g <= peso_g AND peso_max_g >= peso_g
+
+DEPOIS:
+  peso_g = :peso_resolvido
+```
+
+Query Supabase:
+
+```typescript
+.from('categoria_assadeira_regras')
+.select('assadeira_id, unidades_por_assadeira, assadeiras(...)')
+.eq('categoria_id', categoriaId)
+.eq('peso_g', pesoG)
+.eq('ativo', true)
+.order('ordem', { ascending: true })
+.order('created_at', { ascending: true })
+```
+
+### Validação (substitui overlap de faixas)
+
+**Remover:** `rangesOverlap`, `peso_min_g`, `peso_max_g` do schema Zod.
+
+**Adicionar:**
+
+```typescript
+peso_g: z.number().int().min(1, 'Peso deve ser ao menos 1 g')
+```
+
+**Insert/update:** rejeitar duplicata `(categoria_id, peso_g, assadeira_id)` com mensagem clara. Constraint `UNIQUE` no banco como rede de segurança.
+
+### Arquivos impactados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql` | Nova migration |
+| `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql` | Atualizar para referência futura (peso_g) |
+| `src/domain/assadeiras/assadeira-resolver.ts` | `eq('peso_g', pesoG)` |
+| `src/domain/assadeiras/assadeira-resolver.test.ts` | Cenários peso exato / sem match |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.ts` | `peso_g`; remove overlap |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts` | Testes atualizados |
+| `src/app/actions/categoria-assadeira-regras-actions.ts` | Tipos, duplicate check |
+| `src/components/RegrasAssadeiras/RegraAssadeiraModal.tsx` | Campo único peso |
+| `src/components/RegrasAssadeiras/RegrasAssadeirasTable.tsx` | Coluna "Peso" |
+| `src/components/RegrasAssadeiras/RegrasAssadeirasMobileList.tsx` | Idem |
+| `src/components/RegrasAssadeiras/format-faixa-peso.ts` | Renomear → `format-peso-gramas.ts` |
+| `src/app/config/regras-assadeiras/RegrasAssadeirasClient.tsx` | Copy |
+| `src/components/ProdutosConfig/ProdutoAssadeiraRegraPreview.tsx` | Copy "peso exato" |
+| `src/types/database.ts`, `types/database.ts` | Regenerar via gen:types |
+
+**Sem mudança de lógica:** `produto-peso.ts`, `OrdemProducaoService`, badges (origem exceção/regra/pendente), script `migrate-produto-assadeiras-to-excecoes.ts`.
+
+## Interface
+
+### `/config/regras-assadeiras`
+
+| Elemento | Antes | Depois |
+|----------|-------|--------|
+| Modal | Peso mín / máx | **Peso (g)** — inteiro |
+| Tabela | Faixa `60–70 g` | **Peso** `65 g` |
+| Erro ao salvar | Faixas sobrepostas | **Regra duplicada** |
+| Helper | Faixas inclusivas | *Gramas inteiras. Deve coincidir com o peso resolvido do produto.* |
+
+### `/config/produtos`
+
+Atualizar textos que mencionam "faixa de peso" para **"peso"** / **"categoria + peso"**. Comportamento de badges e modal inalterado.
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---------|---------------|
+| Produto 67 g, regra só para 65 g | Pendente — sem match |
+| Duplicata (categoria, peso, assadeira) | Erro na UI + constraint DB |
+| `peso_g` null no produto | Pendente |
+| Múltiplas assadeiras no mesmo peso | Todas retornadas, `ordem` ASC |
+| Exceção manual | Prevalece sobre regra |
+
+## Testes
+
+| Tipo | Escopo |
+|------|--------|
+| Unit | `parseCategoriaAssadeiraRegraForm` — `peso_g` válido/inválido |
+| Unit | `AssadeiraResolver` — match 65 g, sem match 67 g, multi-assadeira |
+| Manual | CRUD regra 65 g → produto 65 g resolve; 67 g pendente |
+| Manual | Duas assadeiras em (categoria, 65 g) com ordens distintas |
+
+## Verificação pós-deploy
+
+1. Aplicar `ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql` no Supabase
+2. `npm run gen:types`
+3. `npm test -- src/domain/assadeiras/`
+4. `npm run build`
+5. Criar regra + validar badge e pedido
+
+## Referência — spec anterior
+
+O spec `2026-06-11-regras-assadeiras-categoria-peso-design.mdx` permanece como histórico da Fase D original. Este documento governa a refatoração para peso exato.

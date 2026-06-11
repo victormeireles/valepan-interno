@@ -10,6 +10,7 @@ export type TipoEstoqueDTO = {
   readonly ativo: boolean;
   readonly possuiEtiqueta: boolean;
   readonly congelado: boolean;
+  readonly mostrarTextoCongelado: boolean;
 };
 
 export class TiposEstoqueService {
@@ -23,7 +24,7 @@ export class TiposEstoqueService {
     const client = this.resolveClient();
     const query = client
       .from('tipos_estoque')
-      .select('id, nome, ativo, possui_etiqueta, congelado')
+      .select('id, nome, ativo, possui_etiqueta, congelado, mostrar_texto_congelado')
       .eq('ativo', true)
       .order('nome', { ascending: true });
 
@@ -41,7 +42,7 @@ export class TiposEstoqueService {
 
     const { data, error } = await client
       .from('tipos_estoque')
-      .select('id, nome, ativo, possui_etiqueta, congelado')
+      .select('id, nome, ativo, possui_etiqueta, congelado, mostrar_texto_congelado')
       .eq('ativo', true)
       .ilike('nome', nome)
       .limit(1)
@@ -63,7 +64,7 @@ export class TiposEstoqueService {
 
     const { data, error } = await client
       .from('tipos_estoque')
-      .select('id, nome, ativo, possui_etiqueta, congelado')
+      .select('id, nome, ativo, possui_etiqueta, congelado, mostrar_texto_congelado')
       .eq('id', id)
       .eq('ativo', true)
       .maybeSingle();
@@ -84,7 +85,7 @@ export class TiposEstoqueService {
     const client = this.resolveClient();
     const { data, error } = await client
       .from('tipos_estoque')
-      .select('id, nome, ativo, possui_etiqueta, congelado')
+      .select('id, nome, ativo, possui_etiqueta, congelado, mostrar_texto_congelado')
       .eq('ativo', true)
       .in('id', ids);
     if (error) throw new Error(`Erro ao buscar tipos de estoque: ${error.message}`);
@@ -96,7 +97,10 @@ export class TiposEstoqueService {
   }
 
   private mapRecord(
-    record: Pick<TipoEstoqueRecord, 'id' | 'nome' | 'ativo' | 'possui_etiqueta' | 'congelado'>,
+    record: Pick<
+      TipoEstoqueRecord,
+      'id' | 'nome' | 'ativo' | 'possui_etiqueta' | 'congelado' | 'mostrar_texto_congelado'
+    >,
   ): TipoEstoqueDTO {
     return {
       id: record.id,
@@ -104,6 +108,7 @@ export class TiposEstoqueService {
       ativo: record.ativo ?? false,
       possuiEtiqueta: record.possui_etiqueta ?? false,
       congelado: record.congelado ?? false,
+      mostrarTextoCongelado: record.mostrar_texto_congelado ?? false,
     };
   }
 }

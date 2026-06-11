@@ -1,0 +1,723 @@
+# Produto × Assadeira (Fase B) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Entregar tela master-detail em `/config/produto-assadeiras` para vincular assadeiras a produtos, com override opcional de pães por assadeira.
+
+**Architecture:** Validação Zod em `src/domain/assadeiras/`. Server Actions espelhando `assadeiras-actions.ts`. UI decomposta em lista master, painel detail, tabela/cards de vínculos e modal — padrão visual da Fase A. Fator efetivo via `resolveUnidadesPorAssadeiraEfetiva`. Sem migration (schema já existe).
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase JS, Zod, Tailwind CSS 4, Vitest, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-11-produto-assadeiras-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/assadeiras/produto-assadeira-validation.ts` | Schema Zod create/update link |
+| `src/domain/assadeiras/produto-assadeira-validation.test.ts` | Testes de validação |
+| `src/app/actions/produto-assadeiras-actions.ts` | Server Actions CRUD vínculos |
+| `src/components/Config/ConfigNav.tsx` | Novo item de navegação |
+| `src/components/ProdutoAssadeiras/ProdutoMasterList.tsx` | Lista master com busca e badges |
+| `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksTable.tsx` | Tabela desktop de vínculos |
+| `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksMobileList.tsx` | Cards mobile de vínculos |
+| `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal.tsx` | Modal criar/editar vínculo |
+| `src/components/ProdutoAssadeiras/ProdutoAssadeiraDetailPanel.tsx` | Painel detail do produto |
+| `src/app/config/produto-assadeiras/page.tsx` | Server Component SSR |
+| `src/app/config/produto-assadeiras/ProdutoAssadeirasClient.tsx` | Orquestra master-detail + URL state |
+
+---
+
+### Task 1: Validação Zod do vínculo
+
+**Files:**
+- Create: `src/domain/assadeiras/produto-assadeira-validation.ts`
+- Create: `src/domain/assadeiras/produto-assadeira-validation.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+// src/domain/assadeiras/produto-assadeira-validation.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  parseProdutoAssadeiraLinkForm,
+  produtoAssadeiraLinkFormSchema,
+} from './produto-assadeira-validation';
+
+describe('produtoAssadeiraLinkFormSchema', () => {
+  const valid = {
+    produto_id: '11111111-1111-4111-8111-111111111111',
+    assadeira_id: '22222222-2222-4222-8222-222222222222',
+    usar_padrao: true,
+    unidades_por_assadeira: null,
+  };
+
+  it('aceita vínculo usando padrão da assadeira', () => {
+    expect(parseProdutoAssadeiraLinkForm(valid).success).toBe(true);
+  });
+
+  it('aceita override explícito >= 1', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      usar_padrao: false,
+      unidades_por_assadeira: 18,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejeita override < 1 quando não usa padrão', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      usar_padrao: false,
+      unidades_por_assadeira: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejeita produto_id vazio', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      produto_id: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejeita assadeira_id vazio', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      assadeira_id: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('normaliza usar_padrao=true para unidades null', () => {
+    const result = produtoAssadeiraLinkFormSchema.parse({
+      ...valid,
+      usar_padrao: true,
+      unidades_por_assadeira: 24,
+    });
+    expect(result.unidades_por_assadeira).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes — devem falhar**
+
+Run: `npm test -- src/domain/assadeiras/produto-assadeira-validation.test.ts`  
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implementar schema**
+
+```typescript
+// src/domain/assadeiras/produto-assadeira-validation.ts
+import { z } from 'zod';
+
+const uuidSchema = z.string().uuid('ID inválido');
+
+export const produtoAssadeiraLinkFormSchema = z
+  .object({
+    produto_id: uuidSchema,
+    assadeira_id: uuidSchema,
+    usar_padrao: z.boolean().default(true),
+    unidades_por_assadeira: z
+      .number()
+      .int('Deve ser um número inteiro')
+      .min(1, 'Mínimo 1 pão por assadeira')
+      .nullable()
+      .optional(),
+  })
+  .transform((data) => ({
+    produto_id: data.produto_id,
+    assadeira_id: data.assadeira_id,
+    unidades_por_assadeira: data.usar_padrao
+      ? null
+      : (data.unidades_por_assadeira ?? null),
+  }))
+  .superRefine((data, ctx) => {
+    if (data.unidades_por_assadeira != null && data.unidades_por_assadeira < 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Mínimo 1 pão por assadeira',
+        path: ['unidades_por_assadeira'],
+      });
+    }
+  });
+
+export type ProdutoAssadeiraLinkFormInput = z.input<
+  typeof produtoAssadeiraLinkFormSchema
+>;
+export type ProdutoAssadeiraLinkFormData = z.output<
+  typeof produtoAssadeiraLinkFormSchema
+>;
+
+export function parseProdutoAssadeiraLinkForm(input: unknown) {
+  return produtoAssadeiraLinkFormSchema.safeParse(input);
+}
+```
+
+- [ ] **Step 4: Rodar testes — devem passar**
+
+Run: `npm test -- src/domain/assadeiras/produto-assadeira-validation.test.ts`  
+Expected: PASS (6 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/assadeiras/produto-assadeira-validation.ts src/domain/assadeiras/produto-assadeira-validation.test.ts
+git commit -m "feat(assadeiras): validação Zod para vínculo produto × assadeira"
+```
+
+---
+
+### Task 2: Server Actions
+
+**Files:**
+- Create: `src/app/actions/produto-assadeiras-actions.ts`
+
+- [ ] **Step 1: Implementar actions**
+
+```typescript
+// src/app/actions/produto-assadeiras-actions.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
+import {
+  parseProdutoAssadeiraLinkForm,
+  type ProdutoAssadeiraLinkFormInput,
+} from '@/domain/assadeiras/produto-assadeira-validation';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import type { Assadeira } from '@/app/actions/assadeiras-actions';
+
+export type ProdutoComAssadeirasResumo = {
+  id: string;
+  nome: string;
+  linkCount: number;
+  semAssadeira: boolean;
+};
+
+export type ProdutoAssadeiraLink = {
+  id: string;
+  produto_id: string;
+  assadeira_id: string;
+  unidades_por_assadeira: number | null;
+  assadeira_nome: string;
+  assadeira_padrao: number | null;
+  assadeira_ativo: boolean;
+  unidades_efetivas: number | null;
+};
+
+type ActionResult<T = ProdutoAssadeiraLink> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+const REVALIDATE_PATH = '/config/produto-assadeiras';
+
+export async function getProdutosComAssadeiras(): Promise<
+  ProdutoComAssadeirasResumo[]
+> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data: produtos, error: produtosError } = await supabase
+    .from('produtos')
+    .select('id, nome')
+    .eq('ativo', true)
+    .order('nome', { ascending: true });
+
+  if (produtosError) {
+    console.error('Erro ao buscar produtos:', produtosError);
+    return [];
+  }
+
+  const { data: links, error: linksError } = await supabase
+    .from('produto_assadeiras')
+    .select('produto_id');
+
+  if (linksError) {
+    console.error('Erro ao buscar vínculos:', linksError);
+    return (produtos ?? []).map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      linkCount: 0,
+      semAssadeira: true,
+    }));
+  }
+
+  const countByProduto = new Map<string, number>();
+  for (const row of links ?? []) {
+    countByProduto.set(
+      row.produto_id,
+      (countByProduto.get(row.produto_id) ?? 0) + 1,
+    );
+  }
+
+  return (produtos ?? []).map((p) => {
+    const linkCount = countByProduto.get(p.id) ?? 0;
+    return {
+      id: p.id,
+      nome: p.nome,
+      linkCount,
+      semAssadeira: linkCount === 0,
+    };
+  });
+}
+
+export async function getAssadeirasAtivas(): Promise<Assadeira[]> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('assadeiras')
+    .select('*')
+    .eq('ativo', true)
+    .order('ordem', { ascending: true })
+    .order('nome', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar assadeiras ativas:', error);
+    return [];
+  }
+  return (data ?? []) as Assadeira[];
+}
+
+export async function getProdutoAssadeiraLinks(
+  produtoId: string,
+): Promise<ProdutoAssadeiraLink[]> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('produto_assadeiras')
+    .select(
+      'id, produto_id, assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)',
+    )
+    .eq('produto_id', produtoId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar vínculos do produto:', error);
+    return [];
+  }
+
+  return (data ?? []).map((row) => {
+    const assadeira = Array.isArray(row.assadeiras)
+      ? row.assadeiras[0]
+      : row.assadeiras;
+    const assadeiraPadrao = assadeira?.unidades_por_assadeira ?? null;
+    return {
+      id: row.id,
+      produto_id: row.produto_id,
+      assadeira_id: row.assadeira_id,
+      unidades_por_assadeira: row.unidades_por_assadeira,
+      assadeira_nome: assadeira?.nome ?? 'Assadeira',
+      assadeira_padrao: assadeiraPadrao,
+      assadeira_ativo: assadeira?.ativo ?? false,
+      unidades_efetivas: resolveUnidadesPorAssadeiraEfetiva({
+        produto: row.unidades_por_assadeira,
+        assadeira: assadeiraPadrao,
+      }),
+    };
+  });
+}
+
+export async function createProdutoAssadeiraLink(
+  input: ProdutoAssadeiraLinkFormInput,
+): Promise<ActionResult> {
+  const parsed = parseProdutoAssadeiraLinkForm(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? 'Dados inválidos',
+    };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('produto_assadeiras')
+    .insert({
+      produto_id: parsed.data.produto_id,
+      assadeira_id: parsed.data.assadeira_id,
+      unidades_por_assadeira: parsed.data.unidades_por_assadeira,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return {
+        success: false,
+        error: 'Este produto já usa esta assadeira',
+      };
+    }
+    console.error('Erro ao criar vínculo:', error);
+    return { success: false, error: 'Erro ao vincular assadeira' };
+  }
+
+  revalidatePath(REVALIDATE_PATH);
+  return { success: true, data: data as ProdutoAssadeiraLink };
+}
+
+export async function updateProdutoAssadeiraLink(
+  id: string,
+  input: Pick<ProdutoAssadeiraLinkFormInput, 'usar_padrao' | 'unidades_por_assadeira'>,
+): Promise<ActionResult> {
+  const usarPadrao = input.usar_padrao ?? true;
+  const unidades = usarPadrao ? null : (input.unidades_por_assadeira ?? null);
+
+  if (!usarPadrao && (unidades == null || unidades < 1)) {
+    return { success: false, error: 'Mínimo 1 pão por assadeira' };
+  }
+
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('produto_assadeiras')
+    .update({ unidades_por_assadeira: unidades })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao atualizar vínculo:', error);
+    return { success: false, error: 'Erro ao atualizar vínculo' };
+  }
+
+  revalidatePath(REVALIDATE_PATH);
+  return { success: true, data: data as ProdutoAssadeiraLink };
+}
+
+export async function deleteProdutoAssadeiraLink(
+  id: string,
+): Promise<ActionResult<void>> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { error } = await supabase
+    .from('produto_assadeiras')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Erro ao remover vínculo:', error);
+    return { success: false, error: 'Erro ao remover vínculo' };
+  }
+
+  revalidatePath(REVALIDATE_PATH);
+  return { success: true, data: undefined as void };
+}
+```
+
+- [ ] **Step 2: Verificar TypeScript**
+
+Run: `npx tsc --noEmit`  
+Expected: sem erros em `produto-assadeiras-actions.ts`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/actions/produto-assadeiras-actions.ts
+git commit -m "feat(assadeiras): server actions para vínculo produto × assadeira"
+```
+
+---
+
+### Task 3: Navegação ConfigNav
+
+**Files:**
+- Modify: `src/components/Config/ConfigNav.tsx`
+
+- [ ] **Step 1: Adicionar item após Assadeiras**
+
+```typescript
+const NAV = [
+  { href: '/config/assadeiras', label: 'Assadeiras', icon: 'bakery_dining' },
+  {
+    href: '/config/produto-assadeiras',
+    label: 'Produto × Assadeira',
+    icon: 'link',
+  },
+  { href: '/config/whatsapp', label: 'WhatsApp', icon: 'chat' },
+] as const;
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/Config/ConfigNav.tsx
+git commit -m "feat(config): nav para produto × assadeira"
+```
+
+---
+
+### Task 4: ProdutoMasterList
+
+**Files:**
+- Create: `src/components/ProdutoAssadeiras/ProdutoMasterList.tsx`
+
+- [ ] **Step 1: Implementar lista master**
+
+Componente client com props:
+
+```typescript
+type Props = {
+  produtos: ProdutoComAssadeirasResumo[];
+  selectedId: string | null;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  onSelect: (id: string) => void;
+};
+```
+
+Requisitos:
+- Input busca com `id="produto-assadeira-search"`, ícone `search`, `min-h-11`
+- Contador `{n} produtos` com `tabular-nums`
+- Cada item: `button` com `min-h-11`, nome truncado, badge:
+  - `semAssadeira` → `bg-amber-50 text-amber-800 border-amber-200` + ícone `warning`
+  - senão → `bg-emerald-50 text-emerald-700` + texto `{linkCount} assadeira(s)`
+- Selecionado: `border-l-2 border-slate-900 bg-gray-50 font-semibold`
+- `aria-current="true"` no item selecionado
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutoAssadeiras/ProdutoMasterList.tsx
+git commit -m "feat(assadeiras): lista master de produtos para config"
+```
+
+---
+
+### Task 5: Tabela e lista mobile de vínculos
+
+**Files:**
+- Create: `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksTable.tsx`
+- Create: `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksMobileList.tsx`
+
+- [ ] **Step 1: Implementar `ProdutoAssadeiraLinksTable`**
+
+Props:
+
+```typescript
+type Props = {
+  links: ProdutoAssadeiraLink[];
+  onEdit: (link: ProdutoAssadeiraLink) => void;
+  onDelete: (link: ProdutoAssadeiraLink) => void;
+};
+```
+
+Colunas: Assadeira · Padrão · Override · Efetivo · Ações  
+- Override: valor ou `—`  
+- Efetivo: `tabular-nums font-semibold`; se null, texto `—` + `title` com aviso  
+- Assadeira inativa: badge `Inativa` (`text-gray-500`)  
+- Desktop only: `hidden md:block`  
+- Botões Editar/Remover com `min-h-11`, ícones `edit` / `delete`
+
+- [ ] **Step 2: Implementar `ProdutoAssadeiraLinksMobileList`**
+
+Mesmas props; cards empilhados com mesmas informações; `md:hidden`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksTable.tsx src/components/ProdutoAssadeiras/ProdutoAssadeiraLinksMobileList.tsx
+git commit -m "feat(assadeiras): tabela e lista mobile de vínculos"
+```
+
+---
+
+### Task 6: Modal de vínculo
+
+**Files:**
+- Create: `src/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal.tsx`
+
+- [ ] **Step 1: Implementar modal**
+
+Props:
+
+```typescript
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
+  produtoId: string;
+  assadeirasAtivas: Assadeira[];
+  link?: ProdutoAssadeiraLink;
+  onSaved: () => void;
+};
+```
+
+Comportamento (espelhar `AssadeiraModal.tsx`):
+- Desktop: dialog centralizado `max-w-md`
+- Mobile: sheet bottom `max-h-[85dvh]`
+- Campo select **Assadeira** — desabilitado em edição; filtrar assadeiras já vinculadas no create
+- Toggle **Usar padrão da assadeira** — default `true` no create; reflete `link.unidades_por_assadeira == null` na edição
+- Input override numérico — visível quando toggle off; helper com padrão da assadeira selecionada
+- `AssadeiraCapacityPreview` com fator efetivo calculado client-side via `resolveUnidadesPorAssadeiraEfetiva`
+- Submit: `createProdutoAssadeiraLink` ou `updateProdutoAssadeiraLink`
+- Dirty check + confirmação ao fechar
+- Focus trap, `role="dialog"`, `aria-modal`
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal.tsx
+git commit -m "feat(assadeiras): modal criar/editar vínculo produto × assadeira"
+```
+
+---
+
+### Task 7: Painel detail
+
+**Files:**
+- Create: `src/components/ProdutoAssadeiras/ProdutoAssadeiraDetailPanel.tsx`
+
+- [ ] **Step 1: Implementar painel**
+
+Props:
+
+```typescript
+type Props = {
+  produto: ProdutoComAssadeirasResumo | null;
+  links: ProdutoAssadeiraLink[];
+  onAddLink: () => void;
+  onEditLink: (link: ProdutoAssadeiraLink) => void;
+  onDeleteLink: (link: ProdutoAssadeiraLink) => void;
+  showBackButton?: boolean;
+  onBack?: () => void;
+};
+```
+
+Estados:
+- `produto === null` → placeholder "Selecione um produto na lista"
+- `links.length === 0` → empty state `link_off` + CTA "Vincular primeira assadeira"
+- Com links → header com nome + CTA "+ Vincular assadeira" + tabela/mobile list
+- Aviso amber se algum link tem `unidades_efetivas == null`
+- Botão Voltar mobile quando `showBackButton`
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutoAssadeiras/ProdutoAssadeiraDetailPanel.tsx
+git commit -m "feat(assadeiras): painel detail produto × assadeira"
+```
+
+---
+
+### Task 8: Client orchestrator + page SSR
+
+**Files:**
+- Create: `src/app/config/produto-assadeiras/ProdutoAssadeirasClient.tsx`
+- Create: `src/app/config/produto-assadeiras/page.tsx`
+
+- [ ] **Step 1: Implementar `ProdutoAssadeirasClient`**
+
+Props SSR:
+
+```typescript
+type Props = {
+  produtos: ProdutoComAssadeirasResumo[];
+  assadeirasAtivas: Assadeira[];
+  linksByProdutoId: Record<string, ProdutoAssadeiraLink[]>;
+};
+```
+
+Estado:
+- `searchTerm` local
+- `selectedProdutoId` sincronizado com `?produto=<uuid>` via `useSearchParams` + `router.replace`
+- Mobile: `mobileView: 'master' | 'detail'` — detail quando produto selecionado no mobile
+- `modalOpen`, `editingLink`
+- Toast sucesso 4s `aria-live="polite"`
+- Delete com `confirm()` antes de `deleteProdutoAssadeiraLink`
+- Layout desktop: `grid lg:grid-cols-[minmax(280px,38%)_1fr] gap-4`
+- Layout mobile master: full width; detail: full width com back limpando seleção
+
+`primaryButtonClassName` — copiar de `AssadeirasClient.tsx`.
+
+- [ ] **Step 2: Implementar `page.tsx`**
+
+```typescript
+// src/app/config/produto-assadeiras/page.tsx
+import {
+  getAssadeirasAtivas,
+  getProdutoAssadeiraLinks,
+  getProdutosComAssadeiras,
+} from '@/app/actions/produto-assadeiras-actions';
+import ProdutoAssadeirasClient from './ProdutoAssadeirasClient';
+
+export default async function ProdutoAssadeirasPage() {
+  const [produtos, assadeirasAtivas] = await Promise.all([
+    getProdutosComAssadeiras(),
+    getAssadeirasAtivas(),
+  ]);
+
+  const linksEntries = await Promise.all(
+    produtos.map(async (p) => [p.id, await getProdutoAssadeiraLinks(p.id)] as const),
+  );
+  const linksByProdutoId = Object.fromEntries(linksEntries);
+
+  return (
+    <ProdutoAssadeirasClient
+      produtos={produtos}
+      assadeirasAtivas={assadeirasAtivas}
+      linksByProdutoId={linksByProdutoId}
+    />
+  );
+}
+```
+
+> **Nota performance:** para catálogos grandes, otimizar depois com query única agregada. YAGNI: volume atual de produtos suporta N+1 no SSR.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/config/produto-assadeiras/page.tsx src/app/config/produto-assadeiras/ProdutoAssadeirasClient.tsx
+git commit -m "feat(assadeiras): página produto × assadeira master-detail"
+```
+
+---
+
+### Task 9: Verificação final
+
+**Files:** (nenhum novo)
+
+- [ ] **Step 1: Rodar testes**
+
+Run: `npm test -- src/domain/assadeiras/`  
+Expected: PASS (validation + factor tests existentes)
+
+- [ ] **Step 2: Rodar build**
+
+Run: `npm run build`  
+Expected: compila sem erros
+
+- [ ] **Step 3: Checklist manual**
+
+1. `/config/produto-assadeiras` — lista todos produtos ativos
+2. Badge "Sem assadeira" em produtos sem vínculo
+3. Selecionar produto → painel detail (desktop split / mobile drill-down)
+4. Vincular assadeira com padrão (toggle on) → override null, efetivo = padrão
+5. Vincular com override 18 → efetivo = 18
+6. Editar vínculo existente
+7. Remover vínculo com confirmação
+8. Duplicata → mensagem "Este produto já usa esta assadeira"
+9. Deep link `?produto=<uuid>` abre produto no mobile
+10. `ConfigNav` destaca item ativo
+
+- [ ] **Step 4: Commit final (se ajustes)**
+
+```bash
+git add -A
+git commit -m "chore(assadeiras): ajustes finais fase B produto × assadeira"
+```
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Master-detail por produto | Task 8 |
+| Todos produtos ativos + badge | Task 4, 8 |
+| Override opcional (herda padrão) | Task 1, 6 |
+| Modal create/edit | Task 6 |
+| Tabela + mobile cards | Task 5 |
+| Server Actions CRUD | Task 2 |
+| ConfigNav item | Task 3 |
+| Deep link `?produto=` | Task 8 |
+| Erro duplicata | Task 2 |
+| Assadeira inativa no detail | Task 5 |
+| Testes unitários validação | Task 1 |
+| Fora de escopo (Fase C, legacy) | — |

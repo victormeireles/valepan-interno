@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { clientesService } from '@/lib/services/clientes-service';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
@@ -81,34 +81,11 @@ export async function adjustStockAction(input: AdjustStockInput) {
 export async function registerOutflowAction(input: RegisterOutflowInput) {
   const payload = registerOutflowSchema.parse(input);
 
-  await saidasSheetManager.appendNovaSaida({
+  await saidaMovimentoService.registrarSaida({
     data: payload.data,
     cliente: payload.clienteDestino,
     produto: payload.produto,
-    observacao: payload.observacao,
-    meta: payload.quantidade,
-    skipNotification: payload.skipNotification,
-  });
-
-  const estoqueDoCliente = await estoqueService.obterTipoEstoqueCliente(
-    payload.clienteDestino,
-  );
-  const estoqueOrigem =
-    payload.estoqueOrigem ??
-    estoqueDoCliente ??
-    payload.clienteDestino;
-
-  await estoqueService.aplicarDelta({
-    cliente: estoqueOrigem,
-    produto: payload.produto,
-    delta: {
-      caixas: -(payload.quantidade.caixas || 0),
-      pacotes: -(payload.quantidade.pacotes || 0),
-      unidades: -(payload.quantidade.unidades || 0),
-      kg: -(payload.quantidade.kg || 0),
-    },
-    origem: 'saida',
-    clienteDestino: payload.clienteDestino,
+    quantidade: payload.quantidade,
   });
 
   revalidatePath('/api/painel/estoque');

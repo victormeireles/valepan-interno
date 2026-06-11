@@ -14,11 +14,6 @@ export const PEDIDOS_EMBALAGEM_CONFIG = {
   },
 } as const;
 
-export const EMBALAGEM_PRODUCAO_DESTINO = {
-  spreadsheetId: EMBALAGEM_LEGACY_SPREADSHEET_ID,
-  tabName: '6 - Embalagem',
-} as const;
-
 export type PedidoItem = {
   produto: string;
   congelado: 'Sim' | 'Não' | boolean;

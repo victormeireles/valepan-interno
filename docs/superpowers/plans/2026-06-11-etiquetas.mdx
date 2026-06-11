@@ -1,0 +1,917 @@
+# Etiquetas — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Entregar hub `/etiquetas` para geração de etiquetas pós-embalagem, com fila de pedidos embalados, geração manual, controle binário gerado/pendente, regras centralizadas e CRUD em `/config/tipos-estoque`.
+
+**Architecture:** Migration SQL + domínio + fila service. A **geração HTML permanece** em `/api/etiqueta/gerar` (inalterada). A nova tela chama essa API e depois `POST /api/etiquetas/registrar`. UI nova em componentes separados, implementada com **ui-ux-pro-max** + padrão `/config/*` (Valepan).
+
+**Restrições:** Não modificar `EtiquetaModal`, `/api/etiqueta/gerar` nem botão em `/meta/embalagem`.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase JS, Zod, Tailwind CSS 4, Vitest, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-11-etiquetas-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_ETIQUETAS_GERADAS.sql` | Tabela + RLS + alterações em `tipos_estoque` e `produtos` |
+| `scripts/migrate-tipos-estoque-etiqueta-flags.ts` | Copia flags de `clientes` → `tipos_estoque` |
+| `src/domain/etiquetas/etiqueta-fila-types.ts` | Tipos `EtiquetaFilaItem`, payload gerar |
+| `src/domain/etiquetas/etiqueta-fila-sorter.ts` | Ordenação lote primeiro + `created_at` |
+| `src/domain/etiquetas/etiqueta-fila-sorter.test.ts` | Testes do sorter |
+| `src/domain/etiquetas/etiqueta-resolver.ts` | Regras tipo + produto + overrides |
+| `src/domain/etiquetas/etiqueta-resolver.test.ts` | Testes do resolver |
+| `src/domain/etiquetas/etiqueta-quantidade-hint.ts` | Texto "≈N etiquetas" no card |
+| `src/domain/etiquetas/etiqueta-quantidade-hint.test.ts` | Testes do hint |
+| `src/domain/etiquetas/tipo-estoque-validation.ts` | Zod CRUD config |
+| `src/data/etiquetas/EtiquetasGeradasRepository.ts` | Persistência `etiquetas_geradas` |
+| `src/data/embalagem/EmbalagemLoteRepository.ts` | Novo `listOrdemProducaoIdsByProduzidoDate` |
+| `src/domain/etiquetas/etiqueta-legacy-payload.ts` | Mapeia resolver → body de `/api/etiqueta/gerar` |
+| `src/lib/services/etiqueta-fila-service.ts` | Monta fila pendentes/gerados |
+| `src/lib/services/tipos-estoque-admin-service.ts` | CRUD admin tipos estoque |
+| `src/app/api/etiquetas/fila/route.ts` | GET fila |
+| `src/app/api/etiquetas/registrar/route.ts` | POST marca como gerado |
+| `design-system/pages/etiquetas.md` | Tokens UI (ui-ux-pro-max persist) |
+| `src/app/actions/tipos-estoque-actions.ts` | Server Actions config |
+| `src/app/etiquetas/page.tsx` | Server Component |
+| `src/app/etiquetas/EtiquetasPageClient.tsx` | Abas, data, grid |
+| `src/components/Etiquetas/*` | Cards, modal, skeleton |
+| `src/app/config/tipos-estoque/*` | Config CRUD |
+| `src/components/TiposEstoque/*` | Tabela, mobile, modal |
+| `src/components/Navigation.tsx` | Link Etiquetas |
+| `src/components/Config/ConfigNav.tsx` | Link Tipos de estoque |
+
+**Intocados:** `EtiquetaModal.tsx`, `/api/etiqueta/gerar`, `/meta/embalagem`
+
+---
+
+### Task 0: Design system UI (ui-ux-pro-max)
+
+**REQUIRED SUB-SKILL:** ui-ux-pro-max antes de codar Task 10.
+
+**Files:**
+- Create: `design-system/pages/etiquetas.md`
+
+- [ ] **Step 1: Gerar design system**
+
+Run (ajustar path do script conforme instalação local):
+
+```bash
+python skills/ui-ux-pro-max/scripts/search.py "warehouse internal operations desktop productivity minimal data-dense" --design-system --persist -p "Valepan Etiquetas" --page "etiquetas"
+```
+
+Se o script não existir no ambiente, aplicar manualmente a partir do skill ui-ux-pro-max + `C:\Users\victo\.cursor\skills\design-system\` (EasyDash / configs):
+
+| Token | Valor |
+|-------|-------|
+| Fundo página | `bg-gray-50` |
+| Card | `bg-white border border-gray-200 rounded-xl shadow-sm` |
+| CTA primário | `bg-gray-900 hover:bg-gray-800 text-white min-h-11 rounded-xl` |
+| CTA secundário | `border border-gray-300 bg-white hover:bg-gray-50 min-h-11` |
+| Texto primário | `text-gray-900` |
+| Texto secundário | `text-gray-600` |
+| Hint quantidade | `text-sm text-gray-500` |
+| Abas | contador + `aria-selected` + focus ring `ring-2 ring-blue-500` |
+| Modal scrim | `bg-black/50` |
+| Ícones | Material Icons apenas (sem emoji) |
+| Alvos | `min-h-11` (≥44px) em botões e tabs |
+
+- [ ] **Step 2: Validar UX** — rodar checklist ui-ux-pro-max §1–3 (a11y, touch, loading skeleton) antes de merge da Task 10
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add design-system/
+git commit -m "docs(etiquetas): add ui-ux-pro-max design tokens for etiquetas page"
+```
+
+---
+
+### Task 1: Migration SQL
+
+**Files:**
+- Create: `CREATE_ETIQUETAS_GERADAS.sql`
+
+- [ ] **Step 1: Criar arquivo SQL completo**
+
+```sql
+-- CREATE_ETIQUETAS_GERADAS.sql
+
+CREATE TABLE IF NOT EXISTS etiquetas_geradas (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ordem_producao_id uuid REFERENCES ordens_producao(id) ON DELETE SET NULL,
+  produto_id uuid NOT NULL REFERENCES produtos(id) ON DELETE RESTRICT,
+  tipo_estoque_id uuid NOT NULL REFERENCES tipos_estoque(id) ON DELETE RESTRICT,
+  data_fabricacao date NOT NULL,
+  modo text NOT NULL CHECK (modo IN ('pedido', 'manual')),
+  gerado_em timestamptz NOT NULL DEFAULT now(),
+  gerado_por uuid REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS etiquetas_geradas_ordem_producao_unique
+  ON etiquetas_geradas (ordem_producao_id)
+  WHERE ordem_producao_id IS NOT NULL;
+
+ALTER TABLE tipos_estoque
+  ADD COLUMN IF NOT EXISTS mostrar_texto_congelado boolean NOT NULL DEFAULT false;
+
+ALTER TABLE produtos
+  ADD COLUMN IF NOT EXISTS nome_etiqueta text,
+  ADD COLUMN IF NOT EXISTS dias_validade_ambiente integer NOT NULL DEFAULT 21,
+  ADD COLUMN IF NOT EXISTS dias_validade_congelado integer NOT NULL DEFAULT 90;
+
+ALTER TABLE etiquetas_geradas ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "etiquetas_geradas_select" ON etiquetas_geradas
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "etiquetas_geradas_insert" ON etiquetas_geradas
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "etiquetas_geradas_update" ON etiquetas_geradas
+  FOR UPDATE TO authenticated
+  USING ((SELECT is_admin()));
+
+CREATE POLICY "etiquetas_geradas_delete" ON etiquetas_geradas
+  FOR DELETE TO authenticated
+  USING ((SELECT is_admin()));
+```
+
+- [ ] **Step 2: Aplicar no Supabase** (Dashboard SQL ou `supabase db push` conforme workflow do projeto)
+
+- [ ] **Step 3: Regenerar tipos**
+
+Run: `npm run gen:types`  
+Expected: `types/database.ts` inclui `etiquetas_geradas` e novas colunas
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CREATE_ETIQUETAS_GERADAS.sql types/database.ts src/types/database.ts
+git commit -m "feat(etiquetas): add etiquetas_geradas table and rule columns"
+```
+
+---
+
+### Task 2: Script migração flags clientes → tipos_estoque
+
+**Files:**
+- Create: `scripts/migrate-tipos-estoque-etiqueta-flags.ts`
+- Modify: `package.json` (scripts npm)
+
+- [ ] **Step 1: Criar script**
+
+```typescript
+// scripts/migrate-tipos-estoque-etiqueta-flags.ts
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+
+const dryRun = process.argv.includes('--dry-run');
+
+async function main() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Missing Supabase env');
+
+  const supabase = createClient(url, key);
+
+  const { data: clientes, error } = await supabase
+    .from('clientes')
+    .select('nome_fantasia, tem_validade_congelado_na_etiqueta, tem_texto_indicando_congelado_na_etiqueta');
+
+  if (error) throw error;
+
+  const { data: tipos } = await supabase.from('tipos_estoque').select('id, nome, congelado, mostrar_texto_congelado');
+  if (!tipos) throw new Error('No tipos_estoque');
+
+  let updated = 0;
+  for (const tipo of tipos) {
+    const cliente = (clientes ?? []).find(
+      (c) => c.nome_fantasia?.trim().toLowerCase() === tipo.nome.trim().toLowerCase(),
+    );
+    if (!cliente) continue;
+
+    const patch: Record<string, boolean> = {};
+    if (cliente.tem_texto_indicando_congelado_na_etiqueta) {
+      patch.mostrar_texto_congelado = true;
+    }
+    if (cliente.tem_validade_congelado_na_etiqueta && !tipo.congelado) {
+      patch.congelado = true;
+    }
+    if (Object.keys(patch).length === 0) continue;
+
+    console.log(`${dryRun ? '[dry-run] ' : ''}Update ${tipo.nome}:`, patch);
+    if (!dryRun) {
+      const { error: upErr } = await supabase.from('tipos_estoque').update(patch).eq('id', tipo.id);
+      if (upErr) throw upErr;
+    }
+    updated += 1;
+  }
+
+  // HB Brioche hardcode → produtos.nome_etiqueta
+  const nomeEtiqueta = 'HB Smash Brioche 50g 10cm';
+  const { data: produto } = await supabase
+    .from('produtos')
+    .select('id, nome, nome_etiqueta')
+    .ilike('nome', 'HB Brioche 50g 10cm')
+    .maybeSingle();
+
+  if (produto && !produto.nome_etiqueta) {
+    console.log(`${dryRun ? '[dry-run] ' : ''}Set nome_etiqueta for ${produto.nome}`);
+    if (!dryRun) {
+      await supabase.from('produtos').update({ nome_etiqueta: nomeEtiqueta }).eq('id', produto.id);
+    }
+  }
+
+  console.log(`Done. tipos updated: ${updated}`);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
+```
+
+- [ ] **Step 2: Adicionar scripts em `package.json`**
+
+```json
+"migrate:tipos-estoque-etiqueta-flags": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+"migrate:tipos-estoque-etiqueta-flags:dry": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts --dry-run"
+```
+
+- [ ] **Step 3: Dry-run**
+
+Run: `npm run migrate:tipos-estoque-etiqueta-flags:dry`  
+Expected: log de updates sem gravar
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/migrate-tipos-estoque-etiqueta-flags.ts package.json
+git commit -m "chore(etiquetas): add migration script for tipo estoque flags"
+```
+
+---
+
+### Task 3: Domain — sorter e quantidade hint
+
+**Files:**
+- Create: `src/domain/etiquetas/etiqueta-fila-types.ts`
+- Create: `src/domain/etiquetas/etiqueta-fila-sorter.ts`
+- Create: `src/domain/etiquetas/etiqueta-fila-sorter.test.ts`
+- Create: `src/domain/etiquetas/etiqueta-quantidade-hint.ts`
+- Create: `src/domain/etiquetas/etiqueta-quantidade-hint.test.ts`
+
+- [ ] **Step 1: Escrever testes do sorter**
+
+```typescript
+// src/domain/etiquetas/etiqueta-fila-sorter.test.ts
+import { describe, expect, it } from 'vitest';
+import { sortEtiquetaFilaItems } from './etiqueta-fila-sorter';
+import type { EtiquetaFilaSortable } from './etiqueta-fila-types';
+
+const base = (overrides: Partial<EtiquetaFilaSortable>): EtiquetaFilaSortable => ({
+  pedidoEmbalagemId: 'a',
+  lote: null,
+  pedidoCreatedAt: '2026-06-11T10:00:00Z',
+  ...overrides,
+});
+
+describe('sortEtiquetaFilaItems', () => {
+  it('coloca com lote antes de sem lote', () => {
+    const input = [
+      base({ pedidoEmbalagemId: 'sem', lote: null }),
+      base({ pedidoEmbalagemId: 'com', lote: 152 }),
+    ];
+    const sorted = sortEtiquetaFilaItems(input);
+    expect(sorted.map((i) => i.pedidoEmbalagemId)).toEqual(['com', 'sem']);
+  });
+
+  it('ordena por created_at asc dentro do grupo', () => {
+    const input = [
+      base({ pedidoEmbalagemId: 'b', lote: 1, pedidoCreatedAt: '2026-06-11T12:00:00Z' }),
+      base({ pedidoEmbalagemId: 'a', lote: 2, pedidoCreatedAt: '2026-06-11T08:00:00Z' }),
+    ];
+    const sorted = sortEtiquetaFilaItems(input);
+    expect(sorted.map((i) => i.pedidoEmbalagemId)).toEqual(['a', 'b']);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar — deve falhar**
+
+Run: `npm test -- src/domain/etiquetas/etiqueta-fila-sorter.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implementar types + sorter**
+
+```typescript
+// src/domain/etiquetas/etiqueta-fila-types.ts
+import type { Quantidade } from '@/domain/types/inventario';
+
+export type EtiquetaFilaSortable = {
+  pedidoEmbalagemId: string;
+  lote: number | null;
+  pedidoCreatedAt: string;
+};
+
+export type EtiquetaFilaItem = EtiquetaFilaSortable & {
+  produto: string;
+  produtoId: string;
+  tipoEstoque: string;
+  tipoEstoqueId: string;
+  dataFabricacao: string;
+  pedido: Quantidade;
+  produzido: Quantidade;
+  unidade: 'cx' | 'pct' | 'un' | 'kg';
+  geradoEm?: string;
+  primeiroLoteHorario?: string;
+};
+
+export type EtiquetaFilaResponse = {
+  date: string;
+  pendentes: EtiquetaFilaItem[];
+  gerados: EtiquetaFilaItem[];
+};
+
+export type GerarEtiquetaPayload = {
+  produtoId: string;
+  tipoEstoqueId: string;
+  dataFabricacao: string;
+  modo: 'pedido' | 'manual';
+  ordemProducaoId?: string;
+  nomeEtiqueta?: string;
+  diasValidade?: number;
+  diasValidadeCongelado?: number;
+};
+```
+
+```typescript
+// src/domain/etiquetas/etiqueta-fila-sorter.ts
+import type { EtiquetaFilaSortable } from './etiqueta-fila-types';
+
+export function sortEtiquetaFilaItems<T extends EtiquetaFilaSortable>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aHasLote = a.lote != null ? 0 : 1;
+    const bHasLote = b.lote != null ? 0 : 1;
+    if (aHasLote !== bHasLote) return aHasLote - bHasLote;
+    return a.pedidoCreatedAt.localeCompare(b.pedidoCreatedAt);
+  });
+}
+```
+
+- [ ] **Step 4: Testes e implementação do hint**
+
+```typescript
+// src/domain/etiquetas/etiqueta-quantidade-hint.test.ts
+import { describe, expect, it } from 'vitest';
+import { buildEtiquetaQuantidadeHint } from './etiqueta-quantidade-hint';
+
+describe('buildEtiquetaQuantidadeHint', () => {
+  it('retorna hint para caixas', () => {
+    expect(buildEtiquetaQuantidadeHint('cx', { caixas: 50, pacotes: 0, unidades: 0, kg: 0 }))
+      .toBe('≈50 etiquetas');
+  });
+
+  it('retorna null quando zero', () => {
+    expect(buildEtiquetaQuantidadeHint('cx', { caixas: 0, pacotes: 0, unidades: 0, kg: 0 }))
+      .toBeNull();
+  });
+});
+```
+
+```typescript
+// src/domain/etiquetas/etiqueta-quantidade-hint.ts
+import type { Quantidade } from '@/domain/types/inventario';
+
+export function buildEtiquetaQuantidadeHint(
+  unidade: 'cx' | 'pct' | 'un' | 'kg',
+  produzido: Quantidade,
+): string | null {
+  if (unidade === 'cx' && produzido.caixas > 0) return `≈${produzido.caixas} etiquetas`;
+  if (unidade === 'pct' && produzido.pacotes > 0) return `≈${produzido.pacotes} etiquetas`;
+  if (unidade === 'un' && produzido.unidades > 0) return `≈${produzido.unidades} etiquetas`;
+  if (unidade === 'kg' && produzido.kg > 0) return `≈${produzido.kg} kg embalados`;
+  return null;
+}
+```
+
+- [ ] **Step 5: Rodar testes**
+
+Run: `npm test -- src/domain/etiquetas/`  
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/etiquetas/
+git commit -m "feat(etiquetas): add fila sorter and quantidade hint domain"
+```
+
+---
+
+### Task 4: Domain — etiqueta-resolver
+
+**Files:**
+- Create: `src/domain/etiquetas/etiqueta-resolver.ts`
+- Create: `src/domain/etiquetas/etiqueta-resolver.test.ts`
+
+- [ ] **Step 1: Escrever testes**
+
+```typescript
+// src/domain/etiquetas/etiqueta-resolver.test.ts
+import { describe, expect, it } from 'vitest';
+import { resolveEtiquetaConfig } from './etiqueta-resolver';
+
+const produto = {
+  nome: 'HB Brioche 50g 10cm',
+  nomeEtiqueta: 'HB Smash Brioche 50g 10cm',
+  diasValidadeAmbiente: 21,
+  diasValidadeCongelado: 90,
+  unitBarcode: '789',
+  unitWeight: 0.05,
+  boxUnits: 100,
+  packageUnits: 10,
+};
+
+const tipo = {
+  congelado: true,
+  mostrarTextoCongelado: true,
+};
+
+describe('resolveEtiquetaConfig', () => {
+  it('usa nome_etiqueta do produto', () => {
+    const result = resolveEtiquetaConfig({ produto, tipo, dataFabricacao: '2026-06-11' });
+    expect(result.nomeEtiqueta).toBe('HB Smash Brioche 50g 10cm');
+  });
+
+  it('aplica overrides do modal', () => {
+    const result = resolveEtiquetaConfig({
+      produto,
+      tipo,
+      dataFabricacao: '2026-06-11',
+      overrides: { diasValidade: 14 },
+    });
+    expect(result.diasValidade).toBe(14);
+  });
+
+  it('calcula lote do dia do ano', () => {
+    const result = resolveEtiquetaConfig({ produto, tipo, dataFabricacao: '2026-06-11' });
+    expect(result.lote).toBeGreaterThan(0);
+  });
+});
+```
+
+- [ ] **Step 2: Implementar resolver**
+
+```typescript
+// src/domain/etiquetas/etiqueta-resolver.ts
+import { loteFromDataFabricacaoEtiqueta } from '@/domain/embalagem/lote-from-data-fabricacao';
+
+export type EtiquetaProdutoInput = {
+  nome: string;
+  nomeEtiqueta: string | null;
+  diasValidadeAmbiente: number;
+  diasValidadeCongelado: number;
+  unitBarcode: string | null;
+  unitWeight: number | null;
+  boxUnits: number | null;
+  packageUnits: number | null;
+};
+
+export type EtiquetaTipoInput = {
+  congelado: boolean;
+  mostrarTextoCongelado: boolean;
+};
+
+export type EtiquetaOverrides = {
+  nomeEtiqueta?: string;
+  diasValidade?: number;
+  diasValidadeCongelado?: number;
+};
+
+export function resolveEtiquetaConfig(input: {
+  produto: EtiquetaProdutoInput;
+  tipo: EtiquetaTipoInput;
+  dataFabricacao: string;
+  overrides?: EtiquetaOverrides;
+}) {
+  const lote = loteFromDataFabricacaoEtiqueta(input.dataFabricacao) ?? 0;
+  return {
+    nomeEtiqueta: input.overrides?.nomeEtiqueta?.trim()
+      || input.produto.nomeEtiqueta?.trim()
+      || input.produto.nome,
+    diasValidade: input.overrides?.diasValidade ?? input.produto.diasValidadeAmbiente,
+    diasValidadeCongelado:
+      input.overrides?.diasValidadeCongelado ?? input.produto.diasValidadeCongelado,
+    congelado: input.tipo.congelado,
+    mostrarTextoCongelado: input.tipo.mostrarTextoCongelado,
+    lote,
+    codigoBarras: input.produto.unitBarcode ?? '',
+    pesoLiquidoUnitario: input.produto.unitWeight ?? 0,
+    unPorCaixa: input.produto.boxUnits ?? 0,
+    unPorPacote: input.produto.packageUnits ?? 0,
+  };
+}
+```
+
+- [ ] **Step 3: Rodar testes**
+
+Run: `npm test -- src/domain/etiquetas/etiqueta-resolver.test.ts`  
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/etiquetas/etiqueta-resolver.ts src/domain/etiquetas/etiqueta-resolver.test.ts
+git commit -m "feat(etiquetas): add centralized etiqueta resolver"
+```
+
+---
+
+### Task 5: Repositories
+
+**Files:**
+- Create: `src/data/etiquetas/EtiquetasGeradasRepository.ts`
+- Modify: `src/data/embalagem/EmbalagemLoteRepository.ts`
+
+- [ ] **Step 1: Adicionar `listOrdemProducaoIdsByProduzidoDate` em EmbalagemLoteRepository**
+
+```typescript
+async listOrdemProducaoIdsByProduzidoDate(dateIso: string): Promise<string[]> {
+  const start = `${dateIso}T00:00:00`;
+  const end = `${dateIso}T23:59:59.999`;
+  const { data, error } = await this.supabase
+    .from('embalagem_lotes')
+    .select('ordem_producao_id')
+    .gte('produzido_em', start)
+    .lte('produzido_em', end);
+  if (error) throw new Error(`Erro ao listar lotes por data: ${error.message}`);
+  const ids = new Set<string>();
+  for (const row of data ?? []) {
+    const id = (row as { ordem_producao_id?: string | null }).ordem_producao_id;
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+```
+
+- [ ] **Step 2: Criar EtiquetasGeradasRepository**
+
+```typescript
+// src/data/etiquetas/EtiquetasGeradasRepository.ts
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+
+export type EtiquetaGeradaRecord = {
+  id: string;
+  ordemProducaoId: string | null;
+  produtoId: string;
+  tipoEstoqueId: string;
+  dataFabricacao: string;
+  modo: 'pedido' | 'manual';
+  geradoEm: string;
+};
+
+export class EtiquetasGeradasRepository {
+  private readonly supabase = supabaseClientFactory.createServiceRoleClient();
+
+  async findByOrdemProducaoIds(ids: string[]): Promise<Map<string, EtiquetaGeradaRecord>> {
+    const map = new Map<string, EtiquetaGeradaRecord>();
+    if (ids.length === 0) return map;
+    const { data, error } = await this.supabase
+      .from('etiquetas_geradas')
+      .select('*')
+      .in('ordem_producao_id', ids);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      if (!row.ordem_producao_id) continue;
+      map.set(row.ordem_producao_id, {
+        id: row.id,
+        ordemProducaoId: row.ordem_producao_id,
+        produtoId: row.produto_id,
+        tipoEstoqueId: row.tipo_estoque_id,
+        dataFabricacao: row.data_fabricacao,
+        modo: row.modo as 'pedido' | 'manual',
+        geradoEm: row.gerado_em,
+      });
+    }
+    return map;
+  }
+
+  async insert(input: Omit<EtiquetaGeradaRecord, 'id' | 'geradoEm'> & { geradoPor?: string | null }): Promise<void> {
+    const { error } = await this.supabase.from('etiquetas_geradas').insert({
+      ordem_producao_id: input.ordemProducaoId,
+      produto_id: input.produtoId,
+      tipo_estoque_id: input.tipoEstoqueId,
+      data_fabricacao: input.dataFabricacao,
+      modo: input.modo,
+      gerado_por: input.geradoPor ?? null,
+    });
+    if (error) throw new Error(error.message);
+  }
+}
+
+export const etiquetasGeradasRepository = new EtiquetasGeradasRepository();
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/data/etiquetas/EtiquetasGeradasRepository.ts src/data/embalagem/EmbalagemLoteRepository.ts
+git commit -m "feat(etiquetas): add repositories for fila and geradas"
+```
+
+---
+
+### Task 6: Payload legado para API existente
+
+**Files:**
+- Create: `src/domain/etiquetas/etiqueta-legacy-payload.ts`
+- Create: `src/domain/etiquetas/etiqueta-legacy-payload.test.ts`
+
+Mapeia saída do `resolveEtiquetaConfig` + nomes para o body que `/api/etiqueta/gerar` já espera (igual `EtiquetaModal`).
+
+- [ ] **Step 1: Teste**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { buildLegacyEtiquetaGerarBody } from './etiqueta-legacy-payload';
+
+describe('buildLegacyEtiquetaGerarBody', () => {
+  it('monta body compatível com EtiquetaModal', () => {
+    const body = buildLegacyEtiquetaGerarBody({
+      produtoNome: 'HB Brioche',
+      tipoEstoqueNome: 'Cliente X',
+      dataFabricacao: '2026-06-11',
+      resolved: {
+        nomeEtiqueta: 'HB Smash',
+        diasValidade: 21,
+        diasValidadeCongelado: 90,
+        congelado: true,
+        mostrarTextoCongelado: false,
+        lote: 162,
+      },
+    });
+    expect(body).toEqual({
+      produto: 'HB Brioche',
+      nomeEtiqueta: 'HB Smash',
+      dataFabricacao: '2026-06-11',
+      diasValidade: 21,
+      diasValidadeCongelado: 90,
+      congelado: true,
+      mostrarTextoCongelado: false,
+      lote: 162,
+      cliente: 'Cliente X',
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Implementar** (função pura exportada)
+
+- [ ] **Step 3: Rodar testes e commit**
+
+```bash
+npm test -- src/domain/etiquetas/etiqueta-legacy-payload.test.ts
+git add src/domain/etiquetas/etiqueta-legacy-payload*
+git commit -m "feat(etiquetas): add legacy API payload builder"
+```
+
+---
+
+### Task 7: etiqueta-fila-service
+
+**Files:**
+- Create: `src/lib/services/etiqueta-fila-service.ts`
+- Create: `src/lib/services/etiqueta-fila-service.test.ts`
+
+- [ ] **Step 1: Implementar `getFilaForDate(date: string): Promise<EtiquetaFilaResponse>`**
+
+Lógica:
+1. `embalagemLoteRepository.listOrdemProducaoIdsByProduzidoDate(date)`
+2. `pedidoEmbalagemRepository.findByIds(ids)` (criar se não existir)
+3. `buildPainelPedido` via padrão de `PainelEmbalagemService`
+4. Filtrar `possuiEtiqueta === true`
+5. Filtrar lotes do dia para `primeiroLoteHorario` (min `produzido_em` na data)
+6. Cruzar `etiquetasGeradasRepository.findByOrdemProducaoIds`
+7. `sortEtiquetaFilaItems` em pendentes e gerados
+
+- [ ] **Step 2: Teste unitário com mocks dos repositories**
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/lib/services/etiqueta-fila-service.ts src/lib/services/etiqueta-fila-service.test.ts
+git commit -m "feat(etiquetas): add fila service"
+```
+
+---
+
+### Task 8: API routes (fila + registrar)
+
+**Files:**
+- Create: `src/app/api/etiquetas/fila/route.ts`
+- Create: `src/app/api/etiquetas/registrar/route.ts`
+
+**Não criar** `/api/etiquetas/gerar` — usar `/api/etiqueta/gerar` existente.
+
+- [ ] **Step 1: GET fila**
+
+```typescript
+export async function GET(request: Request) {
+  const date = new URL(request.url).searchParams.get('date');
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: 'date inválida' }, { status: 400 });
+  }
+  const fila = await etiquetaFilaService.getFilaForDate(date);
+  return NextResponse.json(fila);
+}
+```
+
+- [ ] **Step 2: POST registrar**
+
+```typescript
+// Body: { ordemProducaoId?, produtoId, tipoEstoqueId, dataFabricacao, modo }
+// modo pedido: insert (unique ordem_producao_id) — idempotente se já existe (retornar 200)
+// modo manual: insert sempre (histórico)
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/api/etiquetas/
+git commit -m "feat(etiquetas): add fila and registrar API routes"
+```
+
+---
+
+### Task 9: Config tipos de estoque
+
+**Files:**
+- Create: `src/domain/etiquetas/tipo-estoque-validation.ts`
+- Create: `src/domain/etiquetas/tipo-estoque-validation.test.ts`
+- Create: `src/lib/services/tipos-estoque-admin-service.ts`
+- Create: `src/app/actions/tipos-estoque-actions.ts`
+- Create: `src/app/config/tipos-estoque/page.tsx`
+- Create: `src/app/config/tipos-estoque/TiposEstoqueClient.tsx`
+- Create: `src/components/TiposEstoque/TiposEstoqueTable.tsx`
+- Create: `src/components/TiposEstoque/TiposEstoqueMobileList.tsx`
+- Create: `src/components/TiposEstoque/TipoEstoqueModal.tsx`
+- Modify: `src/components/Config/ConfigNav.tsx`
+- Modify: `src/lib/services/tipos-estoque-service.ts` (incluir novos campos no DTO)
+
+- [ ] **Step 1: Zod schema** (`nome`, `ativo`, `possui_etiqueta`, `congelado`, `mostrar_texto_congelado`)
+
+- [ ] **Step 2: Server actions** `listTiposEstoqueAdmin`, `createTipoEstoque`, `updateTipoEstoque` — espelhar `categoria-assadeira-regras-actions.ts`
+
+- [ ] **Step 3: UI** — copiar estrutura de `RegrasAssadeirasClient.tsx`: header, filtro `?status=`, tabela desktop, lista mobile, modal
+
+- [ ] **Step 4: Adicionar em ConfigNav**
+
+```typescript
+{ href: '/config/tipos-estoque', label: 'Tipos de estoque', icon: 'warehouse' },
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/etiquetas/tipo-estoque-validation* src/lib/services/tipos-estoque-admin-service.ts src/app/actions/tipos-estoque-actions.ts src/app/config/tipos-estoque/ src/components/TiposEstoque/ src/components/Config/ConfigNav.tsx src/lib/services/tipos-estoque-service.ts
+git commit -m "feat(etiquetas): add tipos de estoque config CRUD"
+```
+
+---
+
+### Task 10: UI `/etiquetas` (ui-ux-pro-max)
+
+**REQUIRED:** Ler `design-system/pages/etiquetas.md` (Task 0) antes de implementar. Validar checklist ui-ux-pro-max §1–3 ao finalizar.
+
+**Files:**
+- Create: `src/app/etiquetas/page.tsx`
+- Create: `src/app/etiquetas/EtiquetasPageClient.tsx`
+- Create: `src/components/Etiquetas/EtiquetaPedidoCard.tsx`
+- Create: `src/components/Etiquetas/EtiquetaGerarModal.tsx`
+- Create: `src/components/Etiquetas/EtiquetaManualFormFields.tsx`
+- Create: `src/components/Etiquetas/EtiquetaFilaSkeleton.tsx`
+- Modify: `src/components/Navigation.tsx`
+
+- [ ] **Step 1: `EtiquetasPageClient`**
+
+- Estado: `date` (default `getTodayISOInBrazilTimezone()`), aba `pendentes|gerados`, loading, fila data
+- Header: date input + chips Hoje/Ontem (`addCalendarDaysISO`)
+- Botão `+ Gerar etiqueta manual` abre modal modo manual
+- `useEffect` fetch `GET /api/etiquetas/fila?date=`
+- Grid de `EtiquetaPedidoCard`
+
+- [ ] **Step 2: `EtiquetaPedidoCard`**
+
+- Props: `EtiquetaFilaItem`, `variant: 'pendente'|'gerado'`, `onAction`
+- Exibir meta/realizado formatado + `buildEtiquetaQuantidadeHint`
+- CTA: "Gerar etiqueta" ou "Reimprimir"
+- Badge gerado: `formatLocalTimeHHmm(geradoEm)` na aba gerados
+
+- [ ] **Step 3: `EtiquetaGerarModal`** (componente NOVO — não editar `EtiquetaModal.tsx`)
+
+- Tema claro conforme `design-system/pages/etiquetas.md`
+- Props: `mode: 'fila'|'manual'|'reimprimir'`, initial values
+- Pré-preencher via `resolveEtiquetaConfig` + dados de `tipos_estoque` / `produtos`
+- Submit fluxo **gerar** (fila ou manual):
+  1. `buildLegacyEtiquetaGerarBody(...)` 
+  2. `POST /api/etiqueta/gerar` (API legada, inalterada)
+  3. blob HTML → `window.open`
+  4. `POST /api/etiquetas/registrar` (exceto `reimprimir`)
+- Submit fluxo **reimprimir**: apenas passos 1–3
+- Loading no botão durante async; erro com `role="alert"`
+- On success: `onSuccess()` refetch fila
+
+- [ ] **Step 4: `EtiquetaManualFormFields`**
+
+- Autocomplete produto: reutilizar padrão de `/api/options/embalagem` ou action existente de produtos
+- Select tipo estoque: só `possui_etiqueta = true`
+- Date picker `dataFabricacao`
+
+- [ ] **Step 5: Navigation** — após Realizado: Embalagem:
+
+```tsx
+<Link href="/etiquetas" ...>
+  <span className="material-icons ...">label</span>
+  Etiquetas
+</Link>
+```
+
+- [ ] **Step 6: `page.tsx`**
+
+```tsx
+export const dynamic = 'force-dynamic';
+
+export default function EtiquetasPage() {
+  return <EtiquetasPageClient />;
+}
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/app/etiquetas/ src/components/Etiquetas/ src/components/Navigation.tsx
+git commit -m "feat(etiquetas): add etiquetas hub page and components"
+```
+
+---
+
+### Task 11: Verificação final
+
+- [ ] **Step 1: Rodar testes**
+
+Run: `npm test`  
+Expected: all PASS
+
+- [ ] **Step 2: Rodar lint**
+
+Run: `npm run lint`  
+Expected: sem erros novos
+
+- [ ] **Step 3: Smoke manual**
+
+1. Abrir `/etiquetas` — fila do dia carrega; skeleton durante loading
+2. Clicar card pendente → modal novo → Gerar e imprimir → aba nova + item vai para "Já gerados"
+3. Reimprimir na aba gerados — não duplica registro em `etiquetas_geradas`
+4. Gerar manual — funciona sem pedido
+5. `/config/tipos-estoque` — editar flags reflete no pré-preenchimento do modal novo
+6. `/meta/embalagem` — botão etiqueta **ainda funciona** (`EtiquetaModal` legado intacto)
+7. Checklist ui-ux-pro-max: contraste, focus rings, `min-h-11`, estados vazios
+
+- [ ] **Step 4: Atualizar checklist no spec**
+
+Marcar itens concluídos em `docs/superpowers/specs/2026-06-11-etiquetas-design.mdx`
+
+- [ ] **Step 5: Commit final se pendências**
+
+```bash
+git commit -m "chore(etiquetas): verification and spec checklist" --allow-empty
+```
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Tabela `etiquetas_geradas` + RLS | Task 1 |
+| Colunas `tipos_estoque` / `produtos` | Task 1 |
+| Migração flags clientes | Task 2 |
+| Fila por data + pendentes/gerados | Tasks 3, 5, 7, 8, 10 |
+| Ordenação lote + created_at | Task 3 |
+| Meta/realizado + hint | Tasks 3, 10 |
+| Gerar marca como gerado | Tasks 8, 10 (`registrar` após `/api/etiqueta/gerar`) |
+| Reimpressão livre | Task 10 (só API legada) |
+| Manual essencial | Task 10 |
+| Config tipos estoque | Task 9 |
+| Regras centralizadas (pré-preenchimento) | Tasks 4, 6 |
+| API legada inalterada | Tasks 6, 10 — **sem** editar `/api/etiqueta/gerar` |
+| Fluxo legado meta/embalagem intacto | Nenhuma task altera |
+| ui-ux-pro-max | Task 0, 10 |
+| Navegação | Tasks 9, 10 |

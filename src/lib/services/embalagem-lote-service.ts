@@ -1,9 +1,6 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
 import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
-import {
-  loteTemQuantidadeProduzida,
-  montarObservacaoSaidaExclusaoEmbalagem,
-} from '@/domain/embalagem/embalagem-lote-exclusao';
+import { loteTemQuantidadeProduzida } from '@/domain/embalagem/embalagem-lote-exclusao';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
   EmbalagemLoteFotos,
@@ -15,7 +12,7 @@ import { EstoqueResolverError } from '@/lib/services/estoque-resolver-service';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 export { EstoqueResolverError };
 
@@ -164,30 +161,11 @@ export class EmbalagemLoteService {
     }
 
     if (loteTemQuantidadeProduzida(q)) {
-      await saidasSheetManager.appendNovaSaida({
+      await saidaMovimentoService.registrarSaida({
         data: lote.dataPedido,
         cliente: tipo.nome,
         produto: produto.nome,
-        meta: { ...q },
-        observacao: montarObservacaoSaidaExclusaoEmbalagem(produto.nome),
-        skipNotification: true,
-      });
-
-      const clienteEstoque =
-        (await estoqueService.obterTipoEstoqueCliente(tipo.nome)) ?? tipo.nome;
-
-      await estoqueService.aplicarDelta({
-        cliente: clienteEstoque,
-        produto: produto.nome,
-        delta: {
-          caixas: -q.caixas,
-          pacotes: -q.pacotes,
-          unidades: -q.unidades,
-          kg: -q.kg,
-        },
-        allowNegative: true,
-        origem: 'saida',
-        clienteDestino: tipo.nome,
+        quantidade: { ...q },
       });
     }
 

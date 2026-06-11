@@ -235,11 +235,11 @@ export class EstoqueService {
     origem = 'ajuste_manual',
     embalagemLoteId,
     clienteDestino,
-  }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord> {
+  }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord & { movimentoId: string }> {
     const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(cliente);
     const produtoId = await estoqueResolverService.resolveProdutoId(produto);
 
-    const record = await this.registrarMovimentoByIds({
+    const { record, movimentoId } = await this.registrarMovimentoByIds({
       tipoEstoqueId,
       produtoId,
       tipoEstoqueNome: cliente,
@@ -251,7 +251,7 @@ export class EstoqueService {
       clienteDestino,
     });
 
-    return record;
+    return { ...record, movimentoId };
   }
 
   public async definirQuantidadeAbsoluta({
@@ -283,7 +283,7 @@ export class EstoqueService {
     origem: EstoqueMovimentoOrigem;
     embalagemLoteId?: string;
     clienteDestino?: string;
-  }): Promise<EstoqueRecord> {
+  }): Promise<{ record: EstoqueRecord; movimentoId: string }> {
     const saldoAtualRow = await estoqueRepository.findSaldo(
       input.tipoEstoqueId,
       input.produtoId,
@@ -304,7 +304,7 @@ export class EstoqueService {
       input.allowNegative ?? false,
     );
 
-    await estoqueRepository.insertMovimento({
+    const movimento = await estoqueRepository.insertMovimento({
       tipoEstoqueId: input.tipoEstoqueId,
       produtoId: input.produtoId,
       delta: input.delta,
@@ -336,11 +336,14 @@ export class EstoqueService {
     }
 
     return {
-      cliente: input.tipoEstoqueNome,
-      produto: input.produtoNome,
-      quantidade: saldo,
-      inventarioAtualizadoEm: saldoAtualRow?.updated_at,
-      atualizadoEm,
+      record: {
+        cliente: input.tipoEstoqueNome,
+        produto: input.produtoNome,
+        quantidade: saldo,
+        inventarioAtualizadoEm: saldoAtualRow?.updated_at,
+        atualizadoEm,
+      },
+      movimentoId: movimento.id,
     };
   }
 

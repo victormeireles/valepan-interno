@@ -4,7 +4,7 @@ import { getGoogleSheetsClient } from '@/lib/googleSheets';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
-import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
+import { parseSaidaId, saidaIdToDriveRowNumber } from '@/domain/saidas/saida-id';
 
 export const maxDuration = 30;
 
@@ -15,16 +15,20 @@ export async function POST(request: NextRequest) {
     const rowId = formData.get('rowId') as string;
     const loteId = formData.get('loteId') as string;
     const photoType = formData.get('photoType') as string;
-    const processType = (formData.get('process') as string) || 'embalagem';
+    const processType = formData.get('process') as string | null;
 
     if (!photo) {
       return NextResponse.json({ error: 'Nenhuma foto foi enviada' }, { status: 400 });
     }
 
+    if (!processType) {
+      return NextResponse.json({ error: 'Processo é obrigatório' }, { status: 400 });
+    }
+
     if (processType === 'embalagem') {
       if (!loteId) {
         return NextResponse.json(
-          { error: 'loteId é obrigatório para fotos de embalagem (DB-only).' },
+          { error: 'loteId é obrigatório para fotos de embalagem.' },
           { status: 400 },
         );
       }
@@ -53,11 +57,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rowNumber = rowId
-      ? parseInt(rowId)
-      : parseInt(loteId.replace(/-/g, '').slice(0, 8), 16) % 1_000_000 || 1;
+    const isSaidasProcess = processType === 'saidas';
+    const saidaId = rowId ? parseSaidaId(rowId) : null;
+    const rowNumber = isSaidasProcess
+      ? saidaId
+        ? saidaIdToDriveRowNumber(saidaId)
+        : NaN
+      : rowId
+        ? parseInt(rowId)
+        : parseInt(loteId.replace(/-/g, '').slice(0, 8), 16) % 1_000_000 || 1;
+
     if (rowId && (isNaN(rowNumber) || rowNumber < 2)) {
-      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
+      return NextResponse.json(
+        { error: isSaidasProcess ? 'ID de saída inválido' : 'ID de linha inválido' },
+        { status: 400 },
+      );
     }
 
     if (!photo.type.startsWith('image/')) {
@@ -111,11 +125,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (processType === 'saidas') {
+      return NextResponse.json({
+        success: true,
+        photoUrl: uploadResult.photoUrl,
+        photoId: uploadResult.photoId,
+        photoType,
+        message: 'Foto enviada ao Drive (não persistida no movimento de estoque)',
+      });
+    }
+
     const sheets = await getGoogleSheetsClient();
     let config;
-    if (processType === 'saidas') {
-      config = SAIDAS_SHEET_CONFIG.destino;
-    } else if (processType === 'forno') {
+    if (processType === 'forno') {
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
@@ -127,11 +149,8 @@ export async function POST(request: NextRequest) {
     const { spreadsheetId, tabName } = config;
 
     let startColumn: string;
-    let columnsCount = 3;
-    if (processType === 'saidas') {
-      startColumn = 'P';
-      columnsCount = 2;
-    } else if (processType === 'forno') {
+    const columnsCount = 3;
+    if (processType === 'forno') {
       startColumn = 'L';
     } else if (processType === 'fermentacao') {
       startColumn = 'S';

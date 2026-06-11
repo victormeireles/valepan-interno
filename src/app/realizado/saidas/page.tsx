@@ -24,7 +24,7 @@ const UNIT_LABEL: Record<keyof SaidaQuantidade, string> = {
 type PainelItem = SaidaSheetRecord;
 
 type RealizadoContext = {
-  rowId: number;
+  rowId: string;
   item: PainelItem;
 };
 
@@ -78,7 +78,7 @@ export default function RealizadoSaidasPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContext, setModalContext] = useState<RealizadoContext | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
-  const [loadingCardId, setLoadingCardId] = useState<number | null>(null);
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [novaSaidaOpen, setNovaSaidaOpen] = useState(false);
   const [novaSaidaLoading, setNovaSaidaLoading] = useState(false);
   const [clientesOptions, setClientesOptions] = useState<string[]>([]);
@@ -136,15 +136,15 @@ export default function RealizadoSaidasPage() {
   };
 
   const handleEdit = async (item: PainelItem) => {
-    if (!item.rowIndex) {
+    if (!item.id) {
       setMessage('Este item não pode ser editado');
       return;
     }
 
     try {
-      setLoadingCardId(item.rowIndex);
+      setLoadingCardId(item.id);
       setModalLoading(true);
-      const res = await fetch(`/api/producao/saidas/${item.rowIndex}`);
+      const res = await fetch(`/api/producao/saidas/${item.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados da saída');
 
@@ -157,7 +157,7 @@ export default function RealizadoSaidasPage() {
         saidaUpdatedAt: data.data.saidaUpdatedAt || item.saidaUpdatedAt,
       };
 
-      setModalContext({ rowId: item.rowIndex, item: enrichedItem });
+      setModalContext({ rowId: item.id, item: enrichedItem });
       setModalOpen(true);
     } catch (error) {
       setMessage(getVisibleErrorMessage(error, 'Erro ao carregar dados da saída'));
@@ -199,7 +199,7 @@ export default function RealizadoSaidasPage() {
       if (uploadFile) {
         const formData = new FormData();
         formData.append('photo', uploadFile);
-        formData.append('rowId', modalContext.rowId.toString());
+        formData.append('rowId', modalContext.rowId);
         formData.append('photoType', 'saida');
         formData.append('process', 'saidas');
 
@@ -292,13 +292,13 @@ export default function RealizadoSaidasPage() {
             (!row.saidaUpdatedAt || !row.fotoUrl)
           );
 
-        if (!candidate?.rowIndex) {
+        if (!candidate?.id) {
           throw new Error('Saída criada, mas não foi possível identificar a linha para anexar foto');
         }
 
         const formData = new FormData();
         formData.append('photo', foto);
-        formData.append('rowId', candidate.rowIndex.toString());
+        formData.append('rowId', candidate.id);
         formData.append('photoType', 'saida');
         formData.append('process', 'saidas');
 
@@ -311,7 +311,7 @@ export default function RealizadoSaidasPage() {
           throw new Error(uploadData.error || 'Falha ao enviar foto da saída');
         }
 
-        await fetch(`/api/producao/saidas/${candidate.rowIndex}`, {
+        await fetch(`/api/producao/saidas/${candidate.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -347,18 +347,14 @@ export default function RealizadoSaidasPage() {
       groups[groupKey].push(item);
     });
     
-    // Criar os grupos e ordenar itens dentro de cada grupo por rowIndex
     const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
       const [cliente, data, obs] = groupKey.split('|');
       
-      // Ordenar itens dentro do grupo por rowIndex
-      const sortedItems = [...groupItems].sort((a, b) => {
-        const rowIdA = a.rowIndex ?? Number.MAX_SAFE_INTEGER;
-        const rowIdB = b.rowIndex ?? Number.MAX_SAFE_INTEGER;
-        return rowIdA - rowIdB;
-      });
+      const sortedItems = [...groupItems].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
       
-      const minRowId = Math.min(...sortedItems.map(item => item.rowIndex ?? Number.MAX_SAFE_INTEGER));
+      const minRowId = sortedItems[0]?.createdAt ?? '';
       
       return {
         key: groupKey,
@@ -370,12 +366,9 @@ export default function RealizadoSaidasPage() {
       };
     });
     
-    // Ordenar grupos pelo menor rowIndex de cada grupo
-    const sortedGroups = groupsArray.sort((a, b) => {
-      const minRowIdA = a.minRowId ?? Number.MAX_SAFE_INTEGER;
-      const minRowIdB = b.minRowId ?? Number.MAX_SAFE_INTEGER;
-      return minRowIdA - minRowIdB;
-    });
+    const sortedGroups = groupsArray.sort((a, b) =>
+      (a.minRowId ?? '').localeCompare(b.minRowId ?? ''),
+    );
     
     // Remover minRowId do objeto final (usado apenas para ordenação)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -434,8 +427,8 @@ export default function RealizadoSaidasPage() {
                 >
                   {group.items.map((item, idx) => {
                     const saidaItem = item as unknown as PainelItem;
-                    const itemKey = `${saidaItem.produto}-${saidaItem.rowIndex ?? idx}`;
-                    const isItemLoading = loadingCardId === saidaItem.rowIndex;
+                    const itemKey = `${saidaItem.produto}-${saidaItem.id ?? idx}`;
+                    const isItemLoading = loadingCardId === saidaItem.id;
 
                     const detalhesProduzido = QuantityBreakdown.buildEntries([
                       { quantidade: saidaItem.realizado.caixas, unidade: 'cx' },

@@ -349,6 +349,23 @@ export class EmbalagemLoteRepository {
   ): Promise<void> {
     await this.updateOrdemProducaoId(id, pedidoEmbalagemId);
   }
+
+  async listOrdemProducaoIdsByProduzidoDate(dateIso: string): Promise<string[]> {
+    const start = `${dateIso}T00:00:00`;
+    const end = `${dateIso}T23:59:59.999`;
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select('ordem_producao_id')
+      .gte('produzido_em', start)
+      .lte('produzido_em', end);
+    if (error) throw new Error(`Erro ao listar lotes por data: ${error.message}`);
+    const ids = new Set<string>();
+    for (const row of data ?? []) {
+      const id = (row as { ordem_producao_id?: string | null }).ordem_producao_id;
+      if (id) ids.add(id);
+    }
+    return [...ids];
+  }
 }
 
 export const embalagemLoteRepository = new EmbalagemLoteRepository();

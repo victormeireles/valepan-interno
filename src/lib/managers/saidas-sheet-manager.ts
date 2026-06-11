@@ -190,10 +190,14 @@ export class SaidasSheetManager {
     payload: SaidaRealizadoPayload,
     photo?: PhotoPayload,
   ): Promise<void> {
-    const existingRow = await this.getRow(payload.rowIndex);
+    const rowNumber = Number(payload.id);
+    if (!Number.isFinite(rowNumber) || rowNumber < 2) {
+      throw new Error(`ID de linha inválido: ${payload.id}`);
+    }
+    const existingRow = await this.getRow(rowNumber);
     const sheets = await getGoogleSheetsClient();
     const now = new Date().toISOString();
-    const range = `${this.tabName}!K${payload.rowIndex}:Q${payload.rowIndex}`;
+    const range = `${this.tabName}!K${rowNumber}:Q${rowNumber}`;
     const realizedValues = this.toQuantityArray(payload.realizado);
 
     const fotoUrl = photo?.url ?? existingRow?.fotoUrl ?? '';
@@ -226,7 +230,7 @@ export class SaidasSheetManager {
     if (!dataISO || !cliente || !produto) return null;
 
     return {
-      rowIndex: rowNumber,
+      id: String(rowNumber),
       data: dataISO,
       cliente,
       observacao: (row[SAIDAS_SHEET_COLUMNS.observacao] || '').toString(),

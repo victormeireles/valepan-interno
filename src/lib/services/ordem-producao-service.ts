@@ -1,6 +1,6 @@
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { pedidoKeyToString } from '@/domain/embalagem/pedido-key';
-import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import type { OrdemProducaoKey } from '@/domain/types/ordem-producao';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import {
@@ -27,30 +27,22 @@ export class OrdemProducaoService {
     unidadesPorAssadeiraEfetiva: number;
     boxUnits: number | null;
   }> {
+    const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+    if (!resolved) {
+      throw new EstoqueResolverError(`Produto sem assadeira: ${produtoId}`);
+    }
+
     const supabase = supabaseClientFactory.createServiceRoleClient();
-    const { data: link, error } = await supabase
-      .from('produto_assadeiras')
-      .select('assadeira_id, unidades_por_assadeira, produtos(box_units), assadeiras(unidades_por_assadeira)')
-      .eq('produto_id', produtoId)
-      .order('created_at', { ascending: true })
-      .limit(1)
+    const { data: produto } = await supabase
+      .from('produtos')
+      .select('box_units')
+      .eq('id', produtoId)
       .maybeSingle();
-    if (error || !link) throw new EstoqueResolverError(`Produto sem assadeira: ${produtoId}`);
-    const row = link as unknown as {
-      assadeira_id: string;
-      unidades_por_assadeira: number | null;
-      produtos: { box_units: number | null } | null;
-      assadeiras: { unidades_por_assadeira: number | null } | null;
-    };
-    const fator = resolveUnidadesPorAssadeiraEfetiva({
-      produto: row.unidades_por_assadeira,
-      assadeira: row.assadeiras?.unidades_por_assadeira,
-    });
-    if (!fator) throw new EstoqueResolverError(`Fator assadeira inválido: ${produtoId}`);
+
     return {
-      assadeiraId: row.assadeira_id,
-      unidadesPorAssadeiraEfetiva: fator,
-      boxUnits: row.produtos?.box_units ?? null,
+      assadeiraId: resolved.assadeira_id,
+      unidadesPorAssadeiraEfetiva: resolved.unidades_efetivas,
+      boxUnits: produto?.box_units ?? null,
     };
   }
 

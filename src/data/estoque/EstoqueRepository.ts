@@ -190,6 +190,120 @@ export class EstoqueRepository {
     return (data ?? []).map((row) => this.mapSaldoRow(row as SaldoWithRelations));
   }
 
+  async findMovimentoById(id: string): Promise<EstoqueMovimentoRecord | null> {
+    const { data, error } = await this.supabase
+      .from('estoque_movimentos')
+      .select('*, tipos_estoque(nome), produtos(nome)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar movimento: ${error.message}`);
+    }
+
+    return data ? this.mapMovimentoRow(data as MovimentoWithRelations) : null;
+  }
+
+  async listSaidasByDate(dateISO: string): Promise<EstoqueMovimentoRecord[]> {
+    const inicio = `${dateISO}T00:00:00-03:00`;
+    const fim = `${dateISO}T23:59:59.999-03:00`;
+
+    const { data, error } = await this.supabase
+      .from('estoque_movimentos')
+      .select('*, tipos_estoque(nome), produtos(nome)')
+      .eq('origem', 'saida')
+      .gte('created_at', inicio)
+      .lte('created_at', fim)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar saídas: ${error.message}`);
+    }
+
+    return (data ?? [])
+      .map((row) => this.mapMovimentoRow(row as MovimentoWithRelations))
+      .filter((movimento) =>
+        movimento.delta.caixas < 0 ||
+        movimento.delta.pacotes < 0 ||
+        movimento.delta.unidades < 0 ||
+        movimento.delta.kg < 0,
+      );
+  }
+
+  async findSaidasMatching(input: {
+    data: string;
+    cliente: string;
+    produto: string;
+    quantidade: { caixas: number; pacotes: number; unidades: number; kg: number };
+  }): Promise<EstoqueMovimentoRecord[]> {
+    const saidas = await this.listSaidasByDate(input.data);
+    const clienteNorm = input.cliente.trim().toLowerCase();
+    const produtoNorm = input.produto.trim().toLowerCase();
+
+    return saidas.filter((movimento) => {
+      const clienteMatch =
+        (movimento.clienteDestino ?? '').trim().toLowerCase() === clienteNorm;
+      const produtoMatch = movimento.produtoNome.trim().toLowerCase() === produtoNorm;
+      const quantidade = {
+        caixas: Math.abs(movimento.delta.caixas || 0),
+        pacotes: Math.abs(movimento.delta.pacotes || 0),
+        unidades: Math.abs(movimento.delta.unidades || 0),
+        kg: Math.abs(movimento.delta.kg || 0),
+      };
+
+      return (
+        clienteMatch &&
+        produtoMatch &&
+        quantidade.caixas === (input.quantidade.caixas || 0) &&
+        quantidade.pacotes === (input.quantidade.pacotes || 0) &&
+        quantidade.unidades === (input.quantidade.unidades || 0) &&
+        quantidade.kg === (input.quantidade.kg || 0)
+      );
+    });
+  }
+
+  async deleteMovimento(id: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('estoque_movimentos')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao remover movimento: ${error.message}`);
+    }
+  }
+
+  async updateMovimentoDelta(
+    id: string,
+    delta: { caixas: number; pacotes: number; unidades: number; kg: number },
+    produtoId: string,
+  ): Promise<void> {
+    const movimento = await this.findMovimentoById(id);
+    if (!movimento) {
+      throw new Error('Movimento não encontrado');
+    }
+
+    const saldoAtual = await this.findSaldo(movimento.tipoEstoqueId, produtoId);
+
+    const { error } = await this.supabase
+      .from('estoque_movimentos')
+      .update({
+        delta_caixas: delta.caixas,
+        delta_pacotes: delta.pacotes,
+        delta_unidades: delta.unidades,
+        delta_kg: delta.kg,
+        saldo_caixas: saldoAtual?.caixas ?? 0,
+        saldo_pacotes: saldoAtual?.pacotes ?? 0,
+        saldo_unidades: saldoAtual?.unidades ?? 0,
+        saldo_kg: saldoAtual?.kg ?? 0,
+      })
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar movimento: ${error.message}`);
+    }
+  }
+
   async listMovimentos(filters: ListMovimentosFilters): Promise<EstoqueMovimentoRecord[]> {
     let query = this.supabase
       .from('estoque_movimentos')

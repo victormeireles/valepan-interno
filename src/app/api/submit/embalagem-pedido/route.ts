@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { calculateLoteFromDataFabricacao } from '@/lib/googleSheets';
+import { loteFromDataFabricacaoEtiqueta } from '@/domain/embalagem/lote-from-data-fabricacao';
 import { PedidoEmbalagemPayload } from '@/config/embalagem';
 import {
   ordemProducaoMetaService,
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     revalidatePath('/api/painel/embalagem');
 
-    const newLote = calculateLoteFromDataFabricacao(payload.dataFabricacao);
+    const newLote = loteFromDataFabricacaoEtiqueta(payload.dataFabricacao) ?? 0;
     return NextResponse.json({ message: 'Pedido salvo com sucesso', lote: newLote });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

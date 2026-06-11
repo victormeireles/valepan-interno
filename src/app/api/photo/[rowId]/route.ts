@@ -4,13 +4,25 @@ import { deletePhotoFromDrive, getPhotoInfo } from '@/lib/googleDrive';
 import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
 import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
-import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
+import { parseSaidaId } from '@/domain/saidas/saida-id';
+import { deleteSaidaPhoto, getSaidaPhoto } from '@/lib/saidas/saida-photo-handler';
 
-const EMBALAGEM_GONE_MESSAGE =
-  'Rota legada descontinuada — fotos de embalagem usam loteId no Supabase (Fase C).';
+type PhotoType =
+  | 'pacote'
+  | 'etiqueta'
+  | 'pallet'
+  | 'forno'
+  | 'fermentacao'
+  | 'resfriamento'
+  | 'saida';
 
-function embalagemGone() {
-  return NextResponse.json({ error: EMBALAGEM_GONE_MESSAGE }, { status: 410 });
+function isValidPhotoType(value: string | null): value is PhotoType {
+  return (
+    value !== null &&
+    ['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento', 'saida'].includes(
+      value,
+    )
+  );
 }
 
 export async function GET(
@@ -19,34 +31,18 @@ export async function GET(
 ) {
   try {
     const { searchParams } = new URL(request.url);
-    const processType = (searchParams.get('process') as string) || 'embalagem';
-    if (processType === 'embalagem') {
-      return embalagemGone();
+    const processType = searchParams.get('process');
+    if (!processType || processType === 'embalagem') {
+      return NextResponse.json(
+        { error: 'Fotos de embalagem usam loteId via /api/upload/photo e PATCH no lote.' },
+        { status: 400 },
+      );
     }
 
     const { rowId } = await context.params;
-    const photoType = searchParams.get('type') as
-      | 'pacote'
-      | 'etiqueta'
-      | 'pallet'
-      | 'forno'
-      | 'fermentacao'
-      | 'resfriamento'
-      | 'saida'
-      | null;
+    const photoType = searchParams.get('type');
 
-    const rowNumber = parseInt(rowId);
-
-    if (isNaN(rowNumber) || rowNumber < 2) {
-      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
-    }
-
-    if (
-      !photoType ||
-      !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento', 'saida'].includes(
-        photoType,
-      )
-    ) {
+    if (!isValidPhotoType(photoType)) {
       return NextResponse.json(
         {
           error:
@@ -56,10 +52,20 @@ export async function GET(
       );
     }
 
-    let config;
     if (processType === 'saidas') {
-      config = SAIDAS_SHEET_CONFIG.destino;
-    } else if (processType === 'forno') {
+      if (!parseSaidaId(rowId)) {
+        return NextResponse.json({ error: 'ID de saída inválido' }, { status: 400 });
+      }
+      return NextResponse.json(await getSaidaPhoto());
+    }
+
+    const rowNumber = parseInt(rowId);
+    if (isNaN(rowNumber) || rowNumber < 2) {
+      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
+    }
+
+    let config;
+    if (processType === 'forno') {
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
@@ -68,36 +74,18 @@ export async function GET(
     } else {
       return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
     }
+
     const { spreadsheetId, tabName } = config;
     const sheets = await getGoogleSheetsClient();
 
     let startColumn: string;
-    let columnsCount = 3;
-    if (processType === 'saidas') {
-      startColumn = 'P';
-      columnsCount = 2;
-    } else if (processType === 'forno') {
+    const columnsCount = 3;
+    if (processType === 'forno') {
       startColumn = 'L';
     } else if (processType === 'fermentacao') {
       startColumn = 'S';
-    } else if (processType === 'resfriamento') {
-      startColumn = 'Z';
     } else {
-      switch (photoType) {
-        case 'pacote':
-          startColumn = 'R';
-          break;
-        case 'etiqueta':
-          startColumn = 'U';
-          break;
-        case 'pallet':
-          startColumn = 'X';
-          break;
-        case 'saida':
-          throw new Error('Processo inválido para tipo saida');
-        default:
-          throw new Error('Tipo de foto inválido');
-      }
+      startColumn = 'Z';
     }
 
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
@@ -121,19 +109,18 @@ export async function GET(
     const photoData = {
       photoUrl: values[0] || '',
       photoId: values[1] || '',
-      photoUploadedAt: columnsCount === 3 ? values[2] || '' : '',
+      photoUploadedAt: values[2] || '',
       photoType,
     };
 
     if (photoData.photoId) {
       const photoInfo = await getPhotoInfo(photoData.photoId);
       if (!photoInfo) {
-        const emptyRow = columnsCount === 3 ? ['', '', ''] : ['', ''];
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [emptyRow] },
+          requestBody: { values: [['', '', '']] },
         });
 
         return NextResponse.json({
@@ -161,34 +148,18 @@ export async function DELETE(
 ) {
   try {
     const { searchParams } = new URL(request.url);
-    const processType = (searchParams.get('process') as string) || 'embalagem';
-    if (processType === 'embalagem') {
-      return embalagemGone();
+    const processType = searchParams.get('process');
+    if (!processType || processType === 'embalagem') {
+      return NextResponse.json(
+        { error: 'Fotos de embalagem usam loteId via /api/upload/photo e PATCH no lote.' },
+        { status: 400 },
+      );
     }
 
     const { rowId } = await context.params;
-    const photoType = searchParams.get('type') as
-      | 'pacote'
-      | 'etiqueta'
-      | 'pallet'
-      | 'forno'
-      | 'fermentacao'
-      | 'resfriamento'
-      | 'saida'
-      | null;
+    const photoType = searchParams.get('type');
 
-    const rowNumber = parseInt(rowId);
-
-    if (isNaN(rowNumber) || rowNumber < 2) {
-      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
-    }
-
-    if (
-      !photoType ||
-      !['pacote', 'etiqueta', 'pallet', 'forno', 'fermentacao', 'resfriamento', 'saida'].includes(
-        photoType,
-      )
-    ) {
+    if (!isValidPhotoType(photoType)) {
       return NextResponse.json(
         {
           error:
@@ -198,10 +169,20 @@ export async function DELETE(
       );
     }
 
-    let config;
     if (processType === 'saidas') {
-      config = SAIDAS_SHEET_CONFIG.destino;
-    } else if (processType === 'forno') {
+      if (!parseSaidaId(rowId)) {
+        return NextResponse.json({ error: 'ID de saída inválido' }, { status: 400 });
+      }
+      return NextResponse.json(await deleteSaidaPhoto());
+    }
+
+    const rowNumber = parseInt(rowId);
+    if (isNaN(rowNumber) || rowNumber < 2) {
+      return NextResponse.json({ error: 'ID de linha inválido' }, { status: 400 });
+    }
+
+    let config;
+    if (processType === 'forno') {
       config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
     } else if (processType === 'fermentacao') {
       config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
@@ -210,36 +191,18 @@ export async function DELETE(
     } else {
       return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
     }
+
     const { spreadsheetId, tabName } = config;
     const sheets = await getGoogleSheetsClient();
 
     let startColumn: string;
-    let columnsCount = 3;
-    if (processType === 'saidas') {
-      startColumn = 'P';
-      columnsCount = 2;
-    } else if (processType === 'forno') {
+    const columnsCount = 3;
+    if (processType === 'forno') {
       startColumn = 'L';
     } else if (processType === 'fermentacao') {
       startColumn = 'S';
-    } else if (processType === 'resfriamento') {
-      startColumn = 'Z';
     } else {
-      switch (photoType) {
-        case 'pacote':
-          startColumn = 'R';
-          break;
-        case 'etiqueta':
-          startColumn = 'U';
-          break;
-        case 'pallet':
-          startColumn = 'X';
-          break;
-        case 'saida':
-          throw new Error('Processo inválido para tipo saida');
-        default:
-          throw new Error('Tipo de foto inválido');
-      }
+      startColumn = 'Z';
     }
 
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
@@ -269,12 +232,11 @@ export async function DELETE(
       }
     }
 
-    const emptyRow = columnsCount === 3 ? ['', '', ''] : ['', ''];
     await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
       valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [emptyRow] },
+      requestBody: { values: [['', '', '']] },
     });
 
     return NextResponse.json({

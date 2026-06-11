@@ -459,7 +459,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
 };
 
 type PainelSaidaItem = {
-  rowIndex?: number;
+  id?: string;
   data?: string;
   cliente?: string;
   produto?: string;
@@ -502,7 +502,7 @@ async function anexarFotoNaSaida({
         (!row.saidaUpdatedAt || !row.fotoUrl),
     );
 
-  if (!candidate?.rowIndex) {
+  if (!candidate?.id) {
     throw new Error(
       'Saída criada, mas não foi possível identificar a linha para anexar foto.',
     );
@@ -510,7 +510,7 @@ async function anexarFotoNaSaida({
 
   const formData = new FormData();
   formData.append('photo', foto);
-  formData.append('rowId', candidate.rowIndex.toString());
+  formData.append('rowId', candidate.id);
   formData.append('photoType', 'saida');
   formData.append('process', 'saidas');
 
@@ -525,7 +525,7 @@ async function anexarFotoNaSaida({
     );
   }
 
-  await fetch(`/api/producao/saidas/${candidate.rowIndex}`, {
+  await fetch(`/api/producao/saidas/${candidate.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Sistema de Produção - Valepan",
   description: "Sistema mobile-first para registro de produção por etapas",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

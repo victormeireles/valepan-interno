@@ -1,0 +1,420 @@
+# Regras de Assadeira por Categoria + Peso (Fase D) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Resolver assadeiras por cascata (exceção produto → regra categoria+peso), com snapshot em ordens e UI de regras + badges herdado/exceção.
+
+**Architecture:** Nova tabela `categoria_assadeira_regras` + `AssadeiraResolver` em `src/domain/assadeiras/`. `OrdemProducaoService.resolveAssadeiraDefault` delega ao resolver. Fase D2 entrega `/config/regras-assadeiras`. Fase D3 ajusta badges em `/config/produtos` e script de migração legado.
+
+**Tech Stack:** Next.js 15, Supabase, Zod, Vitest, Tailwind, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-11-regras-assadeiras-categoria-peso-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql` | Migration + RLS |
+| `src/domain/assadeiras/produto-peso.ts` | `resolvePesoGramas` |
+| `src/domain/assadeiras/produto-peso.test.ts` | Testes peso |
+| `src/domain/assadeiras/assadeira-resolver.ts` | `AssadeiraResolver` |
+| `src/domain/assadeiras/assadeira-resolver.test.ts` | Testes resolver |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.ts` | Zod + overlap check |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts` | Testes validação |
+| `src/lib/services/ordem-producao-service.ts` | Delegar ao resolver |
+| `src/app/actions/categoria-assadeira-regras-actions.ts` | CRUD regras |
+| `src/app/actions/produto-assadeiras-actions.ts` | `getProdutosComAssadeiras` + origem |
+| `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts` | Usar resolver |
+| `src/components/RegrasAssadeiras/*` | UI regras (D2) |
+| `src/app/config/regras-assadeiras/*` | Página regras (D2) |
+| `src/components/ProdutosConfig/AssadeiraStatusBadge.tsx` | Badge herdado/exceção (D3) |
+| `scripts/migrate-produto-assadeiras-to-excecoes.ts` | Relatório legado (D3) |
+
+---
+
+## Fase D1 — Resolver + banco
+
+### Task 1: Migration `categoria_assadeira_regras`
+
+**Files:**
+- Create: `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql`
+- Modify: `src/types/database.ts`, `types/database.ts` (via gen:types)
+
+- [ ] **Step 1: Criar SQL** (conteúdo conforme spec — tabela, comments, RLS policies)
+
+- [ ] **Step 2: Aplicar no Supabase SQL Editor**
+
+- [ ] **Step 3: Regenerar types**
+
+Run: `npm run gen:types`  
+Expected: `Database['public']['Tables']['categoria_assadeira_regras']` existe
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql src/types/database.ts types/database.ts
+git commit -m "chore(db): tabela categoria_assadeira_regras com RLS"
+```
+
+---
+
+### Task 2: `resolvePesoGramas`
+
+**Files:**
+- Create: `src/domain/assadeiras/produto-peso.ts`
+- Create: `src/domain/assadeiras/produto-peso.test.ts`
+
+- [ ] **Step 1: Testes que falham**
+
+```typescript
+// src/domain/assadeiras/produto-peso.test.ts
+import { describe, expect, it } from 'vitest';
+import { resolvePesoGramas } from './produto-peso';
+
+describe('resolvePesoGramas', () => {
+  it('usa unit_weight em gramas quando >= 10', () => {
+    expect(resolvePesoGramas({ unit_weight: 65, nome: 'HB Brioche 65g' })).toBe(65);
+  });
+
+  it('converte unit_weight em kg quando < 10', () => {
+    expect(resolvePesoGramas({ unit_weight: 0.065, nome: 'HB Brioche 65g' })).toBe(65);
+  });
+
+  it('extrai gramatura do nome quando unit_weight null', () => {
+    expect(resolvePesoGramas({ unit_weight: null, nome: 'HB Brioche 65g' })).toBe(65);
+  });
+
+  it('retorna null sem peso e sem gramatura no nome', () => {
+    expect(resolvePesoGramas({ unit_weight: null, nome: 'HB Gergelim' })).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar — deve falhar**
+
+Run: `npm test -- src/domain/assadeiras/produto-peso.test.ts`
+
+- [ ] **Step 3: Implementar**
+
+```typescript
+// src/domain/assadeiras/produto-peso.ts
+export type ProdutoPesoInput = {
+  unit_weight: number | null;
+  nome: string;
+};
+
+const GRAMATURA_NOME_REGEX = /(\d+(?:[.,]\d+)?)\s*g\b/i;
+
+export function extractPesoGramasFromNome(nome: string): number | null {
+  const match = nome.match(GRAMATURA_NOME_REGEX);
+  if (!match) return null;
+  const normalized = match[1].replace(',', '.');
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value);
+}
+
+export function resolvePesoGramas(input: ProdutoPesoInput): number | null {
+  if (input.unit_weight != null && input.unit_weight > 0) {
+    if (input.unit_weight < 10) {
+      return Math.round(input.unit_weight * 1000);
+    }
+    return Math.round(input.unit_weight);
+  }
+  return extractPesoGramasFromNome(input.nome);
+}
+```
+
+- [ ] **Step 4: Rodar — deve passar**
+
+- [ ] **Step 5: Commit**
+
+---
+
+### Task 3: `AssadeiraResolver`
+
+**Files:**
+- Create: `src/domain/assadeiras/assadeira-resolver.ts`
+- Create: `src/domain/assadeiras/assadeira-resolver.test.ts`
+
+- [ ] **Step 1: Testes com mocks do Supabase** — usar padrão de testes existentes ou extrair queries para métodos injetáveis. Alternativa pragmática: testes unitários de funções puras `mapVinculo` + teste de integração leve.
+
+Implementar `AssadeiraResolver` como classe com `createServiceRoleClient` injetável para testes:
+
+```typescript
+// src/domain/assadeiras/assadeira-resolver.ts
+import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
+import { resolvePesoGramas } from '@/domain/assadeiras/produto-peso';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+
+export type AssadeiraVinculoOrigem = 'excecao' | 'regra';
+
+export type AssadeiraVinculoResolvido = {
+  assadeira_id: string;
+  assadeira_nome: string;
+  unidades_por_assadeira: number | null;
+  unidades_efetivas: number;
+  assadeira_padrao: number | null;
+  origem: AssadeiraVinculoOrigem;
+};
+
+export class AssadeiraResolver {
+  async resolveForProduto(produtoId: string): Promise<AssadeiraVinculoResolvido[]> {
+    const excecoes = await this.loadExcecoes(produtoId);
+    if (excecoes.length > 0) return excecoes;
+
+    const produto = await this.loadProduto(produtoId);
+    if (!produto) return [];
+
+    const pesoG = resolvePesoGramas({
+      unit_weight: produto.unit_weight,
+      nome: produto.nome,
+    });
+    if (pesoG == null) return [];
+
+    return this.loadRegras(produto.categoria_id, pesoG);
+  }
+
+  async resolveDefaultForProduto(
+    produtoId: string,
+  ): Promise<AssadeiraVinculoResolvido | null> {
+    const list = await this.resolveForProduto(produtoId);
+    return list[0] ?? null;
+  }
+
+  // loadExcecoes, loadProduto, loadRegras — queries Supabase conforme spec
+}
+
+export const assadeiraResolver = new AssadeiraResolver();
+```
+
+Testes mínimos (mock via vitest vi.spyOn nos métodos privados ou test doubles):
+
+```typescript
+describe('AssadeiraResolver', () => {
+  it('exceção prevalece sobre regra', async () => { /* ... */ });
+  it('usa regra quando sem exceção', async () => { /* ... */ });
+  it('retorna vazio sem exceção e sem regra', async () => { /* ... */ });
+});
+```
+
+- [ ] **Step 2–4: Implementar, testar, commit**
+
+```bash
+git commit -m "feat(assadeiras): AssadeiraResolver com cascata exceção → regra"
+```
+
+---
+
+### Task 4: Integrar `OrdemProducaoService` + API assadeiras
+
+**Files:**
+- Modify: `src/lib/services/ordem-producao-service.ts`
+- Modify: `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts`
+
+- [ ] **Step 1: Refatorar `resolveAssadeiraDefault`**
+
+```typescript
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
+
+async resolveAssadeiraDefault(produtoId: string): Promise<{
+  assadeiraId: string;
+  unidadesPorAssadeiraEfetiva: number;
+  boxUnits: number | null;
+}> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+  if (!resolved) throw new EstoqueResolverError(`Produto sem assadeira: ${produtoId}`);
+
+  const { data: produto } = await supabase
+    .from('produtos')
+    .select('box_units')
+    .eq('id', produtoId)
+    .maybeSingle();
+
+  return {
+    assadeiraId: resolved.assadeira_id,
+    unidadesPorAssadeiraEfetiva: resolved.unidades_efetivas,
+    boxUnits: produto?.box_units ?? null,
+  };
+}
+```
+
+- [ ] **Step 2: API GET assadeiras — retornar lista do resolver**
+
+```typescript
+const vinculos = await assadeiraResolver.resolveForProduto(produto.id);
+const assadeiras = vinculos.map((v) => ({
+  id: v.assadeira_id,
+  nome: v.assadeira_nome,
+  unidadesPorAssadeiraEfetiva: v.unidades_efetivas,
+  origem: v.origem,
+}));
+```
+
+- [ ] **Step 3: Rodar testes existentes**
+
+Run: `npm test -- src/domain/assadeiras/ src/domain/producao/assadeira-factor.test.ts`
+
+- [ ] **Step 4: Commit**
+
+---
+
+## Fase D2 — UI regras
+
+### Task 5: Validação Zod + overlap
+
+**Files:**
+- Create: `src/domain/assadeiras/categoria-assadeira-regra-validation.ts`
+- Create: `src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts`
+
+- [ ] **Step 1: Schema**
+
+```typescript
+export const categoriaAssadeiraRegraFormSchema = z.object({
+  categoria_id: z.string().uuid(),
+  peso_min_g: z.number().min(0),
+  peso_max_g: z.number().min(0),
+  assadeira_id: z.string().uuid(),
+  unidades_por_assadeira: z.number().int().min(1).nullable().optional(),
+  ordem: z.number().int().min(0).default(0),
+  ativo: z.boolean().default(true),
+}).refine((d) => d.peso_max_g >= d.peso_min_g, {
+  message: 'Peso máximo deve ser >= peso mínimo',
+  path: ['peso_max_g'],
+});
+
+export function rangesOverlap(
+  a: { peso_min_g: number; peso_max_g: number },
+  b: { peso_min_g: number; peso_max_g: number },
+): boolean {
+  return a.peso_min_g <= b.peso_max_g && b.peso_min_g <= a.peso_max_g;
+}
+```
+
+- [ ] **Step 2: Testes overlap + commit**
+
+---
+
+### Task 6: Server Actions CRUD regras
+
+**Files:**
+- Create: `src/app/actions/categoria-assadeira-regras-actions.ts`
+
+Actions: `getCategoriaAssadeiraRegras`, `createCategoriaAssadeiraRegra`, `updateCategoriaAssadeiraRegra`, `deactivateCategoriaAssadeiraRegra`
+
+Antes de insert/update: buscar regras ativas da mesma `categoria_id` e rejeitar se `rangesOverlap`.
+
+`revalidatePath('/config/regras-assadeiras')`
+
+---
+
+### Task 7: UI `/config/regras-assadeiras`
+
+**Files:**
+- Create: `src/app/config/regras-assadeiras/page.tsx`
+- Create: `src/app/config/regras-assadeiras/RegrasAssadeirasClient.tsx`
+- Create: `src/components/RegrasAssadeiras/RegraAssadeiraModal.tsx`
+- Create: `src/components/RegrasAssadeiras/RegrasAssadeirasTable.tsx`
+- Modify: `src/components/Config/ConfigNav.tsx` — item `rule` "Regras de assadeira"
+
+Padrão visual: `AssadeirasClient` (busca, tabela desktop, cards mobile, modal).
+
+Colunas: Categoria · Faixa peso (g) · Assadeira · Pães efetivos · Status · Ações
+
+---
+
+## Fase D3 — Badges + migração legado
+
+### Task 8: Enriquecer `getProdutosComAssadeiras`
+
+**Files:**
+- Modify: `src/app/actions/produto-assadeiras-actions.ts`
+- Modify: `src/components/ProdutosConfig/AssadeiraStatusBadge.tsx`
+
+Adicionar ao resumo:
+
+```typescript
+export type ProdutoComAssadeirasResumo = {
+  // ...existente
+  assadeiraOrigem: 'excecao' | 'regra' | 'pendente';
+  assadeiraResolvidaCount: number;
+};
+```
+
+Lógica por produto:
+```
+links manuais em produto_assadeiras.length > 0 → excecao, count = links.length
+senão resolver.count > 0 → regra, count = resolver.length
+senão → pendente, count = 0
+```
+
+Badge:
+- `pendente` → Sem assadeira (amber)
+- `excecao` → Exceção · N assadeiras (violet ou slate distinto)
+- `regra` → Regra · N assadeiras (blue/emerald)
+
+---
+
+### Task 9: Ajustar modal Assadeiras do produto
+
+**Files:**
+- Modify: `src/components/ProdutosConfig/ProdutoAssadeirasConfigModal.tsx`
+
+- Helper text: "Vínculos aqui são exceções à regra de categoria + peso."
+- Botão **Remover todas as exceções** → `deleteAllProdutoAssadeiraLinks(produtoId)` (nova action)
+- Se produto sem exceções mas com regra: empty state mostra preview da regra resolvida (readonly)
+
+---
+
+### Task 10: Script migração legado
+
+**Files:**
+- Create: `scripts/migrate-produto-assadeiras-to-excecoes.ts`
+
+```typescript
+// Para cada produto com produto_assadeiras:
+// 1. resolver sem considerar exceções (temporário) ou comparar com regra
+// 2. log: produto, manual, regra, match?
+// --dry-run default
+```
+
+Adicionar em `package.json`:
+
+```json
+"migrate:produto-assadeiras-excecoes": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts",
+"migrate:produto-assadeiras-excecoes:dry": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts --dry-run"
+```
+
+---
+
+### Task 11: Verificação final
+
+- [ ] `npm test -- src/domain/assadeiras/`
+- [ ] `npm run build`
+- [ ] Manual:
+  1. Criar regra categoria+faixa → produto sem exceção resolve
+  2. Adicionar exceção → prevalece
+  3. Remover exceção → volta à regra
+  4. Criar ordem → `assadeira_id` fixo; alterar regra não muda ordem antiga
+  5. Badge correto na listagem
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Tabela + RLS | Task 1 |
+| resolvePesoGramas | Task 2 |
+| AssadeiraResolver cascata | Task 3 |
+| Integração runtime | Task 4 |
+| Snapshot ordens (sem mudança) | Task 4 (já existente) |
+| UI regras | Tasks 5–7 |
+| Badges herdado/exceção/pendente | Task 8 |
+| Modal exceção + remover | Task 9 |
+| Script migração | Task 10 |
+| Faixas não sobrepostas | Task 5–6 |
+| Opção C regra muda / ordem intocável | Task 3–4 + manual Task 11 |

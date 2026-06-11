@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
+import { revalidatePath } from 'next/cache';
 import { NovaSaidaPayload } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
-import { estoqueService } from '@/lib/services/estoque-service';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -39,29 +39,13 @@ export async function POST(request: Request) {
       );
     }
 
-    await saidasSheetManager.appendNovaSaida(payload);
-
-    // Obter tipo de estoque do cliente
-    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(payload.cliente);
-    const clienteEstoque = tipoEstoque ?? payload.cliente;
-
-    // Atualizar estoque (debitar quantidade da saída usando tipo de estoque)
-    await estoqueService.aplicarDelta({
-      cliente: clienteEstoque,
+    const saida = await saidaMovimentoService.registrarSaida({
+      data: payload.data,
+      cliente: payload.cliente,
       produto: payload.produto,
-      delta: {
-        caixas: -(payload.meta.caixas || 0),
-        pacotes: -(payload.meta.pacotes || 0),
-        unidades: -(payload.meta.unidades || 0),
-        kg: -(payload.meta.kg || 0),
-      },
-      allowNegative: true,
-      origem: 'saida',
-      clienteDestino: payload.cliente,
+      quantidade: payload.meta,
     });
 
-    // Só envia notificação se não foi solicitado para pular
-    // (quando há foto, a notificação será enviada no PUT)
     if (!payload.skipNotification) {
       await whatsAppNotificationService.notifySaidasProduction({
         produto: payload.produto,
@@ -71,14 +55,15 @@ export async function POST(request: Request) {
         data: payload.data,
         observacao: payload.observacao,
         origem: 'criada',
+        fotoUrl: payload.fotoUrl,
       });
     }
 
-    return NextResponse.json({ message: 'Saída registrada com sucesso' });
+    revalidatePath('/api/painel/estoque');
+
+    return NextResponse.json({ message: 'Saída registrada com sucesso', id: saida.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-

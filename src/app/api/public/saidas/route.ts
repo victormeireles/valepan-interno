@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { NovaSaidaPayload } from '@/domain/types/saidas';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
-import { estoqueService } from '@/lib/services/estoque-service';
 import { apiKeyAuthService } from '@/lib/services/api-key-auth-service';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -19,13 +18,8 @@ function hasQuantidadeValida(meta: NovaSaidaPayload['meta']): boolean {
   );
 }
 
-/**
- * Endpoint público para criação de saídas via API externa
- * Requer autenticação via API Key no header Authorization ou X-API-Key
- */
 export async function POST(request: Request) {
   try {
-    // Validar autenticação
     if (!apiKeyAuthService.validateRequest(request)) {
       return NextResponse.json(
         { error: 'Não autorizado. Forneça uma API key válida no header Authorization ou X-API-Key' },
@@ -35,7 +29,6 @@ export async function POST(request: Request) {
 
     const payload = (await request.json()) as NovaSaidaPayload;
 
-    // Validações de payload
     if (!payload || !isValidDateISO(payload.data)) {
       return NextResponse.json(
         { error: 'Data inválida. Use o formato YYYY-MM-DD' },
@@ -57,29 +50,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Registrar saída na planilha
-    await saidasSheetManager.appendNovaSaida(payload);
-
-    // Obter tipo de estoque do cliente
-    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(payload.cliente);
-    const clienteEstoque = tipoEstoque ?? payload.cliente;
-
-    // Atualizar estoque (debitar quantidade da saída usando tipo de estoque)
-    await estoqueService.aplicarDelta({
-      cliente: clienteEstoque,
+    const saida = await saidaMovimentoService.registrarSaida({
+      data: payload.data,
+      cliente: payload.cliente,
       produto: payload.produto,
-      delta: {
-        caixas: -(payload.meta.caixas || 0),
-        pacotes: -(payload.meta.pacotes || 0),
-        unidades: -(payload.meta.unidades || 0),
-        kg: -(payload.meta.kg || 0),
-      },
-      allowNegative: true,
-      origem: 'saida',
-      clienteDestino: payload.cliente,
+      quantidade: payload.meta,
     });
 
-    // Enviar notificação WhatsApp (se não foi solicitado para pular)
     if (!payload.skipNotification) {
       await whatsAppNotificationService.notifySaidasProduction({
         produto: payload.produto,
@@ -100,6 +77,7 @@ export async function POST(request: Request) {
         success: true,
         message: 'Saída registrada com sucesso',
         data: {
+          id: saida.id,
           data: payload.data,
           cliente: payload.cliente,
           produto: payload.produto,
@@ -117,4 +95,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -1,0 +1,259 @@
+# Design: Regras de Assadeira por Categoria + Peso (Fase D)
+
+**Data:** 2026-06-11  
+**Status:** Aprovado pelo stakeholder  
+**Relacionado:** Fase A (tipos de assadeira) · Fase B (config produtos `/config/produtos`) · Fase C futura (cliente)
+
+## Contexto
+
+Hoje a classificação produto → assadeira é feita **manualmente** via `produto_assadeiras`. Na operação existe uma regra de negócio:
+
+- Por **categoria + gramatura/peso**, há **uma ou mais assadeiras padrão**
+- Alguns produtos têm **exceções** explícitas
+
+O runtime já usa `produto_assadeiras` em `resolveAssadeiraDefault` (`OrdemProducaoService`). Ordens de produção **gravam** `assadeira_id` na criação — histórico preservado naturalmente.
+
+**Objetivo da Fase D:** codificar regras categoria × peso, resolver dinamicamente em runtime, e tratar `produto_assadeiras` como exceções manuais.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Estratégia | **Resolver dinâmico** (não materializar no sync ERP) |
+| Hierarquia | 1) exceção em `produto_assadeiras` → 2) regra categoria+peso → 3) pendente |
+| Regra muda | Produtos **sem exceção** passam a usar regra nova **imediatamente** |
+| Ordens existentes | **Não mudam** — `ordens_producao.assadeira_id` é snapshot na criação |
+| Exceções manuais | Sempre prevalecem sobre regra |
+| Gramatura | `produtos.unit_weight` (ERP); se null, tentar extrair do nome; senão pendente |
+| Faixas de peso | **Contínuas inclusive** (`peso_min_g` ≤ peso ≤ `peso_max_g`) |
+| Multi-assadeira na regra | Suportado na tabela; runtime retorna lista ordenada por `ordem` |
+| Default em pedidos | Primeira assadeira da lista resolvida (comportamento atual) |
+| Terminologia UI | **Pães por assadeira** — nunca "buracos" |
+
+## Fora de escopo (Fase D)
+
+- Fase C: regras por cliente (`cliente_assadeiras` / bloqueios)
+- Deprecar `produtos.unidades_assadeira` no código legado
+- Consumo automático de estoque de assadeiras
+- Escolha de assadeira pelo usuário no pedido quando há múltiplas (manter primeira por ora)
+- Materializar vínculos no sync ERP com job de refresh
+
+## Schema
+
+### Nova tabela: `categoria_assadeira_regras`
+
+```sql
+CREATE TABLE categoria_assadeira_regras (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  categoria_id uuid NOT NULL REFERENCES categorias(id) ON DELETE CASCADE,
+  peso_min_g numeric NOT NULL CHECK (peso_min_g >= 0),
+  peso_max_g numeric NOT NULL CHECK (peso_max_g >= peso_min_g),
+  assadeira_id uuid NOT NULL REFERENCES assadeiras(id) ON DELETE RESTRICT,
+  unidades_por_assadeira integer CHECK (unidades_por_assadeira IS NULL OR unidades_por_assadeira >= 1),
+  ordem integer NOT NULL DEFAULT 0,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (categoria_id, peso_min_g, peso_max_g, assadeira_id)
+);
+
+COMMENT ON TABLE categoria_assadeira_regras IS
+  'Regra padrão: categoria + faixa de peso (gramas) → tipo(s) de assadeira';
+
+COMMENT ON COLUMN categoria_assadeira_regras.unidades_por_assadeira IS
+  'Override opcional de pães por assadeira; null herda de assadeiras.unidades_por_assadeira';
+
+ALTER TABLE categoria_assadeira_regras ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "categoria_assadeira_regras_select" ON categoria_assadeira_regras
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "categoria_assadeira_regras_insert" ON categoria_assadeira_regras
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "categoria_assadeira_regras_update" ON categoria_assadeira_regras
+  FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "categoria_assadeira_regras_delete" ON categoria_assadeira_regras
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+```
+
+Após migration: `npm run gen:types`.
+
+**Validação de negócio (aplicação):** faixas da mesma categoria não devem se sobrepor quando `ativo = true`. Validar no Server Action antes de insert/update.
+
+### `produto_assadeiras` — nova semântica
+
+| Antes | Depois |
+|-------|--------|
+| Única fonte de vínculo | **Exceção manual** do produto |
+| Preenchido manualmente para todos | Só produtos que fogem da regra padrão |
+
+Opcional (Fase D3): coluna `origem text CHECK (origem IN ('manual', 'migrado')) DEFAULT 'manual'` para distinguir dados legados da classificação manual atual.
+
+### Peso efetivo do produto
+
+```
+peso_g = produtos.unit_weight
+      ?? extrairGramaturaDoNome(produtos.nome)  -- fallback existente no domínio estoque
+      ?? null  → produto pendente
+```
+
+Converter `unit_weight` para gramas se o ERP armazenar em kg (confirmar unidade na integração; documentar na migration se necessário).
+
+## Arquitetura
+
+### Resolver central
+
+```
+src/domain/assadeiras/
+  assadeira-resolver.ts           # AssadeiraResolver class
+  assadeira-resolver.test.ts
+  produto-peso.ts                 # resolvePesoGramas(produto)
+```
+
+**Interface:**
+
+```typescript
+type AssadeiraVinculoResolvido = {
+  assadeira_id: string;
+  assadeira_nome: string;
+  unidades_por_assadeira: number | null;  // override do vínculo/regra
+  unidades_efetivas: number;
+  origem: 'excecao' | 'regra';
+};
+
+class AssadeiraResolver {
+  resolveForProduto(produtoId: string): Promise<AssadeiraVinculoResolvido[]>;
+  resolveDefaultForProduto(produtoId: string): Promise<AssadeiraVinculoResolvido | null>;
+}
+```
+
+**Algoritmo `resolveForProduto`:**
+
+```
+1. SELECT produto_assadeiras WHERE produto_id = ?
+   JOIN assadeiras WHERE ativo = true
+   ORDER BY created_at ASC
+   → se length > 0: return com origem = 'excecao'
+
+2. Carregar produto (categoria_id, unit_weight, nome)
+   peso_g = resolvePesoGramas(produto)
+   → se peso_g IS NULL: return []
+
+3. SELECT categoria_assadeira_regras
+   WHERE categoria_id = ? AND ativo = true
+     AND peso_min_g <= peso_g AND peso_max_g >= peso_g
+   JOIN assadeiras WHERE ativo = true
+   ORDER BY ordem ASC, created_at ASC
+   → return com origem = 'regra'
+
+4. return []
+```
+
+**Fator efetivo:** `resolveUnidadesPorAssadeiraEfetiva({ produto: override, assadeira: tipo.unidades_por_assadeira })`.
+
+### Integração runtime
+
+Substituir lógica interna de `OrdemProducaoService.resolveAssadeiraDefault` para delegar a `AssadeiraResolver.resolveDefaultForProduto`.
+
+Pontos de consumo (inalterados na interface pública):
+
+- `src/lib/services/ordem-producao-service.ts`
+- `src/lib/services/ordem-producao-meta-service.ts`
+- `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts`
+- `src/app/api/submit/forno-pedido/route.ts`
+- `src/app/api/submit/embalagem-pedido/route.ts` (via meta service)
+
+**Snapshot em ordens:** nenhuma alteração — `assadeira_id` já gravado na criação. Regra nova não retroage.
+
+### Fluxo de dados
+
+```
+ERP sync → produtos (categoria_id, unit_weight)
+                │
+Config UI ──────┼── categoria_assadeira_regras (padrões)
+                │
+                └── produto_assadeiras (exceções)
+                         │
+                         ▼
+              AssadeiraResolver.resolveForProduto
+                         │
+         ┌───────────────┴────────────────┐
+         ▼                                ▼
+  /config/produtos (badges)      Criação pedido/ordem
+  /config/regras-assadeiras      → snapshot assadeira_id
+```
+
+## Interface
+
+### `/config/regras-assadeiras` (Fase D2)
+
+**Header:** `Configuração de Regras de Assadeira`, ícone `rule`
+
+**Lista:** agrupada por categoria, faixas de peso, assadeira(s), pães efetivos  
+**Ações:** CRUD via modal (padrão Fase A)  
+**Validação:** faixas não sobrepostas na mesma categoria
+
+**Nav:** item em `ConfigNav` após "Produtos"
+
+### `/config/produtos` — ajustes (Fase D3)
+
+**Badge na coluna Assadeiras:**
+
+| Estado | Badge |
+|--------|-------|
+| Exceção manual | `Exceção · N assadeiras` (emerald) |
+| Herdado da regra | `Regra · N assadeiras` (blue/slate) |
+| Sem resolução | `Sem assadeira` (amber) |
+
+**Modal Assadeiras:** título deixa claro que é exceção; helper "Sem vínculos aqui, o produto usa a regra de categoria + peso". Botão **Remover exceção** (delete all links do produto) com confirmação.
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---------|---------------|
+| Produto sem exceção e sem regra para categoria+peso | Badge "Sem assadeira"; APIs de pedido 400 |
+| `unit_weight` null e nome sem gramatura | Pendente até ERP atualizar ou exceção manual |
+| Faixas sobrepostas na mesma categoria | Erro na UI ao salvar regra |
+| Regra desativada (`ativo=false`) | Ignorada no resolver |
+| Assadeira inativa na regra | Ignorada no resolver |
+| Múltiplas regras na mesma faixa | Todas retornadas, ordenadas por `ordem` |
+| Ordem já criada | `assadeira_id` intocável |
+
+## Migração de dados legados (Fase D3)
+
+Script one-shot `scripts/migrate-produto-assadeiras-to-excecoes.ts`:
+
+1. Todos os registros atuais em `produto_assadeiras` → marcar `origem = 'migrado'` (se coluna existir)
+2. **Não deletar** — tratá-los como exceção até revisão manual
+3. Relatório: produtos onde vínculo manual coincide com o que a regra resolveria → candidatos a remoção de exceção
+
+Operador revisa e remove exceções redundantes pela UI.
+
+## Testes
+
+| Tipo | Escopo |
+|------|--------|
+| Unit | `resolvePesoGramas` — unit_weight, fallback nome, null |
+| Unit | `AssadeiraResolver` — exceção > regra > vazio |
+| Unit | Faixas inclusive nas bordas (`peso_min_g`, `peso_max_g`) |
+| Unit | Regra muda → resolve diferente; ordem mock com assadeira_id antigo inalterado |
+| Unit | Faixas sobrepostas rejeitadas na validação |
+| Manual | CRUD regras, badge herdado/exceção, pedido novo usa regra atualizada |
+
+## Faseamento
+
+| Fase | Entrega |
+|------|---------|
+| **D1** | Migration + `AssadeiraResolver` + integrar `resolveAssadeiraDefault` |
+| **D2** | Tela `/config/regras-assadeiras` |
+| **D3** | Badges em `/config/produtos` + migração legado + script relatório |
+
+## Fases futuras (referência)
+
+| Fase | Escopo |
+|------|--------|
+| C | Regras/bloqueios por cliente |
+| — | Escolha de assadeira no pedido quando múltiplas |
+| — | Deprecar `produtos.unidades_assadeira` |

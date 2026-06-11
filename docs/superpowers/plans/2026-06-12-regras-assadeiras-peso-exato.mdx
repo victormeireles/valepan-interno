@@ -1,0 +1,420 @@
+# Regras de Assadeira — Peso Exato — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Refatorar `categoria_assadeira_regras` de faixas (`peso_min_g`/`peso_max_g`) para peso exato (`peso_g`), com match por igualdade no resolver e UI simplificada.
+
+**Architecture:** `ALTER TABLE` na tabela vazia; domínio/actions/UI trocam min/max por `peso_g`; resolver usa `.eq('peso_g', pesoG)`; validação de overlap substituída por duplicata `(categoria_id, peso_g, assadeira_id)`. Cascata exceção → regra → pendente inalterada.
+
+**Tech Stack:** Next.js 15, Supabase, Zod, Vitest, Tailwind, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-12-regras-assadeiras-peso-exato-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql` | Migration DDL |
+| `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql` | Atualizar referência (peso_g) |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.ts` | Zod `peso_g` |
+| `src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts` | Testes validação |
+| `src/domain/assadeiras/assadeira-resolver.ts` | Query `eq('peso_g')` |
+| `src/app/actions/categoria-assadeira-regras-actions.ts` | CRUD + duplicate check |
+| `src/components/RegrasAssadeiras/*` | UI campo único peso |
+| `src/types/database.ts`, `types/database.ts` | gen:types |
+| `src/app/config/regras-assadeiras/RegrasAssadeirasClient.tsx` | Copy |
+
+---
+
+## Task 1: Migration SQL peso exato
+
+**Files:**
+- Create: `ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql`
+- Modify: `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql`
+
+- [ ] **Step 1: Criar migration**
+
+```sql
+-- ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql
+-- Pré-requisito: categoria_assadeira_regras vazia
+
+ALTER TABLE categoria_assadeira_regras
+  DROP CONSTRAINT IF EXISTS categoria_assadeira_regras_categoria_id_peso_min_g_peso_max_g_key;
+
+ALTER TABLE categoria_assadeira_regras
+  DROP COLUMN peso_min_g,
+  DROP COLUMN peso_max_g;
+
+ALTER TABLE categoria_assadeira_regras
+  ADD COLUMN peso_g integer NOT NULL CHECK (peso_g > 0);
+
+ALTER TABLE categoria_assadeira_regras
+  ADD CONSTRAINT categoria_assadeira_regras_categoria_peso_assadeira_key
+  UNIQUE (categoria_id, peso_g, assadeira_id);
+
+CREATE INDEX IF NOT EXISTS idx_categoria_assadeira_regras_lookup
+  ON categoria_assadeira_regras (categoria_id, peso_g)
+  WHERE ativo = true;
+
+COMMENT ON TABLE categoria_assadeira_regras IS
+  'Regra padrão: categoria + peso exato (gramas) → tipo(s) de assadeira';
+
+COMMENT ON COLUMN categoria_assadeira_regras.peso_g IS
+  'Peso em gramas inteiras; deve coincidir com resolvePesoGramas do produto';
+```
+
+- [ ] **Step 2: Atualizar `CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql`** para usar `peso_g` (referência futura):
+
+```sql
+peso_g integer NOT NULL CHECK (peso_g > 0),
+-- ...
+UNIQUE (categoria_id, peso_g, assadeira_id)
+```
+
+- [ ] **Step 3: Aplicar no Supabase** (MCP `apply_migration` ou SQL Editor, projeto `pklyjtbqtbhqbiqzlmep`)
+
+- [ ] **Step 4: Regenerar types**
+
+Run:
+```bash
+npm run gen:types
+Copy-Item -Path types/database.ts -Destination src/types/database.ts -Force
+```
+
+Expected: `categoria_assadeira_regras.Row` contém `peso_g`, sem `peso_min_g`/`peso_max_g`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ALTER_CATEGORIA_ASSADEIRA_REGRAS_PESO_EXATO.sql CREATE_CATEGORIA_ASSADEIRA_REGRAS.sql src/types/database.ts types/database.ts
+git commit -m "chore(db): regras assadeira por peso exato (peso_g)"
+```
+
+---
+
+## Task 2: Validação Zod
+
+**Files:**
+- Modify: `src/domain/assadeiras/categoria-assadeira-regra-validation.ts`
+- Modify: `src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts`
+
+- [ ] **Step 1: Substituir testes**
+
+```typescript
+// src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts
+import { describe, expect, it } from 'vitest';
+import { parseCategoriaAssadeiraRegraForm } from './categoria-assadeira-regra-validation';
+
+const VALID_UUID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+const OTHER_UUID = 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
+
+describe('parseCategoriaAssadeiraRegraForm', () => {
+  it('aceita peso exato com padrão da assadeira', () => {
+    const result = parseCategoriaAssadeiraRegraForm({
+      categoria_id: VALID_UUID,
+      peso_g: 65,
+      assadeira_id: OTHER_UUID,
+      usar_padrao: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.peso_g).toBe(65);
+      expect(result.data.unidades_por_assadeira).toBeNull();
+    }
+  });
+
+  it('rejeita peso menor que 1', () => {
+    const result = parseCategoriaAssadeiraRegraForm({
+      categoria_id: VALID_UUID,
+      peso_g: 0,
+      assadeira_id: OTHER_UUID,
+      usar_padrao: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('preserva override de pães por assadeira', () => {
+    const result = parseCategoriaAssadeiraRegraForm({
+      categoria_id: VALID_UUID,
+      peso_g: 80,
+      assadeira_id: OTHER_UUID,
+      usar_padrao: false,
+      unidades_por_assadeira: 12,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.unidades_por_assadeira).toBe(12);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Rodar — deve falhar**
+
+Run: `npm test -- src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts`  
+Expected: FAIL (peso_g não existe no schema)
+
+- [ ] **Step 3: Implementar schema**
+
+```typescript
+// src/domain/assadeiras/categoria-assadeira-regra-validation.ts
+export const categoriaAssadeiraRegraFormSchema = z
+  .object({
+    categoria_id: uuidSchema,
+    peso_g: z
+      .number({ error: 'Peso é obrigatório' })
+      .int('Peso deve ser um número inteiro')
+      .min(1, 'Peso deve ser ao menos 1 g'),
+    assadeira_id: uuidSchema,
+    usar_padrao: z.boolean().default(true),
+    unidades_por_assadeira: z
+      .number()
+      .int('Deve ser um número inteiro')
+      .min(1, 'Mínimo 1 pão por assadeira')
+      .nullable()
+      .optional(),
+    ordem: z.number().int().min(0).default(0),
+    ativo: z.boolean().default(true),
+  })
+  .transform((data) => ({
+    categoria_id: data.categoria_id,
+    peso_g: data.peso_g,
+    assadeira_id: data.assadeira_id,
+    unidades_por_assadeira: data.usar_padrao
+      ? null
+      : (data.unidades_por_assadeira ?? null),
+    ordem: data.ordem ?? 0,
+    ativo: data.ativo ?? true,
+  }))
+  // superRefine unidades_por_assadeira — manter igual
+```
+
+Remover: `PesoRange`, `rangesOverlap`, refine min/max.
+
+- [ ] **Step 4: Rodar — deve passar**
+
+Run: `npm test -- src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/assadeiras/categoria-assadeira-regra-validation.ts src/domain/assadeiras/categoria-assadeira-regra-validation.test.ts
+git commit -m "refactor(assadeiras): validação regra por peso_g exato"
+```
+
+---
+
+## Task 3: AssadeiraResolver
+
+**Files:**
+- Modify: `src/domain/assadeiras/assadeira-resolver.ts`
+
+- [ ] **Step 1: Trocar query em `loadRegras`**
+
+```typescript
+// substituir .lte/.gte por:
+.eq('peso_g', pesoG)
+```
+
+Query completa:
+
+```typescript
+const { data, error } = await supabase
+  .from('categoria_assadeira_regras')
+  .select(
+    'assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)',
+  )
+  .eq('categoria_id', categoriaId)
+  .eq('peso_g', pesoG)
+  .eq('ativo', true)
+  .order('ordem', { ascending: true })
+  .order('created_at', { ascending: true });
+```
+
+- [ ] **Step 2: Rodar testes do domínio**
+
+Run: `npm test -- src/domain/assadeiras/`  
+Expected: PASS (testes atuais são de `buildVinculoResolvido`, não quebram)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/domain/assadeiras/assadeira-resolver.ts
+git commit -m "refactor(assadeiras): resolver match por peso_g exato"
+```
+
+---
+
+## Task 4: Server Actions CRUD
+
+**Files:**
+- Modify: `src/app/actions/categoria-assadeira-regras-actions.ts`
+
+- [ ] **Step 1: Atualizar tipos `CategoriaAssadeiraRegra` e `RegraRow`**
+
+Trocar `peso_min_g`/`peso_max_g` por `peso_g: number`.
+
+- [ ] **Step 2: Substituir `findOverlappingRegra` por `findDuplicateRegra`**
+
+```typescript
+async function findDuplicateRegra(
+  categoriaId: string,
+  pesoG: number,
+  assadeiraId: string,
+  excludeId?: string,
+): Promise<boolean> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  let query = supabase
+    .from('categoria_assadeira_regras')
+    .select('id')
+    .eq('categoria_id', categoriaId)
+    .eq('peso_g', pesoG)
+    .eq('assadeira_id', assadeiraId)
+    .eq('ativo', true);
+
+  if (excludeId) query = query.neq('id', excludeId);
+
+  const { data, error } = await query.maybeSingle();
+  if (error && error.code !== 'PGRST116') {
+    console.error('Erro ao verificar duplicata de regra:', error);
+    return true;
+  }
+  return data != null;
+}
+```
+
+- [ ] **Step 3: Atualizar `persistRegra`**
+
+```typescript
+const isDuplicate = await findDuplicateRegra(
+  parsed.categoria_id,
+  parsed.peso_g,
+  parsed.assadeira_id,
+  id,
+);
+if (isDuplicate) {
+  return {
+    success: false,
+    error: 'Já existe uma regra ativa para esta categoria, peso e assadeira',
+  };
+}
+```
+
+Payload insert/update: `peso_g: parsed.peso_g` (remover min/max).
+
+Select strings: incluir `peso_g` em vez de min/max.
+
+Order: `.order('peso_g', { ascending: true })`.
+
+Remover import de `rangesOverlap`.
+
+- [ ] **Step 4: Build typecheck**
+
+Run: `npm run build`  
+Expected: compila (pode falhar até UI atualizar — Task 5)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/actions/categoria-assadeira-regras-actions.ts
+git commit -m "refactor(assadeiras): actions CRUD com peso_g e duplicata"
+```
+
+---
+
+## Task 5: UI Regras de assadeira
+
+**Files:**
+- Create: `src/components/RegrasAssadeiras/format-peso-gramas.ts`
+- Delete: `src/components/RegrasAssadeiras/format-faixa-peso.ts`
+- Modify: `src/components/RegrasAssadeiras/RegraAssadeiraModal.tsx`
+- Modify: `src/components/RegrasAssadeiras/RegrasAssadeirasTable.tsx`
+- Modify: `src/components/RegrasAssadeiras/RegrasAssadeirasMobileList.tsx`
+- Modify: `src/app/config/regras-assadeiras/RegrasAssadeirasClient.tsx`
+
+- [ ] **Step 1: Criar formatter**
+
+```typescript
+// src/components/RegrasAssadeiras/format-peso-gramas.ts
+export function formatPesoGramas(pesoG: number): string {
+  return `${Math.round(pesoG)} g`;
+}
+```
+
+- [ ] **Step 2: `RegraAssadeiraModal` — um campo `pesoG`**
+
+Estado: `pesoG` em vez de `pesoMin`/`pesoMax`.  
+Payload: `peso_g: pesoG as number`.  
+Remover grid 2 colunas; um input `Peso (g)` inteiro min=1.  
+Copy: "Vincule categoria + peso a um tipo de assadeira."
+
+- [ ] **Step 3: Tabela e mobile**
+
+- Sort key: `peso_g` (label "Peso")
+- Célula: `formatPesoGramas(item.peso_g)`
+- Imports atualizados
+
+- [ ] **Step 4: `RegrasAssadeirasClient` copy**
+
+"Defina qual assadeira usar por categoria e peso (gramas)."
+
+- [ ] **Step 5: Deletar `format-faixa-peso.ts`**
+
+- [ ] **Step 6: Build**
+
+Run: `npm run build`  
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/components/RegrasAssadeiras/ src/app/config/regras-assadeiras/
+git commit -m "refactor(ui): regras assadeira com peso exato"
+```
+
+---
+
+## Task 6: Verificação final
+
+- [ ] **Step 1: Testes**
+
+Run: `npm test -- src/domain/assadeiras/`  
+Expected: all PASS
+
+- [ ] **Step 2: Build**
+
+Run: `npm run build`  
+Expected: PASS
+
+- [ ] **Step 3: Verificação manual**
+
+1. `/config/regras-assadeiras` → criar regra categoria + 65 g
+2. Produto da categoria com 65 g → badge **Regra**
+3. Produto 67 g sem regra → **Pendente**
+4. Duplicata (mesma categoria, 65 g, mesma assadeira) → erro
+5. Duas assadeiras diferentes no mesmo (categoria, 65 g) → ambas na lista
+
+- [ ] **Step 4: Commit final (se houver ajustes)**
+
+```bash
+git commit -m "chore: verificação peso exato regras assadeira"
+```
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| `peso_g` integer no schema | Task 1 |
+| Index lookup | Task 1 |
+| Resolver `eq('peso_g')` | Task 3 |
+| Remove overlap, duplicate check | Tasks 2, 4 |
+| UI campo único | Task 5 |
+| Sem match → pendente | Task 3 (já implícito) |
+| Multi-assadeira por peso | Task 4 (unique por assadeira_id) |
+| gen:types | Task 1 |
+| Copy produtos | Já ok ("categoria + peso") |

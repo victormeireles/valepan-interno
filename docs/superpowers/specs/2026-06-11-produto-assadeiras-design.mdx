@@ -1,0 +1,243 @@
+# Design: Produto × Assadeira (Fase B)
+
+**Data:** 2026-06-11  
+**Status:** Aprovado pelo stakeholder  
+**Roadmap:** A (concluída) → **B (esta spec)** → C (regras por cliente)
+
+## Contexto
+
+A **Fase A** entregou CRUD de tipos de assadeira em `/config/assadeiras`. O banco já possui a tabela `produto_assadeiras` (`produto_id`, `assadeira_id`, `unidades_por_assadeira` nullable), consumida por pedidos de forno/embalagem e ordens de produção.
+
+Hoje os vínculos produto × assadeira são mantidos diretamente no Supabase. Pedidos já usam:
+
+```
+fator = produto_assadeiras.unidades_por_assadeira
+     ?? assadeiras.unidades_por_assadeira
+```
+
+via `resolveUnidadesPorAssadeiraEfetiva` em `src/domain/producao/assadeira-factor.ts`.
+
+**Objetivo da Fase B:** entregar tela de configuração em `/config/produto-assadeiras` para vincular assadeiras a produtos, com override opcional de pães por assadeira.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Organização | **Por produto** — master-detail |
+| Lista de produtos | **Todos os produtos ativos**, inclusive sem vínculo |
+| Badge pendente | "Sem assadeira" nos produtos sem nenhum vínculo |
+| Override de pães | **Opcional** — vazio/null herda `assadeiras.unidades_por_assadeira` |
+| Terminologia UI | **Pães por assadeira** — nunca "buracos" |
+| Layout | Master-detail (lista produtos + painel de vínculos) + modal |
+| Navegação | Novo item em `ConfigNav`: **Produto × Assadeira** |
+| Ícones | Material Icons — sem emoji em nav/header/ações |
+| Estilo visual | Alinhado à Fase A (`gray-50`, cards brancos, CTA `gray-900`) |
+
+## Fora de escopo (Fase B)
+
+- Fase C: regras por cliente (`/config/cliente-assadeiras`)
+- Deprecar `produtos.unidades_assadeira` no código legado (massa/fermentação)
+- Consumo automático de estoque na produção
+- Ordenação manual de assadeiras por produto (mantém `created_at ASC` como hoje)
+- Campo "assadeira padrão" explícito no banco
+
+## Schema
+
+### Tabela `produto_assadeiras` — campos na UI
+
+| Coluna DB | Label na tela | Obrigatório | Notas |
+|-----------|---------------|-------------|-------|
+| `produto_id` | (contexto master) | Sim | Produto selecionado na lista |
+| `assadeira_id` | Assadeira | Sim | Apenas tipos `ativo = true` no select de criação |
+| `unidades_por_assadeira` | Pães por assadeira (override) | Não | Null = herda padrão do tipo |
+
+**Constraint esperada:** unique `(produto_id, assadeira_id)`.
+
+**Fator efetivo exibido e usado na produção:**
+
+```
+fator = produto_assadeiras.unidades_por_assadeira
+     ?? assadeiras.unidades_por_assadeira
+```
+
+Se `fator` IS NULL ou ≤ 0 → aviso na UI; APIs de pedido retornam 400 (comportamento existente).
+
+Nenhuma migration de schema necessária — tabela já existe e suporta nullable override.
+
+## Arquitetura
+
+### Estrutura de arquivos
+
+```
+src/app/config/
+  produto-assadeiras/
+    page.tsx                              # Server Component
+    ProdutoAssadeirasClient.tsx           # Master-detail + seleção
+src/components/ProdutoAssadeiras/
+  ProdutoMasterList.tsx                   # Lista master (busca, badges)
+  ProdutoAssadeiraDetailPanel.tsx         # Painel detail do produto
+  ProdutoAssadeiraLinksTable.tsx          # Desktop: tabela de vínculos
+  ProdutoAssadeiraLinksMobileList.tsx     # Mobile: cards empilhados
+  ProdutoAssadeiraLinkModal.tsx           # Criar/editar vínculo
+src/app/actions/produto-assadeiras-actions.ts
+src/domain/assadeiras/produto-assadeira-validation.ts
+```
+
+### Server Actions
+
+| Action | Comportamento |
+|--------|---------------|
+| `getProdutosComAssadeiras()` | Produtos ativos + `linkCount` + flag `semAssadeira` |
+| `getProdutoAssadeiraLinks(produtoId)` | Vínculos com join em `assadeiras(nome, unidades_por_assadeira, ativo)` |
+| `createProdutoAssadeiraLink(data)` | Insert validado; erro se duplicata |
+| `updateProdutoAssadeiraLink(id, data)` | Update override (`unidades_por_assadeira`) |
+| `deleteProdutoAssadeiraLink(id)` | Delete vínculo + `revalidatePath` |
+
+Validação compartilhada (Zod) entre client e server.
+
+Reutilizar `resolveUnidadesPorAssadeiraEfetiva` para calcular fator efetivo na UI.
+
+### Fluxo de dados
+
+```
+page.tsx (SSR)
+  → getProdutosComAssadeiras + getAssadeirasAtivas
+  → ProdutoAssadeirasClient
+    → seleção produto (estado + URL ?produto=<id>)
+    → ProdutoAssadeiraDetailPanel
+      → ProdutoAssadeiraLinkModal (create/update via Server Actions)
+        → Supabase produto_assadeiras
+        → revalidatePath('/config/produto-assadeiras')
+
+Pedidos forno/embalagem (inalterado nesta fase)
+  → produto_assadeiras.unidades_por_assadeira ?? assadeiras.unidades_por_assadeira
+```
+
+## Interface (ui-ux-pro-max)
+
+### Nav — `ConfigNav`
+
+| Item | Ícone Material | Rota |
+|------|----------------|------|
+| Produto × Assadeira | `link` | `/config/produto-assadeiras` |
+
+Posicionar após "Assadeiras", antes de "WhatsApp".
+
+### Página `/config/produto-assadeiras`
+
+**Header:** `ConfigPageHeader` com `icon="link"`, título "Produto × Assadeira".
+
+**Layout desktop (≥1024px):** split master-detail (~38% / ~62%).
+
+**Layout mobile (<1024px):**
+
+- Estado lista: master full-width
+- Toque no produto → painel detail full-width com botão "Voltar" (`arrow_back`, min-h-11)
+- Deep link `?produto=<uuid>` abre direto no detail
+
+### Master — lista de produtos
+
+- Busca por nome (label visível, ícone `search`, debounce)
+- Contador de resultados (`tabular-nums`)
+- Cada item:
+  - Nome do produto
+  - Badge **Sem assadeira** (`amber`, ícone `warning` + texto) se `linkCount === 0`
+  - Badge **N assadeiras** (`emerald` discreto) se `linkCount > 0`
+- Item selecionado: `border-l-2 border-slate-900 bg-gray-50`
+- Touch target ≥44px em todos os itens
+- Virtualizar lista se >100 produtos
+
+### Detail — painel do produto selecionado
+
+**Sem produto selecionado (desktop):** placeholder "Selecione um produto na lista".
+
+**Empty state** (produto sem vínculos):
+
+- Ícone `link_off`
+- "Nenhuma assadeira vinculada"
+- CTA "Vincular primeira assadeira"
+
+**Com vínculos** — tabela (desktop) / cards (mobile):
+
+| Coluna | Conteúdo |
+|--------|----------|
+| Assadeira | Nome do tipo |
+| Padrão | Pães/assadeira do tipo |
+| Override | Valor custom ou "—" |
+| Efetivo | Fator usado na produção (`tabular-nums`, destaque) |
+| Ações | Editar · Remover |
+
+CTA secundário no header do painel: "+ Vincular assadeira".
+
+Assadeira inativa ainda vinculada: exibir com badge "Inativa", permitir remover.
+
+Aviso se fator efetivo nulo: "Configure pães por assadeira no tipo ou defina override."
+
+### Modal (`ProdutoAssadeiraLinkModal`)
+
+| Breakpoint | Padrão |
+|------------|--------|
+| Desktop | Dialog centralizado `max-w-md`, scrim `bg-black/50` |
+| Mobile | Sheet bottom ~85dvh, scroll interno |
+
+**Acessibilidade:** `role="dialog"`, `aria-modal`, focus trap, Esc fecha, confirmação ao descartar alterações.
+
+**Campos:**
+
+1. **Assadeira** — select/autocomplete de assadeiras ativas; desabilitado na edição
+2. **Toggle "Usar padrão da assadeira"** — quando ligado, `unidades_por_assadeira = null` e input desabilitado
+3. **Pães por assadeira (override)** — inteiro ≥1, visível quando toggle desligado
+   - Helper: "Deixe vazio para usar o padrão (X pães)"
+4. **Preview** — reutilizar `AssadeiraCapacityPreview` com fator efetivo
+
+**Validação:** on blur; erros abaixo do campo; `role="alert"` no submit; foco no primeiro inválido.
+
+**Rodapé:** Cancelar · Salvar (loading/disabled).
+
+**Remover vínculo:** botão destrutivo no modo edição ou ação na tabela; confirmação antes de excluir (`rose-700`).
+
+**Feedback:** toast `aria-live="polite"`, auto-dismiss 4s.
+
+### Tokens visuais
+
+Mesmos da Fase A:
+
+```
+Fundo:        bg-gray-50/50
+Superfície:   bg-white border-gray-100 rounded-2xl shadow-sm
+CTA primário: bg-gray-900 hover:bg-gray-800
+Perigo:       text-rose-700 border-rose-200
+Sucesso:      text-emerald-600
+Aviso:        text-amber-700 border-amber-200
+Foco:         ring-2 ring-blue-500 ring-offset-2
+Transição:    200ms ease-out
+Touch:        min-h-11 em inputs e botões
+```
+
+## Tratamento de erros
+
+| Cenário | Comportamento |
+|---------|---------------|
+| Produto sem assadeiras | Badge "Sem assadeira" + empty state no detail |
+| Assadeira inativa vinculada | Badge "Inativa" no detail; permitir remover |
+| Duplicata produto + assadeira | "Este produto já usa esta assadeira" |
+| Override < 1 quando preenchido | Erro no campo |
+| Fator efetivo nulo | Aviso informativo no detail (tipo sem padrão e sem override) |
+| Remover último vínculo | Permitir; pedidos futuros retornam 400 (existente) |
+| Falha Supabase | Toast + opção de retry |
+| Produto inativo | Não aparece na lista master |
+
+## Testes
+
+| Tipo | Escopo |
+|------|--------|
+| Unit | `produto-assadeira-validation.ts` — override opcional, duplicata, override ≥1 |
+| Unit | Fator efetivo com/sem override (reutiliza `assadeira-factor`) |
+| Manual | Master-detail desktop, drill-down mobile, CRUD vínculos, empty states, deep link `?produto=` |
+
+## Fases futuras (referência)
+
+| Fase | Rota | Escopo |
+|------|------|--------|
+| C | `/config/cliente-assadeiras` | Assadeiras permitidas/bloqueadas por cliente |
+| — | — | Deprecar `produtos.unidades_assadeira` no código legado |

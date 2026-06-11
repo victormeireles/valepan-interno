@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -14,98 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _ordens_producao_legacy: {
-        Row: {
-          assadeira_id: string | null
-          created_at: string | null
-          data_producao: string | null
-          id: string
-          lote_codigo: string
-          ordem_planejamento: number | null
-          pedido_id: string | null
-          prioridade: number | null
-          produto_id: string
-          qtd_planejada: number
-          status: string | null
-        }
-        Insert: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id: string
-          qtd_planejada: number
-          status?: string | null
-        }
-        Update: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo?: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id?: string
-          qtd_planejada?: number
-          status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ordens_producao_assadeira_id_fkey"
-            columns: ["assadeira_id"]
-            isOneToOne: false
-            referencedRelation: "assadeiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "relatorio_producao_pedidos_v"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["produto_id"]
-          },
-        ]
-      }
       assadeiras: {
         Row: {
           ativo: boolean
@@ -244,13 +152,6 @@ export type Database = {
             referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "boletos_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
         ]
       }
       cadastro_hamburgueria_comentarios: {
@@ -357,6 +258,57 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      categoria_assadeira_regras: {
+        Row: {
+          assadeira_id: string
+          ativo: boolean
+          categoria_id: string
+          created_at: string
+          id: string
+          ordem: number
+          peso_g: number
+          unidades_por_assadeira: number | null
+          updated_at: string
+        }
+        Insert: {
+          assadeira_id: string
+          ativo?: boolean
+          categoria_id: string
+          created_at?: string
+          id?: string
+          ordem?: number
+          peso_g: number
+          unidades_por_assadeira?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assadeira_id?: string
+          ativo?: boolean
+          categoria_id?: string
+          created_at?: string
+          id?: string
+          ordem?: number
+          peso_g?: number
+          unidades_por_assadeira?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categoria_assadeira_regras_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categoria_assadeira_regras_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "categorias"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       categorias: {
         Row: {
@@ -535,13 +487,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cliente_precos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "cliente_precos_produto_id_fkey"
@@ -852,13 +797,6 @@ export type Database = {
             foreignKeyName: "clube_beneficios_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "clube_beneficios_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -950,13 +888,6 @@ export type Database = {
             referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "clube_pontos_transacoes_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
         ]
       }
       clube_resgates: {
@@ -1026,25 +957,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "clube_resgates_pedido_bonificado_id_fkey"
-            columns: ["pedido_bonificado_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
             foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
             columns: ["produto_resgatado_id"]
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
-            columns: ["produto_resgatado_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "clube_resgates_produto_resgatado_id_fkey"
@@ -1211,13 +1128,6 @@ export type Database = {
             foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -1327,13 +1237,6 @@ export type Database = {
             foreignKeyName: "embalagem_lotes_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "embalagem_lotes_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -1342,6 +1245,71 @@ export type Database = {
             columns: ["tipo_estoque_id"]
             isOneToOne: false
             referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      etiquetas_geradas: {
+        Row: {
+          created_at: string
+          data_fabricacao: string
+          gerado_em: string
+          gerado_por: string | null
+          id: string
+          modo: string
+          ordem_producao_id: string | null
+          produto_id: string
+          tipo_estoque_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_fabricacao: string
+          gerado_em?: string
+          gerado_por?: string | null
+          id?: string
+          modo: string
+          ordem_producao_id?: string | null
+          produto_id: string
+          tipo_estoque_id: string
+        }
+        Update: {
+          created_at?: string
+          data_fabricacao?: string
+          gerado_em?: string
+          gerado_por?: string | null
+          id?: string
+          modo?: string
+          ordem_producao_id?: string | null
+          produto_id?: string
+          tipo_estoque_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "etiquetas_geradas_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_gerado_por_fkey"
+            columns: ["gerado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -1540,25 +1508,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "estoque_consignado_movimentos_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
             foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
@@ -1640,13 +1594,6 @@ export type Database = {
             foreignKeyName: "estoque_movimentos_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "estoque_movimentos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -1697,13 +1644,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estoque_saldos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "estoque_saldos_produto_id_fkey"
@@ -1860,13 +1800,6 @@ export type Database = {
             foreignKeyName: "integracao_produtos_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "integracao_produtos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -1914,13 +1847,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
@@ -2063,13 +1989,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "nota_fiscal_pedido_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
           },
         ]
       }
@@ -2222,9 +2141,101 @@ export type Database = {
           },
         ]
       }
-      ordens_producao: {
+      _ordens_producao_legacy: {
         Row: {
           assadeira_id: string | null
+          created_at: string | null
+          data_producao: string | null
+          id: string
+          lote_codigo: string
+          ordem_planejamento: number | null
+          pedido_id: string | null
+          prioridade: number | null
+          produto_id: string
+          qtd_planejada: number
+          status: string | null
+        }
+        Insert: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id: string
+          qtd_planejada: number
+          status?: string | null
+        }
+        Update: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo?: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id?: string
+          qtd_planejada?: number
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["pedido_id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_producao"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      ordens_producao: {
+        Row: {
+          assadeira_id: string
           assadeiras: number
           caixas: number
           created_at: string
@@ -2241,7 +2252,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          assadeira_id?: string | null
+          assadeira_id: string
           assadeiras?: number
           caixas?: number
           created_at?: string
@@ -2258,7 +2269,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          assadeira_id?: string | null
+          assadeira_id?: string
           assadeiras?: number
           caixas?: number
           created_at?: string
@@ -2288,13 +2299,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pedidos_embalagem_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "pedidos_embalagem_produto_id_fkey"
@@ -2472,25 +2476,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "pedido_itens_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
             foreignKeyName: "pedido_itens_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pedido_itens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "pedido_itens_produto_id_fkey"
@@ -2734,20 +2724,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "producao_etapas_log_ordem_producao_id_fkey"
-            columns: ["ordem_producao_id"]
-            isOneToOne: false
-            referencedRelation: "_ordens_producao_legacy"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_etapas_log_ordem_producao_id_fkey"
-            columns: ["ordem_producao_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "producao_etapas_log_receita_id_fkey"
             columns: ["receita_id"]
             isOneToOne: false
@@ -2854,13 +2830,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "produto_assadeiras_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "produto_assadeiras_produto_id_fkey"
@@ -3004,13 +2973,6 @@ export type Database = {
             foreignKeyName: "produto_receitas_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "produto_receitas_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
           },
@@ -3056,13 +3018,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "produto_tag_associacoes_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "produto_tag_associacoes_produto_id_fkey"
@@ -3123,8 +3078,11 @@ export type Database = {
           categoria_id: string
           codigo: string
           created_at: string
+          dias_validade_ambiente: number
+          dias_validade_congelado: number
           id: string
           nome: string
+          nome_etiqueta: string | null
           ordem_na_familia: number | null
           package_units: number | null
           produto_familia_id: string | null
@@ -3142,8 +3100,11 @@ export type Database = {
           categoria_id: string
           codigo: string
           created_at?: string
+          dias_validade_ambiente?: number
+          dias_validade_congelado?: number
           id?: string
           nome: string
+          nome_etiqueta?: string | null
           ordem_na_familia?: number | null
           package_units?: number | null
           produto_familia_id?: string | null
@@ -3161,8 +3122,11 @@ export type Database = {
           categoria_id?: string
           codigo?: string
           created_at?: string
+          dias_validade_ambiente?: number
+          dias_validade_congelado?: number
           id?: string
           nome?: string
+          nome_etiqueta?: string | null
           ordem_na_familia?: number | null
           package_units?: number | null
           produto_familia_id?: string | null
@@ -3364,13 +3328,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "roteiro_paradas_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
             foreignKeyName: "roteiro_paradas_roteiro_veiculo_id_fkey"
             columns: ["roteiro_veiculo_id"]
             isOneToOne: false
@@ -3542,13 +3499,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "sugestoes_envio_logs_pedido_origem_id_fkey"
-            columns: ["pedido_origem_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
             foreignKeyName: "sugestoes_envio_logs_pedido_rascunho_id_fkey"
             columns: ["pedido_rascunho_id"]
             isOneToOne: false
@@ -3562,36 +3512,35 @@ export type Database = {
             referencedRelation: "relatorio_producao_pedidos_v"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "sugestoes_envio_logs_pedido_rascunho_id_fkey"
-            columns: ["pedido_rascunho_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
         ]
       }
       tipos_estoque: {
         Row: {
           ativo: boolean | null
+          congelado: boolean
           created_at: string | null
           id: string
+          mostrar_texto_congelado: boolean
           nome: string
           possui_etiqueta: boolean
           updated_at: string | null
         }
         Insert: {
           ativo?: boolean | null
+          congelado?: boolean
           created_at?: string | null
           id?: string
+          mostrar_texto_congelado?: boolean
           nome: string
           possui_etiqueta?: boolean
           updated_at?: string | null
         }
         Update: {
           ativo?: boolean | null
+          congelado?: boolean
           created_at?: string | null
           id?: string
+          mostrar_texto_congelado?: boolean
           nome?: string
           possui_etiqueta?: boolean
           updated_at?: string | null
@@ -4056,29 +4005,6 @@ export type Database = {
         }
         Relationships: []
       }
-      vw_dashboard_producao: {
-        Row: {
-          box_units: number | null
-          data_producao: string | null
-          etapa_atual: string | null
-          id: string | null
-          lote_codigo: string | null
-          op_created_at: string | null
-          pedido_id: string | null
-          prioridade: number | null
-          produto_codigo: string | null
-          produto_id: string | null
-          produto_nome: string | null
-          produto_unidade: string | null
-          qtd_planejada: number | null
-          qtd_produzida_atual: number | null
-          status: string | null
-          ultima_atividade_at: string | null
-          unidades_assadeira: number | null
-          usuario_atual: string | null
-        }
-        Relationships: []
-      }
       vw_estoque_consignado_saldo: {
         Row: {
           distribuidor_id: string | null
@@ -4099,13 +4025,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
           },
           {
             foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"

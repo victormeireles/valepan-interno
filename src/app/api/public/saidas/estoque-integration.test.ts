@@ -1,33 +1,35 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const aplicarDeltaMock = vi.fn(async () => ({
-  cliente: 'Estoque X',
+const registrarSaidaMock = vi.fn(async () => ({
+  id: 'mov-1',
+  data: '2026-06-02',
+  cliente: 'Cliente A',
   produto: 'Pao Brioche',
-  quantidade: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
-  atualizadoEm: new Date().toISOString(),
+  observacao: '',
+  meta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
+  realizado: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
+  createdAt: '2026-06-02T12:00:00.000Z',
+  updatedAt: '2026-06-02T12:00:00.000Z',
 }));
 
-const listByDateMock = vi.fn(async () => [
+const findMatchingMock = vi.fn(async () => [
   {
-    rowIndex: 5,
+    id: 'mov-1',
+    data: '2026-06-02',
     cliente: 'Cliente A',
     produto: 'Pao Brioche',
-    data: '2026-06-02',
+    observacao: '',
     meta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
     realizado: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
+    createdAt: '2026-06-02T12:00:00.000Z',
+    updatedAt: '2026-06-02T12:00:00.000Z',
   },
 ]);
 
+const estornarSaidaMock = vi.fn(async () => findMatchingMock.mock.results[0]?.value);
+
 vi.mock('@/lib/services/api-key-auth-service', () => ({
   apiKeyAuthService: { validateRequest: vi.fn(() => true) },
-}));
-
-vi.mock('@/lib/managers/saidas-sheet-manager', () => ({
-  saidasSheetManager: {
-    appendNovaSaida: vi.fn(async () => undefined),
-    listByDate: (...args: unknown[]) => listByDateMock(...args),
-    deleteRow: vi.fn(async () => undefined),
-  },
 }));
 
 vi.mock('@/lib/services/whatsapp-notification-service', () => ({
@@ -38,19 +40,20 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-vi.mock('@/lib/services/estoque-service', () => ({
-  estoqueService: {
-    obterTipoEstoqueCliente: vi.fn(async () => 'Estoque X'),
-    aplicarDelta: (...args: unknown[]) => aplicarDeltaMock(...args),
+vi.mock('@/lib/services/saida-movimento-service', () => ({
+  saidaMovimentoService: {
+    registrarSaida: (...args: unknown[]) => registrarSaidaMock(...args),
+    findMatching: (...args: unknown[]) => findMatchingMock(...args),
+    estornarSaida: (...args: unknown[]) => estornarSaidaMock(...args),
   },
 }));
 
 describe('POST /api/public/saidas estoque', () => {
   beforeEach(() => {
-    aplicarDeltaMock.mockClear();
+    registrarSaidaMock.mockClear();
   });
 
-  it('debita estoque com origem saida e allowNegative', async () => {
+  it('registra saída via movimento de estoque', async () => {
     const { POST } = await import('./route');
     const req = new Request('http://localhost/api/public/saidas', {
       method: 'POST',
@@ -65,12 +68,11 @@ describe('POST /api/public/saidas estoque', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(201);
-    expect(aplicarDeltaMock).toHaveBeenCalledWith(
+    expect(registrarSaidaMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        allowNegative: true,
-        origem: 'saida',
-        clienteDestino: 'Cliente A',
-        delta: expect.objectContaining({ caixas: -2 }),
+        cliente: 'Cliente A',
+        produto: 'Pao Brioche',
+        quantidade: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
       }),
     );
   });
@@ -78,11 +80,11 @@ describe('POST /api/public/saidas estoque', () => {
 
 describe('DELETE /api/public/saidas/delete estoque', () => {
   beforeEach(() => {
-    aplicarDeltaMock.mockClear();
-    listByDateMock.mockClear();
+    findMatchingMock.mockClear();
+    estornarSaidaMock.mockClear();
   });
 
-  it('estorna estoque com origem saida quando havia realizado', async () => {
+  it('estorna saída encontrada no ledger', async () => {
     const { DELETE } = await import('./delete/route');
     const req = new Request('http://localhost/api/public/saidas/delete', {
       method: 'DELETE',
@@ -97,13 +99,6 @@ describe('DELETE /api/public/saidas/delete estoque', () => {
 
     const res = await DELETE(req);
     expect(res.status).toBe(200);
-    expect(aplicarDeltaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        clienteDestino: 'Cliente A',
-        delta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
-        allowNegative: true,
-        origem: 'saida',
-      }),
-    );
+    expect(estornarSaidaMock).toHaveBeenCalledWith('mov-1');
   });
 });

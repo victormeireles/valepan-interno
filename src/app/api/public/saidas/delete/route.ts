@@ -1,20 +1,19 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
-import { estoqueService } from '@/lib/services/estoque-service';
 import { apiKeyAuthService } from '@/lib/services/api-key-auth-service';
 import { SaidaQuantidade } from '@/domain/types/saidas';
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function quantidadesIguais(q1: SaidaQuantidade, q2: SaidaQuantidade): boolean {
+function hasQuantidadeValida(quantidade: SaidaQuantidade): boolean {
   return (
-    (q1.caixas || 0) === (q2.caixas || 0) &&
-    (q1.pacotes || 0) === (q2.pacotes || 0) &&
-    (q1.unidades || 0) === (q2.unidades || 0) &&
-    (q1.kg || 0) === (q2.kg || 0)
+    (quantidade.caixas || 0) > 0 ||
+    (quantidade.pacotes || 0) > 0 ||
+    (quantidade.unidades || 0) > 0 ||
+    (quantidade.kg || 0) > 0
   );
 }
 
@@ -25,14 +24,8 @@ interface DeleteSaidaPayload {
   quantidade: SaidaQuantidade;
 }
 
-/**
- * Endpoint público para deletar saídas via API externa
- * Requer autenticação via API Key no header Authorization ou X-API-Key
- * Identifica a saída por data, cliente, produto e quantidade
- */
 export async function DELETE(request: Request) {
   try {
-    // Validar autenticação
     if (!apiKeyAuthService.validateRequest(request)) {
       return NextResponse.json(
         { error: 'Não autorizado. Forneça uma API key válida no header Authorization ou X-API-Key' },
@@ -42,7 +35,6 @@ export async function DELETE(request: Request) {
 
     const payload = (await request.json()) as DeleteSaidaPayload;
 
-    // Validações de payload
     if (!payload || !isValidDateISO(payload.data)) {
       return NextResponse.json(
         { error: 'Data inválida. Use o formato YYYY-MM-DD' },
@@ -57,86 +49,51 @@ export async function DELETE(request: Request) {
       );
     }
 
-    if (!payload.quantidade) {
+    if (!payload.quantidade || !hasQuantidadeValida(payload.quantidade)) {
       return NextResponse.json(
-        { error: 'Quantidade é obrigatória' },
+        { error: 'Quantidade é obrigatória e deve ter ao menos um valor > 0' },
         { status: 400 },
       );
     }
 
-    // Buscar todas as saídas da data
-    const saidas = await saidasSheetManager.listByDate(payload.data);
-
-    // Filtrar por cliente, produto e quantidade
-    const saidasEncontradas = saidas.filter((saida) => {
-      const clienteMatch = saida.cliente.trim().toLowerCase() === payload.cliente.trim().toLowerCase();
-      const produtoMatch = saida.produto.trim().toLowerCase() === payload.produto.trim().toLowerCase();
-      const quantidadeMatch = quantidadesIguais(saida.meta, payload.quantidade);
-
-      return clienteMatch && produtoMatch && quantidadeMatch;
+    const matches = await saidaMovimentoService.findMatching({
+      data: payload.data,
+      cliente: payload.cliente,
+      produto: payload.produto,
+      quantidade: payload.quantidade,
     });
 
-    if (saidasEncontradas.length === 0) {
+    if (matches.length === 0) {
       return NextResponse.json(
         { error: 'Saída não encontrada com os critérios fornecidos' },
         { status: 404 },
       );
     }
 
-    if (saidasEncontradas.length > 1) {
+    if (matches.length > 1) {
       return NextResponse.json(
         {
-          error: 'Múltiplas saídas encontradas com os critérios fornecidos. Use critérios mais específicos ou forneça o rowId.',
-          encontradas: saidasEncontradas.length,
+          error: 'Múltiplas saídas encontradas com os critérios fornecidos. Use critérios mais específicos ou forneça o id.',
+          encontradas: matches.length,
         },
         { status: 409 },
       );
     }
 
-    const existingRow = saidasEncontradas[0];
-    const rowNumber = existingRow.rowIndex;
-
-    // Deletar a linha da planilha
-    await saidasSheetManager.deleteRow(rowNumber);
-
-    // Se houver realizado, creditar estoque de volta
-    const quantidade = existingRow.realizado;
-    const houveRealizado =
-      quantidade.caixas > 0 ||
-      quantidade.pacotes > 0 ||
-      quantidade.unidades > 0 ||
-      quantidade.kg > 0;
-
-    if (houveRealizado) {
-      // Obter tipo de estoque do cliente
-      const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(existingRow.cliente);
-      
-      // Creditar estoque de volta SOMENTE se houver tipo de estoque definido
-      // Evita criar estoque no nome do cliente se ele não tiver tipo de estoque
-      if (tipoEstoque) {
-        await estoqueService.aplicarDelta({
-          cliente: tipoEstoque,
-          produto: existingRow.produto,
-          delta: quantidade,
-          allowNegative: true,
-          origem: 'saida',
-          clienteDestino: existingRow.cliente,
-        });
-      }
-    }
+    await saidaMovimentoService.estornarSaida(matches[0].id);
 
     revalidatePath('/api/painel/estoque');
 
     return NextResponse.json(
       {
         success: true,
-        message: 'Saída removida com sucesso',
+        message: 'Saída estornada com sucesso',
         data: {
-          rowId: rowNumber,
-          cliente: existingRow.cliente,
-          produto: existingRow.produto,
-          data: existingRow.data,
-          estoqueCreditado: houveRealizado,
+          id: matches[0].id,
+          cliente: matches[0].cliente,
+          produto: matches[0].produto,
+          data: matches[0].data,
+          estoqueCreditado: true,
         },
       },
       { status: 200 },
@@ -150,6 +107,3 @@ export async function DELETE(request: Request) {
     );
   }
 }
-
-
-

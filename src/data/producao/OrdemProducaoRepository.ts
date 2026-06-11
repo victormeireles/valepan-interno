@@ -107,6 +107,22 @@ export class OrdemProducaoRepository {
     return data ? fromDbRow(data as unknown as OrdemProducaoRow) : null;
   }
 
+  async findByIds(ids: string[]): Promise<OrdemProducaoRecord[]> {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (unique.length === 0) return [];
+
+    const { data, error } = await this.supabase
+      .from(ORDENS_PRODUCAO_TABLE)
+      .select()
+      .in('id', unique);
+
+    if (error) {
+      throw new Error(`Erro ao buscar ordens produção: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => fromDbRow(row as unknown as OrdemProducaoRow));
+  }
+
   async updateQuantidades(
     id: string,
     fields: {

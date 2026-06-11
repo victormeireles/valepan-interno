@@ -6,7 +6,7 @@ export interface SaidaQuantidade {
 }
 
 export interface SaidaSheetRecord {
-  rowIndex: number;
+  id: string;
   data: string;
   cliente: string;
   observacao: string;
@@ -21,7 +21,7 @@ export interface SaidaSheetRecord {
 }
 
 export interface SaidaMetaListItem {
-  rowIndex: number;
+  id: string;
   data: string;
   cliente: string;
   observacao: string;
@@ -57,7 +57,7 @@ export interface SaidaSubmitPayload {
 }
 
 export interface SaidaRealizadoPayload {
-  rowIndex: number;
+  id: string;
   realizado: SaidaQuantidade;
 }
 

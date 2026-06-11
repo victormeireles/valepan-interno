@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server';
-import { saidasSheetManager } from '@/lib/managers/saidas-sheet-manager';
 import { SaidaMetaPayload } from '@/domain/types/saidas';
-
-function parseRowId(rowId: string): number | null {
-  const parsed = Number(rowId);
-  if (Number.isNaN(parsed) || parsed < 2) return null;
-  return parsed;
-}
+import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
+import { parseSaidaId } from '@/domain/saidas/saida-id';
 
 function isValidDateISO(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -22,19 +17,19 @@ function hasQuantidadeValida(meta: SaidaMetaPayload['meta']): boolean {
 }
 
 export async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ rowId: string }> },
 ) {
   try {
     const { rowId } = await context.params;
-    const rowNumber = parseRowId(rowId);
-    if (!rowNumber) {
+    const movimentoId = parseSaidaId(rowId);
+    if (!movimentoId) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
-    const row = await saidasSheetManager.getRow(rowNumber);
+    const row = await saidaMovimentoService.getById(movimentoId);
     if (!row) {
-      return NextResponse.json({ error: 'Linha não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Saída não encontrada' }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -45,7 +40,7 @@ export async function GET(
         produto: row.produto,
         meta: row.meta,
       },
-      rowId: rowNumber,
+      rowId: movimentoId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -59,8 +54,8 @@ export async function PUT(
 ) {
   try {
     const { rowId } = await context.params;
-    const rowNumber = parseRowId(rowId);
-    if (!rowNumber) {
+    const movimentoId = parseSaidaId(rowId);
+    if (!movimentoId) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
@@ -84,7 +79,7 @@ export async function PUT(
       );
     }
 
-    await saidasSheetManager.updateMeta(rowNumber, payload);
+    await saidaMovimentoService.ajustarRealizado(movimentoId, payload.meta);
 
     return NextResponse.json({ message: 'Meta atualizada com sucesso' });
   } catch (error) {
@@ -92,5 +87,3 @@ export async function PUT(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-
