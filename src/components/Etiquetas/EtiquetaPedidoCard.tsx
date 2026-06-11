@@ -1,7 +1,6 @@
 'use client';
 
 import type { EtiquetaFilaItem } from '@/domain/etiquetas/etiqueta-fila-types';
-import { buildEtiquetaQuantidadeHint } from '@/domain/etiquetas/etiqueta-quantidade-hint';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 import {
   formatEtiquetaMeta,
@@ -25,7 +24,6 @@ export default function EtiquetaPedidoCard({
   variant,
   onAction,
 }: EtiquetaPedidoCardProps) {
-  const hint = buildEtiquetaQuantidadeHint(item.unidade, item.produzido);
   const geradoLabel =
     variant === 'gerado' && item.geradoEm
       ? formatLocalTimeHHmm(item.geradoEm)
@@ -39,33 +37,37 @@ export default function EtiquetaPedidoCard({
           : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-gray-900 truncate">{item.produto}</h3>
           <p className="text-sm text-gray-600 truncate">{item.tipoEstoque}</p>
         </div>
-        {item.lote != null && (
-          <span className="inline-flex shrink-0 items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-            Lote {item.lote}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {item.origem === 'pedido' ? (
+            <div
+              className="text-sm tabular-nums flex items-center gap-1.5"
+              aria-label={`Realizado ${formatEtiquetaRealizado(item.produzido)}, meta ${formatEtiquetaMeta(item.pedido)}`}
+            >
+              <span className="font-semibold text-gray-900">
+                {formatEtiquetaRealizado(item.produzido)}
+              </span>
+              <span className="text-xs text-gray-400">/</span>
+              <span className="text-gray-600">{formatEtiquetaMeta(item.pedido)}</span>
+            </div>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+              Manual
+            </span>
+          )}
+          {item.lote != null && (
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+              Lote {item.lote}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-1 text-sm">
-        <div className="flex justify-between gap-2">
-          <span className="text-gray-600">Meta</span>
-          <span className="text-gray-900 font-medium">{formatEtiquetaMeta(item.pedido)}</span>
-        </div>
-        <div className="flex justify-between gap-2">
-          <span className="text-gray-600">Realizado</span>
-          <span className="text-gray-900 font-medium">
-            {formatEtiquetaRealizado(item.produzido)}
-          </span>
-        </div>
-        {hint && <p className="text-sm text-gray-500">{hint}</p>}
-      </div>
-
-      {item.primeiroLoteHorario && (
+      {item.origem === 'pedido' && item.primeiroLoteHorario && (
         <p className="text-xs text-gray-500">
           Embalado às {item.primeiroLoteHorario}
         </p>

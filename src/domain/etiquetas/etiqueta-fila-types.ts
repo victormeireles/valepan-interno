@@ -4,9 +4,14 @@ export type EtiquetaFilaSortable = {
   pedidoEmbalagemId: string;
   lote: number | null;
   pedidoCreatedAt: string;
+  primeiroLoteCreatedAt?: string;
 };
 
+export type EtiquetaFilaOrigem = 'pedido' | 'manual';
+
 export type EtiquetaFilaItem = EtiquetaFilaSortable & {
+  origem: EtiquetaFilaOrigem;
+  etiquetaGeradaId?: string;
   produto: string;
   produtoId: string;
   tipoEstoque: string;

@@ -24,42 +24,60 @@ export function getTodayISOInBrazilTimezone(): string {
 }
 
 /**
- * Normaliza uma data para o formato ISO (YYYY-MM-DD) sem considerar timezone
- * Evita problemas de conversão de timezone ao parsear datas
- * 
- * @param value - Valor a ser normalizado (string, Date, etc)
- * @returns string no formato YYYY-MM-DD ou data atual do Brasil se inválido
+ * Extrai uma data de calendário (YYYY-MM-DD) sem deslocamento de fuso.
+ * Colunas `date` do Postgres e strings ISO date-only devem usar esta função.
  */
-export function normalizeToISODate(value?: unknown): string {
-  if (!value) return getTodayISOInBrazilTimezone();
-  const str = value.toString().trim();
-  if (!str) return getTodayISOInBrazilTimezone();
+export function extractCalendarDate(value: unknown): string {
+  if (value == null || value === '') return '';
 
-  // Se já está no formato ISO (YYYY-MM-DD), retornar diretamente
-  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    return isoMatch[0];
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '';
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
-  // Formato brasileiro dd/mm/yyyy
+  const str = String(value).trim();
+  if (!str) return '';
+
+  const isoPrefix = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoPrefix) return isoPrefix[1];
+
   const brMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (brMatch) {
     const [, dd, mm, yyyy] = brMatch;
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // Para outros formatos (como Date objects ou strings com hora),
-  // tentar parsear mas usar o timezone do Brasil para extrair a data
+  return '';
+}
+
+/**
+ * Normaliza uma data para o formato ISO (YYYY-MM-DD) sem considerar timezone
+ * Evita problemas de conversão de timezone ao parsear datas
+ *
+ * @param value - Valor a ser normalizado (string, Date, etc)
+ * @returns string no formato YYYY-MM-DD ou data atual do Brasil se inválido
+ */
+export function normalizeToISODate(value?: unknown): string {
+  if (!value) return getTodayISOInBrazilTimezone();
+
+  const calendar = extractCalendarDate(value);
+  if (calendar) return calendar;
+
+  const str = value.toString().trim();
+  if (!str) return getTodayISOInBrazilTimezone();
+
   const parsed = new Date(str);
   if (!Number.isNaN(parsed.getTime())) {
-    // Usar Intl.DateTimeFormat para extrair a data no timezone do Brasil
     const brazilDate = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Sao_Paulo',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     }).format(parsed);
-    
+
     return brazilDate;
   }
 
@@ -111,8 +129,9 @@ export function addCalendarDaysISO(isoDate: string, deltaDays: number): string {
 }
 
 export function formatISODateBr(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-');
-  if (!y || !m || !d) return isoDate;
+  const normalized = extractCalendarDate(isoDate);
+  if (!normalized) return isoDate;
+  const [y, m, d] = normalized.split('-');
   return `${d}/${m}/${y}`;
 }
 

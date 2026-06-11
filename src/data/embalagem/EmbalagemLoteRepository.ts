@@ -1,4 +1,5 @@
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { extractCalendarDate } from '@/lib/utils/date-utils';
 import type {
   EmbalagemLoteInsert,
   EmbalagemLoteRecord,
@@ -64,8 +65,8 @@ function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
     modo: row.modo,
     pedidoEmbalagemId:
       compatRow.ordem_producao_id ?? compatRow.pedido_embalagem_id ?? null,
-    dataPedido: row.data_pedido,
-    dataFabricacao: row.data_fabricacao,
+    dataPedido: extractCalendarDate(row.data_pedido) || row.data_pedido,
+    dataFabricacao: extractCalendarDate(row.data_fabricacao) || row.data_fabricacao,
     tipoEstoqueId: row.tipo_estoque_id,
     produtoId: row.produto_id,
     congelado: row.congelado === 'Sim' ? 'Sim' : 'Não',

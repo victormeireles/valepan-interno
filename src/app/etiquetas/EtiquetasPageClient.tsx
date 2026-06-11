@@ -76,10 +76,13 @@ export default function EtiquetasPageClient() {
       tipoEstoqueId: item.tipoEstoqueId,
       tipoEstoqueNome: item.tipoEstoque,
       dataFabricacao: item.dataFabricacao,
-      ordemProducaoId: item.pedidoEmbalagemId,
+      ...(item.origem === 'pedido' ? { ordemProducaoId: item.pedidoEmbalagemId } : {}),
     });
     setModalOpen(true);
   };
+
+  const getItemKey = (item: EtiquetaFilaItem) =>
+    item.origem === 'manual' ? `manual-${item.etiquetaGeradaId}` : item.pedidoEmbalagemId;
 
   const openManualModal = () => {
     setModalMode('manual');
@@ -181,7 +184,7 @@ export default function EtiquetasPageClient() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
               <EtiquetaPedidoCard
-                key={item.pedidoEmbalagemId}
+                key={getItemKey(item)}
                 item={item}
                 variant={tab === 'pendentes' ? 'pendente' : 'gerado'}
                 onAction={(selected) =>

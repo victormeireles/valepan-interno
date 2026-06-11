@@ -10,19 +10,25 @@ const base = (overrides: Partial<EtiquetaFilaSortable>): EtiquetaFilaSortable =>
 });
 
 describe('sortEtiquetaFilaItems', () => {
-  it('coloca com lote antes de sem lote', () => {
+  it('coloca com lote de embalagem antes de sem lote', () => {
     const input = [
-      base({ pedidoEmbalagemId: 'sem', lote: null }),
-      base({ pedidoEmbalagemId: 'com', lote: 152 }),
+      base({ pedidoEmbalagemId: 'sem' }),
+      base({ pedidoEmbalagemId: 'com', primeiroLoteCreatedAt: '2026-06-11T09:00:00Z' }),
     ];
     const sorted = sortEtiquetaFilaItems(input);
     expect(sorted.map((i) => i.pedidoEmbalagemId)).toEqual(['com', 'sem']);
   });
 
-  it('ordena por created_at asc dentro do grupo', () => {
+  it('ordena por created_at do primeiro lote asc dentro do grupo', () => {
     const input = [
-      base({ pedidoEmbalagemId: 'b', lote: 1, pedidoCreatedAt: '2026-06-11T12:00:00Z' }),
-      base({ pedidoEmbalagemId: 'a', lote: 2, pedidoCreatedAt: '2026-06-11T08:00:00Z' }),
+      base({
+        pedidoEmbalagemId: 'b',
+        primeiroLoteCreatedAt: '2026-06-11T12:00:00Z',
+      }),
+      base({
+        pedidoEmbalagemId: 'a',
+        primeiroLoteCreatedAt: '2026-06-11T08:00:00Z',
+      }),
     ];
     const sorted = sortEtiquetaFilaItems(input);
     expect(sorted.map((i) => i.pedidoEmbalagemId)).toEqual(['a', 'b']);

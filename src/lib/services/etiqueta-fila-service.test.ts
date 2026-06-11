@@ -28,6 +28,7 @@ const listOrdemProducaoIdsByProduzidoDate = vi.fn();
 const listByPedidoEmbalagemIds = vi.fn();
 const findByIdsPedido = vi.fn();
 const findByOrdemProducaoIds = vi.fn();
+const findManualByGeradoDate = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 
@@ -54,10 +55,11 @@ function makeLote(
   pedidoId: string,
   produzidoEm: string,
   caixas: number,
+  createdAt?: string,
 ): EmbalagemLoteRecord {
   return {
     id: `lote-${produzidoEm}`,
-    createdAt: produzidoEm,
+    createdAt: createdAt ?? produzidoEm,
     modo: 'parcial',
     pedidoEmbalagemId: pedidoId,
     dataPedido: '2026-06-11',
@@ -81,6 +83,7 @@ describe('EtiquetaFilaService.getFilaForDate', () => {
     },
     etiquetasGeradasRepository: {
       findByOrdemProducaoIds,
+      findManualByGeradoDate,
     },
     tiposEstoqueService: {
       findByIds: findByIdsTipos,
@@ -113,15 +116,53 @@ describe('EtiquetaFilaService.getFilaForDate', () => {
       { id: 'prod-2', nome: 'Baguete' },
     ]);
     findByOrdemProducaoIds.mockResolvedValue(new Map());
+    findManualByGeradoDate.mockResolvedValue([]);
   });
 
-  it('retorna fila vazia quando não há produção na data', async () => {
+  it('retorna fila vazia quando não há produção nem manual na data', async () => {
     listOrdemProducaoIdsByProduzidoDate.mockResolvedValue([]);
+    findManualByGeradoDate.mockResolvedValue([]);
 
     const result = await service.getFilaForDate('2026-06-11');
 
     expect(result).toEqual({ date: '2026-06-11', pendentes: [], gerados: [] });
     expect(findByIdsPedido).not.toHaveBeenCalled();
+  });
+
+  it('inclui etiquetas manuais geradas na aba gerados', async () => {
+    listOrdemProducaoIdsByProduzidoDate.mockResolvedValue([]);
+    findManualByGeradoDate.mockResolvedValue([
+      {
+        id: 'eg-manual-1',
+        ordemProducaoId: null,
+        produtoId: 'prod-1',
+        tipoEstoqueId: 'tipo-etiqueta',
+        dataFabricacao: '2026-06-11',
+        modo: 'manual' as const,
+        geradoEm: '2026-06-11T15:30:00Z',
+      },
+    ]);
+
+    const result = await service.getFilaForDate('2026-06-11');
+
+    expect(result.pendentes).toHaveLength(0);
+    expect(result.gerados).toHaveLength(1);
+    expect(result.gerados[0]).toMatchObject({
+      origem: 'manual',
+      etiquetaGeradaId: 'eg-manual-1',
+      produto: 'HB Brioche 65g',
+      tipoEstoque: 'Cliente A',
+      dataFabricacao: '2026-06-11',
+      lote: 162,
+      geradoEm: '2026-06-11T15:30:00Z',
+    });
+    expect(result.gerados[0].produzido).toEqual({
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+    });
+    expect(result.gerados[0].primeiroLoteHorario).toBeUndefined();
   });
 
   it('filtra pedidos sem possui_etiqueta e separa pendentes/gerados', async () => {
@@ -173,30 +214,56 @@ describe('EtiquetaFilaService.getFilaForDate', () => {
     expect(result.gerados[0].geradoEm).toBe('2026-06-11T14:00:00Z');
   });
 
-  it('ordena pendentes com lote antes de sem lote e por created_at', async () => {
-    listOrdemProducaoIdsByProduzidoDate.mockResolvedValue(['ped-sem', 'ped-com']);
+  it('usa a data da fila para dataFabricacao em pendentes (meta de outro dia)', async () => {
+    listOrdemProducaoIdsByProduzidoDate.mockResolvedValue(['ped-ontem']);
     findByIdsPedido.mockResolvedValue([
-      basePedido('ped-sem', {
-        createdAt: '2026-06-11T08:00:00Z',
-        dataFabricacaoEtiqueta: '',
+      basePedido('ped-ontem', {
+        dataProducao: '2026-06-10',
+        dataFabricacaoEtiqueta: '2026-06-10',
+        createdAt: '2026-06-10T08:00:00Z',
       }),
-      basePedido('ped-com', { createdAt: '2026-06-11T09:00:00Z' }),
     ]);
 
     listByPedidoEmbalagemIds.mockResolvedValue(
       new Map([
-        ['ped-sem', [makeLote('ped-sem', '2026-06-11T10:00:00Z', 1)]],
-        ['ped-com', [makeLote('ped-com', '2026-06-11T11:00:00Z', 2)]],
+        ['ped-ontem', [makeLote('ped-ontem', '2026-06-11T05:18:47Z', 50)]],
+      ]),
+    );
+
+    const result = await service.getFilaForDate('2026-06-11');
+
+    expect(result.pendentes).toHaveLength(1);
+    expect(result.pendentes[0].dataFabricacao).toBe('2026-06-11');
+    expect(result.pendentes[0].lote).toBe(162);
+  });
+
+  it('ordena pendentes por created_at do primeiro lote de embalagem', async () => {
+    listOrdemProducaoIdsByProduzidoDate.mockResolvedValue(['ped-tarde', 'ped-cedo']);
+    findByIdsPedido.mockResolvedValue([
+      basePedido('ped-tarde', { createdAt: '2026-06-11T09:00:00Z' }),
+      basePedido('ped-cedo', { createdAt: '2026-06-11T08:00:00Z' }),
+    ]);
+
+    listByPedidoEmbalagemIds.mockResolvedValue(
+      new Map([
+        [
+          'ped-tarde',
+          [makeLote('ped-tarde', '2026-06-11T11:00:00Z', 2, '2026-06-11T11:30:00Z')],
+        ],
+        [
+          'ped-cedo',
+          [makeLote('ped-cedo', '2026-06-11T10:00:00Z', 1, '2026-06-11T10:15:00Z')],
+        ],
       ]),
     );
 
     const result = await service.getFilaForDate('2026-06-11');
 
     expect(result.pendentes.map((item) => item.pedidoEmbalagemId)).toEqual([
-      'ped-com',
-      'ped-sem',
+      'ped-cedo',
+      'ped-tarde',
     ]);
-    expect(result.pendentes[0].lote).not.toBeNull();
-    expect(result.pendentes[1].lote).toBeNull();
+    expect(result.pendentes[0].primeiroLoteCreatedAt).toBe('2026-06-11T10:15:00Z');
+    expect(result.pendentes[1].primeiroLoteCreatedAt).toBe('2026-06-11T11:30:00Z');
   });
 });

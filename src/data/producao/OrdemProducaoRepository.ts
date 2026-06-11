@@ -1,5 +1,9 @@
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
-import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import {
+  addCalendarDaysISO,
+  extractCalendarDate,
+  getTodayISOInBrazilTimezone,
+} from '@/lib/utils/date-utils';
 import type {
   OrdemProducaoKey,
   OrdemProducaoRecord,
@@ -60,8 +64,9 @@ function fromDbRow(row: OrdemProducaoRow): OrdemProducaoRecord {
     id: row.id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    dataProducao: row.data_producao,
-    dataFabricacaoEtiqueta: row.data_fabricacao_etiqueta,
+    dataProducao: extractCalendarDate(row.data_producao) || row.data_producao,
+    dataFabricacaoEtiqueta:
+      extractCalendarDate(row.data_fabricacao_etiqueta) || row.data_fabricacao_etiqueta,
     tipoEstoqueId: row.tipo_estoque_id,
     produtoId: row.produto_id,
     observacao: row.observacao,

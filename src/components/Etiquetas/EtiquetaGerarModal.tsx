@@ -12,7 +12,11 @@ import EtiquetaManualFormFields, {
 } from '@/components/Etiquetas/EtiquetaManualFormFields';
 import EtiquetaModalToggleField from '@/components/Etiquetas/EtiquetaModalToggleField';
 import { loadEtiquetaPrefillData } from '@/components/Etiquetas/etiqueta-prefill-loader';
-import { formatISODateBr, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import {
+  extractCalendarDate,
+  formatISODateBr,
+  getTodayISOInBrazilTimezone,
+} from '@/lib/utils/date-utils';
 
 export type EtiquetaGerarModalMode = 'fila' | 'manual' | 'reimprimir';
 
@@ -33,8 +37,10 @@ type EtiquetaGerarModalProps = {
   onSuccess?: () => void;
 };
 
-const scrimClass = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
-const panelClass = 'bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto';
+const overlayClass = 'fixed inset-0 z-50 flex items-center justify-center p-4';
+const backdropClass = 'absolute inset-0 bg-black/50';
+const panelClass =
+  'relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto';
 const inputClass =
   'min-h-11 w-full rounded-lg border border-gray-300 px-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
 const readOnlyClass =
@@ -156,13 +162,15 @@ export default function EtiquetaGerarModal({
     setProdutoId(initialValues.produtoId);
     setTipoEstoqueId(initialValues.tipoEstoqueId);
     setTipoEstoqueNome(initialValues.tipoEstoqueNome);
-    setDataFabricacao(initialValues.dataFabricacao);
+    const fabricacao = extractCalendarDate(initialValues.dataFabricacao)
+      || initialValues.dataFabricacao;
+    setDataFabricacao(fabricacao);
     setOrdemProducaoId(initialValues.ordemProducaoId);
 
     void loadPrefill(
       initialValues.produtoId,
       initialValues.tipoEstoqueId,
-      initialValues.dataFabricacao,
+      fabricacao,
     );
   }, [isOpen, mode, initialValues, loadPrefill]);
 
@@ -272,9 +280,25 @@ export default function EtiquetaGerarModal({
         ? 'Reimprimir etiqueta'
         : 'Gerar etiqueta';
 
+  const handleBackdropClick = () => {
+    if (submitting) return;
+    onClose();
+  };
+
   return (
-    <div className={scrimClass} role="dialog" aria-modal="true" aria-labelledby="etiqueta-modal-title">
-      <div className={panelClass}>
+    <div className={overlayClass}>
+      <div
+        className={backdropClass}
+        onClick={handleBackdropClick}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="etiqueta-modal-title"
+        className={panelClass}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 id="etiqueta-modal-title" className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <span className="material-icons" aria-hidden>
