@@ -203,40 +203,15 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Seção de Inventário */}
+        {/* Seção de Estoque */}
         <section className="mb-8 sm:mb-10">
           <div className="flex items-center gap-4 mb-8 sm:mb-10">
-            <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-emerald-600 via-teal-600 to-transparent"></div>
+            <div className="h-0.5 w-16 sm:w-20 bg-gradient-to-r from-teal-600 via-cyan-600 to-transparent"></div>
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
-              Inventário
+              Estoque
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-            <Link
-              href="/realizado/estoque"
-              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-emerald-300/50 overflow-hidden transform hover:-translate-y-1"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/0 via-teal-50/0 to-cyan-50/0 group-hover:from-emerald-50/50 group-hover:via-teal-50/30 group-hover:to-cyan-50/50 transition-all duration-500"></div>
-              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-emerald-100/0 to-teal-100/0 group-hover:from-emerald-100/30 group-hover:to-teal-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
-              <div className="relative">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                  <span className="text-3xl sm:text-4xl">🏷️</span>
-                </div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-emerald-600 transition-colors duration-300">
-                  Inventário de Estoque
-                </h3>
-                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
-                  Atualize o estoque físico e registre diferenças
-                </p>
-                <div className="flex items-center text-emerald-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
-                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
-                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-              </div>
-            </Link>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-xl">
             <Link
               href="/painel/dashboard-estoque"
               className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-teal-300/50 overflow-hidden transform hover:-translate-y-1"

@@ -5,7 +5,6 @@ import type { EstoqueMovimentoOrigem } from '@/domain/types/estoque-db';
 const ORIGENS: EstoqueMovimentoOrigem[] = [
   'embalagem',
   'saida',
-  'inventario',
   'ajuste_manual',
 ];
 

@@ -1805,87 +1805,6 @@ export type Database = {
           },
         ]
       }
-      inventario_lancamento_itens: {
-        Row: {
-          caixas: number
-          id: string
-          inventario_id: string
-          kg: number
-          pacotes: number
-          produto_id: string
-          unidades: number
-        }
-        Insert: {
-          caixas?: number
-          id?: string
-          inventario_id: string
-          kg?: number
-          pacotes?: number
-          produto_id: string
-          unidades?: number
-        }
-        Update: {
-          caixas?: number
-          id?: string
-          inventario_id?: string
-          kg?: number
-          pacotes?: number
-          produto_id?: string
-          unidades?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "inventario_lancamento_itens_inventario_id_fkey"
-            columns: ["inventario_id"]
-            isOneToOne: false
-            referencedRelation: "inventario_lancamentos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "inventario_lancamento_itens_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["produto_id"]
-          },
-        ]
-      }
-      inventario_lancamentos: {
-        Row: {
-          created_at: string
-          data: string
-          id: string
-          tipo_estoque_id: string
-        }
-        Insert: {
-          created_at?: string
-          data: string
-          id?: string
-          tipo_estoque_id: string
-        }
-        Update: {
-          created_at?: string
-          data?: string
-          id?: string
-          tipo_estoque_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "inventario_lancamentos_tipo_estoque_id_fkey"
-            columns: ["tipo_estoque_id"]
-            isOneToOne: false
-            referencedRelation: "tipos_estoque"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       masseiras: {
         Row: {
           ativo: boolean | null
@@ -4129,7 +4048,6 @@ export type Database = {
       estoque_movimento_origem:
         | "embalagem"
         | "saida"
-        | "inventario"
         | "ajuste_manual"
       frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
@@ -4351,7 +4269,6 @@ export const Constants = {
       estoque_movimento_origem: [
         "embalagem",
         "saida",
-        "inventario",
         "ajuste_manual",
       ],
       frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],

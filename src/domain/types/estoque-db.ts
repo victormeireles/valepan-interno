@@ -3,7 +3,6 @@ import type { Quantidade } from './inventario';
 export type EstoqueMovimentoOrigem =
   | 'embalagem'
   | 'saida'
-  | 'inventario'
   | 'ajuste_manual';
 
 export interface EstoqueSaldoRecord {

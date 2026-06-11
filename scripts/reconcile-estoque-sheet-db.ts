@@ -19,8 +19,8 @@ const jsonOutput = process.argv.includes('--json');
 
 async function main() {
   const { readSheetValues } = await import('../src/lib/googleSheets');
-  const { INVENTARIO_SHEET_CONFIG, ESTOQUE_SHEET_COLUMNS } = await import(
-    '../src/config/inventario'
+  const { ESTOQUE_SHEET_CONFIG, ESTOQUE_SHEET_COLUMNS } = await import(
+    '../src/config/estoque-sheet'
   );
   const { tiposEstoqueService } = await import(
     '../src/lib/services/tipos-estoque-service'
@@ -42,7 +42,7 @@ async function main() {
     );
   }
 
-  const { spreadsheetId, tabName } = INVENTARIO_SHEET_CONFIG.destinoEstoque;
+  const { spreadsheetId, tabName } = ESTOQUE_SHEET_CONFIG;
   const rows = await readSheetValues(spreadsheetId, `${tabName}!A:H`);
   const dataRows = rows.slice(1);
 

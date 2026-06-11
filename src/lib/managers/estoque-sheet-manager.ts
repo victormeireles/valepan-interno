@@ -5,9 +5,9 @@ import {
 } from '@/lib/googleSheets';
 import {
   ESTOQUE_SHEET_COLUMNS,
-  INVENTARIO_SHEET_CONFIG,
+  ESTOQUE_SHEET_CONFIG,
   EstoqueQuantidadeColumns,
-} from '@/config/inventario';
+} from '@/config/estoque-sheet';
 import { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
 
 const ESTOQUE_FULL_RANGE = 'A:H';
@@ -24,11 +24,9 @@ export class EstoqueSheetManager {
   private readonly quantidadeColumns: EstoqueQuantidadeColumns;
 
   constructor() {
-    this.spreadsheetId =
-      INVENTARIO_SHEET_CONFIG.destinoEstoque.spreadsheetId;
-    this.tabName = INVENTARIO_SHEET_CONFIG.destinoEstoque.tabName;
-    this.quantidadeColumns =
-      INVENTARIO_SHEET_CONFIG.destinoEstoque.quantidadeColumns;
+    this.spreadsheetId = ESTOQUE_SHEET_CONFIG.spreadsheetId;
+    this.tabName = ESTOQUE_SHEET_CONFIG.tabName;
+    this.quantidadeColumns = ESTOQUE_SHEET_CONFIG.quantidadeColumns;
   }
 
   public async listAll(): Promise<EstoqueRecord[]> {
@@ -48,45 +46,6 @@ export class EstoqueSheetManager {
     const all = await this.listAll();
     const clienteNormalizado = cliente.trim();
     return all.filter((record) => record.cliente.trim() === clienteNormalizado);
-  }
-
-  public async replaceClienteEstoque(
-    cliente: string,
-    itens: Array<{ produto: string; quantidade: Quantidade }>,
-    metadata?: { inventarioAtualizadoEm?: string; atualizadoEm?: string },
-  ): Promise<void> {
-    const allRows = await readSheetValues(
-      this.spreadsheetId,
-      `${this.tabName}!${ESTOQUE_FULL_RANGE}`,
-    );
-    const dataRows = allRows.slice(1);
-    
-    // Primeiro, consolidar duplicatas existentes na planilha
-    const rowsConsolidadas = this.consolidarDuplicatas(dataRows);
-    
-    const clienteNormalizado = cliente.trim();
-    const preservedRows = rowsConsolidadas.filter(
-      (row) => (row[ESTOQUE_SHEET_COLUMNS.cliente] || '').toString().trim() !== clienteNormalizado,
-    );
-    const atualizadoEm =
-      metadata?.atualizadoEm ?? new Date().toISOString();
-    const inventarioAtualizadoEm =
-      metadata?.inventarioAtualizadoEm ?? atualizadoEm;
-
-    const newRows = itens.map((item) => [
-      clienteNormalizado,
-      item.produto.trim(),
-      item.quantidade.caixas || 0,
-      item.quantidade.pacotes || 0,
-      item.quantidade.unidades || 0,
-      item.quantidade.kg || 0,
-      inventarioAtualizadoEm,
-      atualizadoEm,
-    ]);
-
-    const mergedRows = [...preservedRows, ...newRows];
-    // rewriteDataRows já consolida novamente como segurança extra
-    await this.rewriteDataRows(mergedRows);
   }
 
   public async upsertQuantidade(

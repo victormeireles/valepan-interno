@@ -1,10 +1,4 @@
-import {
-  InventarioLancamentoItem,
-  InventarioLancamentoPayload,
-  EstoqueDiff,
-  EstoqueRecord,
-  Quantidade,
-} from '@/domain/types/inventario';
+import { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
 import type {
   EstoqueMovimentoOrigem,
   EstoqueMovimentoRecord,
@@ -17,8 +11,6 @@ import {
   criarQuantidadeZerada,
 } from '@/domain/estoque/quantidade-calculo';
 import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
-import { inventarioRepository } from '@/data/estoque/InventarioRepository';
-import { inventarioSheetManager } from '@/lib/managers/inventario-sheet-manager';
 import { estoqueSheetManager } from '@/lib/managers/estoque-sheet-manager';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { clientesService } from './clientes-service';
@@ -122,109 +114,6 @@ export class EstoqueService {
     } catch {
       return false;
     }
-  }
-
-  public async avaliarInventario(
-    cliente: string,
-    itens: InventarioLancamentoItem[],
-  ): Promise<{
-    estoqueAtual: EstoqueRecord[];
-    diffs: EstoqueDiff[];
-    produtosNaoInformados: string[];
-  }> {
-    const estoqueAtual = await this.obterEstoqueCliente(cliente);
-    const diffs = this.calcularDiffs(estoqueAtual, itens);
-    const produtosInformados = new Set(itens.map((item) => item.produto));
-    const produtosNaoInformados = estoqueAtual
-      .filter((record) => !produtosInformados.has(record.produto))
-      .map((record) => record.produto);
-
-    return { estoqueAtual, diffs, produtosNaoInformados };
-  }
-
-  public async aplicarInventario(
-    payload: InventarioLancamentoPayload,
-  ): Promise<{
-    diffs: EstoqueDiff[];
-    estoqueAtualizado: EstoqueRecord[];
-  }> {
-    const avaliacao = await this.avaliarInventario(payload.cliente, payload.itens);
-    const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(payload.cliente);
-
-    const itensComZeros = this.completarItensComZeros(avaliacao.estoqueAtual, payload.itens);
-
-    const itensResolvidos = await Promise.all(
-      itensComZeros.map(async (item) => ({
-        produtoId: await estoqueResolverService.resolveProdutoId(item.produto),
-        produtoNome: item.produto,
-        quantidade: item.quantidade,
-      })),
-    );
-
-    await inventarioRepository.create({
-      data: payload.data,
-      tipoEstoqueId,
-      itens: itensResolvidos.map((item) => ({
-        produtoId: item.produtoId,
-        quantidade: item.quantidade,
-      })),
-    });
-
-    for (const item of itensResolvidos) {
-      const saldoAtual = await estoqueRepository.findSaldo(tipoEstoqueId, item.produtoId);
-      const quantidadeAtual = saldoAtual
-        ? {
-            caixas: saldoAtual.caixas,
-            pacotes: saldoAtual.pacotes,
-            unidades: saldoAtual.unidades,
-            kg: Number(saldoAtual.kg),
-          }
-        : criarQuantidadeZerada();
-
-      const delta = calcularDelta(quantidadeAtual, item.quantidade);
-      const houveMudanca =
-        delta.caixas !== 0 ||
-        delta.pacotes !== 0 ||
-        delta.unidades !== 0 ||
-        delta.kg !== 0;
-
-      if (!houveMudanca) continue;
-
-      await this.registrarMovimentoByIds({
-        tipoEstoqueId,
-        produtoId: item.produtoId,
-        tipoEstoqueNome: payload.cliente,
-        produtoNome: item.produtoNome,
-        delta,
-        origem: 'inventario',
-      });
-    }
-
-    const atualizadoEm = new Date().toISOString();
-    await estoqueSheetManager.replaceClienteEstoque(
-      payload.cliente,
-      itensComZeros.map((item) => ({
-        produto: item.produto,
-        quantidade: item.quantidade,
-      })),
-      {
-        inventarioAtualizadoEm: atualizadoEm,
-        atualizadoEm,
-      },
-    );
-
-    try {
-      await inventarioSheetManager.registrarInventario(
-        payload.data,
-        payload.cliente,
-        payload.itens,
-      );
-    } catch (error) {
-      console.error('[EstoqueService] Falha dual-write inventário planilha:', error);
-    }
-
-    const estoqueAtualizado = await this.obterEstoqueCliente(payload.cliente);
-    return { diffs: avaliacao.diffs, estoqueAtualizado };
   }
 
   public async aplicarDelta({
@@ -384,55 +273,6 @@ export class EstoqueService {
     const nomesAtivos = new Set(produtosAtivos.map((produto) => produto.nome));
 
     return records.filter((record) => nomesAtivos.has(record.produto));
-  }
-
-  private calcularDiffs(
-    estoqueAtual: EstoqueRecord[],
-    itens: InventarioLancamentoItem[],
-  ): EstoqueDiff[] {
-    const mapaAtual = new Map(
-      estoqueAtual.map((record) => [record.produto, record.quantidade]),
-    );
-    const diffs: EstoqueDiff[] = [];
-
-    itens.forEach((item) => {
-      const anterior = mapaAtual.get(item.produto);
-      diffs.push({
-        produto: item.produto,
-        anterior,
-        novo: item.quantidade,
-      });
-      mapaAtual.delete(item.produto);
-    });
-
-    mapaAtual.forEach((quantidade, produto) => {
-      diffs.push({
-        produto,
-        anterior: quantidade,
-        novo: criarQuantidadeZerada(),
-      });
-    });
-
-    return diffs;
-  }
-
-  private completarItensComZeros(
-    estoqueAtual: EstoqueRecord[],
-    itens: InventarioLancamentoItem[],
-  ): InventarioLancamentoItem[] {
-    const produtosInformados = new Set(itens.map((item) => item.produto));
-    const itensComZeros = [...itens];
-
-    estoqueAtual.forEach((record) => {
-      if (!produtosInformados.has(record.produto)) {
-        itensComZeros.push({
-          produto: record.produto,
-          quantidade: criarQuantidadeZerada(),
-        });
-      }
-    });
-
-    return itensComZeros;
   }
 
   private normalizarQuantidade(quantidade: Quantidade): Quantidade {
