@@ -9,6 +9,7 @@ import type {
   EstoqueMovimentoOrigem,
   EstoqueMovimentoRecord,
   ListMovimentosFilters,
+  ListSaldosOptions,
 } from '@/domain/types/estoque-db';
 import {
   aplicarDeltaComClamp,
@@ -19,6 +20,7 @@ import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
 import { inventarioRepository } from '@/data/estoque/InventarioRepository';
 import { inventarioSheetManager } from '@/lib/managers/inventario-sheet-manager';
 import { estoqueSheetManager } from '@/lib/managers/estoque-sheet-manager';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { clientesService } from './clientes-service';
 import { tiposEstoqueService } from './tipos-estoque-service';
 import {
@@ -52,8 +54,10 @@ export class EstoqueService {
     return saldos.filter((record) => record.cliente.trim() === clienteNormalizado);
   }
 
-  public async obterTodosEstoques(): Promise<EstoqueRecord[]> {
-    return this.listarSaldosComFallback();
+  public async obterTodosEstoques(
+    options?: ListSaldosOptions,
+  ): Promise<EstoqueRecord[]> {
+    return this.listarSaldosComFallback(options);
   }
 
   public async listarMovimentos(
@@ -340,14 +344,20 @@ export class EstoqueService {
     };
   }
 
-  private async listarSaldosComFallback(): Promise<EstoqueRecord[]> {
+  private async listarSaldosComFallback(
+    options?: ListSaldosOptions,
+  ): Promise<EstoqueRecord[]> {
     const count = await estoqueRepository.countSaldos();
 
     if (count === 0) {
-      return estoqueSheetManager.listAll();
+      const records = await estoqueSheetManager.listAll();
+      if (!options?.apenasProdutosAtivos) {
+        return records;
+      }
+      return this.filtrarRegistrosProdutosAtivos(records);
     }
 
-    const saldos = await estoqueRepository.listAllSaldos();
+    const saldos = await estoqueRepository.listAllSaldos(options);
     return saldos.map((saldo) => ({
       cliente: saldo.tipoEstoqueNome,
       produto: saldo.produtoNome,
@@ -361,6 +371,16 @@ export class EstoqueService {
       ordemFamilia: saldo.ordemFamilia,
       ordemNaFamilia: saldo.ordemNaFamilia,
     }));
+  }
+
+  private async filtrarRegistrosProdutosAtivos(
+    records: EstoqueRecord[],
+  ): Promise<EstoqueRecord[]> {
+    const productService = new SupabaseProductService();
+    const produtosAtivos = await productService.listProducts();
+    const nomesAtivos = new Set(produtosAtivos.map((produto) => produto.nome));
+
+    return records.filter((record) => nomesAtivos.has(record.produto));
   }
 
   private calcularDiffs(

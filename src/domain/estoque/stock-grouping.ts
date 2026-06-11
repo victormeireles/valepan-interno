@@ -1,6 +1,5 @@
 import type { EstoqueRecord, Quantidade } from '@/domain/types/inventario';
 import { criarQuantidadeZerada, somarQuantidades } from './quantidade-calculo';
-import { isQuantidadeZerada } from '@/lib/utils/quantidade-formatter';
 
 export const SEM_FAMILIA_LABEL = 'Sem família';
 
@@ -113,8 +112,6 @@ export function buildStockTree(records: EstoqueRecord[]): StockTipoNode[] {
   >();
 
   for (const record of records) {
-    if (isQuantidadeZerada(record.quantidade)) continue;
-
     const tipoId = record.tipoEstoqueId ?? record.cliente;
     const tipoNome = record.cliente;
 
@@ -218,7 +215,16 @@ export function buildStockTree(records: EstoqueRecord[]): StockTipoNode[] {
     });
   }
 
-  return sortStockTree(tree);
+  return sortStockTree(pruneEmptyStockTree(tree));
+}
+
+export function pruneEmptyStockTree(tree: StockTipoNode[]): StockTipoNode[] {
+  return tree
+    .map((tipo) => ({
+      ...tipo,
+      familias: tipo.familias.filter((familia) => familia.produtos.length > 0),
+    }))
+    .filter((tipo) => tipo.familias.length > 0);
 }
 
 export function filterStockTree(
@@ -265,7 +271,7 @@ export function filterStockTree(
     })
     .filter((t): t is StockTipoNode => t !== null);
 
-  return sortStockTree(filtered);
+  return sortStockTree(pruneEmptyStockTree(filtered));
 }
 
 export function countProductsInTree(tree: StockTipoNode[]): number {

@@ -52,3 +52,7 @@ export interface ListMovimentosFilters {
   ate?: string;
   limit?: number;
 }
+
+export interface ListSaldosOptions {
+  apenasProdutosAtivos?: boolean;
+}

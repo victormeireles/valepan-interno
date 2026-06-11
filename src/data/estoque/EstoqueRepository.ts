@@ -5,6 +5,7 @@ import type {
   EstoqueMovimentoRecord,
   EstoqueSaldoRecord,
   ListMovimentosFilters,
+  ListSaldosOptions,
   RegistrarMovimentoInput,
 } from '@/domain/types/estoque-db';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -15,6 +16,7 @@ type MovimentoRow = Database['public']['Tables']['estoque_movimentos']['Row'];
 
 type ProdutoWithFamilia = {
   nome: string;
+  ativo: boolean;
   produto_familia_id: string | null;
   ordem_na_familia: number;
   produto_familias: { nome_exibicao: string; ordem: number; imagem_url: string | null } | null;
@@ -26,7 +28,10 @@ type SaldoWithRelations = SaldoRow & {
 };
 
 const SALDO_SELECT =
-  '*, tipos_estoque(nome), produtos(nome, produto_familia_id, ordem_na_familia, produto_familias(nome_exibicao, ordem, imagem_url))';
+  '*, tipos_estoque(nome), produtos(nome, ativo, produto_familia_id, ordem_na_familia, produto_familias(nome_exibicao, ordem, imagem_url))';
+
+const SALDO_SELECT_APENAS_ATIVOS =
+  '*, tipos_estoque(nome), produtos!inner(nome, ativo, produto_familia_id, ordem_na_familia, produto_familias(nome_exibicao, ordem, imagem_url))';
 
 type MovimentoWithRelations = MovimentoRow & {
   tipos_estoque: { nome: string } | null;
@@ -151,11 +156,19 @@ export class EstoqueRepository {
     return data;
   }
 
-  async listAllSaldos(): Promise<EstoqueSaldoRecord[]> {
-    const { data, error } = await this.supabase
+  async listAllSaldos(options?: ListSaldosOptions): Promise<EstoqueSaldoRecord[]> {
+    const apenasAtivos = options?.apenasProdutosAtivos === true;
+
+    let query = this.supabase
       .from('estoque_saldos')
-      .select(SALDO_SELECT)
+      .select(apenasAtivos ? SALDO_SELECT_APENAS_ATIVOS : SALDO_SELECT)
       .order('updated_at', { ascending: false });
+
+    if (apenasAtivos) {
+      query = query.eq('produtos.ativo', true);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`Erro ao listar saldos: ${error.message}`);

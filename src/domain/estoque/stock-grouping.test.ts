@@ -6,6 +6,7 @@ import {
   countProductsInTree,
   extractProductVariationLabel,
   filterStockTree,
+  pruneEmptyStockTree,
 } from './stock-grouping';
 
 function record(partial: Partial<EstoqueRecord> & Pick<EstoqueRecord, 'cliente' | 'produto'>): EstoqueRecord {
@@ -77,16 +78,30 @@ describe('buildStockTree', () => {
     expect(tree[0].familias[0].familiaId).toBeNull();
   });
 
-  it('ignora quantidades zeradas', () => {
+  it('inclui produtos com quantidade zerada', () => {
     const tree = buildStockTree([
       record({
         cliente: 'Valepan',
         produto: 'Zerado',
+        tipoEstoqueId: 'tipo-1',
+        produtoId: 'p-zero',
         quantidade: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
+      }),
+      record({
+        cliente: 'Valepan',
+        produto: 'Com estoque',
+        tipoEstoqueId: 'tipo-1',
+        produtoId: 'p1',
+        quantidade: { caixas: 5, pacotes: 0, unidades: 0, kg: 0 },
       }),
     ]);
 
-    expect(tree).toHaveLength(0);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].total.caixas).toBe(5);
+    expect(tree[0].familias[0].produtos).toHaveLength(2);
+    expect(tree[0].familias[0].produtos.some((p) => p.produto === 'Zerado')).toBe(
+      true,
+    );
   });
 
   it('ordena tipos e famílias por estoque (cx desc, pct desc)', () => {
@@ -152,6 +167,52 @@ describe('buildStockTree', () => {
     expect(tree[0].tipoEstoqueNome).toBe('Damião');
     expect(tree[0].familias[0].familiaNome).toBe('Mais pct');
     expect(tree[0].familias[1].familiaNome).toBe('Menos pct');
+  });
+});
+
+describe('pruneEmptyStockTree', () => {
+  it('remove tipos e famílias sem produtos', () => {
+    const tree = pruneEmptyStockTree([
+      {
+        tipoEstoqueId: 't-vazio',
+        tipoEstoqueNome: 'Sem produtos',
+        total: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
+        familias: [],
+      },
+      {
+        tipoEstoqueId: 't1',
+        tipoEstoqueNome: 'Valepan',
+        total: { caixas: 5, pacotes: 0, unidades: 0, kg: 0 },
+        familias: [
+          {
+            familiaId: 'f1',
+            familiaNome: 'Com produtos',
+            familiaImagemUrl: null,
+            ordemFamilia: 1,
+            total: { caixas: 5, pacotes: 0, unidades: 0, kg: 0 },
+            produtos: [
+              {
+                produto: 'Produto A',
+                quantidade: { caixas: 5, pacotes: 0, unidades: 0, kg: 0 },
+              },
+            ],
+          },
+          {
+            familiaId: 'f2',
+            familiaNome: 'Sem produtos',
+            familiaImagemUrl: null,
+            ordemFamilia: 2,
+            total: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
+            produtos: [],
+          },
+        ],
+      },
+    ]);
+
+    expect(tree).toHaveLength(1);
+    expect(tree[0].tipoEstoqueNome).toBe('Valepan');
+    expect(tree[0].familias).toHaveLength(1);
+    expect(tree[0].familias[0].familiaNome).toBe('Com produtos');
   });
 });
 

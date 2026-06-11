@@ -5,7 +5,9 @@ export const revalidate = 3600; // Cache por 1 hora por padrão, invalidado sob 
 
 export async function GET() {
   try {
-    const allStock = await estoqueService.obterTodosEstoques();
+    const allStock = await estoqueService.obterTodosEstoques({
+      apenasProdutosAtivos: true,
+    });
     return NextResponse.json({ data: allStock });
   } catch {
     return NextResponse.json(
