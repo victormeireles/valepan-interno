@@ -307,7 +307,7 @@ function generateEtiquetaHTML(data: {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 25px;
-      margin: 10px 0 20px 0;
+      margin: 10px 0 10px 0;
     }
     
     .info-row-3 {
@@ -342,19 +342,43 @@ function generateEtiquetaHTML(data: {
       font-weight: bold;
     }
     
+    .info-subvalue {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
+    .info-subvalue-label {
+      font-size: 14px;
+      color: #000;
+      font-weight: 600;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    
+    .info-subvalue-days {
+      font-size: 28px;
+      color: #000;
+      font-weight: bold;
+      line-height: 1.1;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
     .bottom-row {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin: 35px 0;
-      gap: 40px;
+      margin: 10px 0 0 0;
+      gap: 30px;
     }
     
     .bottom-col-1 {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 8px;
     }
     
     .bottom-col-1 .info-item {
@@ -385,7 +409,7 @@ function generateEtiquetaHTML(data: {
     
     .barcode-image {
       max-width: 100%;
-      height: 120px;
+      height: 110px;
       display: block;
       margin: 0 auto;
     }
@@ -393,7 +417,7 @@ function generateEtiquetaHTML(data: {
     .barcode-number {
       font-size: 28px;
       color: #000;
-      margin-top: 15px;
+      margin-top: 6px;
       letter-spacing: 2px;
       font-weight: bold;
     }
@@ -485,6 +509,10 @@ function generateEtiquetaHTML(data: {
           <div class="info-label-line">CONGELADO</div>
         </div>
         <div class="info-value">${data.diasValidadeCongelado} DIAS</div>
+        <div class="info-subvalue">
+          <div class="info-subvalue-label">APÓS DESCONGELAR</div>
+          <div class="info-subvalue-days">5 DIAS</div>
+        </div>
       </div>
     </div>
     `}
