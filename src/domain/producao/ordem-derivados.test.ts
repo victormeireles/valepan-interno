@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assadeirasFromSheetQuantidade,
   deriveQuantidadesFromAssadeiras,
+  deriveQuantidadesFromUnidades,
 } from './ordem-derivados';
 
 describe('deriveQuantidadesFromAssadeiras', () => {
@@ -63,5 +64,42 @@ describe('assadeirasFromSheetQuantidade', () => {
       { unidadesPorAssadeira: 24, boxUnits: 12 },
     );
     expect(result).toBe(0);
+  });
+});
+
+describe('deriveQuantidadesFromUnidades', () => {
+  it('mantém unidades totais e deriva caixas com floor', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 1000,
+      boxUnits: 24,
+    });
+    expect(result).toEqual({
+      unidades: 1000,
+      caixas: 41,
+      pacotes: 0,
+      kg: 0,
+    });
+  });
+
+  it('caixas = 0 sem box_units', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 500,
+      boxUnits: null,
+    });
+    expect(result).toEqual({
+      unidades: 500,
+      caixas: 0,
+      pacotes: 0,
+      kg: 0,
+    });
+  });
+
+  it('arredonda unidades para inteiro', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 99.6,
+      boxUnits: 10,
+    });
+    expect(result.unidades).toBe(100);
+    expect(result.caixas).toBe(10);
   });
 });

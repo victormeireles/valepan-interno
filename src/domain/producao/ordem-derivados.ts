@@ -22,6 +22,18 @@ export function deriveQuantidadesFromAssadeiras(
   return { unidades, caixas, pacotes: 0, kg: 0 };
 }
 
+export function deriveQuantidadesFromUnidades(input: {
+  unidades: number;
+  boxUnits?: number | null;
+}): DerivedQuantidades {
+  const unidades = Math.round(input.unidades);
+  const caixas =
+    input.boxUnits && input.boxUnits > 0
+      ? Math.floor(unidades / input.boxUnits)
+      : 0;
+  return { unidades, caixas, pacotes: 0, kg: 0 };
+}
+
 export function assadeirasFromSheetQuantidade(
   q: { caixas: number; pacotes: number; unidades: number; kg: number },
   ctx: { unidadesPorAssadeira: number; boxUnits: number | null },
