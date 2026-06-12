@@ -6,13 +6,21 @@ import NumberInput from '@/components/FormControls/NumberInput';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
 import TextInput from '@/components/FormControls/TextInput';
 import Switch from '@/components/FormControls/Switch';
-import { deriveQuantidadesFromAssadeiras } from '@/domain/producao/ordem-derivados';
+import {
+  usePedidoItemModoEntrada,
+  type AssadeiraOption,
+} from '@/components/CreatePedidoModal/usePedidoItemModoEntrada';
+import {
+  deriveQuantidadesFromAssadeiras,
+  deriveQuantidadesFromUnidades,
+} from '@/domain/producao/ordem-derivados';
 
 type PedidoItem = {
   produto: string;
   congelado: boolean;
   assadeiras: number;
   assadeiraId: string;
+  unidades: number;
   tipoCliente?: string | null;
   observacao?: string;
 };
@@ -48,12 +56,6 @@ type CreatePedidoModalProps = {
   };
 };
 
-type AssadeiraOption = {
-  id: string;
-  nome: string;
-  unidadesPorAssadeiraEfetiva: number;
-};
-
 function getTodayISO(): string {
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -68,6 +70,7 @@ function createEmptyItem(): PedidoItem {
     congelado: false,
     assadeiras: 0,
     assadeiraId: '',
+    unidades: 0,
     tipoCliente: null,
     observacao: '',
   };
@@ -84,16 +87,6 @@ function createInitialForm(): CreatePedidoData {
   };
 }
 
-function reindexRecord<T>(record: Record<number, T>, removedIndex: number): Record<number, T> {
-  const next: Record<number, T> = {};
-  for (const [key, value] of Object.entries(record)) {
-    const numericKey = Number(key);
-    if (numericKey < removedIndex) next[numericKey] = value;
-    if (numericKey > removedIndex) next[numericKey - 1] = value;
-  }
-  return next;
-}
-
 export default function CreatePedidoModal({
   isOpen,
   onClose,
@@ -107,18 +100,21 @@ export default function CreatePedidoModal({
   const [formData, setFormData] = useState<CreatePedidoData>(createInitialForm);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [tiposClienteOptions, setTiposClienteOptions] = useState<string[]>([]);
-  const [assadeiraOptionsByItem, setAssadeiraOptionsByItem] = useState<Record<number, AssadeiraOption[]>>({});
-  const [boxUnitsByItem, setBoxUnitsByItem] = useState<Record<number, number | null>>({});
-  const [assadeiraLoadingByItem, setAssadeiraLoadingByItem] = useState<Record<number, boolean>>({});
+  const {
+    getState,
+    resetAll,
+    resetIndex,
+    setLoading,
+    applyAssadeirasLoaded,
+    reindexAfterRemove,
+  } = usePedidoItemModoEntrada();
 
   useEffect(() => {
     if (!isOpen) return;
     setFormData(createInitialForm());
-    setAssadeiraOptionsByItem({});
-    setBoxUnitsByItem({});
-    setAssadeiraLoadingByItem({});
+    resetAll();
     setMessage(null);
-  }, [isOpen]);
+  }, [isOpen, resetAll]);
 
   useEffect(() => {
     const loadTiposCliente = async () => {
@@ -151,7 +147,7 @@ export default function CreatePedidoModal({
   const loadAssadeirasForProduto = async (index: number, produtoNome: string) => {
     if (!produtoNome.trim()) return;
     try {
-      setAssadeiraLoadingByItem((prev) => ({ ...prev, [index]: true }));
+      setLoading(index, true);
       const produtoRes = await fetch(`/api/produtos/${encodeURIComponent(produtoNome)}`);
       const produtoData = await produtoRes.json();
       if (!produtoRes.ok || !produtoData?.produto?.id) {
@@ -164,33 +160,33 @@ export default function CreatePedidoModal({
       const assadeirasData = await assadeirasRes.json();
 
       if (!assadeirasRes.ok) {
-        throw new Error(assadeirasData.error || 'Produto sem assadeiras configuradas');
+        throw new Error(assadeirasData.error || 'Erro ao carregar assadeiras');
       }
 
       const options = (assadeirasData.assadeiras || []) as AssadeiraOption[];
-      setAssadeiraOptionsByItem((prev) => ({ ...prev, [index]: options }));
-      setBoxUnitsByItem((prev) => ({ ...prev, [index]: produtoBoxUnits }));
+      const modo = applyAssadeirasLoaded(index, options, produtoBoxUnits);
 
-      if (options.length === 1) {
+      updateItem(index, 'assadeiras', 0);
+      updateItem(index, 'unidades', 0);
+      updateItem(index, 'assadeiraId', '');
+
+      if (modo === 'latas' && options.length === 1) {
         updateItem(index, 'assadeiraId', options[0].id);
       }
     } catch (err) {
-      setAssadeiraOptionsByItem((prev) => ({ ...prev, [index]: [] }));
-      setBoxUnitsByItem((prev) => ({ ...prev, [index]: null }));
+      resetIndex(index);
       setMessage({
         type: 'error',
         text: err instanceof Error ? err.message : 'Erro ao carregar assadeiras do produto',
       });
-    } finally {
-      setAssadeiraLoadingByItem((prev) => ({ ...prev, [index]: false }));
     }
   };
 
   const handleProdutoChange = async (index: number, value: string) => {
     updateItem(index, 'produto', value);
     updateItem(index, 'assadeiraId', '');
-    setAssadeiraOptionsByItem((prev) => ({ ...prev, [index]: [] }));
-    setBoxUnitsByItem((prev) => ({ ...prev, [index]: null }));
+    updateItem(index, 'unidades', 0);
+    resetIndex(index);
 
     if (produtosOptions.includes(value)) {
       await loadAssadeirasForProduto(index, value);
@@ -201,14 +197,19 @@ export default function CreatePedidoModal({
     e.preventDefault();
     try {
       setMessage(null);
-      const validItems = formData.itens.filter(
-        (item) => item.produto.trim() && item.assadeiras > 0 && Boolean(item.assadeiraId),
-      );
+      const validItems = formData.itens.filter((item, index) => {
+        if (!item.produto.trim()) return false;
+        const { modo } = getState(index);
+        if (modo === 'latas') {
+          return item.assadeiras > 0 && Boolean(item.assadeiraId);
+        }
+        return item.unidades > 0;
+      });
 
       if (validItems.length === 0) {
         setMessage({
           type: 'error',
-          text: 'Adicione ao menos um produto com latas e assadeira selecionada',
+          text: 'Adicione ao menos um produto com quantidade válida (latas ou unidades)',
         });
         return;
       }
@@ -228,9 +229,7 @@ export default function CreatePedidoModal({
 
   const handleClose = () => {
     setFormData(createInitialForm());
-    setAssadeiraOptionsByItem({});
-    setBoxUnitsByItem({});
-    setAssadeiraLoadingByItem({});
+    resetAll();
     setMessage(null);
     onClose();
   };
@@ -248,9 +247,7 @@ export default function CreatePedidoModal({
       ...prev,
       itens: prev.itens.filter((_, i) => i !== index),
     }));
-    setAssadeiraOptionsByItem((prev) => reindexRecord(prev, index));
-    setBoxUnitsByItem((prev) => reindexRecord(prev, index));
-    setAssadeiraLoadingByItem((prev) => reindexRecord(prev, index));
+    reindexAfterRemove(index);
   };
 
   if (!isOpen) return null;
@@ -333,16 +330,26 @@ export default function CreatePedidoModal({
 
               <div className="space-y-4">
                 {formData.itens.map((item, index) => {
-                  const assadeirasOptions = assadeiraOptionsByItem[index] || [];
+                  const {
+                    options: assadeirasOptions,
+                    boxUnits,
+                    modo,
+                    loading: assadeiraLoading,
+                  } = getState(index);
                   const selectedAssadeira = assadeirasOptions.find((a) => a.id === item.assadeiraId);
                   const preview =
-                    selectedAssadeira && item.assadeiras > 0
+                    modo === 'latas' && selectedAssadeira && item.assadeiras > 0
                       ? deriveQuantidadesFromAssadeiras({
                           assadeiras: item.assadeiras,
                           unidadesPorAssadeira: selectedAssadeira.unidadesPorAssadeiraEfetiva,
-                          boxUnits: boxUnitsByItem[index] ?? undefined,
+                          boxUnits: boxUnits ?? undefined,
                         })
-                      : null;
+                      : modo === 'unidades' && item.unidades > 0
+                        ? deriveQuantidadesFromUnidades({
+                            unidades: item.unidades,
+                            boxUnits: boxUnits ?? undefined,
+                          })
+                        : null;
 
                   return (
                     <div key={index} className="bg-white p-4 rounded-lg border border-gray-200">
@@ -383,40 +390,49 @@ export default function CreatePedidoModal({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        {(visibleFields?.pacotes ?? true) && (
+                      {modo === 'latas' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                          {(visibleFields?.pacotes ?? true) && (
+                            <NumberInput
+                              label="Latas (LT)"
+                              value={item.assadeiras}
+                              onChange={(value) => updateItem(index, 'assadeiras', value)}
+                              min={0}
+                              step={1}
+                            />
+                          )}
+                          <div>
+                            <label className="block text-base font-semibold text-gray-800 mb-3">
+                              Assadeira
+                            </label>
+                            <select
+                              value={item.assadeiraId}
+                              onChange={(e) => updateItem(index, 'assadeiraId', e.target.value)}
+                              className="w-full px-4 py-4 text-sm sm:text-base text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+                              disabled={assadeiraLoading || !item.produto}
+                            >
+                              <option value="">
+                                {assadeiraLoading ? 'Carregando...' : 'Selecione uma assadeira'}
+                              </option>
+                              {assadeirasOptions.map((assadeira) => (
+                                <option key={assadeira.id} value={assadeira.id}>
+                                  {assadeira.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4">
                           <NumberInput
-                            label="Latas (LT)"
-                            value={item.assadeiras}
-                            onChange={(value) => updateItem(index, 'assadeiras', value)}
+                            label="Unidades (UN)"
+                            value={item.unidades}
+                            onChange={(value) => updateItem(index, 'unidades', value)}
                             min={0}
                             step={1}
                           />
-                        )}
-
-                        <div>
-                          <label className="block text-base font-semibold text-gray-800 mb-3">
-                            Assadeira
-                          </label>
-                          <select
-                            value={item.assadeiraId}
-                            onChange={(e) => updateItem(index, 'assadeiraId', e.target.value)}
-                            className="w-full px-4 py-4 text-sm sm:text-base text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-                            disabled={assadeiraLoadingByItem[index] || !item.produto}
-                          >
-                            <option value="">
-                              {assadeiraLoadingByItem[index]
-                                ? 'Carregando...'
-                                : 'Selecione uma assadeira'}
-                            </option>
-                            {assadeirasOptions.map((assadeira) => (
-                              <option key={assadeira.id} value={assadeira.id}>
-                                {assadeira.nome}
-                              </option>
-                            ))}
-                          </select>
                         </div>
-                      </div>
+                      )}
 
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -438,9 +454,10 @@ export default function CreatePedidoModal({
                         {preview && (
                           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                             <div className="text-sm text-blue-800">
-                              <span className="font-semibold">Preview:</span> {item.assadeiras} LT
-                              {' '}→ {preview.unidades} UN
-                              {' '}• {preview.caixas} CX
+                              <span className="font-semibold">Preview:</span>{' '}
+                              {modo === 'latas'
+                                ? `${item.assadeiras} LT → ${preview.unidades} UN • ${preview.caixas} CX`
+                                : `${item.unidades} UN • ${preview.caixas} CX`}
                             </div>
                           </div>
                         )}
