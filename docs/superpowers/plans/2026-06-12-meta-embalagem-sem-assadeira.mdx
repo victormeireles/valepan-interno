@@ -1,0 +1,718 @@
+# Meta/Embalagem — Pedidos sem assadeira — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Permitir criar metas de embalagem para produtos sem assadeira vinculada, com entrada em unidades (não latas), persistindo `assadeira_id = NULL` e derivando caixas quando o produto tiver `box_units`.
+
+**Architecture:** Domínio puro em `ordem-derivados.ts` para conversão UN → CX. Novo método `createSemAssadeira` no meta service persiste ordem sem assadeira. API de assadeiras deixa de tratar lista vazia como erro. Modal de criação alterna UI por item (`latas` vs `unidades`) após resolver assadeiras do produto.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase JS, Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-06-12-meta-embalagem-sem-assadeira-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/producao/ordem-derivados.ts` | `deriveQuantidadesFromUnidades` |
+| `src/domain/producao/ordem-derivados.test.ts` | testes UN → CX |
+| `src/lib/services/ordem-producao-service.ts` | `hasAssadeiraForProduto`, `resolveBoxUnitsForProduto` |
+| `src/lib/services/ordem-producao-meta-service.ts` | `createSemAssadeira` |
+| `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts` | 200 com `[]` quando sem vínculo |
+| `src/app/api/submit/embalagem-pedido/route.ts` | roteamento triplo por item |
+| `src/components/CreatePedidoModalAssadeiras.tsx` | UI dinâmica latas vs unidades |
+| `src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts` | hook extraído (mantém modal < 500 linhas) |
+
+---
+
+### Task 1: Domínio — `deriveQuantidadesFromUnidades`
+
+**Files:**
+- Modify: `src/domain/producao/ordem-derivados.ts`
+- Modify: `src/domain/producao/ordem-derivados.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+Adicionar ao final de `ordem-derivados.test.ts`:
+
+```typescript
+import {
+  assadeirasFromSheetQuantidade,
+  deriveQuantidadesFromAssadeiras,
+  deriveQuantidadesFromUnidades,
+} from './ordem-derivados';
+
+describe('deriveQuantidadesFromUnidades', () => {
+  it('mantém unidades totais e deriva caixas com floor', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 1000,
+      boxUnits: 24,
+    });
+    expect(result).toEqual({
+      unidades: 1000,
+      caixas: 41,
+      pacotes: 0,
+      kg: 0,
+    });
+  });
+
+  it('caixas = 0 sem box_units', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 500,
+      boxUnits: null,
+    });
+    expect(result).toEqual({
+      unidades: 500,
+      caixas: 0,
+      pacotes: 0,
+      kg: 0,
+    });
+  });
+
+  it('arredonda unidades para inteiro', () => {
+    const result = deriveQuantidadesFromUnidades({
+      unidades: 99.6,
+      boxUnits: 10,
+    });
+    expect(result.unidades).toBe(100);
+    expect(result.caixas).toBe(10);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/domain/producao/ordem-derivados.test.ts`  
+Expected: FAIL — `deriveQuantidadesFromUnidades is not exported`
+
+- [ ] **Step 3: Implementar função**
+
+Em `ordem-derivados.ts`, após `deriveQuantidadesFromAssadeiras`:
+
+```typescript
+export function deriveQuantidadesFromUnidades(input: {
+  unidades: number;
+  boxUnits?: number | null;
+}): DerivedQuantidades {
+  const unidades = Math.round(input.unidades);
+  const caixas =
+    input.boxUnits && input.boxUnits > 0
+      ? Math.floor(unidades / input.boxUnits)
+      : 0;
+  return { unidades, caixas, pacotes: 0, kg: 0 };
+}
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/domain/producao/ordem-derivados.test.ts`  
+Expected: PASS (todos os describes)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/producao/ordem-derivados.ts src/domain/producao/ordem-derivados.test.ts
+git commit -m "feat(producao): deriveQuantidadesFromUnidades para pedidos sem assadeira"
+```
+
+---
+
+### Task 2: Service — helpers e `createSemAssadeira`
+
+**Files:**
+- Modify: `src/lib/services/ordem-producao-service.ts`
+- Modify: `src/lib/services/ordem-producao-meta-service.ts`
+
+- [ ] **Step 1: Adicionar helpers em `ordem-producao-service.ts`**
+
+```typescript
+async hasAssadeiraForProduto(produtoId: string): Promise<boolean> {
+  const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+  return resolved != null;
+}
+
+async resolveBoxUnitsForProduto(produtoId: string): Promise<number | null> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data: produto } = await supabase
+    .from('produtos')
+    .select('box_units')
+    .eq('id', produtoId)
+    .maybeSingle();
+  return produto?.box_units ?? null;
+}
+```
+
+- [ ] **Step 2: Adicionar tipo e método em `ordem-producao-meta-service.ts`**
+
+Importar `deriveQuantidadesFromUnidades` de `@/domain/producao/ordem-derivados`.
+
+Adicionar tipo:
+
+```typescript
+export type CreateFromUnidadesInput = {
+  dataProducao: string;
+  dataEtiqueta: string;
+  tipoEstoque: string;
+  produto: string;
+  observacao: string;
+  unidades: number;
+};
+```
+
+Adicionar método:
+
+```typescript
+async createSemAssadeira(input: CreateFromUnidadesInput): Promise<OrdemProducaoRecord> {
+  await pedidoEmbalagemService.validatePayloadItems(input.tipoEstoque, [input.produto]);
+
+  const { tipoEstoqueId, produtoId } = await pedidoEmbalagemService.resolveIds(
+    input.tipoEstoque,
+    input.produto,
+  );
+
+  const hasAssadeira = await pedidoEmbalagemService.hasAssadeiraForProduto(produtoId);
+  if (hasAssadeira) {
+    throw new EstoqueResolverError(
+      `Produto "${input.produto}" possui assadeira — use latas para criar a meta`,
+    );
+  }
+
+  if (!Number.isFinite(input.unidades) || input.unidades <= 0) {
+    throw new EstoqueResolverError('Informe ao menos 1 unidade');
+  }
+
+  const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(produtoId);
+  const quantidade = deriveQuantidadesFromUnidades({
+    unidades: input.unidades,
+    boxUnits,
+  });
+
+  const ordem = await ordemProducaoRepository.nextOrdemPlanejamento(input.dataProducao);
+
+  const [record] = await ordemProducaoRepository.upsertMany([
+    {
+      dataProducao: input.dataProducao,
+      dataFabricacaoEtiqueta: input.dataEtiqueta,
+      tipoEstoqueId,
+      produtoId,
+      observacao: input.observacao,
+      assadeiraId: '',
+      assadeiras: 0,
+      ordemPlanejamento: ordem,
+      quantidade,
+    },
+  ]);
+  return record;
+}
+```
+
+- [ ] **Step 3: Verificar build TypeScript**
+
+Run: `npm run build`  
+Expected: compila sem erro (pode demorar; alternativa: `npx tsc --noEmit` se configurado)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/ordem-producao-service.ts src/lib/services/ordem-producao-meta-service.ts
+git commit -m "feat(producao): createSemAssadeira para metas em unidades"
+```
+
+---
+
+### Task 3: API — assadeiras retorna lista vazia
+
+**Files:**
+- Modify: `src/app/api/produtos/[nomeProduto]/assadeiras/route.ts`
+
+- [ ] **Step 1: Remover 404 para lista vazia**
+
+Substituir bloco:
+
+```typescript
+if (assadeiras.length === 0) {
+  return NextResponse.json(
+    { error: 'Produto sem assadeiras configuradas' },
+    { status: 404 },
+  );
+}
+```
+
+Por:
+
+```typescript
+return NextResponse.json({ assadeiras });
+```
+
+(mover o `return NextResponse.json({ assadeiras })` único para depois do map; lista vazia = 200)
+
+Resultado final do handler:
+
+```typescript
+const vinculos = await assadeiraResolver.resolveForProduto(produto.id);
+const assadeiras = vinculos.map((v) => ({
+  id: v.assadeira_id,
+  nome: v.assadeira_nome,
+  unidadesPorAssadeiraEfetiva: v.unidades_efetivas,
+  origem: v.origem,
+}));
+
+return NextResponse.json({ assadeiras });
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/api/produtos/[nomeProduto]/assadeiras/route.ts
+git commit -m "fix(api): assadeiras vazias retornam 200 em vez de 404"
+```
+
+---
+
+### Task 4: API — roteamento em `embalagem-pedido`
+
+**Files:**
+- Modify: `src/app/api/submit/embalagem-pedido/route.ts`
+
+- [ ] **Step 1: Atualizar loop de itens**
+
+Substituir o bloco `for (const item of payload.itens)` por:
+
+```typescript
+for (const item of payload.itens) {
+  const observacao = item.observacao?.trim() || payload.observacao?.trim() || '';
+
+  if (item.assadeiras && item.assadeiras > 0) {
+    await ordemProducaoMetaService.createFromLatas({
+      dataProducao: payload.dataPedido,
+      dataEtiqueta: payload.dataFabricacao,
+      tipoEstoque: payload.cliente,
+      produto: item.produto,
+      latas: item.assadeiras,
+      observacao,
+    });
+    continue;
+  }
+
+  if (item.unidades && item.unidades > 0) {
+    await ordemProducaoMetaService.createSemAssadeira({
+      dataProducao: payload.dataPedido,
+      dataEtiqueta: payload.dataFabricacao,
+      tipoEstoque: payload.cliente,
+      produto: item.produto,
+      observacao,
+      unidades: item.unidades,
+    });
+    continue;
+  }
+
+  await ordemProducaoMetaService.createFromQuantidade({
+    dataProducao: payload.dataPedido,
+    dataEtiqueta: payload.dataFabricacao,
+    tipoEstoque: payload.cliente,
+    produto: item.produto,
+    observacao,
+    quantidade: {
+      caixas: item.caixas || 0,
+      pacotes: item.pacotes || 0,
+      unidades: item.unidades || 0,
+      kg: item.kg || 0,
+    },
+  });
+}
+```
+
+Ordem importa: `assadeiras > 0` primeiro; depois `unidades > 0` sem assadeira; por último legado.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/api/submit/embalagem-pedido/route.ts
+git commit -m "feat(api): roteamento createSemAssadeira em embalagem-pedido"
+```
+
+---
+
+### Task 5: Hook — modo de entrada por item
+
+**Files:**
+- Create: `src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts`
+
+- [ ] **Step 1: Criar hook**
+
+```typescript
+'use client';
+
+import { useCallback, useState } from 'react';
+
+export type ModoEntradaQuantidade = 'latas' | 'unidades';
+
+export type AssadeiraOption = {
+  id: string;
+  nome: string;
+  unidadesPorAssadeiraEfetiva: number;
+};
+
+type AssadeiraState = {
+  options: AssadeiraOption[];
+  boxUnits: number | null;
+  modo: ModoEntradaQuantidade;
+  loading: boolean;
+};
+
+const EMPTY: AssadeiraState = {
+  options: [],
+  boxUnits: null,
+  modo: 'latas',
+  loading: false,
+};
+
+export function usePedidoItemModoEntrada() {
+  const [byIndex, setByIndex] = useState<Record<number, AssadeiraState>>({});
+
+  const resetAll = useCallback(() => setByIndex({}), []);
+
+  const resetIndex = useCallback((index: number) => {
+    setByIndex((prev) => ({ ...prev, [index]: { ...EMPTY } }));
+  }, []);
+
+  const setLoading = useCallback((index: number, loading: boolean) => {
+    setByIndex((prev) => ({
+      ...prev,
+      [index]: { ...(prev[index] ?? EMPTY), loading },
+    }));
+  }, []);
+
+  const applyAssadeirasLoaded = useCallback(
+    (index: number, options: AssadeiraOption[], boxUnits: number | null) => {
+      const modo: ModoEntradaQuantidade = options.length > 0 ? 'latas' : 'unidades';
+      setByIndex((prev) => ({
+        ...prev,
+        [index]: { options, boxUnits, modo, loading: false },
+      }));
+      return modo;
+    },
+    [],
+  );
+
+  const reindexAfterRemove = useCallback((removedIndex: number) => {
+    setByIndex((prev) => {
+      const next: Record<number, AssadeiraState> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        const numericKey = Number(key);
+        if (numericKey < removedIndex) next[numericKey] = value;
+        if (numericKey > removedIndex) next[numericKey - 1] = value;
+      }
+      return next;
+    });
+  }, []);
+
+  const getState = useCallback(
+    (index: number): AssadeiraState => byIndex[index] ?? EMPTY,
+    [byIndex],
+  );
+
+  return {
+    getState,
+    resetAll,
+    resetIndex,
+    setLoading,
+    applyAssadeirasLoaded,
+    reindexAfterRemove,
+  };
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts
+git commit -m "refactor(ui): hook usePedidoItemModoEntrada para modal de pedido"
+```
+
+---
+
+### Task 6: UI — `CreatePedidoModalAssadeiras` dinâmico
+
+**Files:**
+- Modify: `src/components/CreatePedidoModalAssadeiras.tsx`
+
+- [ ] **Step 1: Estender tipo `PedidoItem`**
+
+```typescript
+type PedidoItem = {
+  produto: string;
+  congelado: boolean;
+  assadeiras: number;
+  assadeiraId: string;
+  unidades: number;
+  tipoCliente?: string | null;
+  observacao?: string;
+};
+```
+
+Atualizar `createEmptyItem`:
+
+```typescript
+function createEmptyItem(): PedidoItem {
+  return {
+    produto: '',
+    congelado: false,
+    assadeiras: 0,
+    assadeiraId: '',
+    unidades: 0,
+    tipoCliente: null,
+    observacao: '',
+  };
+}
+```
+
+- [ ] **Step 2: Substituir state local de assadeiras pelo hook**
+
+Remover:
+- `assadeiraOptionsByItem`, `boxUnitsByItem`, `assadeiraLoadingByItem`
+- função `reindexRecord` (hook já tem `reindexAfterRemove`)
+
+Importar e usar:
+
+```typescript
+import { usePedidoItemModoEntrada } from '@/components/CreatePedidoModal/usePedidoItemModoEntrada';
+import { deriveQuantidadesFromAssadeiras, deriveQuantidadesFromUnidades } from '@/domain/producao/ordem-derivados';
+```
+
+No componente:
+
+```typescript
+const {
+  getState,
+  resetAll,
+  resetIndex,
+  setLoading,
+  applyAssadeirasLoaded,
+  reindexAfterRemove,
+} = usePedidoItemModoEntrada();
+```
+
+- [ ] **Step 3: Atualizar `loadAssadeirasForProduto`**
+
+```typescript
+const loadAssadeirasForProduto = async (index: number, produtoNome: string) => {
+  if (!produtoNome.trim()) return;
+  try {
+    setLoading(index, true);
+    const produtoRes = await fetch(`/api/produtos/${encodeURIComponent(produtoNome)}`);
+    const produtoData = await produtoRes.json();
+    if (!produtoRes.ok || !produtoData?.produto?.id) {
+      throw new Error(produtoData.error || 'Produto inválido');
+    }
+
+    const produtoId = produtoData.produto.id as string;
+    const produtoBoxUnits = (produtoData.produto.unPorCaixa as number | undefined) ?? null;
+    const assadeirasRes = await fetch(`/api/produtos/${encodeURIComponent(produtoId)}/assadeiras`);
+    const assadeirasData = await assadeirasRes.json();
+
+    if (!assadeirasRes.ok) {
+      throw new Error(assadeirasData.error || 'Erro ao carregar assadeiras');
+    }
+
+    const options = (assadeirasData.assadeiras || []) as AssadeiraOption[];
+    const modo = applyAssadeirasLoaded(index, options, produtoBoxUnits);
+
+    updateItem(index, 'assadeiras', 0);
+    updateItem(index, 'unidades', 0);
+    updateItem(index, 'assadeiraId', '');
+
+    if (modo === 'latas' && options.length === 1) {
+      updateItem(index, 'assadeiraId', options[0].id);
+    }
+  } catch (err) {
+    resetIndex(index);
+    setMessage({
+      type: 'error',
+      text: err instanceof Error ? err.message : 'Erro ao carregar assadeiras do produto',
+    });
+  }
+};
+```
+
+- [ ] **Step 4: Atualizar validação do submit**
+
+```typescript
+const validItems = formData.itens.filter((item, index) => {
+  if (!item.produto.trim()) return false;
+  const { modo } = getState(index);
+  if (modo === 'latas') {
+    return item.assadeiras > 0 && Boolean(item.assadeiraId);
+  }
+  return item.unidades > 0;
+});
+
+if (validItems.length === 0) {
+  setMessage({
+    type: 'error',
+    text: 'Adicione ao menos um produto com quantidade válida (latas ou unidades)',
+  });
+  return;
+}
+```
+
+- [ ] **Step 5: Render condicional por item**
+
+Dentro do `map` de itens, obter estado:
+
+```typescript
+const { options: assadeirasOptions, boxUnits, modo, loading: assadeiraLoading } = getState(index);
+```
+
+Preview:
+
+```typescript
+const preview =
+  modo === 'latas' && selectedAssadeira && item.assadeiras > 0
+    ? deriveQuantidadesFromAssadeiras({
+        assadeiras: item.assadeiras,
+        unidadesPorAssadeira: selectedAssadeira.unidadesPorAssadeiraEfetiva,
+        boxUnits: boxUnits ?? undefined,
+      })
+    : modo === 'unidades' && item.unidades > 0
+      ? deriveQuantidadesFromUnidades({
+          unidades: item.unidades,
+          boxUnits: boxUnits ?? undefined,
+        })
+      : null;
+```
+
+Substituir grid de Latas + Assadeira por:
+
+```tsx
+{modo === 'latas' ? (
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+    {(visibleFields?.pacotes ?? true) && (
+      <NumberInput
+        label="Latas (LT)"
+        value={item.assadeiras}
+        onChange={(value) => updateItem(index, 'assadeiras', value)}
+        min={0}
+        step={1}
+      />
+    )}
+    <div>
+      <label className="block text-base font-semibold text-gray-800 mb-3">
+        Assadeira
+      </label>
+      <select
+        value={item.assadeiraId}
+        onChange={(e) => updateItem(index, 'assadeiraId', e.target.value)}
+        className="w-full px-4 py-4 text-sm sm:text-base text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+        disabled={assadeiraLoading || !item.produto}
+      >
+        <option value="">
+          {assadeiraLoading ? 'Carregando...' : 'Selecione uma assadeira'}
+        </option>
+        {assadeirasOptions.map((assadeira) => (
+          <option key={assadeira.id} value={assadeira.id}>
+            {assadeira.nome}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+) : (
+  <div className="mt-4">
+    <NumberInput
+      label="Unidades (UN)"
+      value={item.unidades}
+      onChange={(value) => updateItem(index, 'unidades', value)}
+      min={0}
+      step={1}
+    />
+  </div>
+)}
+```
+
+Preview text:
+
+```tsx
+{preview && (
+  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+    <div className="text-sm text-blue-800">
+      <span className="font-semibold">Preview:</span>{' '}
+      {modo === 'latas'
+        ? `${item.assadeiras} LT → ${preview.unidades} UN • ${preview.caixas} CX`
+        : `${item.unidades} UN • ${preview.caixas} CX`}
+    </div>
+  </div>
+)}
+```
+
+- [ ] **Step 6: Atualizar handlers de reset/close/remove**
+
+- `useEffect` on open: chamar `resetAll()` em vez de setters locais
+- `handleClose`: `resetAll()`
+- `removeItem`: `reindexAfterRemove(index)` em vez de `reindexRecord`
+- `handleProdutoChange`: `resetIndex(index)` + zerar `unidades`
+
+- [ ] **Step 7: Verificar lint**
+
+Run: `npm run lint -- --max-warnings=0 src/components/CreatePedidoModalAssadeiras.tsx src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts`  
+Expected: sem erros
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/components/CreatePedidoModalAssadeiras.tsx src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts
+git commit -m "feat(ui): modal embalagem alterna latas vs unidades por produto"
+```
+
+---
+
+### Task 7: Verificação manual
+
+**Files:** nenhum
+
+- [ ] **Step 1: Rodar suite de testes**
+
+Run: `npm test`  
+Expected: all pass
+
+- [ ] **Step 2: Teste manual — produto sem assadeira**
+
+1. `npm run dev`
+2. Abrir `/meta/embalagem`
+3. Novo pedido → selecionar produto **sem assadeira**
+4. Confirmar: campo **Unidades**, sem Latas/Assadeira
+5. Informar ex.: 1000 UN (produto com `box_units = 24`)
+6. Salvar → pedido aparece no painel com unidades/caixas corretos
+
+- [ ] **Step 3: Teste manual — produto com assadeira**
+
+1. Selecionar produto **com assadeira**
+2. Confirmar: Latas + Assadeira (comportamento anterior intacto)
+
+- [ ] **Step 4: Teste manual — pedido misto**
+
+1. Dois itens no mesmo pedido: um com assadeira, outro sem
+2. Confirmar: ambos salvam corretamente
+
+- [ ] **Step 5: Teste manual — edição inalterada**
+
+1. Editar meta existente (com ou sem assadeira)
+2. Confirmar: formulário caixas/pacotes/unidades/kg sem mudança
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Escopo Meta/Embalagem criação | Task 6, 7 |
+| Edição inalterada | Task 7 step 5 (não modifica EditModal) |
+| `deriveQuantidadesFromUnidades` | Task 1 |
+| `createSemAssadeira` | Task 2 |
+| API 200 lista vazia | Task 3 |
+| Roteamento POST | Task 4 |
+| UI dinâmica latas/unidades | Task 5, 6 |
+| Validação produto com assadeira + unidades → 400 | Task 2 |
+| Fora de escopo forno/batch | não incluído |
