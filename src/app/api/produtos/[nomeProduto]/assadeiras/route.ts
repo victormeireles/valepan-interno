@@ -40,13 +40,6 @@ export async function GET(
       origem: v.origem,
     }));
 
-    if (assadeiras.length === 0) {
-      return NextResponse.json(
-        { error: 'Produto sem assadeiras configuradas' },
-        { status: 404 },
-      );
-    }
-
     return NextResponse.json({ assadeiras });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
