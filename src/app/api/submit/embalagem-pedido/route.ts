@@ -38,21 +38,34 @@ export async function POST(request: Request) {
             latas: item.assadeiras,
             observacao,
           });
-        } else {
-          await ordemProducaoMetaService.createFromQuantidade({
+          continue;
+        }
+
+        if (item.unidades && item.unidades > 0) {
+          await ordemProducaoMetaService.createSemAssadeira({
             dataProducao: payload.dataPedido,
             dataEtiqueta: payload.dataFabricacao,
             tipoEstoque: payload.cliente,
             produto: item.produto,
             observacao,
-            quantidade: {
-              caixas: item.caixas || 0,
-              pacotes: item.pacotes || 0,
-              unidades: item.unidades || 0,
-              kg: item.kg || 0,
-            },
+            unidades: item.unidades,
           });
+          continue;
         }
+
+        await ordemProducaoMetaService.createFromQuantidade({
+          dataProducao: payload.dataPedido,
+          dataEtiqueta: payload.dataFabricacao,
+          tipoEstoque: payload.cliente,
+          produto: item.produto,
+          observacao,
+          quantidade: {
+            caixas: item.caixas || 0,
+            pacotes: item.pacotes || 0,
+            unidades: item.unidades || 0,
+            kg: item.kg || 0,
+          },
+        });
       }
     } catch (e) {
       if (e instanceof EstoqueResolverError) {
