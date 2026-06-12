@@ -22,6 +22,21 @@ export class OrdemProducaoService {
     return { tipoEstoqueId, produtoId };
   }
 
+  async hasAssadeiraForProduto(produtoId: string): Promise<boolean> {
+    const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+    return resolved != null;
+  }
+
+  async resolveBoxUnitsForProduto(produtoId: string): Promise<number | null> {
+    const supabase = supabaseClientFactory.createServiceRoleClient();
+    const { data: produto } = await supabase
+      .from('produtos')
+      .select('box_units')
+      .eq('id', produtoId)
+      .maybeSingle();
+    return produto?.box_units ?? null;
+  }
+
   async resolveAssadeiraDefault(produtoId: string): Promise<{
     assadeiraId: string;
     unidadesPorAssadeiraEfetiva: number;

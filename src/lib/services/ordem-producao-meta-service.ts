@@ -3,6 +3,7 @@ import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepositor
 import {
   assadeirasFromSheetQuantidade,
   deriveQuantidadesFromAssadeiras,
+  deriveQuantidadesFromUnidades,
 } from '@/domain/producao/ordem-derivados';
 import type { OrdemProducaoRecord, OrdemProducaoUpsert } from '@/domain/types/ordem-producao';
 import {
@@ -41,6 +42,15 @@ export type CreateFromQuantidadeInput = {
   produto: string;
   observacao: string;
   quantidade: DerivedQuantidades;
+};
+
+export type CreateFromUnidadesInput = {
+  dataProducao: string;
+  dataEtiqueta: string;
+  tipoEstoque: string;
+  produto: string;
+  observacao: string;
+  unidades: number;
 };
 
 type AssadeiraContext = {
@@ -85,6 +95,49 @@ export class OrdemProducaoMetaService {
     await pedidoEmbalagemService.validatePayloadItems(input.tipoEstoque, [input.produto]);
     const upsert = await this.buildUpsertFromLatas(input);
     const [record] = await ordemProducaoRepository.upsertMany([upsert]);
+    return record;
+  }
+
+  async createSemAssadeira(input: CreateFromUnidadesInput): Promise<OrdemProducaoRecord> {
+    await pedidoEmbalagemService.validatePayloadItems(input.tipoEstoque, [input.produto]);
+
+    const { tipoEstoqueId, produtoId } = await pedidoEmbalagemService.resolveIds(
+      input.tipoEstoque,
+      input.produto,
+    );
+
+    const hasAssadeira = await pedidoEmbalagemService.hasAssadeiraForProduto(produtoId);
+    if (hasAssadeira) {
+      throw new EstoqueResolverError(
+        `Produto "${input.produto}" possui assadeira — use latas para criar a meta`,
+      );
+    }
+
+    if (!Number.isFinite(input.unidades) || input.unidades <= 0) {
+      throw new EstoqueResolverError('Informe ao menos 1 unidade');
+    }
+
+    const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(produtoId);
+    const quantidade = deriveQuantidadesFromUnidades({
+      unidades: input.unidades,
+      boxUnits,
+    });
+
+    const ordem = await ordemProducaoRepository.nextOrdemPlanejamento(input.dataProducao);
+
+    const [record] = await ordemProducaoRepository.upsertMany([
+      {
+        dataProducao: input.dataProducao,
+        dataFabricacaoEtiqueta: input.dataEtiqueta,
+        tipoEstoqueId,
+        produtoId,
+        observacao: input.observacao,
+        assadeiraId: '',
+        assadeiras: 0,
+        ordemPlanejamento: ordem,
+        quantidade,
+      },
+    ]);
     return record;
   }
 
