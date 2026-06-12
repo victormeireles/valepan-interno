@@ -1,0 +1,179 @@
+# Design: Meta/Embalagem — pedidos sem assadeira
+
+**Data:** 2026-06-12  
+**Status:** Aprovado pelo stakeholder  
+**Depende de:** mapeamento produto × assadeira (Fase B + regras categoria/peso)
+
+## Contexto
+
+O mapeamento de assadeiras por produto está concluído. Produtos **sem assadeira** são aqueles que, após resolver exceções (`produto_assadeiras`) e regras de categoria/peso (`categoria_assadeira_regras`), retornam lista vazia em `assadeiraResolver.resolveForProduto`.
+
+Hoje, ao criar meta de embalagem (`CreatePedidoModalAssadeiras`), esses produtos falham: a API `/api/produtos/[id]/assadeiras` retorna 404 e o backend (`createFromQuantidade`) exige assadeira default.
+
+**Objetivo:** permitir criar ordens de produção (meta/embalagem) para produtos sem assadeira, com entrada em **unidades** em vez de latas, persistindo unidades e derivando caixas quando o produto tiver `box_units`.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Escopo | **Somente Meta/Embalagem** (criação de pedido) |
+| Meta/Produção (forno) | Fora de escopo desta spec |
+| Edição de meta existente | **Inalterada** — formulário atual (caixas / pacotes / unidades / kg) |
+| Entrada sem assadeira | Campo **Unidades (UN)** — sem latas, sem seletor de assadeira |
+| Entrada com assadeira | Fluxo atual (Latas + Assadeira + preview LT → UN/CX) |
+| Pedido misto | Suportado — cada item do modal resolve modo independentemente |
+| Conversão ao salvar | `unidades` = total informado; `caixas` = `floor(unidades / box_units)` se `box_units > 0`, senão `0` |
+| Quantidade canônica sem assadeira | `unidades` (não latas) |
+| Persistência assadeira | `assadeira_id = NULL`, `assadeiras = 0` |
+| Pacotes / kg | `0` (mesmo padrão do fluxo com assadeira) |
+| Batch import (`MetaEmbalagemBatchModal`) | Fora de escopo |
+
+## Fora de escopo
+
+- Meta/Produção (forno)
+- Edição dinâmica por produto (EditModal permanece genérico)
+- Importação em lote
+- Mudanças no painel de listagem (usa dados já persistidos)
+- Novo flag explícito “produto sem assadeira” no banco — detecção via resolver vazio
+
+## Comportamento do formulário (criação)
+
+### Fluxo por item
+
+1. Usuário seleciona produto no `CreatePedidoModalAssadeiras`.
+2. Sistema carrega assadeiras via API existente.
+3. **Com assadeira(s):** exibe Latas (LT) + seletor de Assadeira + preview `N LT → X UN • Y CX`.
+4. **Sem assadeira:** oculta Latas e Assadeira; exibe **Unidades (UN)** + preview `N UN • Y CX` (CX só se `box_units`).
+5. Submit valida:
+   - Com assadeira: `assadeiras > 0` e `assadeiraId` preenchido
+   - Sem assadeira: `unidades > 0`
+6. Mensagem de erro genérica se nenhum item válido.
+
+### Estado por item
+
+```typescript
+type ModoEntradaQuantidade = 'latas' | 'unidades';
+
+type PedidoItem = {
+  produto: string;
+  congelado: boolean;
+  // modo latas
+  assadeiras: number;
+  assadeiraId: string;
+  // modo unidades (sem assadeira)
+  unidades: number;
+  // metadados embalagem
+  tipoCliente?: string | null;
+  observacao?: string;
+};
+```
+
+Modo derivado após carregar assadeiras: `assadeiras.length > 0 ? 'latas' : 'unidades'`.
+
+## Persistência (backend)
+
+### Nova função de domínio
+
+Arquivo: `src/domain/producao/ordem-derivados.ts`
+
+```typescript
+export function deriveQuantidadesFromUnidades(input: {
+  unidades: number;
+  boxUnits?: number | null;
+}): DerivedQuantidades {
+  const unidades = Math.round(input.unidades);
+  const caixas =
+    input.boxUnits && input.boxUnits > 0
+      ? Math.floor(unidades / input.boxUnits)
+      : 0;
+  return { unidades, caixas, pacotes: 0, kg: 0 };
+}
+```
+
+Espelha `deriveQuantidadesFromAssadeiras`, sem multiplicador de assadeira.
+
+### Novo método no service
+
+Arquivo: `src/lib/services/ordem-producao-meta-service.ts`
+
+```typescript
+createSemAssadeira(input: CreateFromUnidadesInput): Promise<OrdemProducaoRecord>
+```
+
+| Campo | Valor |
+|-------|-------|
+| `assadeira_id` | `NULL` |
+| `assadeiras` | `0` |
+| `unidades` | total informado |
+| `caixas` | derivado via `deriveQuantidadesFromUnidades` |
+| `pacotes`, `kg` | `0` |
+
+Não chama `resolveAssadeiraDefault`. Usa `box_units` do produto apenas para derivar caixas.
+
+### Roteamento em `POST /api/submit/embalagem-pedido`
+
+Por item, nesta ordem:
+
+1. `item.assadeiras > 0` → `createFromLatas` (inalterado)
+2. `item.unidades > 0` **e** produto sem assadeira → `createSemAssadeira` (novo)
+3. Caso contrário → `createFromQuantidade` (legado / edição via API direta)
+
+Para distinguir caso 2 vs 3 na criação via modal: o payload inclui flag implícita — item enviado com `unidades > 0`, sem `assadeiras`, e sem `assadeiraId`. O service valida que o produto realmente não tem assadeira; se tiver, retorna 400 (“Use latas para este produto”).
+
+## API
+
+### `GET /api/produtos/[nomeProduto]/assadeiras`
+
+**Mudança:** lista vazia retorna **200** `{ assadeiras: [] }` em vez de 404.
+
+404 permanece apenas para produto inexistente.
+
+### Payload de criação
+
+`PedidoItem` em `src/config/embalagem.ts` já possui `unidades`; passa a ser usado na criação via modal sem assadeira.
+
+## Arquitetura de arquivos
+
+```
+src/domain/producao/
+  ordem-derivados.ts                    # + deriveQuantidadesFromUnidades
+  ordem-derivados.test.ts               # testes da nova função
+
+src/lib/services/
+  ordem-producao-meta-service.ts        # + createSemAssadeira
+
+src/app/api/
+  produtos/[nomeProduto]/assadeiras/route.ts   # 200 com [] quando vazio
+  submit/embalagem-pedido/route.ts               # roteamento triplo
+
+src/components/
+  CreatePedidoModalAssadeiras.tsx       # UI dinâmica latas vs unidades
+```
+
+## Tratamento de erros
+
+| Situação | Resposta |
+|----------|----------|
+| Produto não encontrado | 404 |
+| `unidades <= 0` em item sem assadeira | 400 |
+| Produto **com** assadeira mas payload só com unidades | 400 |
+| Produto sem assadeira mas payload com latas | 400 (validação modal impede) |
+| Falha de resolução cliente/produto | 400 (`EstoqueResolverError`) |
+
+## Testes
+
+- `deriveQuantidadesFromUnidades`: com/sem `box_units`, arredondamento
+- `createSemAssadeira`: persiste `assadeira_id` null, `assadeiras` 0, derivados corretos
+- API assadeiras: produto sem vínculo → 200 + `[]`
+- Validação: produto com assadeira + payload unidades → 400
+
+## Critérios de aceite
+
+1. Produto sem assadeira: modal exibe Unidades, não Latas/Assadeira.
+2. Produto com assadeira: comportamento idêntico ao atual.
+3. Pedido com itens mistos (com e sem assadeira) salva corretamente.
+4. Ordem salva com `assadeira_id = NULL`, `assadeiras = 0`, `unidades` = valor informado.
+5. Com `box_units = 24` e 1000 UN: `unidades = 1000`, `caixas = 41`.
+6. Sem `box_units`: `caixas = 0`, `unidades` = valor informado.
+7. Edição de meta existente permanece com formulário caixas/pacotes/unidades/kg.
+8. Meta/Produção (forno) inalterada.
