@@ -67,6 +67,7 @@ export class AssadeiraResolver {
         'assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)',
       )
       .eq('produto_id', produtoId)
+      .order('ordem', { ascending: true })
       .order('created_at', { ascending: true });
 
     if (error) {

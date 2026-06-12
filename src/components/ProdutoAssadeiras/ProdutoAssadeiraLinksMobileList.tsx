@@ -5,7 +5,9 @@ import type { ProdutoAssadeiraLink } from '@/app/actions/produto-assadeiras-acti
 type Props = {
   links: ProdutoAssadeiraLink[];
   onEdit: (link: ProdutoAssadeiraLink) => void;
-  onDelete: (link: ProdutoAssadeiraLink) => void;
+  onDelete: (link: ProdutoAssadeiraLink) => void | Promise<void>;
+  deletingLinkId?: string | null;
+  isDeletingAllLinks?: boolean;
 };
 
 function formatOverride(value: number | null) {
@@ -16,13 +18,33 @@ export default function ProdutoAssadeiraLinksMobileList({
   links,
   onEdit,
   onDelete,
+  deletingLinkId = null,
+  isDeletingAllLinks = false,
 }: Props) {
   return (
     <div className="md:hidden divide-y divide-gray-100">
-      {links.map((link) => (
-        <article key={link.id} className="p-4 space-y-3">
+      {links.map((link, index) => {
+        const isDeletingThis =
+          isDeletingAllLinks || deletingLinkId === link.id;
+        const isRowBusy = isDeletingAllLinks || deletingLinkId != null;
+
+        return (
+        <article
+          key={link.id}
+          className={`p-4 space-y-3 ${isDeletingThis ? 'opacity-60' : ''}`}
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-gray-500 tabular-nums">
+                  Ordem {link.ordem}
+                </span>
+                {index === 0 && (
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                    Principal
+                  </span>
+                )}
+              </div>
               <h3 className="font-semibold text-gray-900">{link.assadeira_nome}</h3>
               {!link.assadeira_ativo && (
                 <span className="mt-1 inline-flex rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
@@ -60,7 +82,8 @@ export default function ProdutoAssadeiraLinksMobileList({
             <button
               type="button"
               onClick={() => onEdit(link)}
-              className="min-h-11 inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700"
+              disabled={isRowBusy}
+              className="min-h-11 inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="material-icons text-base" aria-hidden="true">
                 edit
@@ -69,17 +92,32 @@ export default function ProdutoAssadeiraLinksMobileList({
             </button>
             <button
               type="button"
-              onClick={() => onDelete(link)}
-              className="min-h-11 inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-4 text-sm font-medium text-rose-700"
+              onClick={() => void onDelete(link)}
+              disabled={isRowBusy}
+              aria-busy={isDeletingThis}
+              className="min-h-11 inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-4 text-sm font-medium text-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="material-icons text-base" aria-hidden="true">
-                delete
-              </span>
-              Remover
+              {isDeletingThis ? (
+                <>
+                  <span
+                    className="w-4 h-4 border-2 border-rose-300 border-t-rose-700 rounded-full animate-spin"
+                    aria-hidden="true"
+                  />
+                  Removendo…
+                </>
+              ) : (
+                <>
+                  <span className="material-icons text-base" aria-hidden="true">
+                    delete
+                  </span>
+                  Remover
+                </>
+              )}
             </button>
           </div>
         </article>
-      ))}
+      );
+      })}
     </div>
   );
 }

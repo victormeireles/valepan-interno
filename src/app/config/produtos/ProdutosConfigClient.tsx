@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Assadeira } from '@/app/actions/assadeiras-actions';
 import {
   deleteAllProdutoAssadeiraLinks,
   deleteProdutoAssadeiraLink,
+  getProdutoAssadeiraLinks,
   type ProdutoAssadeiraLink,
   type ProdutoComAssadeirasResumo,
 } from '@/app/actions/produto-assadeiras-actions';
@@ -13,6 +14,10 @@ import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import ProdutoAssadeiraLinkModal from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal';
 import ProdutoAssadeirasConfigModal from '@/components/ProdutosConfig/ProdutoAssadeirasConfigModal';
 import type { ProdutoConfigMenuAction } from '@/components/ProdutosConfig/ProdutoConfigOverflowMenu';
+import ProdutosConfigCategoryTabs, {
+  ALL_CATEGORIES_TAB_ID,
+  buildProdutoCategoryTabs,
+} from '@/components/ProdutosConfig/ProdutosConfigCategoryTabs';
 import ProdutosConfigMobileList from '@/components/ProdutosConfig/ProdutosConfigMobileList';
 import ProdutosConfigTable, {
   type ProdutoSortKey,
@@ -21,7 +26,6 @@ import ProdutosConfigTable, {
 type Props = {
   produtos: ProdutoComAssadeirasResumo[];
   assadeirasAtivas: Assadeira[];
-  linksByProdutoId: Record<string, ProdutoAssadeiraLink[]>;
 };
 
 function compareValues(a: unknown, b: unknown): number {
@@ -35,14 +39,22 @@ function compareValues(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b), 'pt-BR');
 }
 
+function sortLinks(links: ProdutoAssadeiraLink[]): ProdutoAssadeiraLink[] {
+  return [...links].sort((a, b) => {
+    if (a.ordem !== b.ordem) return a.ordem - b.ordem;
+    return a.assadeira_nome.localeCompare(b.assadeira_nome, 'pt-BR');
+  });
+}
+
 export default function ProdutosConfigClient({
-  produtos,
+  produtos: initialProdutos,
   assadeirasAtivas,
-  linksByProdutoId,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [produtos, setProdutos] = useState(initialProdutos);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeCategoryId, setActiveCategoryId] = useState(ALL_CATEGORIES_TAB_ID);
   const [sortKey, setSortKey] = useState<ProdutoSortKey>('nome');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [assadeirasModalOpen, setAssadeirasModalOpen] = useState(false);
@@ -50,11 +62,42 @@ export default function ProdutosConfigClient({
   const [activeProdutoId, setActiveProdutoId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<ProdutoAssadeiraLink | undefined>();
   const [toast, setToast] = useState<string | null>(null);
+  const [linksByProdutoId, setLinksByProdutoId] = useState<
+    Record<string, ProdutoAssadeiraLink[]>
+  >({});
+  const [loadingLinksForProdutoId, setLoadingLinksForProdutoId] = useState<string | null>(
+    null,
+  );
+  const [deletingLinkId, setDeletingLinkId] = useState<string | null>(null);
+  const [isDeletingAllLinks, setIsDeletingAllLinks] = useState(false);
 
   const activeProduto = produtos.find((p) => p.id === activeProdutoId) ?? null;
   const activeLinks = activeProdutoId
     ? (linksByProdutoId[activeProdutoId] ?? [])
     : [];
+  const isLoadingActiveLinks = loadingLinksForProdutoId === activeProdutoId;
+
+  useEffect(() => {
+    setProdutos(initialProdutos);
+  }, [initialProdutos]);
+
+  const updateProdutoResumo = useCallback((resumo: ProdutoComAssadeirasResumo) => {
+    setProdutos((prev) =>
+      prev.map((item) => (item.id === resumo.id ? resumo : item)),
+    );
+  }, []);
+
+  const loadLinksForProduto = useCallback(async (produtoId: string) => {
+    setLoadingLinksForProdutoId(produtoId);
+    try {
+      const links = await getProdutoAssadeiraLinks(produtoId);
+      setLinksByProdutoId((prev) => ({ ...prev, [produtoId]: links }));
+    } finally {
+      setLoadingLinksForProdutoId((current) =>
+        current === produtoId ? null : current,
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const produtoId = searchParams.get('produto');
@@ -62,20 +105,31 @@ export default function ProdutosConfigClient({
     if (produtoId && config === 'assadeiras' && produtos.some((p) => p.id === produtoId)) {
       setActiveProdutoId(produtoId);
       setAssadeirasModalOpen(true);
+      void loadLinksForProduto(produtoId);
     }
-  }, [searchParams, produtos]);
+  }, [searchParams, produtos, loadLinksForProduto]);
+
+  const categoryTabs = useMemo(() => buildProdutoCategoryTabs(produtos), [produtos]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return produtos
-      .filter((p) => !term || p.nome.toLowerCase().includes(term))
+      .filter((p) => {
+        if (activeCategoryId !== ALL_CATEGORIES_TAB_ID && p.categoria_id !== activeCategoryId) {
+          return false;
+        }
+        return !term || p.nome.toLowerCase().includes(term);
+      })
       .sort((a, b) => {
         const av = a[sortKey];
         const bv = b[sortKey];
         const cmp = compareValues(av, bv);
         return sortDir === 'asc' ? cmp : -cmp;
       });
-  }, [produtos, searchTerm, sortKey, sortDir]);
+  }, [produtos, searchTerm, activeCategoryId, sortKey, sortDir]);
+
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 || activeCategoryId !== ALL_CATEGORIES_TAB_ID;
 
   const handleSort = (key: ProdutoSortKey) => {
     if (sortKey === key) {
@@ -100,6 +154,7 @@ export default function ProdutosConfigClient({
     setActiveProdutoId(produtoId);
     setAssadeirasModalOpen(true);
     syncUrl(produtoId, 'assadeiras');
+    void loadLinksForProduto(produtoId);
   };
 
   const closeAssadeirasModal = () => {
@@ -116,9 +171,20 @@ export default function ProdutosConfigClient({
     }
   };
 
-  const handleSaved = () => {
+  const handleSaved = (
+    link: ProdutoAssadeiraLink,
+    produtoResumo: ProdutoComAssadeirasResumo,
+  ) => {
+    setLinksByProdutoId((prev) => {
+      const current = prev[produtoResumo.id] ?? [];
+      const exists = current.some((item) => item.id === link.id);
+      const next = exists
+        ? current.map((item) => (item.id === link.id ? link : item))
+        : [...current, link];
+      return { ...prev, [produtoResumo.id]: sortLinks(next) };
+    });
+    updateProdutoResumo(produtoResumo);
     setToast('Vínculo salvo com sucesso');
-    router.refresh();
     setTimeout(() => setToast(null), 4000);
   };
 
@@ -133,19 +199,27 @@ export default function ProdutosConfigClient({
   };
 
   const handleDeleteAllLinks = async () => {
-    if (!activeProdutoId) return;
+    if (!activeProdutoId || isDeletingAllLinks || deletingLinkId) return;
 
-    const result = await deleteAllProdutoAssadeiraLinks(activeProdutoId);
-    if (result.success) {
+    setIsDeletingAllLinks(true);
+    try {
+      const result = await deleteAllProdutoAssadeiraLinks(activeProdutoId);
+      if (!result.success) {
+        alert(result.error || 'Erro ao remover exceções');
+        return;
+      }
+
+      setLinksByProdutoId((prev) => ({ ...prev, [activeProdutoId]: [] }));
+      updateProdutoResumo(result.produto);
       setToast('Exceções removidas');
-      router.refresh();
       setTimeout(() => setToast(null), 4000);
-    } else {
-      alert(result.error || 'Erro ao remover exceções');
+    } finally {
+      setIsDeletingAllLinks(false);
     }
   };
 
   const handleDeleteLink = async (link: ProdutoAssadeiraLink) => {
+    if (!activeProdutoId || deletingLinkId || isDeletingAllLinks) return;
     if (
       !confirm(
         `Remover o vínculo com "${link.assadeira_nome}"? Pedidos futuros não poderão usar esta combinação.`,
@@ -154,13 +228,25 @@ export default function ProdutosConfigClient({
       return;
     }
 
-    const result = await deleteProdutoAssadeiraLink(link.id);
-    if (result.success) {
+    setDeletingLinkId(link.id);
+    try {
+      const result = await deleteProdutoAssadeiraLink(link.id);
+      if (!result.success) {
+        alert(result.error || 'Erro ao remover vínculo');
+        return;
+      }
+
+      setLinksByProdutoId((prev) => ({
+        ...prev,
+        [activeProdutoId]: (prev[activeProdutoId] ?? []).filter(
+          (item) => item.id !== link.id,
+        ),
+      }));
+      updateProdutoResumo(result.produto);
       setToast('Vínculo removido');
-      router.refresh();
       setTimeout(() => setToast(null), 4000);
-    } else {
-      alert(result.error || 'Erro ao remover vínculo');
+    } finally {
+      setDeletingLinkId(null);
     }
   };
 
@@ -212,6 +298,21 @@ export default function ProdutosConfigClient({
           </p>
         </div>
 
+        <ProdutosConfigCategoryTabs
+          tabs={categoryTabs}
+          activeTabId={activeCategoryId}
+          onTabChange={setActiveCategoryId}
+        />
+
+        <div
+          id="produto-tabpanel-list"
+          role="tabpanel"
+          aria-labelledby={
+            activeCategoryId === ALL_CATEGORIES_TAB_ID
+              ? 'produto-tab-all'
+              : `produto-tab-${activeCategoryId}`
+          }
+        >
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-6">
             <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4">
@@ -220,13 +321,25 @@ export default function ProdutosConfigClient({
               </span>
             </div>
             <h2 className="text-lg font-semibold text-gray-900">
-              {searchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto ativo'}
+              {hasActiveFilters ? 'Nenhum produto encontrado' : 'Nenhum produto ativo'}
             </h2>
             <p className="text-gray-500 max-w-sm text-center mt-1 text-sm">
-              {searchTerm
-                ? 'Tente ajustar a busca.'
+              {hasActiveFilters
+                ? 'Tente ajustar a busca ou selecionar outra categoria.'
                 : 'Cadastre produtos ativos para configurá-los aqui.'}
             </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setActiveCategoryId(ALL_CATEGORIES_TAB_ID);
+                }}
+                className="mt-4 min-h-11 px-4 text-sm font-medium text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
+              >
+                Limpar filtros
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -243,6 +356,7 @@ export default function ProdutosConfigClient({
             />
           </>
         )}
+        </div>
       </section>
 
       {activeProduto && (
@@ -251,11 +365,14 @@ export default function ProdutosConfigClient({
             isOpen={assadeirasModalOpen}
             produto={activeProduto}
             links={activeLinks}
+            isLoadingLinks={isLoadingActiveLinks}
             onClose={closeAssadeirasModal}
             onAddLink={openCreateLink}
             onEditLink={openEditLink}
             onDeleteLink={handleDeleteLink}
             onDeleteAllLinks={handleDeleteAllLinks}
+            deletingLinkId={deletingLinkId}
+            isDeletingAllLinks={isDeletingAllLinks}
           >
             <ProdutoAssadeiraLinkModal
               isOpen={linkModalOpen}
@@ -266,6 +383,7 @@ export default function ProdutosConfigClient({
               produtoId={activeProduto.id}
               assadeirasAtivas={assadeirasAtivas}
               linkedAssadeiraIds={activeLinks.map((l) => l.assadeira_id)}
+              existingLinks={activeLinks}
               link={editingLink}
               onSaved={handleSaved}
             />

@@ -15,11 +15,14 @@ type Props = {
   isOpen: boolean;
   produto: ProdutoComAssadeirasResumo;
   links: ProdutoAssadeiraLink[];
+  isLoadingLinks?: boolean;
   onClose: () => void;
   onAddLink: () => void;
   onEditLink: (link: ProdutoAssadeiraLink) => void;
-  onDeleteLink: (link: ProdutoAssadeiraLink) => void;
-  onDeleteAllLinks: () => void;
+  onDeleteLink: (link: ProdutoAssadeiraLink) => void | Promise<void>;
+  onDeleteAllLinks: () => void | Promise<void>;
+  deletingLinkId?: string | null;
+  isDeletingAllLinks?: boolean;
   children?: React.ReactNode;
 };
 
@@ -30,13 +33,17 @@ export default function ProdutoAssadeirasConfigModal({
   isOpen,
   produto,
   links,
+  isLoadingLinks = false,
   onClose,
   onAddLink,
   onEditLink,
   onDeleteLink,
   onDeleteAllLinks,
+  deletingLinkId = null,
+  isDeletingAllLinks = false,
   children,
 }: Props) {
+  const isDeleting = isDeletingAllLinks || deletingLinkId != null;
   const titleId = useId();
   const [regraPreview, setRegraPreview] = useState<AssadeiraVinculoResolvido[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -44,6 +51,10 @@ export default function ProdutoAssadeirasConfigModal({
   useEffect(() => {
     if (!isOpen) {
       setRegraPreview([]);
+      return;
+    }
+
+    if (isLoadingLinks) {
       return;
     }
 
@@ -65,7 +76,7 @@ export default function ProdutoAssadeirasConfigModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, produto.id, links.length]);
+  }, [isOpen, isLoadingLinks, produto.id, links.length]);
 
   if (!isOpen) return null;
 
@@ -129,7 +140,13 @@ export default function ProdutoAssadeirasConfigModal({
             </div>
           )}
 
-          {!hasExcecoes && loadingPreview && (
+          {isLoadingLinks && (
+            <p className="text-sm text-gray-500" role="status" aria-live="polite">
+              Carregando vínculos…
+            </p>
+          )}
+
+          {!isLoadingLinks && !hasExcecoes && loadingPreview && (
             <p className="text-sm text-gray-500">Carregando regra aplicável…</p>
           )}
 
@@ -137,17 +154,33 @@ export default function ProdutoAssadeirasConfigModal({
             <ProdutoAssadeiraRegraPreview vinculos={regraPreview} />
           )}
 
-          {hasExcecoes ? (
+          {!isLoadingLinks && hasExcecoes ? (
             <>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <button
                   type="button"
                   onClick={handleDeleteAll}
-                  className="min-h-11 px-4 py-2.5 text-sm font-semibold text-rose-700 bg-white border border-rose-200 rounded-xl hover:bg-rose-50 transition-colors"
+                  disabled={isDeleting}
+                  className="min-h-11 px-4 py-2.5 text-sm font-semibold text-rose-700 bg-white border border-rose-200 rounded-xl hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
-                  Remover todas as exceções
+                  {isDeletingAllLinks ? (
+                    <>
+                      <span
+                        className="w-4 h-4 border-2 border-rose-300 border-t-rose-700 rounded-full animate-spin"
+                        aria-hidden="true"
+                      />
+                      Removendo exceções…
+                    </>
+                  ) : (
+                    'Remover todas as exceções'
+                  )}
                 </button>
-                <button type="button" onClick={onAddLink} className={primaryButtonClassName}>
+                <button
+                  type="button"
+                  onClick={onAddLink}
+                  disabled={isDeleting}
+                  className={`${primaryButtonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
                   <span className="material-icons text-base" aria-hidden="true">
                     add
                   </span>
@@ -160,15 +193,19 @@ export default function ProdutoAssadeirasConfigModal({
                   links={links}
                   onEdit={onEditLink}
                   onDelete={onDeleteLink}
+                  deletingLinkId={deletingLinkId}
+                  isDeletingAllLinks={isDeletingAllLinks}
                 />
                 <ProdutoAssadeiraLinksMobileList
                   links={links}
                   onEdit={onEditLink}
                   onDelete={onDeleteLink}
+                  deletingLinkId={deletingLinkId}
+                  isDeletingAllLinks={isDeletingAllLinks}
                 />
               </div>
             </>
-          ) : (
+          ) : !isLoadingLinks ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
               <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <span className="material-icons text-3xl text-gray-300" aria-hidden="true">
@@ -189,7 +226,7 @@ export default function ProdutoAssadeirasConfigModal({
                 Criar exceção manual
               </button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {children}

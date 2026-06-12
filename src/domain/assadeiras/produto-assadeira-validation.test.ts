@@ -58,4 +58,23 @@ describe('produtoAssadeiraLinkFormSchema', () => {
     });
     expect(result.unidades_por_assadeira).toBeNull();
   });
+
+  it('aceita ordem de prioridade >= 0', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      ordem: 2,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.ordem).toBe(2);
+    }
+  });
+
+  it('rejeita ordem negativa', () => {
+    const result = parseProdutoAssadeiraLinkForm({
+      ...valid,
+      ordem: -1,
+    });
+    expect(result.success).toBe(false);
+  });
 });

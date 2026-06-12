@@ -6,6 +6,7 @@ import {
   createProdutoAssadeiraLink,
   updateProdutoAssadeiraLink,
   type ProdutoAssadeiraLink,
+  type ProdutoComAssadeirasResumo,
 } from '@/app/actions/produto-assadeiras-actions';
 import AssadeiraCapacityPreview from '@/components/Assadeiras/AssadeiraCapacityPreview';
 import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
@@ -16,9 +17,15 @@ type Props = {
   produtoId: string;
   assadeirasAtivas: Assadeira[];
   linkedAssadeiraIds: string[];
+  existingLinks: ProdutoAssadeiraLink[];
   link?: ProdutoAssadeiraLink;
-  onSaved: () => void;
+  onSaved: (link: ProdutoAssadeiraLink, produto: ProdutoComAssadeirasResumo) => void;
 };
+
+function resolveDefaultOrdem(links: ProdutoAssadeiraLink[]): number {
+  if (links.length === 0) return 0;
+  return Math.max(...links.map((item) => item.ordem)) + 1;
+}
 
 const inputClassName =
   'w-full min-h-11 px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all';
@@ -29,6 +36,7 @@ export default function ProdutoAssadeiraLinkModal({
   produtoId,
   assadeirasAtivas,
   linkedAssadeiraIds,
+  existingLinks,
   link,
   onSaved,
 }: Props) {
@@ -36,6 +44,7 @@ export default function ProdutoAssadeiraLinkModal({
   const [assadeiraId, setAssadeiraId] = useState('');
   const [usarPadrao, setUsarPadrao] = useState(true);
   const [override, setOverride] = useState<number | ''>('');
+  const [ordem, setOrdem] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldError, setFieldError] = useState('');
@@ -65,10 +74,12 @@ export default function ProdutoAssadeiraLinkModal({
         assadeiraId: link?.assadeira_id ?? selectableAssadeiras[0]?.id ?? '',
         usarPadrao: link ? link.unidades_por_assadeira == null : true,
         override: link?.unidades_por_assadeira ?? '',
+        ordem: link?.ordem ?? resolveDefaultOrdem(existingLinks),
       };
       setAssadeiraId(next.assadeiraId);
       setUsarPadrao(next.usarPadrao);
       setOverride(next.override as number | '');
+      setOrdem(next.ordem);
       setError('');
       setFieldError('');
       setDirty(false);
@@ -77,13 +88,13 @@ export default function ProdutoAssadeiraLinkModal({
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, link, selectableAssadeiras]);
+  }, [isOpen, link, selectableAssadeiras, existingLinks]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const current = JSON.stringify({ assadeiraId, usarPadrao, override });
+    const current = JSON.stringify({ assadeiraId, usarPadrao, override, ordem });
     setDirty(current !== initialSnapshot.current);
-  }, [isOpen, assadeiraId, usarPadrao, override]);
+  }, [isOpen, assadeiraId, usarPadrao, override, ordem]);
 
   if (!isOpen && !animating) return null;
 
@@ -117,18 +128,20 @@ export default function ProdutoAssadeiraLinkModal({
         assadeira_id: assadeiraId,
         usar_padrao: usarPadrao,
         unidades_por_assadeira: usarPadrao ? null : (override as number),
+        ordem,
       };
 
       const response = link
         ? await updateProdutoAssadeiraLink(link.id, {
             usar_padrao: usarPadrao,
             unidades_por_assadeira: usarPadrao ? null : (override as number),
+            ordem,
           })
         : await createProdutoAssadeiraLink(payload);
 
       if (!response.success) throw new Error(response.error);
 
-      onSaved();
+      onSaved(response.link, response.produto);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar vínculo');
@@ -244,6 +257,25 @@ export default function ProdutoAssadeiraLinkModal({
             {fatorEfetivo != null && (
               <AssadeiraCapacityPreview paesPorAssadeira={fatorEfetivo} />
             )}
+
+            <div>
+              <label htmlFor="link-ordem" className="block text-sm font-medium text-gray-700 mb-2">
+                Ordem de prioridade
+              </label>
+              <input
+                id="link-ordem"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                value={ordem}
+                onChange={(e) => setOrdem(parseInt(e.target.value, 10) || 0)}
+                className={`${inputClassName} tabular-nums`}
+              />
+              <p className="mt-1.5 text-xs text-gray-500">
+                Menor número = assadeira padrão em pedidos e ordens de produção.
+              </p>
+            </div>
           </div>
 
           <div className="border-t border-gray-100 px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 shrink-0">

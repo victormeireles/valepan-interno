@@ -14,6 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      _ordens_producao_legacy: {
+        Row: {
+          assadeira_id: string | null
+          created_at: string | null
+          data_producao: string | null
+          id: string
+          lote_codigo: string
+          ordem_planejamento: number | null
+          pedido_id: string | null
+          prioridade: number | null
+          produto_id: string
+          qtd_planejada: number
+          status: string | null
+        }
+        Insert: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id: string
+          qtd_planejada: number
+          status?: string | null
+        }
+        Update: {
+          assadeira_id?: string | null
+          created_at?: string | null
+          data_producao?: string | null
+          id?: string
+          lote_codigo?: string
+          ordem_planejamento?: number | null
+          pedido_id?: string | null
+          prioridade?: number | null
+          produto_id?: string
+          qtd_planejada?: number
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_assadeira_id_fkey"
+            columns: ["assadeira_id"]
+            isOneToOne: false
+            referencedRelation: "assadeiras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+        ]
+      }
       assadeiras: {
         Row: {
           ativo: boolean
@@ -1249,71 +1327,6 @@ export type Database = {
           },
         ]
       }
-      etiquetas_geradas: {
-        Row: {
-          created_at: string
-          data_fabricacao: string
-          gerado_em: string
-          gerado_por: string | null
-          id: string
-          modo: string
-          ordem_producao_id: string | null
-          produto_id: string
-          tipo_estoque_id: string
-        }
-        Insert: {
-          created_at?: string
-          data_fabricacao: string
-          gerado_em?: string
-          gerado_por?: string | null
-          id?: string
-          modo: string
-          ordem_producao_id?: string | null
-          produto_id: string
-          tipo_estoque_id: string
-        }
-        Update: {
-          created_at?: string
-          data_fabricacao?: string
-          gerado_em?: string
-          gerado_por?: string | null
-          id?: string
-          modo?: string
-          ordem_producao_id?: string | null
-          produto_id?: string
-          tipo_estoque_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "etiquetas_geradas_ordem_producao_id_fkey"
-            columns: ["ordem_producao_id"]
-            isOneToOne: false
-            referencedRelation: "ordens_producao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "etiquetas_geradas_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "etiquetas_geradas_tipo_estoque_id_fkey"
-            columns: ["tipo_estoque_id"]
-            isOneToOne: false
-            referencedRelation: "tipos_estoque"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "etiquetas_geradas_gerado_por_fkey"
-            columns: ["gerado_por"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       empresas: {
         Row: {
           app_key: string
@@ -1654,6 +1667,78 @@ export type Database = {
           },
           {
             foreignKeyName: "estoque_saldos_tipo_estoque_id_fkey"
+            columns: ["tipo_estoque_id"]
+            isOneToOne: false
+            referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      etiquetas_geradas: {
+        Row: {
+          created_at: string
+          data_fabricacao: string
+          gerado_em: string
+          gerado_por: string | null
+          id: string
+          modo: string
+          ordem_producao_id: string | null
+          produto_id: string
+          tipo_estoque_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_fabricacao: string
+          gerado_em?: string
+          gerado_por?: string | null
+          id?: string
+          modo: string
+          ordem_producao_id?: string | null
+          produto_id: string
+          tipo_estoque_id: string
+        }
+        Update: {
+          created_at?: string
+          data_fabricacao?: string
+          gerado_em?: string
+          gerado_por?: string | null
+          id?: string
+          modo?: string
+          ordem_producao_id?: string | null
+          produto_id?: string
+          tipo_estoque_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "etiquetas_geradas_gerado_por_fkey"
+            columns: ["gerado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
+          },
+          {
+            foreignKeyName: "etiquetas_geradas_tipo_estoque_id_fkey"
             columns: ["tipo_estoque_id"]
             isOneToOne: false
             referencedRelation: "tipos_estoque"
@@ -2057,98 +2142,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "empresas"
             referencedColumns: ["id"]
-          },
-        ]
-      }
-      _ordens_producao_legacy: {
-        Row: {
-          assadeira_id: string | null
-          created_at: string | null
-          data_producao: string | null
-          id: string
-          lote_codigo: string
-          ordem_planejamento: number | null
-          pedido_id: string | null
-          prioridade: number | null
-          produto_id: string
-          qtd_planejada: number
-          status: string | null
-        }
-        Insert: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id: string
-          qtd_planejada: number
-          status?: string | null
-        }
-        Update: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo?: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id?: string
-          qtd_planejada?: number
-          status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ordens_producao_assadeira_id_fkey"
-            columns: ["assadeira_id"]
-            isOneToOne: false
-            referencedRelation: "assadeiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "relatorio_producao_pedidos_v"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["pedido_id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_producao"
-            referencedColumns: ["produto_id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["produto_id"]
           },
         ]
       }
@@ -2715,6 +2708,7 @@ export type Database = {
           assadeira_id: string
           created_at: string
           id: string
+          ordem: number
           produto_id: string
           unidades_por_assadeira: number | null
           updated_at: string
@@ -2723,6 +2717,7 @@ export type Database = {
           assadeira_id: string
           created_at?: string
           id?: string
+          ordem?: number
           produto_id: string
           unidades_por_assadeira?: number | null
           updated_at?: string
@@ -2731,6 +2726,7 @@ export type Database = {
           assadeira_id?: string
           created_at?: string
           id?: string
+          ordem?: number
           produto_id?: string
           unidades_por_assadeira?: number | null
           updated_at?: string
@@ -4045,10 +4041,7 @@ export type Database = {
         | "saida_venda"
         | "ajuste_entrada"
         | "ajuste_saida"
-      estoque_movimento_origem:
-        | "embalagem"
-        | "saida"
-        | "ajuste_manual"
+      estoque_movimento_origem: "embalagem" | "saida" | "ajuste_manual"
       frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
       tipo_pedido_enum: "valepan" | "hamburgueria"
@@ -4266,11 +4259,7 @@ export const Constants = {
         "ajuste_entrada",
         "ajuste_saida",
       ],
-      estoque_movimento_origem: [
-        "embalagem",
-        "saida",
-        "ajuste_manual",
-      ],
+      estoque_movimento_origem: ["embalagem", "saida", "ajuste_manual"],
       frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
       tipo_pedido_enum: ["valepan", "hamburgueria"],

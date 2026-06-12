@@ -13,6 +13,7 @@ export const produtoAssadeiraLinkFormSchema = z
       .min(1, 'Mínimo 1 pão por assadeira')
       .nullable()
       .optional(),
+    ordem: z.number().int().min(0).default(0),
   })
   .transform((data) => ({
     produto_id: data.produto_id,
@@ -20,6 +21,7 @@ export const produtoAssadeiraLinkFormSchema = z
     unidades_por_assadeira: data.usar_padrao
       ? null
       : (data.unidades_por_assadeira ?? null),
+    ordem: data.ordem ?? 0,
   }))
   .superRefine((data, ctx) => {
     if (data.unidades_por_assadeira != null && data.unidades_por_assadeira < 1) {
