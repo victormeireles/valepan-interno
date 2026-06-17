@@ -12,6 +12,8 @@ export type FornoLoteUpdate = {
   unidades?: number;
   fotos?: FornoLoteInsert['fotos'];
   produzidoEm?: string;
+  modo?: FornoLoteInsert['modo'];
+  producaoAnterior?: FornoLoteInsert['producaoAnterior'];
 };
 
 function quantidadeToJson(q: EtapaQuantidade | null | undefined): Json | null {
@@ -96,6 +98,10 @@ export class FornoLoteRepository {
         ...(patch.assadeiras !== undefined ? { assadeiras: patch.assadeiras } : {}),
         ...(patch.unidades !== undefined ? { unidades: patch.unidades } : {}),
         ...(patch.produzidoEm ? { produzido_em: patch.produzidoEm } : {}),
+        ...(patch.modo ? { modo: patch.modo } : {}),
+        ...(patch.producaoAnterior !== undefined
+          ? { producao_anterior: quantidadeToJson(patch.producaoAnterior) }
+          : {}),
         ...(fotos
           ? {
               foto_url: fotos.fotoUrl ?? null,

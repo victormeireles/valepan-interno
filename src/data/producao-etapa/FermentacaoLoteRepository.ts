@@ -15,6 +15,8 @@ export type FermentacaoLoteUpdate = {
   unidades?: number;
   fotos?: FermentacaoLoteInsert['fotos'];
   produzidoEm?: string;
+  modo?: FermentacaoLoteInsert['modo'];
+  producaoAnterior?: FermentacaoLoteInsert['producaoAnterior'];
 };
 
 function quantidadeToJson(q: EtapaQuantidade | null | undefined): Json | null {
@@ -99,6 +101,10 @@ export class FermentacaoLoteRepository {
         ...(patch.assadeiras !== undefined ? { assadeiras: patch.assadeiras } : {}),
         ...(patch.unidades !== undefined ? { unidades: patch.unidades } : {}),
         ...(patch.produzidoEm ? { produzido_em: patch.produzidoEm } : {}),
+        ...(patch.modo ? { modo: patch.modo } : {}),
+        ...(patch.producaoAnterior !== undefined
+          ? { producao_anterior: quantidadeToJson(patch.producaoAnterior) }
+          : {}),
         ...(fotos
           ? {
               foto_url: fotos.fotoUrl ?? null,
