@@ -50,6 +50,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
 
   return {
     ordemProducaoId: ordem.id,
+    ordemPlanejamento: ordem.ordemPlanejamento,
     produto,
     tipoEstoque,
     observacao: ordem.observacao,

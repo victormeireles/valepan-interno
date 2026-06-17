@@ -34,10 +34,10 @@ type BatchPreviewResult = {
 type Step = 'input' | 'preview';
 
 const FORMAT_HINT =
-  'data produção;data etiqueta;tipo estoque;produto;latas/un;assadeira;observação';
+  'data produção;tipo estoque;produto;latas/un;assadeira;data etiqueta;observação';
 
-const EXAMPLE = `2026-06-09;2026-06-09;Valepan;HB Brioche 65g;1000;;
-2026-06-09;2026-06-09;Valepan;HB Gergelim 65g;350;;lata nova`;
+const EXAMPLE = `2026-06-09;Valepan;HB Brioche 65g;1000;;;
+2026-06-09;Valepan;HB Gergelim 65g;350;;;lata nova`;
 
 interface MetaEmbalagemBatchModalProps {
   isOpen: boolean;
@@ -186,7 +186,8 @@ export default function MetaEmbalagemBatchModal({
                 {FORMAT_HINT}
               </p>
               <p className="text-xs text-gray-600">
-                Assadeira vazia usa a padrão do produto. Produtos sem assadeira: informe unidades na coluna latas/un.
+                Assadeira vazia usa a padrão do produto. Data etiqueta vazia usa a data de produção.
+                Produtos sem assadeira: informe unidades na coluna latas/un.
               </p>
               <textarea
                 id={textareaId}

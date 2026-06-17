@@ -3,6 +3,9 @@ import type { FornoLoteRecord } from '@/domain/types/forno-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 
 const listByDataProducao = vi.fn();
+const listByDatasProducao = vi.fn();
+const findUltimaDataComPedidos = vi.fn();
+const findDataAnteriorComPedidos = vi.fn();
 const listByOrdemProducaoIds = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
@@ -11,6 +14,9 @@ const assadeirasIn = vi.fn();
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
     listByDataProducao: (...args: unknown[]) => listByDataProducao(...args),
+    listByDatasProducao: (...args: unknown[]) => listByDatasProducao(...args),
+    findUltimaDataComPedidos: (...args: unknown[]) => findUltimaDataComPedidos(...args),
+    findDataAnteriorComPedidos: (...args: unknown[]) => findDataAnteriorComPedidos(...args),
   },
 }));
 
@@ -141,5 +147,60 @@ describe('PainelFornoService.getPainelForDate', () => {
         { loteId: 'l2', assadeiras: 2 },
       ],
     });
+  });
+});
+
+describe('PainelFornoService.getCargaCompleta', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    findByIdsTipos.mockResolvedValue([
+      {
+        id: 'tipo-1',
+        nome: 'Valepan',
+        ativo: true,
+        possuiEtiqueta: true,
+        congelado: false,
+        mostrarTextoCongelado: false,
+      },
+    ]);
+    findByIdsProdutos.mockResolvedValue([
+      {
+        id: 'prod-1',
+        nome: 'HB Brioche 65g',
+        unidadeNomeResumido: 'UN',
+        codigo: 'HB65',
+        unitBarcode: null,
+        boxUnits: 24,
+        packageUnits: null,
+        unitWeight: null,
+        unidadesAssadeira: 40,
+      },
+    ]);
+    assadeirasIn.mockResolvedValue({
+      data: [{ id: 'ass-1', nome: 'Lata 40' }],
+      error: null,
+    });
+    findUltimaDataComPedidos.mockResolvedValue('2026-06-17');
+    findDataAnteriorComPedidos.mockResolvedValue('2026-06-16');
+  });
+
+  it('retorna ordens e snapshots de comparação', async () => {
+    const ordem = makeOrdem('op-1');
+    listByDatasProducao.mockResolvedValue(
+      new Map([
+        ['2026-06-17', [ordem]],
+        ['2026-06-10', [ordem]],
+        ['2026-06-16', [ordem]],
+      ]),
+    );
+    listByOrdemProducaoIds.mockResolvedValue(
+      new Map([['op-1', [makeLote('l1', 3)]]]),
+    );
+
+    const result = await painelFornoService.getCargaCompleta('2026-06-17');
+
+    expect(result.comparacaoSemana.date).toBe('2026-06-10');
+    expect(result.comparacaoAnterior.date).toBe('2026-06-16');
+    expect(result.ordens).toHaveLength(1);
   });
 });

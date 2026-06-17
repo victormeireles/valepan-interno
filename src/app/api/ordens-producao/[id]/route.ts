@@ -3,6 +3,7 @@ import {
   ordemProducaoMetaService,
   EstoqueResolverError,
 } from '@/lib/services/ordem-producao-meta-service';
+import { extractCalendarDate } from '@/lib/utils/date-utils';
 
 type OrdemProducaoUpdateBody = {
   dataProducao: string;
@@ -20,9 +21,17 @@ function isValidDateISO(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
 }
 
+function normalizeCalendarDates(body: OrdemProducaoUpdateBody): OrdemProducaoUpdateBody | null {
+  const dataProducao = extractCalendarDate(body.dataProducao);
+  const dataEtiqueta = extractCalendarDate(body.dataEtiqueta);
+  if (!dataProducao || !dataEtiqueta) return null;
+  return { ...body, dataProducao, dataEtiqueta };
+}
+
 function validateUpdateBody(body: OrdemProducaoUpdateBody): string | null {
   if (!body) return 'Corpo da requisição inválido';
-  if (!isValidDateISO(body.dataProducao) || !isValidDateISO(body.dataEtiqueta)) {
+  const normalized = normalizeCalendarDates(body);
+  if (!normalized || !isValidDateISO(normalized.dataProducao) || !isValidDateISO(normalized.dataEtiqueta)) {
     return 'Datas inválidas';
   }
   if (!body.tipoEstoque?.trim()) return 'Tipo de estoque é obrigatório';
@@ -39,11 +48,13 @@ export async function PUT(
 ) {
   try {
     const { id } = await context.params;
-    const body = (await request.json()) as OrdemProducaoUpdateBody;
-    const validationError = validateUpdateBody(body);
+    const rawBody = (await request.json()) as OrdemProducaoUpdateBody;
+    const validationError = validateUpdateBody(rawBody);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
+
+    const body = normalizeCalendarDates(rawBody)!;
 
     try {
       await ordemProducaoMetaService.updateFromForm(id, {

@@ -1,0 +1,165 @@
+# Design: Dashboard lateral — Fermentação e Forno
+
+**Data:** 2026-06-18  
+**Status:** Aprovado pelo stakeholder  
+**Rotas:** `/realizado/fermentacao`, `/realizado/forno`  
+**Depende de:** `2026-06-17-fermentacao-forno-desligar-planilha-design.mdx`, `2026-04-10-realizado-embalagem-dashboard-design.mdx`
+
+## Contexto
+
+As telas de fermentação e forno já exibem cards hierárquicos (ordem → lotes) ordenados por `ordemPlanejamento`. Falta o **painel lateral de métricas** presente em `/realizado/embalagem`: resumo do dia + tabela horária com comparações.
+
+## Objetivo
+
+Replicar o **layout** da embalagem (cards à esquerda / dashboard à direita no desktop; dashboard abaixo no mobile) com um dashboard **enxuto**:
+
+1. **Produzido / meta** e **Falta produzir** — apenas **assadeiras (lt)**
+2. **Sem** cards de média por hora nem previsão até fechar (ritmo de ontem)
+3. **Tabela por intervalo** com **3 colunas** (dia filtrado, dia anterior, D-7), valores em assadeiras
+
+## Layout
+
+### Desktop (`lg+`)
+
+- Header (`RealizadoHeader`): largura total, inalterado.
+- Corpo: `grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start`
+  - **Coluna esquerda:** cards (não finalizados + finalizados), `ThreeColumnLayout` com `columnCount={3}` dentro da metade esquerda.
+  - **Coluna direita:** `EtapaAssadeirasDashboard` com `lg:sticky lg:top-4`.
+
+### Mobile
+
+- Uma coluna: **cards primeiro**, **dashboard depois**.
+
+Cores de fundo permanecem por etapa (fermentação `#8b773a`, forno `#330804`).
+
+## Métricas do resumo
+
+| Label embalagem | Label fermentação/forno |
+|-----------------|-------------------------|
+| Embalado / meta | **Produzido / meta** |
+| Falta embalar | **Falta produzir** |
+| Unidade `cx` | Unidade **`lt`** (latas/assadeiras) |
+
+### Regra de inclusão (somente assadeiras)
+
+Uma ordem entra no dashboard **somente se**:
+
+- `modoQuantidade === 'assadeiras'`, **e**
+- `pedido.assadeiras > 0`
+
+Ordens só em unidades (`modoQuantidade === 'unidades'` ou meta de assadeiras zero) **não entram** no resumo nem na tabela.
+
+### Cálculos
+
+- **Meta:** `SUM(pedido.assadeiras)` das ordens elegíveis
+- **Produzido:** `SUM(lote.assadeiras)` dos lotes dessas ordens (ignorar `lote.unidades`)
+- **Falta produzir:** `max(0, meta - produzido)`
+- **Barra de progresso:** `produzido / meta` (cap 100%), estilo igual embalagem
+
+## Tabela por intervalo
+
+Mesma UX da embalagem (`EmbalagemDashboard` seção final):
+
+- **Colunas:** dia filtrado (destaque âmbar) | dia anterior | mesma data semana passada (D-7)
+- **Subcolunas por dia:** `hora` | `acum.`
+- **Linhas:** união de intervalos horários (0–23, fuso **América/São_Paulo**) em que **qualquer** dos 3 dias teve assadeiras > 0
+- **Valor hora:** soma de `lote.assadeiras` cujo `produzidoEm` cai naquela hora BR
+- **Valor acum.:** soma acumulada de assadeiras da meia-noite até o fim da faixa horária
+- **Aviso:** assadeiras no dia filtrado sem `produzidoEm` válido — não entram na tabela (mensagem equivalente à embalagem)
+
+### Timestamp
+
+- Usar **`lote.produzidoEm`** (equivalente ao `producaoUpdatedAt` / col. Q da embalagem)
+
+## Fora de escopo
+
+- Cards “Média 7h → …”
+- Card “Previsão até fechar (ritmo de ontem)” e régua 20h–22h
+- Inclusão de unidades no dashboard
+- Alteração do layout de cards (agrupamento, ordem) — já definido em sessão anterior
+- TV / WhatsApp
+
+## Arquitetura
+
+### Abordagem (aprovada)
+
+Extrair blocos reutilizáveis do `EmbalagemDashboard` (resumo + tabela horária) para componentes compartilhados. Criar `EtapaAssadeirasDashboard` sem seção de previsão. Domínio em `painel-dashboard-adapter` espelhando `painel-dashboard-adapter` da embalagem.
+
+### API — carga completa
+
+Espelhar `GET /api/painel/embalagem/carga`:
+
+| Rota | Service |
+|------|---------|
+| `GET /api/painel/fermentacao/carga?date=YYYY-MM-DD` | `painelFermentacaoService.getCargaCompleta` |
+| `GET /api/painel/forno/carga?date=YYYY-MM-DD` | `painelFornoService.getCargaCompleta` |
+
+```typescript
+type EtapaDashboardSnapshot = {
+  assadeiras: number;
+  pedidoAssadeiras: number;
+  produzidoEm?: string;
+};
+
+type CargaEtapaResponse = {
+  date: string;
+  ultimaDataComDados: string | null;
+  ordens: PainelOrdemEtapa[];
+  comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
+  comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
+};
+```
+
+**Algoritmo `getCargaCompleta`:**
+
+1. `dateSemana = date - 7 dias`
+2. `ultimaDataComDados = ordemProducaoRepository.findUltimaDataComPedidos(7)`
+3. `dateAnterior = ordemProducaoRepository.findDataAnteriorComPedidos(date, 14)`
+4. Carregar ordens para `[date, dateSemana, dateAnterior?]` via `listByDatasProducao`
+5. Para cada data: lotes da etapa + `buildPainelOrdem` (mesmo fluxo do GET painel atual)
+6. Snapshots via `ordensToDashboardSnapshots(ordens)` — filtro assadeiras no adapter
+
+### Adapter de domínio
+
+`src/domain/producao-etapa/painel-dashboard-adapter.ts`:
+
+- `isOrdemContaAssadeirasDashboard(ordem)`
+- `ordensToDashboardSnapshots(ordens)` — meta por ordem + linha por lote
+- `ordensToDashboardItems(ordens)` — formato para `EtapaAssadeirasDashboard`
+- `snapshotsToDashboardItems(snapshots)` — colunas de comparação
+
+### Componentes UI
+
+```
+src/components/Realizado/
+  EtapaAssadeirasDashboard.tsx
+  dashboard/
+    ProductionDaySummary.tsx    # labels via props
+    HourlyAccumTable.tsx        # genérico: unidade, maps, 3 colunas
+```
+
+`EmbalagemDashboard` refatorado para compor os mesmos blocos + manter seção de previsão.
+
+### Páginas fermentação/forno
+
+- Carga inicial: `GET .../carga` ao mudar data (com `ultimaDataComDados` para auto-selecionar último dia com dados, como embalagem)
+- Polling 60s: apenas `GET .../painel/fermentacao|forno` para cards (sem recarregar comparações)
+- Pausar polling com modal aberto
+
+## Testes
+
+- Adapter: filtro assadeiras, snapshots, exclusão ordens unidades
+- `HourlyAccumTable` / métricas horárias: mapa, acumulado, união de horas
+- Service: `getCargaCompleta` — 3 datas, snapshots corretos
+- `EtapaAssadeirasDashboard`: totais produzido/meta/falta
+
+## Critérios de aceite
+
+- [ ] Desktop: cards à esquerda, dashboard à direita (fermentação e forno)
+- [ ] Mobile: dashboard abaixo dos cards
+- [ ] Resumo mostra “Produzido / meta” e “Falta produzir” em **lt**
+- [ ] Ordens só-unidades não entram em meta, produzido nem tabela
+- [ ] Sem cards de média/previsão
+- [ ] Tabela com 3 colunas (dia, ontem, D-7) e subcolunas hora/acum.
+- [ ] Valores da tabela batem com soma de `lote.assadeiras` por hora de `produzidoEm`
+- [ ] `npm test` e `npm run build` passando

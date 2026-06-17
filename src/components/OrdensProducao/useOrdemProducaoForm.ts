@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { OrdemProducaoPainelItem } from '@/domain/types/ordens-producao-painel';
 import {
   deriveQuantidadesFromAssadeiras,
@@ -77,6 +77,7 @@ export function useOrdemProducaoForm({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const formSeedRef = useRef('');
 
   const {
     getState,
@@ -143,15 +144,30 @@ export function useOrdemProducaoForm({
   }, [applyAssadeirasLoaded, resetIndex, setAssadeiraLoading]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      formSeedRef.current = '';
+      return;
+    }
+
+    const seed =
+      mode === 'edit' ? `edit:${initialOrder?.id ?? ''}` : `create:${filterDate}`;
+    if (formSeedRef.current === seed) return;
+    formSeedRef.current = seed;
+
     if (mode === 'edit' && initialOrder) {
       setForm(formFromOrder(initialOrder));
       resetAll();
+      setMessage(null);
+      setConfirmDelete(false);
       void loadAssadeirasForProduto(initialOrder.produto, initialOrder.assadeiraNome);
-    } else {
-      resetForm();
+      return;
     }
-  }, [isOpen, mode, initialOrder, resetAll, resetForm, loadAssadeirasForProduto]);
+
+    setForm(createEmptyForm(filterDate));
+    resetAll();
+    setMessage(null);
+    setConfirmDelete(false);
+  }, [isOpen, mode, initialOrder, filterDate, resetAll, loadAssadeirasForProduto]);
 
   useEffect(() => {
     if (!isOpen) return;

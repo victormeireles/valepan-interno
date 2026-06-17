@@ -1,4 +1,20 @@
+import { sortPorOrdemPlanejamento } from '@/domain/realizado/ordem-planejamento-sort';
 import type { PainelLoteEtapa, PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import type {
+  EtapaQuantidade,
+  ModoQuantidadeEtapa,
+} from '@/domain/producao-etapa/etapa-quantidade';
+import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
+
+export function buildEtapaDetalhesQuantidade(
+  qty: EtapaQuantidade,
+  modo: ModoQuantidadeEtapa,
+): QuantityBreakdownEntry[] {
+  if (modo === 'assadeiras') {
+    return qty.assadeiras > 0 ? [{ quantidade: qty.assadeiras, unidade: 'lt' }] : [];
+  }
+  return qty.unidades > 0 ? [{ quantidade: qty.unidades, unidade: 'un' }] : [];
+}
 
 export type PainelLoteItemEtapa = {
   loteId: string;
@@ -57,5 +73,14 @@ export function splitOrdensPorFinalizacao(ordens: PainelOrdemEtapa[]): {
     }
   }
 
-  return { naoFinalizados, finalizados };
+  return {
+    naoFinalizados: sortOrdensPorPlanejamento(naoFinalizados),
+    finalizados: sortOrdensPorPlanejamento(finalizados),
+  };
+}
+
+export function sortOrdensPorPlanejamento(
+  ordens: PainelOrdemEtapa[],
+): PainelOrdemEtapa[] {
+  return sortPorOrdemPlanejamento(ordens);
 }

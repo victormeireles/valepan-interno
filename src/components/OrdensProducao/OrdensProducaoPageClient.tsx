@@ -54,6 +54,7 @@ export default function OrdensProducaoPageClient() {
           totalOrdens={resumo.totalOrdens}
           totalLatas={resumo.totalLatas}
           totalUnidades={resumo.totalUnidades}
+          totalCaixas={resumo.totalCaixas}
           onImport={() => setBatchOpen(true)}
           onNewOrder={openCreate}
         />

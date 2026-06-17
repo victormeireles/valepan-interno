@@ -25,27 +25,46 @@ export type MetaEmbalagemBatchParseResult = {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const FORMAT_HINT =
-  'data produção;data etiqueta;tipo estoque;produto;latas/un;assadeira;observação';
+  'data produção;tipo estoque;produto;latas/un;assadeira;data etiqueta;observação';
 
 function splitBatchColumns(parts: string[]): {
   qtyRaw: string;
   assadeira: string;
+  dataEtiqueta: string;
   observacao: string;
 } {
+  const qtyRaw = parts[3] ?? '';
+
   if (parts.length >= 7) {
-    const [, , , , qtyRaw, assadeira, ...obsParts] = parts;
     return {
       qtyRaw,
-      assadeira: assadeira.trim(),
-      observacao: normalizeObservacao(obsParts.join(';')),
+      assadeira: parts[4].trim(),
+      dataEtiqueta: parts[5].trim(),
+      observacao: normalizeObservacao(parts.slice(6).join(';')),
     };
   }
 
-  const [, , , , qtyRaw, ...obsParts] = parts;
+  if (parts.length >= 6) {
+    const col4 = parts[4].trim();
+    const col5 = parts[5].trim();
+
+    if (ISO_DATE.test(col4)) {
+      return { qtyRaw, assadeira: '', dataEtiqueta: col4, observacao: normalizeObservacao(col5) };
+    }
+    if (ISO_DATE.test(col5) || col5 === '') {
+      return { qtyRaw, assadeira: col4, dataEtiqueta: col5, observacao: '' };
+    }
+    if (col4 === '') {
+      return { qtyRaw, assadeira: '', dataEtiqueta: '', observacao: normalizeObservacao(col5) };
+    }
+    return { qtyRaw, assadeira: col4, dataEtiqueta: '', observacao: normalizeObservacao(col5) };
+  }
+
   return {
     qtyRaw,
     assadeira: '',
-    observacao: normalizeObservacao(obsParts.join(';')),
+    dataEtiqueta: '',
+    observacao: normalizeObservacao(parts.slice(4).join(';')),
   };
 }
 
@@ -69,14 +88,15 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
       continue;
     }
 
-    const [dataProducao, dataEtiqueta, tipoEstoque, produto] = parts;
-    const { qtyRaw, assadeira, observacao } = splitBatchColumns(parts);
+    const [dataProducao, tipoEstoque, produto] = parts;
+    const { qtyRaw, assadeira, dataEtiqueta, observacao } = splitBatchColumns(parts);
+    const resolvedDataEtiqueta = dataEtiqueta || dataProducao;
 
     if (!ISO_DATE.test(dataProducao)) {
       errors.push({ linha, texto: raw, erro: 'Data de produção inválida (use AAAA-MM-DD)' });
       continue;
     }
-    if (!ISO_DATE.test(dataEtiqueta)) {
+    if (dataEtiqueta && !ISO_DATE.test(dataEtiqueta)) {
       errors.push({ linha, texto: raw, erro: 'Data de etiqueta inválida (use AAAA-MM-DD)' });
       continue;
     }
@@ -98,7 +118,7 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
     rows.push({
       linha,
       dataProducao,
-      dataEtiqueta,
+      dataEtiqueta: resolvedDataEtiqueta,
       tipoEstoque,
       produto,
       latas,

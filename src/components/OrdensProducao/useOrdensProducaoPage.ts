@@ -30,7 +30,12 @@ export function useOrdensProducaoPage() {
   const today = getTodayISOInBrazilTimezone();
   const [filterDate, setFilterDate] = useState(today);
   const [ordens, setOrdens] = useState<OrdemProducaoPainelItem[]>([]);
-  const [resumo, setResumo] = useState({ totalOrdens: 0, totalLatas: 0, totalUnidades: 0 });
+  const [resumo, setResumo] = useState({
+    totalOrdens: 0,
+    totalLatas: 0,
+    totalUnidades: 0,
+    totalCaixas: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -58,7 +63,7 @@ export function useOrdensProducaoPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar ordens');
       setOrdens([]);
-      setResumo({ totalOrdens: 0, totalLatas: 0, totalUnidades: 0 });
+      setResumo({ totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 });
     } finally {
       setLoading(false);
     }
@@ -137,7 +142,12 @@ export function useOrdensProducaoPage() {
       await ordensProducaoListManager.create(body);
       showToast({ type: 'success', text: 'Ordem criada' });
     }
+
     closeForm();
+    if (body.dataProducao !== filterDate) {
+      setFilterDate(body.dataProducao);
+      return;
+    }
     await fetchList(filterDate);
   };
 

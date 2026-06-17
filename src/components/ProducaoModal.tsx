@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import NumberInput from './FormControls/NumberInput';
 import PhotoUploader from './PhotoUploader';
 import PhotoManager from './PhotoManager';
@@ -11,6 +11,8 @@ import {
   type CamposRealizadoEmbalagem,
 } from '@/domain/embalagem/painel-quantidade';
 import { EmbalagemLoteModalShell } from './EmbalagemLoteModal';
+import EmbalagemDiscardSheet from './EmbalagemLoteModal/EmbalagemDiscardSheet';
+import { hasProducaoDraftChanged } from '@/domain/realizado/producao-draft-changes';
 
 
 interface ProducaoModalProps {
@@ -94,6 +96,7 @@ export default function ProducaoModal({
     'pacote' | 'etiqueta' | 'pallet' | null
   >(null);
   const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
+  const baselineRef = useRef<ProducaoData | null>(null);
 
   const isEtapaMode = mode === 'forno' || mode === 'fermentacao';
   const showAssadeirasField = !isEtapaMode || modoQuantidade === 'assadeiras';
@@ -148,9 +151,14 @@ export default function ProducaoModal({
   // Sincronizar só ao abrir o modal ou trocar a linha. Não listar `initialData` nas deps:
   // o pai recria o objeto a cada render e reaplicaria valores antigos por cima do que o usuário digitou.
   useEffect(() => {
-    if (!isOpen || !initialData) return;
+    if (!isOpen) {
+      baselineRef.current = null;
+      return;
+    }
+    if (!initialData) return;
     if (isNewLote && (pedidoEmbalagemId || ordemProducaoId)) {
       setFormData(initialData);
+      baselineRef.current = { ...initialData };
       return;
     }
     if (mode === 'embalagem') {
@@ -161,6 +169,7 @@ export default function ProducaoModal({
       return;
     }
     setFormData(initialData);
+    baselineRef.current = { ...initialData };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
   }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId, ordemProducaoId, mode]);
 
@@ -756,19 +765,13 @@ export default function ProducaoModal({
     setRemoveConfirmSlot(null);
     setPendingAction(null);
     setPhotoWarningMessage('');
+    baselineRef.current = null;
     onClose();
   }, [onClose]);
 
   const hasDraftChanges = useCallback(() => {
-    const hasQty =
-      (formData.caixas || 0) +
-        (formData.pacotes || 0) +
-        (formData.unidades || 0) +
-        (formData.kg || 0) >
-      0;
-    const hasObs = Boolean((formData.obsEmbalagem || '').trim());
     const hasNewPhotos = Object.values(photoFiles).some((file) => file !== null);
-    return hasQty || hasObs || hasNewPhotos;
+    return hasProducaoDraftChanged(formData, baselineRef.current, hasNewPhotos);
   }, [formData, photoFiles]);
 
   const requestClose = useCallback(() => {
@@ -1049,6 +1052,12 @@ export default function ProducaoModal({
               </button>
             </div>
           </form>
+
+          <EmbalagemDiscardSheet
+            open={showDiscardSheet}
+            onDiscard={handleDiscardConfirm}
+            onContinue={handleDiscardCancel}
+          />
         </div>
       </div>
       )}

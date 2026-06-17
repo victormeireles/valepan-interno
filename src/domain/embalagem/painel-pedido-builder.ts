@@ -55,6 +55,7 @@ export function buildPainelPedido(
 
   return {
     pedidoEmbalagemId: pedido.id,
+    ordemPlanejamento: pedido.ordemPlanejamento,
     cliente,
     produto,
     observacao: pedido.observacao,

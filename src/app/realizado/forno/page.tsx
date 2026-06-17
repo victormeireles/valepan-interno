@@ -3,24 +3,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import {
+  EtapaAssadeirasDashboard,
   EtapaProductAccordion,
   ProductCompactCard,
   RealizadoHeader,
   ThreeColumnLayout,
 } from '@/components/Realizado';
 import {
+  buildEtapaDetalhesQuantidade,
   loteToPainelItemEtapa,
   splitOrdensPorFinalizacao,
   type PainelLoteItemEtapa,
 } from '@/domain/realizado/etapa-painel-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import type { RealizadoGroup } from '@/domain/types/realizado';
-import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+import { useEtapaPainelCarga } from '@/hooks/useEtapaPainelCarga';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 import type { ProducaoData } from '@/domain/types';
 
-type EtapaGroup = RealizadoGroup & {
+type EtapaOrdemLayoutItem = RealizadoGroup & {
   ordem: PainelOrdemEtapa;
 };
 
@@ -31,10 +33,6 @@ function getVisibleErrorMessage(error: unknown, fallback: string): string | null
 
 export default function ProducaoFornoPage() {
   const latestDate = useLatestDataDate('forno');
-  const [ordens, setOrdens] = useState<PainelOrdemEtapa[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(latestDate);
   const [producaoModalOpen, setProducaoModalOpen] = useState(false);
   const [isNewLoteModal, setIsNewLoteModal] = useState(false);
@@ -45,47 +43,28 @@ export default function ProducaoFornoPage() {
   const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
   const [creatingLoteOrdemId, setCreatingLoteOrdemId] = useState<string | null>(null);
 
+  const {
+    ordens,
+    loading,
+    refreshing,
+    message,
+    setMessage,
+    dashboardItems,
+    dashboardPrev,
+    dashboardWeek,
+    comparisonWeekDate,
+    dateComparisonPrev,
+    refreshOrdensOnly,
+  } = useEtapaPainelCarga({
+    etapa: 'forno',
+    selectedDate,
+    setSelectedDate,
+    producaoModalOpen,
+  });
+
   useEffect(() => {
     setSelectedDate(latestDate);
   }, [latestDate]);
-
-  const refreshPainelData = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const res = await fetch(`/api/painel/forno?date=${selectedDate}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-      setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
-    } catch (err) {
-      console.error('Erro ao recarregar painel de forno:', err);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [selectedDate]);
-
-  const loadPainel = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/painel/forno?date=${selectedDate}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-      setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
-    } catch (err) {
-      setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedDate]);
-
-  useEffect(() => {
-    void loadPainel();
-  }, [loadPainel]);
-
-  useEffect(() => {
-    if (producaoModalOpen) return;
-    const interval = setInterval(() => void refreshPainelData(), 60_000);
-    return () => clearInterval(interval);
-  }, [producaoModalOpen, refreshPainelData]);
 
   const handleEditProducao = useCallback(
     async (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
@@ -125,7 +104,7 @@ export default function ProducaoFornoPage() {
         setLoadingCardId(null);
       }
     },
-    [ordens],
+    [ordens, setMessage],
   );
 
   const handleNovoLote = useCallback((ordem: PainelOrdemEtapa) => {
@@ -154,14 +133,14 @@ export default function ProducaoFornoPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao excluir lote');
-        await refreshPainelData();
+        await refreshOrdensOnly();
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao excluir lote'));
       } finally {
         setDeletingLoteId(null);
       }
     },
-    [refreshPainelData],
+    [refreshOrdensOnly, setMessage],
   );
 
   const handleSaveProducao = useCallback(
@@ -185,7 +164,7 @@ export default function ProducaoFornoPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
         setMessage('Produção de forno atualizada com sucesso!');
-        await refreshPainelData();
+        await refreshOrdensOnly();
         setTimeout(() => setMessage(null), 3000);
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção de forno'));
@@ -193,15 +172,15 @@ export default function ProducaoFornoPage() {
         setProducaoLoading(false);
       }
     },
-    [editingLote, refreshPainelData],
+    [editingLote, refreshOrdensOnly, setMessage],
   );
 
   const renderLote = useCallback(
     (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
-      const produzidoDetalhes = QuantityBreakdown.buildEntries([
-        { quantidade: lote.assadeiras || 0, unidade: 'lt' },
-        { quantidade: lote.unidades || 0, unidade: 'un' },
-      ]);
+      const produzidoDetalhes = buildEtapaDetalhesQuantidade(
+        { assadeiras: lote.assadeiras || 0, unidades: lote.unidades || 0 },
+        lote.modoQuantidade,
+      );
       const isDeleting = deletingLoteId === lote.loteId;
       const trailingSlot = (
         <button
@@ -259,20 +238,19 @@ export default function ProducaoFornoPage() {
 
   const renderOrdemAccordion = useCallback(
     (ordem: PainelOrdemEtapa, allowNovoLote: boolean) => {
-      const detalhesProduzido = QuantityBreakdown.buildEntries([
-        { quantidade: ordem.produzidoBreakdown.assadeiras, unidade: 'lt' },
-        { quantidade: ordem.produzidoBreakdown.unidades, unidade: 'un' },
-      ]);
-      const detalhesMeta = QuantityBreakdown.buildEntries([
-        { quantidade: ordem.pedido.assadeiras, unidade: 'lt' },
-        { quantidade: ordem.pedido.unidades, unidade: 'un' },
-      ]);
+      const detalhesProduzido = buildEtapaDetalhesQuantidade(
+        ordem.produzidoBreakdown,
+        ordem.modoQuantidade,
+      );
+      const detalhesMeta = buildEtapaDetalhesQuantidade(ordem.pedido, ordem.modoQuantidade);
 
       return (
         <EtapaProductAccordion
           key={ordem.ordemProducaoId}
           instanceId={`${selectedDate}|${ordem.ordemProducaoId}`}
           produto={ordem.produto}
+          cliente={ordem.tipoEstoque}
+          observacao={ordem.observacao || undefined}
           somaProduzido={ordem.produzido}
           somaAProduzir={ordem.aProduzir}
           unidade={ordem.unidade}
@@ -299,7 +277,7 @@ export default function ProducaoFornoPage() {
     [ordens],
   );
 
-  const gruposNaoFinalizados = useMemo<EtapaGroup[]>(
+  const itensNaoFinalizados = useMemo<EtapaOrdemLayoutItem[]>(
     () =>
       naoFinalizados.map((ordem) => ({
         key: ordem.ordemProducaoId,
@@ -309,7 +287,7 @@ export default function ProducaoFornoPage() {
     [naoFinalizados],
   );
 
-  const gruposFinalizados = useMemo<EtapaGroup[]>(
+  const itensFinalizados = useMemo<EtapaOrdemLayoutItem[]>(
     () =>
       finalizados.map((ordem) => ({
         key: ordem.ordemProducaoId,
@@ -319,14 +297,10 @@ export default function ProducaoFornoPage() {
     [finalizados],
   );
 
-  const renderGroup = useCallback(
+  const renderOrdemItem = useCallback(
     (group: RealizadoGroup, allowNovoLote: boolean) => {
-      const typedGroup = group as EtapaGroup;
-      return (
-        <div className="bg-gray-800/20 border border-gray-600/30 rounded-lg p-3 space-y-2">
-          {renderOrdemAccordion(typedGroup.ordem, allowNovoLote)}
-        </div>
-      );
+      const { ordem } = group as EtapaOrdemLayoutItem;
+      return renderOrdemAccordion(ordem, allowNovoLote);
     },
     [renderOrdemAccordion],
   );
@@ -400,43 +374,60 @@ export default function ProducaoFornoPage() {
         {loading ? (
           <div className="text-center py-16 text-gray-300 text-xl">Carregando...</div>
         ) : (
-          <>
-            {refreshing ? (
-              <div
-                className="mb-3 flex items-center gap-2 text-sm text-gray-300"
-                role="status"
-                aria-live="polite"
-              >
-                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-500 border-t-amber-300 animate-spin motion-reduce:animate-none" />
-                Atualizando dados...
-              </div>
-            ) : null}
+          <div
+            className={`grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start transition-opacity duration-200 motion-reduce:transition-none ${
+              refreshing ? 'opacity-70 pointer-events-none' : ''
+            }`}
+          >
+            <div className="min-w-0 space-y-8">
+              {refreshing ? (
+                <div
+                  className="mb-3 flex items-center gap-2 text-sm text-gray-300"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-500 border-t-amber-300 animate-spin motion-reduce:animate-none" />
+                  Atualizando dados...
+                </div>
+              ) : null}
 
-            {gruposNaoFinalizados.length > 0 && (
-              <div className="mb-8">
-                <ThreeColumnLayout
-                  groups={gruposNaoFinalizados}
-                  columnCount={3}
-                  renderGroup={(group) => renderGroup(group, true)}
-                />
-              </div>
-            )}
+              {itensNaoFinalizados.length > 0 && (
+                <div className="mb-8">
+                  <ThreeColumnLayout
+                    groups={itensNaoFinalizados}
+                    columnCount={1}
+                    renderGroup={(group) => renderOrdemItem(group, true)}
+                  />
+                </div>
+              )}
 
-            {gruposFinalizados.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
-                <ThreeColumnLayout
-                  groups={gruposFinalizados}
-                  columnCount={3}
-                  renderGroup={(group) => renderGroup(group, false)}
-                />
-              </div>
-            )}
-          </>
+              {itensFinalizados.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
+                  <ThreeColumnLayout
+                    groups={itensFinalizados}
+                    columnCount={1}
+                    renderGroup={(group) => renderOrdemItem(group, false)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <EtapaAssadeirasDashboard
+              selectedDate={selectedDate}
+              items={dashboardItems}
+              comparisonPrev={
+                dateComparisonPrev
+                  ? { date: dateComparisonPrev, items: dashboardPrev }
+                  : null
+              }
+              comparisonWeek={{ date: comparisonWeekDate, items: dashboardWeek }}
+            />
+          </div>
         )}
 
         <footer className="mt-6 text-center text-gray-300 text-sm">
-          {gruposNaoFinalizados.length + gruposFinalizados.length} ordens • {totalLotes} lotes
+          {itensNaoFinalizados.length + itensFinalizados.length} ordens • {totalLotes} lotes
         </footer>
       </div>
 
@@ -445,7 +436,7 @@ export default function ProducaoFornoPage() {
         onClose={onCloseModal}
         isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
-        onSaveSuccess={refreshPainelData}
+        onSaveSuccess={refreshOrdensOnly}
         initialData={selectedInitialData}
         produto={selectedOrdem?.produto || ''}
         cliente={selectedOrdem?.tipoEstoque || ''}

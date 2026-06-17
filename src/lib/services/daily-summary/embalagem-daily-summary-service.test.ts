@@ -16,6 +16,7 @@ function makePedido(
 ): PainelPedidoEmbalagem {
   return {
     pedidoEmbalagemId: 'ped-1',
+    ordemPlanejamento: 1,
     observacao: '',
     dataPedido: '2026-06-09',
     dataFabricacao: '2026-06-10',

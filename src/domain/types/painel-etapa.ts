@@ -10,6 +10,7 @@ export type PainelEtapaResponse = {
 
 export type PainelOrdemEtapa = {
   ordemProducaoId: string;
+  ordemPlanejamento: number;
   produto: string;
   tipoEstoque: string;
   observacao: string;
@@ -33,4 +34,20 @@ export type PainelLoteEtapa = {
   fotoUrl?: string;
   fotoId?: string;
   fotoUploadedAt?: string;
+};
+
+export type EtapaDashboardSnapshot = {
+  assadeiras: number;
+  pedidoAssadeiras: number;
+  produzidoEm?: string;
+};
+
+export type EtapaDashboardItem = EtapaDashboardSnapshot;
+
+export type CargaEtapaResponse = {
+  date: string;
+  ultimaDataComDados: string | null;
+  ordens: PainelOrdemEtapa[];
+  comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
+  comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
 };

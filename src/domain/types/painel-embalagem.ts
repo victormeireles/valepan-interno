@@ -21,6 +21,7 @@ export type PainelLoteEmbalagem = {
 
 export type PainelPedidoEmbalagem = {
   pedidoEmbalagemId: string;
+  ordemPlanejamento: number;
   cliente: string;
   produto: string;
   observacao: string;

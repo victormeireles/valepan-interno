@@ -124,7 +124,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
 
     expect(result).toEqual({
       date: '2026-06-17',
-      resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0 },
+      resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 },
       ordens: [],
     });
     expect(findByIdsTipos).not.toHaveBeenCalled();
@@ -202,6 +202,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       totalOrdens: 3,
       totalLatas: 20,
       totalUnidades: 1300,
+      totalCaixas: 30,
     });
   });
 

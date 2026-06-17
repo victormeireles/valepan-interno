@@ -1,0 +1,639 @@
+# Fermentação e Forno — Dashboard lateral — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Adicionar dashboard lateral (desktop direita / mobile abaixo) nas telas de fermentação e forno, com resumo produzido/meta/falta em assadeiras e tabela horária com 3 colunas de comparação — sem cards de média/previsão.
+
+**Architecture:** Extrair resumo + tabela horária de `EmbalagemDashboard` para componentes compartilhados; adapter de domínio em `producao-etapa/painel-dashboard-adapter`; `getCargaCompleta` nos painel services espelhando embalagem; páginas usam grid 2 colunas como embalagem.
+
+**Tech Stack:** Next.js App Router, TypeScript, Vitest, Tailwind.
+
+**Spec:** `docs/superpowers/specs/2026-06-18-fermentacao-forno-dashboard-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/types/painel-etapa.ts` | `EtapaDashboardSnapshot`, `CargaEtapaResponse`, `EtapaDashboardItem` |
+| `src/domain/producao-etapa/painel-dashboard-adapter.ts` | Filtro assadeiras, snapshots, items |
+| `src/domain/producao-etapa/painel-dashboard-adapter.test.ts` | Testes adapter |
+| `src/domain/realizado/hourly-quantity-metrics.ts` | Mapa horário, acumulado, janela (genérico) |
+| `src/domain/realizado/hourly-quantity-metrics.test.ts` | Testes métricas horárias |
+| `src/components/Realizado/dashboard/ProductionDaySummary.tsx` | Resumo + barra progresso |
+| `src/components/Realizado/dashboard/HourlyAccumTable.tsx` | Tabela 3 colunas hora/acum. |
+| `src/components/Realizado/EtapaAssadeirasDashboard.tsx` | Dashboard fermentação/forno |
+| `src/components/Realizado/EmbalagemDashboard.tsx` | Refatorar para usar blocos compartilhados |
+| `src/lib/services/painel-fermentacao-service.ts` | `getCargaCompleta` |
+| `src/lib/services/painel-forno-service.ts` | `getCargaCompleta` |
+| `src/lib/services/painel-fermentacao-service.test.ts` | Teste carga |
+| `src/lib/services/painel-forno-service.test.ts` | Teste carga |
+| `src/app/api/painel/fermentacao/carga/route.ts` | GET carga |
+| `src/app/api/painel/forno/carga/route.ts` | GET carga |
+| `src/app/realizado/fermentacao/page.tsx` | Grid 2 col + dashboard |
+| `src/app/realizado/forno/page.tsx` | Grid 2 col + dashboard |
+| `src/components/Realizado/index.ts` | Export `EtapaAssadeirasDashboard` |
+
+---
+
+## Task 1: Tipos e adapter de dashboard (TDD)
+
+**Files:**
+- Modify: `src/domain/types/painel-etapa.ts`
+- Create: `src/domain/producao-etapa/painel-dashboard-adapter.ts`
+- Create: `src/domain/producao-etapa/painel-dashboard-adapter.test.ts`
+
+- [ ] **Step 1: Adicionar tipos em `painel-etapa.ts`**
+
+```typescript
+export type EtapaDashboardSnapshot = {
+  assadeiras: number;
+  pedidoAssadeiras: number;
+  produzidoEm?: string;
+};
+
+export type EtapaDashboardItem = {
+  assadeiras: number;
+  pedidoAssadeiras: number;
+  produzidoEm?: string;
+};
+
+export type CargaEtapaResponse = {
+  date: string;
+  ultimaDataComDados: string | null;
+  ordens: PainelOrdemEtapa[];
+  comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
+  comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
+};
+```
+
+- [ ] **Step 2: Escrever testes falhando**
+
+```typescript
+// painel-dashboard-adapter.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  isOrdemContaAssadeirasDashboard,
+  ordensToDashboardSnapshots,
+  ordensToDashboardItems,
+} from './painel-dashboard-adapter';
+import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+
+function ordem(overrides: Partial<PainelOrdemEtapa> = {}): PainelOrdemEtapa {
+  return {
+    ordemProducaoId: 'op-1',
+    ordemPlanejamento: 1,
+    produto: 'HB Brioche',
+    tipoEstoque: 'Valepan',
+    observacao: '',
+    dataProducao: '2026-06-18',
+    modoQuantidade: 'assadeiras',
+    pedido: { assadeiras: 10, unidades: 0 },
+    produzidoBreakdown: { assadeiras: 5, unidades: 0 },
+    unidade: 'lt',
+    aProduzir: 10,
+    produzido: 5,
+    lotes: [
+      {
+        loteId: 'l1',
+        modo: 'parcial',
+        assadeiras: 3,
+        unidades: 0,
+        produzidoEm: '2026-06-18T14:30:00Z',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe('isOrdemContaAssadeirasDashboard', () => {
+  it('inclui ordem com assadeiras', () => {
+    expect(isOrdemContaAssadeirasDashboard(ordem())).toBe(true);
+  });
+  it('exclui ordem só unidades', () => {
+    expect(
+      isOrdemContaAssadeirasDashboard(
+        ordem({ modoQuantidade: 'unidades', pedido: { assadeiras: 0, unidades: 100 } }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('ordensToDashboardSnapshots', () => {
+  it('gera meta por ordem e linha por lote elegível', () => {
+    const snaps = ordensToDashboardSnapshots([ordem()]);
+    expect(snaps).toHaveLength(2);
+    expect(snaps[0]).toEqual({ assadeiras: 0, pedidoAssadeiras: 10 });
+    expect(snaps[1]).toEqual({
+      assadeiras: 3,
+      pedidoAssadeiras: 0,
+      produzidoEm: '2026-06-18T14:30:00Z',
+    });
+  });
+  it('ignora ordens só unidades', () => {
+    expect(
+      ordensToDashboardSnapshots([
+        ordem({ modoQuantidade: 'unidades', pedido: { assadeiras: 0, unidades: 50 } }),
+      ]),
+    ).toHaveLength(0);
+  });
+});
+```
+
+- [ ] **Step 3: Rodar testes — deve falhar**
+
+```bash
+npm test -- src/domain/producao-etapa/painel-dashboard-adapter.test.ts
+```
+
+- [ ] **Step 4: Implementar adapter**
+
+```typescript
+// painel-dashboard-adapter.ts
+import type {
+  EtapaDashboardItem,
+  EtapaDashboardSnapshot,
+  PainelOrdemEtapa,
+} from '@/domain/types/painel-etapa';
+
+export function isOrdemContaAssadeirasDashboard(ordem: PainelOrdemEtapa): boolean {
+  return ordem.modoQuantidade === 'assadeiras' && ordem.pedido.assadeiras > 0;
+}
+
+export function ordensToDashboardSnapshots(
+  ordens: PainelOrdemEtapa[],
+): EtapaDashboardSnapshot[] {
+  const items: EtapaDashboardSnapshot[] = [];
+  for (const ordem of ordens) {
+    if (!isOrdemContaAssadeirasDashboard(ordem)) continue;
+    items.push({ assadeiras: 0, pedidoAssadeiras: ordem.pedido.assadeiras });
+    for (const lote of ordem.lotes) {
+      items.push({
+        assadeiras: lote.assadeiras,
+        pedidoAssadeiras: 0,
+        produzidoEm: lote.produzidoEm,
+      });
+    }
+  }
+  return items;
+}
+
+export function ordensToDashboardItems(ordens: PainelOrdemEtapa[]): EtapaDashboardItem[] {
+  return ordensToDashboardSnapshots(ordens);
+}
+
+export function snapshotsToDashboardItems(
+  snapshots: EtapaDashboardSnapshot[],
+): EtapaDashboardItem[] {
+  return snapshots.map((s) => ({ ...s }));
+}
+```
+
+- [ ] **Step 5: Rodar testes — deve passar**
+
+```bash
+npm test -- src/domain/producao-etapa/painel-dashboard-adapter.test.ts
+```
+
+---
+
+## Task 2: Métricas horárias genéricas (TDD)
+
+**Files:**
+- Create: `src/domain/realizado/hourly-quantity-metrics.ts`
+- Create: `src/domain/realizado/hourly-quantity-metrics.test.ts`
+
+Extrair lógica de `EmbalagemDashboard` (`hourlyCaixasMap`, `cumulativeCaixasUntilHour`, `hoursUnion`) para funções genéricas.
+
+- [ ] **Step 1: Testes**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import {
+  buildHourlyQuantityMap,
+  cumulativeQuantityUntilHour,
+  unionHoursWithQuantity,
+} from './hourly-quantity-metrics';
+
+describe('buildHourlyQuantityMap', () => {
+  it('soma quantidade por hora BR de produzidoEm', () => {
+    const map = buildHourlyQuantityMap([
+      { quantity: 5, timestamp: '2026-06-18T11:30:00Z' },
+      { quantity: 2, timestamp: '2026-06-18T11:45:00Z' },
+    ]);
+    // assert hour bucket in Brazil timezone — use fixed offset or mock getBrazilHourFromIso
+    expect(map.get(8) ?? 0 + map.get(9) ?? 0).toBeGreaterThan(0);
+  });
+});
+```
+
+(Ajustar hora esperada conforme helper `getBrazilHourFromIso` já usado em `EmbalagemDashboard`.)
+
+- [ ] **Step 2: Implementar `hourly-quantity-metrics.ts`**
+
+```typescript
+import { getBrazilHourFromIso } from '@/lib/utils/date-utils';
+
+export type HourlyQuantityEntry = { quantity: number; timestamp?: string };
+
+export function buildHourlyQuantityMap(entries: HourlyQuantityEntry[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const entry of entries) {
+    if (entry.quantity <= 0) continue;
+    const h = getBrazilHourFromIso(entry.timestamp);
+    if (h === null) continue;
+    map.set(h, (map.get(h) ?? 0) + entry.quantity);
+  }
+  return map;
+}
+
+export function getQuantityForHour(map: Map<number, number>, hour: number): number {
+  return map.get(hour) ?? 0;
+}
+
+export function cumulativeQuantityUntilHour(map: Map<number, number>, hour: number): number {
+  let sum = 0;
+  for (let h = 0; h <= hour; h++) sum += map.get(h) ?? 0;
+  return sum;
+}
+
+export function unionHoursWithQuantity(...maps: Map<number, number>[]): number[] {
+  const s = new Set<number>();
+  for (const map of maps) {
+    for (const [h, qty] of map) if (qty > 0) s.add(h);
+  }
+  return [...s].sort((a, b) => a - b);
+}
+
+export function countQuantityWithoutValidHour(entries: HourlyQuantityEntry[]): number {
+  let n = 0;
+  for (const entry of entries) {
+    if (entry.quantity <= 0) continue;
+    if (getBrazilHourFromIso(entry.timestamp) === null) n += entry.quantity;
+  }
+  return n;
+}
+```
+
+- [ ] **Step 3: Testes passando**
+
+```bash
+npm test -- src/domain/realizado/hourly-quantity-metrics.test.ts
+```
+
+---
+
+## Task 3: Componentes compartilhados de dashboard
+
+**Files:**
+- Create: `src/components/Realizado/dashboard/ProductionDaySummary.tsx`
+- Create: `src/components/Realizado/dashboard/HourlyAccumTable.tsx`
+
+- [ ] **Step 1: `ProductionDaySummary`**
+
+Props:
+
+```typescript
+type Props = {
+  producedLabel: string;      // ex. "120 lt"
+  metaLabel: string;        // ex. "400 lt"
+  remaining: number;        // falta (número)
+  unitLabel: string;        // "lt"
+  producedHeading?: string; // default "Produzido / meta"
+  remainingHeading?: string; // default "Falta produzir"
+  progressPct: number;
+};
+```
+
+Copiar markup da seção `Resumo do dia` de `EmbalagemDashboard` (linhas ~706–737), parametrizando labels. Manter classes `EMBALAGEM_BAR_TRACK_CLASS` / fill (extrair constantes para `dashboard/dashboard-styles.ts` se necessário).
+
+- [ ] **Step 2: `HourlyAccumTable`**
+
+Props:
+
+```typescript
+type Props = {
+  unitSingular: string; // "lt" — usado em aria-label
+  mapDay: Map<number, number>;
+  mapPrev: Map<number, number>;
+  mapWeek: Map<number, number>;
+  titleDay: string;
+  titlePrev: string | null;
+  titleWeek: string;
+  hasPrev: boolean;
+  quantityWithoutHour: number;
+};
+```
+
+Mover para este arquivo: `HourAccumSplitColumns`, `HourAccumColumnSubheads`, `HourAccumPair`, `formatIntervaloHoraBr`, `formatIntPtBrOrDash` (ou importar de metrics/utils).
+
+Renderizar tabela idêntica à seção final de `EmbalagemDashboard` (thead 4 colunas, tbody por `unionHoursWithQuantity`).
+
+- [ ] **Step 3: Exportar em `src/components/Realizado/index.ts` se necessário**
+
+---
+
+## Task 4: `EtapaAssadeirasDashboard`
+
+**Files:**
+- Create: `src/components/Realizado/EtapaAssadeirasDashboard.tsx`
+- Modify: `src/components/Realizado/index.ts`
+
+- [ ] **Step 1: Implementar componente**
+
+```typescript
+'use client';
+
+import { useMemo } from 'react';
+import type { EtapaDashboardItem } from '@/domain/types/painel-etapa';
+import {
+  buildHourlyQuantityMap,
+  countQuantityWithoutValidHour,
+  unionHoursWithQuantity,
+} from '@/domain/realizado/hourly-quantity-metrics';
+import {
+  formatWeekdayDayMonthBr,
+  formatWeekdayPassadaDayMonthBr,
+} from '@/lib/utils/date-utils';
+import ProductionDaySummary from './dashboard/ProductionDaySummary';
+import HourlyAccumTable from './dashboard/HourlyAccumTable';
+
+function itemsToHourlyEntries(items: EtapaDashboardItem[]) {
+  return items
+    .filter((i) => i.assadeiras > 0)
+    .map((i) => ({ quantity: i.assadeiras, timestamp: i.produzidoEm }));
+}
+
+type Props = {
+  selectedDate: string;
+  items: EtapaDashboardItem[];
+  comparisonPrev: { date: string; items: EtapaDashboardItem[] } | null;
+  comparisonWeek: { date: string; items: EtapaDashboardItem[] };
+};
+
+export default function EtapaAssadeirasDashboard({ selectedDate, items, comparisonPrev, comparisonWeek }: Props) {
+  const totais = useMemo(() => {
+    const meta = items.reduce((s, i) => s + (i.pedidoAssadeiras || 0), 0);
+    const produzido = items.reduce((s, i) => s + (i.assadeiras || 0), 0);
+    const falta = Math.max(0, meta - produzido);
+    const progressoPct = meta > 0 ? Math.min(100, (produzido / meta) * 100) : 0;
+    return { meta, produzido, falta, progressoPct };
+  }, [items]);
+
+  const mapD = useMemo(() => buildHourlyQuantityMap(itemsToHourlyEntries(items)), [items]);
+  const mapPrev = useMemo(
+    () => buildHourlyQuantityMap(itemsToHourlyEntries(comparisonPrev?.items ?? [])),
+    [comparisonPrev],
+  );
+  const mapWeek = useMemo(
+    () => buildHourlyQuantityMap(itemsToHourlyEntries(comparisonWeek.items)),
+    [comparisonWeek],
+  );
+
+  const hoursUnion = useMemo(
+    () => unionHoursWithQuantity(mapD, mapPrev, mapWeek),
+    [mapD, mapPrev, mapWeek],
+  );
+
+  const semHorario = useMemo(() => countQuantityWithoutValidHour(itemsToHourlyEntries(items)), [items]);
+
+  return (
+    <aside
+      className="min-w-0 rounded-xl border border-gray-700/80 bg-gray-800/40 p-4 shadow-inner lg:sticky lg:top-4 space-y-6"
+      aria-label="Painel de métricas do dia"
+    >
+      <ProductionDaySummary
+        producedHeading="Produzido / meta"
+        remainingHeading="Falta produzir"
+        producedLabel={`${totais.produzido} lt`}
+        metaLabel={`${totais.meta} lt`}
+        remaining={totais.falta}
+        unitLabel="lt"
+        progressPct={totais.progressoPct}
+      />
+      <HourlyAccumTable
+        unitSingular="lt"
+        mapDay={mapD}
+        mapPrev={mapPrev}
+        mapWeek={mapWeek}
+        hours={hoursUnion}
+        titleDay={formatWeekdayDayMonthBr(selectedDate)}
+        titlePrev={comparisonPrev ? formatWeekdayDayMonthBr(comparisonPrev.date) : null}
+        titleWeek={formatWeekdayPassadaDayMonthBr(comparisonWeek.date)}
+        hasPrev={comparisonPrev !== null}
+        quantityWithoutHour={semHorario}
+      />
+    </aside>
+  );
+}
+```
+
+(Ajustar props de `HourlyAccumTable` para receber `hours` pré-calculado.)
+
+**Importante:** arquivo deve ficar **&lt; 200 linhas**; lógica pesada fica no domínio.
+
+---
+
+## Task 5: Refatorar `EmbalagemDashboard` (opcional mínimo)
+
+**Files:**
+- Modify: `src/components/Realizado/EmbalagemDashboard.tsx`
+
+- [ ] **Step 1:** Substituir seção resumo por `ProductionDaySummary` (labels embalagem).
+- [ ] **Step 2:** Substituir tabela por `HourlyAccumTable` mapeando `caixas` → `buildHourlyQuantityMap`.
+- [ ] **Step 3:** Manter seção previsão/média intacta entre resumo e tabela.
+- [ ] **Step 4:** Rodar testes existentes de embalagem (se houver) + smoke manual.
+
+Se refatoração arriscar regressão, **mínimo aceitável:** não refatorar embalagem neste PR — duplicar só em `EtapaAssadeirasDashboard` e deixar refactor embalagem como follow-up. Preferir refactor se testes passarem.
+
+---
+
+## Task 6: `getCargaCompleta` — fermentação (TDD)
+
+**Files:**
+- Modify: `src/lib/services/painel-fermentacao-service.ts`
+- Modify: `src/lib/services/painel-fermentacao-service.test.ts`
+
+- [ ] **Step 1: Teste**
+
+```typescript
+it('getCargaCompleta retorna ordens e snapshots de comparação', async () => {
+  // mock ordemProducaoRepository.listByDatasProducao, findUltima..., findDataAnterior...
+  // mock fermentacaoLoteRepository.listByOrdemProducaoIds
+  const result = await painelFermentacaoService.getCargaCompleta('2026-06-18');
+  expect(result.ordens).toHaveLength(1);
+  expect(result.comparacaoSemana.date).toBe('2026-06-11');
+  expect(result.comparacaoAnterior.items.length).toBeGreaterThanOrEqual(0);
+});
+```
+
+- [ ] **Step 2: Implementar** espelhando `PainelEmbalagemService.getCargaCompleta`:
+
+```typescript
+async getCargaCompleta(date: string): Promise<CargaEtapaResponse> {
+  const dateSemana = addCalendarDaysISO(date, -7);
+  const [ultimaDataComDados, dateAnterior] = await Promise.all([
+    ordemProducaoRepository.findUltimaDataComPedidos(7),
+    ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
+  ]);
+  const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
+  const ordensByDate = await ordemProducaoRepository.listByDatasProducao(datesToLoad);
+  // ... build painel ordens + ordensToDashboardSnapshots para cada data
+}
+```
+
+Reutilizar `getPainelForDate` internamente ou extrair `buildOrdensPainelForRecords`.
+
+- [ ] **Step 3: Testes passando**
+
+```bash
+npm test -- src/lib/services/painel-fermentacao-service.test.ts
+```
+
+---
+
+## Task 7: `getCargaCompleta` — forno
+
+**Files:**
+- Modify: `src/lib/services/painel-forno-service.ts`
+- Modify: `src/lib/services/painel-forno-service.test.ts`
+
+- [ ] **Step 1–3:** Mesmo padrão da Task 6 com `fornoLoteRepository`.
+
+```bash
+npm test -- src/lib/services/painel-forno-service.test.ts
+```
+
+---
+
+## Task 8: Rotas API carga
+
+**Files:**
+- Create: `src/app/api/painel/fermentacao/carga/route.ts`
+- Create: `src/app/api/painel/forno/carga/route.ts`
+
+- [ ] **Step 1: fermentacao/carga/route.ts**
+
+```typescript
+import { NextResponse } from 'next/server';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import { painelFermentacaoService } from '@/lib/services/painel-fermentacao-service';
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get('date') || getTodayISOInBrazilTimezone();
+    const response = await painelFermentacaoService.getCargaCompleta(date);
+    return NextResponse.json(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+```
+
+- [ ] **Step 2:** Copiar para forno com `painelFornoService`.
+
+---
+
+## Task 9: Página fermentação — layout + dashboard
+
+**Files:**
+- Modify: `src/app/realizado/fermentacao/page.tsx`
+
+- [ ] **Step 1: Estado de carga** (espelhar embalagem)
+
+```typescript
+const [comparisonWeekItems, setComparisonWeekItems] = useState<EtapaDashboardItem[]>([]);
+const [comparisonPrevItems, setComparisonPrevItems] = useState<EtapaDashboardItem[]>([]);
+const [comparisonWeekDate, setComparisonWeekDate] = useState<string>(...);
+const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
+const initialDateResolved = useRef(false);
+```
+
+- [ ] **Step 2: `loadCargaFermentacao`** → `GET /api/painel/fermentacao/carga?date=`
+
+Aplicar `ultimaDataComDados` na primeira carga; `snapshotsToDashboardItems` para comparações; `ordensToDashboardItems(ordens)` para dashboard do dia.
+
+- [ ] **Step 3: Polling** — manter `refreshPainelData` só para `GET /api/painel/fermentacao` (cards); pausar com modal aberto.
+
+- [ ] **Step 4: Layout grid**
+
+```tsx
+<div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start ${refreshing ? 'opacity-70 pointer-events-none' : ''}`}>
+  <div className="min-w-0 space-y-8">
+    {/* ThreeColumnLayout não finalizados + finalizados */}
+  </div>
+  <EtapaAssadeirasDashboard
+    selectedDate={selectedDate}
+    items={dashboardItems}
+    comparisonPrev={dateComparisonPrev ? { date: dateComparisonPrev, items: dashboardPrev } : null}
+    comparisonWeek={{ date: comparisonWeekDate, items: dashboardWeek }}
+  />
+</div>
+```
+
+- [ ] **Step 5:** Remover footer redundante ou alinhar com embalagem.
+
+---
+
+## Task 10: Página forno — layout + dashboard
+
+**Files:**
+- Modify: `src/app/realizado/forno/page.tsx`
+
+- [ ] **Step 1–5:** Mesmo padrão da Task 9 com endpoints/API de forno.
+
+---
+
+## Task 11: Verificação final
+
+- [ ] **Step 1: Testes**
+
+```bash
+npm test
+```
+
+- [ ] **Step 2: Build**
+
+```bash
+npm run build
+```
+
+- [ ] **Step 3: Checklist manual**
+  - Desktop fermentação: cards esquerda, dashboard direita
+  - Mobile: dashboard abaixo
+  - Repetir forno
+  - Ordem só-unidades não aparece no dashboard
+  - Tabela 3 colunas com hora/acum. em lt
+
+---
+
+## Self-review (plano × spec)
+
+| Requisito spec | Task |
+|----------------|------|
+| Layout 2 col desktop / mobile abaixo | 9, 10 |
+| Produzido/meta/falta produzir em lt | 1, 4 |
+| Excluir ordens só unidades | 1 |
+| Sem média/previsão | 4 (não inclui seção) |
+| Tabela 3 colunas hora/acum. | 2, 3, 4 |
+| `produzidoEm` por lote | 1 |
+| API carga + comparações | 6, 7, 8 |
+| Polling cards sem recarregar comparação | 9, 10 |
+
+Sem placeholders TBD. Tipos consistentes (`EtapaDashboardItem`, `EtapaDashboardSnapshot`) em todas as tasks.
+
+---
+
+## Execução
+
+Plano salvo em `docs/superpowers/plans/2026-06-18-fermentacao-forno-dashboard.mdx`.
+
+**Opções de execução:**
+
+1. **Subagent-Driven (recomendado)** — subagent por task, revisão entre tasks  
+2. **Inline** — executar nesta sessão com checkpoints
+
+Qual prefere?

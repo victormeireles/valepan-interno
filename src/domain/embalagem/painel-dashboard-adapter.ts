@@ -3,7 +3,10 @@ import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
-import { derivarUnidadePrincipal } from '@/domain/embalagem/painel-quantidade';
+import {
+  derivarUnidadePrincipal,
+  pedidoUsaCaixasOuPacotes,
+} from '@/domain/embalagem/painel-quantidade';
 
 /** Payload mínimo para comparações do dashboard (sem fotos). */
 export function pedidosToDashboardSnapshots(
@@ -12,6 +15,8 @@ export function pedidosToDashboardSnapshots(
   const items: DashboardSnapshot[] = [];
 
   for (const p of pedidos) {
+    if (!pedidoUsaCaixasOuPacotes(p.pedido)) continue;
+
     items.push({
       caixas: 0,
       pacotes: 0,
@@ -41,6 +46,8 @@ export function pedidosToDashboardItems(
   const items: EmbalagemDashboardItem[] = [];
 
   for (const p of pedidos) {
+    if (!pedidoUsaCaixasOuPacotes(p.pedido)) continue;
+
     items.push({
       cliente: p.cliente,
       produto: p.produto,

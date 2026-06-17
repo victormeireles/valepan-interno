@@ -4,6 +4,7 @@ import {
   EstoqueResolverError,
 } from '@/lib/services/ordem-producao-meta-service';
 import { ordensProducaoPainelService } from '@/lib/services/ordens-producao-painel-service';
+import { extractCalendarDate } from '@/lib/utils/date-utils';
 
 type OrdemProducaoCreateBody = {
   dataProducao: string;
@@ -21,9 +22,17 @@ function isValidDateISO(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
 }
 
+function normalizeCalendarDates(body: OrdemProducaoCreateBody): OrdemProducaoCreateBody | null {
+  const dataProducao = extractCalendarDate(body.dataProducao);
+  const dataEtiqueta = extractCalendarDate(body.dataEtiqueta);
+  if (!dataProducao || !dataEtiqueta) return null;
+  return { ...body, dataProducao, dataEtiqueta };
+}
+
 function validateCreateBody(body: OrdemProducaoCreateBody): string | null {
   if (!body) return 'Corpo da requisição inválido';
-  if (!isValidDateISO(body.dataProducao) || !isValidDateISO(body.dataEtiqueta)) {
+  const normalized = normalizeCalendarDates(body);
+  if (!normalized || !isValidDateISO(normalized.dataProducao) || !isValidDateISO(normalized.dataEtiqueta)) {
     return 'Datas inválidas';
   }
   if (!body.tipoEstoque?.trim()) return 'Tipo de estoque é obrigatório';
@@ -51,12 +60,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as OrdemProducaoCreateBody;
-    const validationError = validateCreateBody(body);
+    const rawBody = (await request.json()) as OrdemProducaoCreateBody;
+    const validationError = validateCreateBody(rawBody);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
+    const body = normalizeCalendarDates(rawBody)!;
     const observacao = body.observacao?.trim() ?? '';
 
     try {

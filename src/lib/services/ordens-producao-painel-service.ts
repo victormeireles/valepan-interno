@@ -27,7 +27,7 @@ export class OrdensProducaoPainelService {
     if (ordens.length === 0) {
       return {
         date,
-        resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0 },
+        resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 },
         ordens: [],
       };
     }
@@ -137,6 +137,10 @@ export class OrdensProducaoPainelService {
       totalOrdens: items.length,
       totalLatas: items.reduce((sum, item) => sum + item.assadeiras, 0),
       totalUnidades: items.reduce((sum, item) => sum + item.unidades, 0),
+      totalCaixas: items.reduce(
+        (sum, item) => sum + (item.caixas > 0 ? item.caixas : 0),
+        0,
+      ),
     };
   }
 }

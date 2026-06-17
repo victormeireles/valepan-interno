@@ -17,6 +17,7 @@ type OrdensProducaoToolbarProps = {
   totalOrdens: number;
   totalLatas: number;
   totalUnidades: number;
+  totalCaixas: number;
   onImport: () => void;
   onNewOrder: () => void;
 };
@@ -31,17 +32,19 @@ export default function OrdensProducaoToolbar({
   totalOrdens,
   totalLatas,
   totalUnidades,
+  totalCaixas,
   onImport,
   onNewOrder,
 }: OrdensProducaoToolbarProps) {
   const today = getTodayISOInBrazilTimezone();
   const isToday = filterDate === today;
   const isYesterday = filterDate === addCalendarDaysISO(today, -1);
+  const isTomorrow = filterDate === addCalendarDaysISO(today, 1);
 
   const resumoLabel =
     totalOrdens === 0
       ? '0 ordens'
-      : `${totalOrdens} ${totalOrdens === 1 ? 'ordem' : 'ordens'} • ${formatQty(totalLatas)} LT • ${formatQty(totalUnidades)} UN`;
+      : `${totalOrdens} ${totalOrdens === 1 ? 'ordem' : 'ordens'} • ${formatQty(totalLatas)} LT • ${formatQty(totalUnidades)} UN • ${formatQty(totalCaixas)} CX`;
 
   return (
     <header className="sticky top-0 z-20 -mx-4 mb-6 border-b border-stone-200 bg-stone-50/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -71,6 +74,14 @@ export default function OrdensProducaoToolbar({
               aria-pressed={isYesterday}
             >
               Ontem
+            </button>
+            <button
+              type="button"
+              onClick={() => onDateChange(addCalendarDaysISO(today, 1))}
+              className={ordensProducaoChipClass(isTomorrow)}
+              aria-pressed={isTomorrow}
+            >
+              Amanhã
             </button>
             <p className={ordensProducaoMetaTextClass}>{resumoLabel}</p>
           </div>

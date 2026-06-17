@@ -1,11 +1,19 @@
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
-import type { PainelEtapaResponse } from '@/domain/types/painel-etapa';
+import { ordensToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
+import { sortOrdensPorPlanejamento } from '@/domain/realizado/etapa-painel-adapter';
+import type {
+  CargaEtapaResponse,
+  PainelEtapaResponse,
+  PainelOrdemEtapa,
+} from '@/domain/types/painel-etapa';
+import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
+import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 
 type AssadeiraRow = { id: string; nome: string };
 
@@ -20,25 +28,74 @@ export class PainelFermentacaoService {
       return { date, ordens: [] };
     }
 
-    const ids = ordens.map((o) => o.id);
-    const [lotesByOrdem, names] = await Promise.all([
-      fermentacaoLoteRepository.listByOrdemProducaoIds(ids),
-      this.loadNameMaps(ordens),
-    ]);
-
-    const ordensPainel = ordens.map((ordem) =>
-      buildPainelOrdem({
-        ordem,
-        lotes: lotesByOrdem.get(ordem.id) ?? [],
-        produto: names.produtoNomeById.get(ordem.produtoId) ?? 'Desconhecido',
-        tipoEstoque: names.tipoNomeById.get(ordem.tipoEstoqueId) ?? 'Desconhecido',
-        assadeiraNome: ordem.assadeiraId
-          ? names.assadeiraNomeById.get(ordem.assadeiraId)
-          : undefined,
-      }),
+    const lotesByOrdem = await fermentacaoLoteRepository.listByOrdemProducaoIds(
+      ordens.map((ordem) => ordem.id),
     );
+    const ordensPainel = await this.buildOrdensPainel(ordens, lotesByOrdem);
 
     return { date, ordens: ordensPainel };
+  }
+
+  async getCargaCompleta(date: string): Promise<CargaEtapaResponse> {
+    const dateSemana = addCalendarDaysISO(date, -7);
+
+    const [ultimaDataComDados, dateAnterior] = await Promise.all([
+      ordemProducaoRepository.findUltimaDataComPedidos(7),
+      ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
+    ]);
+
+    const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
+    const ordensByDate = await ordemProducaoRepository.listByDatasProducao(datesToLoad);
+    const allOrdens = [...ordensByDate.values()].flat();
+    const lotesByOrdem =
+      allOrdens.length > 0
+        ? await fermentacaoLoteRepository.listByOrdemProducaoIds(allOrdens.map((ordem) => ordem.id))
+        : new Map<string, FermentacaoLoteRecord[]>();
+
+    const [ordensMain, ordensSemana, ordensAnterior] = await Promise.all([
+      this.buildOrdensPainel(ordensByDate.get(date) ?? [], lotesByOrdem),
+      this.buildOrdensPainel(ordensByDate.get(dateSemana) ?? [], lotesByOrdem),
+      dateAnterior
+        ? this.buildOrdensPainel(ordensByDate.get(dateAnterior) ?? [], lotesByOrdem)
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      date,
+      ultimaDataComDados,
+      ordens: ordensMain,
+      comparacaoSemana: {
+        date: dateSemana,
+        items: ordensToDashboardSnapshots(ordensSemana),
+      },
+      comparacaoAnterior: {
+        date: dateAnterior,
+        items: ordensToDashboardSnapshots(ordensAnterior),
+      },
+    };
+  }
+
+  private async buildOrdensPainel(
+    ordens: OrdemProducaoRecord[],
+    lotesByOrdem: Map<string, FermentacaoLoteRecord[]>,
+  ): Promise<PainelOrdemEtapa[]> {
+    if (ordens.length === 0) return [];
+
+    const names = await this.loadNameMaps(ordens);
+
+    return sortOrdensPorPlanejamento(
+      ordens.map((ordem) =>
+        buildPainelOrdem({
+          ordem,
+          lotes: lotesByOrdem.get(ordem.id) ?? [],
+          produto: names.produtoNomeById.get(ordem.produtoId) ?? 'Desconhecido',
+          tipoEstoque: names.tipoNomeById.get(ordem.tipoEstoqueId) ?? 'Desconhecido',
+          assadeiraNome: ordem.assadeiraId
+            ? names.assadeiraNomeById.get(ordem.assadeiraId)
+            : undefined,
+        }),
+      ),
+    );
   }
 
   private async loadNameMaps(ordens: OrdemProducaoRecord[]) {

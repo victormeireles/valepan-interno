@@ -24,6 +24,7 @@ export type OrdensProducaoListResponse = {
     totalOrdens: number;
     totalLatas: number;
     totalUnidades: number;
+    totalCaixas: number;
   };
   ordens: OrdemProducaoPainelItem[];
 };

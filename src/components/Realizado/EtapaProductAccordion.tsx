@@ -8,6 +8,8 @@ import ProductCompactCard from './ProductCompactCard';
 export interface EtapaProductAccordionProps {
   instanceId: string;
   produto: string;
+  cliente?: string;
+  observacao?: string;
   somaProduzido: number;
   somaAProduzir: number;
   unidade: string;
@@ -27,6 +29,8 @@ function sanitizeForHtmlId(value: string): string {
 export default function EtapaProductAccordion({
   instanceId,
   produto,
+  cliente,
+  observacao,
   somaProduzido,
   somaAProduzir,
   unidade,
@@ -106,6 +110,8 @@ export default function EtapaProductAccordion({
     <div className="flex flex-col gap-1">
       <ProductCompactCard
         produto={produto}
+        cliente={cliente}
+        observacao={observacao}
         produzido={somaProduzido}
         aProduzir={somaAProduzir}
         unidade={unidade}
