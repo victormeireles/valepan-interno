@@ -54,6 +54,18 @@ export type CreateFromUnidadesInput = {
   unidades: number;
 };
 
+export type UpdateFromFormInput = {
+  dataProducao: string;
+  dataEtiqueta: string;
+  tipoEstoque: string;
+  produto: string;
+  observacao: string;
+  modoQuantidade: 'latas' | 'unidades';
+  latas?: number;
+  unidades?: number;
+  assadeiraNome?: string;
+};
+
 type AssadeiraContext = {
   assadeiraId: string;
   unidadesPorAssadeiraEfetiva: number;
@@ -248,6 +260,89 @@ export class OrdemProducaoMetaService {
     return ordemProducaoRepository.updateQuantidades(id, {
       assadeiraId: assadeira.assadeiraId,
       assadeiras: latas,
+      quantidade,
+    });
+  }
+
+  async updateFromForm(id: string, input: UpdateFromFormInput): Promise<OrdemProducaoRecord> {
+    const existing = await ordemProducaoRepository.findById(id);
+    if (!existing) throw new Error('Pedido não encontrado');
+
+    const { tipoEstoqueId, produtoId } = await pedidoEmbalagemService.resolveIds(
+      input.tipoEstoque,
+      input.produto,
+    );
+
+    if (input.modoQuantidade === 'unidades') {
+      const hasAssadeira = await pedidoEmbalagemService.hasAssadeiraForProduto(produtoId);
+      if (hasAssadeira) {
+        throw new EstoqueResolverError(
+          `Produto "${input.produto}" possui assadeira — use latas para criar a meta`,
+        );
+      }
+
+      const unidades = input.unidades ?? 0;
+      if (!Number.isFinite(unidades) || unidades <= 0) {
+        throw new EstoqueResolverError('Informe ao menos 1 unidade');
+      }
+
+      const produzido = await embalagemLoteRepository.sumQuantidadeByPedidoId(id);
+      const totalProduzido =
+        produzido.caixas + produzido.pacotes + produzido.unidades + produzido.kg;
+      if (totalProduzido > 0 && unidades < produzido.unidades - 1e-6) {
+        throw new Error(
+          `Meta (${unidades} un) menor que produzido (${produzido.unidades} un)`,
+        );
+      }
+
+      const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(produtoId);
+      const quantidade = deriveQuantidadesFromUnidades({ unidades, boxUnits });
+
+      return ordemProducaoRepository.updatePedidoFields(id, {
+        dataProducao: input.dataProducao,
+        dataFabricacaoEtiqueta: input.dataEtiqueta,
+        tipoEstoqueId,
+        produtoId,
+        observacao: input.observacao,
+        assadeiraId: '',
+        assadeiras: 0,
+        ordemPlanejamento: existing.ordemPlanejamento,
+        quantidade,
+      });
+    }
+
+    const assadeira = await pedidoEmbalagemService.resolveAssadeiraForProduto(
+      produtoId,
+      input.assadeiraNome,
+    );
+    if (!assadeira) {
+      throw new EstoqueResolverError(
+        `Produto "${input.produto}" não possui assadeira — use unidades`,
+      );
+    }
+
+    const latas = input.latas ?? 0;
+    if (!Number.isFinite(latas) || latas <= 0) {
+      throw new EstoqueResolverError('Informe ao menos 1 lata');
+    }
+
+    await this.assertMetaNotBelowProduzido(id, latas, assadeira, input.produto);
+
+    const quantidade = deriveQuantidadesFromAssadeiras({
+      assadeiras: latas,
+      unidadesPorAssadeira: assadeira.unidadesPorAssadeiraEfetiva,
+      boxUnits: assadeira.boxUnits,
+    });
+
+    return ordemProducaoRepository.updatePedidoFields(id, {
+      dataProducao: input.dataProducao,
+      dataFabricacaoEtiqueta: input.dataEtiqueta,
+      tipoEstoqueId,
+      produtoId,
+      observacao: input.observacao,
+      assadeiraId: assadeira.assadeiraId,
+      assadeiras: latas,
+      ordemPlanejamento: existing.ordemPlanejamento,
       quantidade,
     });
   }
