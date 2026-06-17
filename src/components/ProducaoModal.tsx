@@ -43,7 +43,7 @@ interface ProducaoModalProps {
     unidades: number;
     kg: number;
   };
-  mode?: 'embalagem' | 'forno' | 'fermentacao' | 'resfriamento';
+  mode?: 'embalagem' | 'forno' | 'fermentacao';
   modoQuantidade?: 'assadeiras' | 'unidades';
   /** Aberto via botão "+" (novo lote), não edição de lote existente. */
   isNewLote?: boolean;
@@ -377,7 +377,7 @@ export default function ProducaoModal({
       let updatedFormData = { ...formData };
       
       // Verificar se há fotos para upload
-      const hasPhotos = mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? Boolean(photoFiles.pacote) : Object.values(photoFiles).some(file => file !== null);
+      const hasPhotos = mode === 'forno' || mode === 'fermentacao' ? Boolean(photoFiles.pacote) : Object.values(photoFiles).some(file => file !== null);
       
       // Upload de fotos se houver
       const canUploadPhotos =
@@ -403,10 +403,9 @@ export default function ProducaoModal({
             } else if (rowId) {
               formDataPhoto.append('rowId', rowId.toString());
             }
-            formDataPhoto.append('photoType', mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : photoType);
+            formDataPhoto.append('photoType', mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : photoType);
             if (mode === 'forno' && !loteId) formDataPhoto.append('process', 'forno');
             if (mode === 'fermentacao' && !loteId) formDataPhoto.append('process', 'fermentacao');
-            if (mode === 'resfriamento') formDataPhoto.append('process', 'resfriamento');
             
             uploadPromises.push(
               fetch('/api/upload/photo', {
@@ -443,7 +442,7 @@ export default function ProducaoModal({
           const uploadData = await uploadRes.json();
           
           // Atualizar formData com dados da foto baseado no tipo
-          const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
+          const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
           
           updatedFormData = {
             ...updatedFormData,
@@ -527,8 +526,8 @@ export default function ProducaoModal({
           }),
         });
       } else {
-        const typeParam = mode === 'resfriamento' ? 'resfriamento' : photoType;
-        const processParam = mode === 'resfriamento' ? '&process=resfriamento' : '';
+        const typeParam = photoType;
+        const processParam = '';
         res = await fetch(`/api/photo/${rowId}?type=${typeParam}${processParam}`, {
           method: 'DELETE',
         });
@@ -540,7 +539,7 @@ export default function ProducaoModal({
       }
       
       // Atualizar formData para remover dados da foto
-      const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
+      const photoFieldPrefix = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : (photoType === 'pacote' ? 'pacote' : photoType === 'etiqueta' ? 'etiqueta' : 'pallet');
       
       setFormData(prev => ({
         ...prev,
@@ -915,7 +914,7 @@ export default function ProducaoModal({
                     {showAssadeirasField && pedidoQuantidades.caixas > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium">
                         {pedidoQuantidades.caixas}{' '}
-                        {isEtapaMode || mode === 'resfriamento' ? 'Latas' : 'Caixas'}
+                        {isEtapaMode ? 'Latas' : 'Caixas'}
                       </span>
                     )}
                     {!isEtapaMode && pedidoQuantidades.pacotes > 0 && (
@@ -986,11 +985,11 @@ export default function ProducaoModal({
                   </h4>
                   
                   {/* Mostrar botão "Ver Foto" se houver foto */}
-                  {(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : mode === 'resfriamento' ? formData.resfriamentoFotoUrl : formData.pacoteFotoUrl) && (
+                  {(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl) && (
                     <div className="mb-4">
                       <PhotoManager
-                        photoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : mode === 'resfriamento' ? formData.resfriamentoFotoUrl : formData.pacoteFotoUrl) || ''}
-                        photoId={(mode === 'forno' ? formData.fornoFotoId : mode === 'fermentacao' ? formData.fermentacaoFotoId : mode === 'resfriamento' ? formData.resfriamentoFotoId : formData.pacoteFotoId) || ''}
+                        photoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl) || ''}
+                        photoId={(mode === 'forno' ? formData.fornoFotoId : mode === 'fermentacao' ? formData.fermentacaoFotoId : formData.pacoteFotoId) || ''}
                         onPhotoRemove={() => handlePhotoManagerRemove('pacote')}
                         loading={photoLoading}
                         disabled={loading}
@@ -1005,7 +1004,7 @@ export default function ProducaoModal({
                     onPhotoRemove={() => handlePhotoRemove('pacote')}
                     loading={photoLoading}
                     disabled={loading}
-                    currentPhotoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : mode === 'resfriamento' ? formData.resfriamentoFotoUrl : formData.pacoteFotoUrl)}
+                    currentPhotoUrl={(mode === 'forno' ? formData.fornoFotoUrl : mode === 'fermentacao' ? formData.fermentacaoFotoUrl : formData.pacoteFotoUrl)}
                   />
                 </div>
               </div>

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadPhotoToDrive } from '@/lib/googleDrive';
-import { getGoogleSheetsClient } from '@/lib/googleSheets';
-import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 import { parseSaidaId, saidaIdToDriveRowNumber } from '@/domain/saidas/saida-id';
 
 export const maxDuration = 30;
@@ -42,14 +40,13 @@ export async function POST(request: NextRequest) {
         'pallet',
         'forno',
         'fermentacao',
-        'resfriamento',
         'saida',
       ].includes(photoType)
     ) {
       return NextResponse.json(
         {
           error:
-            'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao, resfriamento ou saida',
+            'Tipo de foto inválido. Use: pacote, etiqueta, pallet, forno, fermentacao ou saida',
         },
         { status: 400 },
       );
@@ -100,7 +97,6 @@ export async function POST(request: NextRequest) {
         | 'pallet'
         | 'forno'
         | 'fermentacao'
-        | 'resfriamento'
         | 'saida',
     );
 
@@ -173,37 +169,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const sheets = await getGoogleSheetsClient();
-    if (processType !== 'resfriamento') {
-      return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
-    }
-    const config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
-    const { spreadsheetId, tabName } = config;
-
-    const columnsCount = 3;
-    const startColumn = 'Z';
-
-    const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
-    const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;
-    const values =
-      columnsCount === 3
-        ? [uploadResult.photoUrl, uploadResult.photoId, new Date().toISOString()]
-        : [uploadResult.photoUrl, uploadResult.photoId];
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [values] },
-    });
-
-    return NextResponse.json({
-      success: true,
-      photoUrl: uploadResult.photoUrl,
-      photoId: uploadResult.photoId,
-      photoType,
-      message: 'Foto enviada com sucesso',
-    });
+    return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

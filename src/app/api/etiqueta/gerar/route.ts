@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readSheetValues } from '@/lib/googleSheets';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import fs from 'fs';
 import path from 'path';
@@ -38,72 +38,22 @@ function formatPesoLiquido(peso: number): string {
   return pesoInteiro.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+const productService = new SupabaseProductService();
+
 async function getProdutoData(nomeProduto: string) {
-  const spreadsheetId = process.env.NEXT_PUBLIC_PRODUTOS_SHEET_ID;
-  if (!spreadsheetId) {
-    throw new Error('ID da planilha de produtos não configurado');
+  const product = await productService.findByName(nomeProduto);
+  if (!product) {
+    throw new Error('Produto não encontrado');
   }
 
-  const tabName = 'Produtos';
-  // Ler todas as colunas possíveis (até Z pelo menos)
-  const values = await readSheetValues(spreadsheetId, `${tabName}!A:Z`);
-
-  if (values.length < 3) {
-    throw new Error('Planilha de produtos vazia ou sem dados');
-  }
-
-  // Cabeçalhos estão na linha 2 (índice 1)
-  const headers = values[1] || [];
-
-  // Buscar índices das colunas pelos nomes dos cabeçalhos
-  const findColumnIndex = (searchTerms: string[]): number => {
-    return headers.findIndex((h: string) => {
-      if (!h) return false;
-      const headerLower = h.toString().trim().toLowerCase();
-      return searchTerms.some(term => headerLower === term.toLowerCase() || headerLower.includes(term.toLowerCase()));
-    });
+  return {
+    nome: product.nome,
+    unidade: product.unidadeNomeResumido || '',
+    codigoBarras: product.unitBarcode || '',
+    unPorCaixa: product.boxUnits ?? 0,
+    unPorPacote: product.packageUnits ?? 0,
+    pesoLiquido: product.unitWeight ?? 0,
   };
-
-  const produtoColIdx = findColumnIndex(['Produto']);
-  const codigoBarrasColIdx = findColumnIndex(['Código de Barras', 'Codigo de Barras']);
-  const unCaixaColIdx = findColumnIndex(['UN Caixa', 'UN Caixa']);
-  const unPacoteColIdx = findColumnIndex(['UN Pacote', 'UN Pacote']);
-  const pesoLiquidoColIdx = findColumnIndex(['Peso Líquido', 'Peso Liquido']);
-
-  if (produtoColIdx < 0) {
-    throw new Error('Coluna "Produto" não encontrada na planilha');
-  }
-
-  // Buscar linha do produto
-  const produtoRow = values.slice(2).find(row => {
-    const produto = row[produtoColIdx]?.toString().trim();
-    return produto && produto.toLowerCase() === nomeProduto.toLowerCase();
-  });
-
-  if (!produtoRow) {
-    throw new Error('Produto não encontrado na planilha');
-  }
-
-  // Função helper para parse seguro
-  const parseSafe = (val: string | undefined | null): number => {
-    if (!val) return 0;
-    const str = val.toString().trim().replace(',', '.');
-    const parsed = parseFloat(str);
-    return isNaN(parsed) ? 0 : parsed;
-  };
-
-  const codigoBarrasRaw = codigoBarrasColIdx >= 0 ? (produtoRow[codigoBarrasColIdx]?.toString().trim() || '') : '';
-
-  const result = {
-    nome: produtoRow[produtoColIdx]?.toString().trim() || '',
-    unidade: produtoRow[1]?.toString().trim() || '', // Manter unidade da coluna B se existir
-    codigoBarras: codigoBarrasRaw,
-    unPorCaixa: unCaixaColIdx >= 0 ? parseSafe(produtoRow[unCaixaColIdx]) : 0,
-    unPorPacote: unPacoteColIdx >= 0 ? parseSafe(produtoRow[unPacoteColIdx]) : 0,
-    pesoLiquido: pesoLiquidoColIdx >= 0 ? parseSafe(produtoRow[pesoLiquidoColIdx]) : 0,
-  };
-  
-  return result;
 }
 
 async function generateBarcodeBase64(code: string): Promise<string> {

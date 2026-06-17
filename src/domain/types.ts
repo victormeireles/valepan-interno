@@ -25,10 +25,6 @@ export interface PhotoData {
   fermentacaoFotoUrl?: string;
   fermentacaoFotoId?: string;
   fermentacaoFotoUploadedAt?: string;
-  // Resfriamento: foto única
-  resfriamentoFotoUrl?: string;
-  resfriamentoFotoId?: string;
-  resfriamentoFotoUploadedAt?: string;
 }
 
 // Dados de produção com fotos
@@ -41,7 +37,7 @@ export interface ProducaoData extends PhotoData {
 }
 
 // Tipo de foto para upload
-export type PhotoType = 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao' | 'resfriamento';
+export type PhotoType = 'pacote' | 'etiqueta' | 'pallet' | 'forno' | 'fermentacao';
 
 // Resposta da API de upload de foto
 export interface PhotoUploadResponse {
