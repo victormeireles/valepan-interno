@@ -3,6 +3,10 @@
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 
+// Tabela legada removida do Database gerado; fila /producao/fila ainda consulta via service_role.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LEGACY_ORDENS_PRODUCAO_TABLE = '_ordens_producao_legacy' as any;
+
 interface CreateProductionOrderParams {
   produtoId: string;
   qtdPlanejada: number;
@@ -29,13 +33,15 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     
     // Busca última OP do dia para incrementar sequencial
-    const { data: lastOp } = await supabase
-      .from('_ordens_producao_legacy')
+    const { data: lastOpRaw } = await supabase
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .select('lote_codigo')
       .ilike('lote_codigo', `OP-${dateStr}-%`)
       .order('lote_codigo', { ascending: false })
       .limit(1)
       .single();
+
+    const lastOp = lastOpRaw as { lote_codigo?: string } | null;
 
     let sequence = 1;
     if (lastOp?.lote_codigo) {
@@ -52,8 +58,8 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
       ? new Date(params.dataProducao).toISOString()
       : new Date().toISOString();
 
-    const { data, error } = await supabase
-      .from('_ordens_producao_legacy')
+    const { data: insertedRaw, error } = await supabase
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .insert({
         produto_id: params.produtoId,
         qtd_planejada: params.qtdPlanejada,
@@ -65,6 +71,8 @@ export async function createProductionOrder(params: CreateProductionOrderParams)
       })
       .select()
       .single();
+
+    const data = insertedRaw as Record<string, unknown> | null;
 
     if (error) throw error;
 
@@ -90,12 +98,14 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
       updateData.data_producao = new Date(params.dataProducao).toISOString();
     }
 
-    const { data, error } = await supabase
-      .from('_ordens_producao_legacy')
+    const { data: updatedRaw, error } = await supabase
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .update(updateData)
       .eq('id', params.ordemId)
       .select()
       .single();
+
+    const data = updatedRaw as Record<string, unknown> | null;
 
     if (error) throw error;
 
@@ -110,8 +120,16 @@ export async function updateProductionOrder(params: UpdateProductionOrderParams)
 export async function getProductionQueue() {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
-  const { data, error } = await supabase
-    .from('_ordens_producao_legacy')
+  type OrdemProducaoItem = {
+    id: string;
+    produto_id: string;
+    lote_codigo: string;
+    qtd_planejada: number;
+    [key: string]: unknown;
+  };
+
+  const { data: queueRaw, error } = await supabase
+    .from(LEGACY_ORDENS_PRODUCAO_TABLE)
     .select(`
       *,
       produtos (
@@ -133,6 +151,8 @@ export async function getProductionQueue() {
     .neq('status', 'concluido')
     .neq('status', 'cancelado');
 
+  const data = (queueRaw ?? []) as unknown as OrdemProducaoItem[];
+
   if (error) {
     console.error('Erro ao buscar fila:', error);
     return [];
@@ -143,13 +163,6 @@ export async function getProductionQueue() {
   }
 
   // Buscar receitas de massa para todos os produtos
-  type OrdemProducaoItem = {
-    id: string;
-    produto_id: string;
-    lote_codigo: string;
-    qtd_planejada: number;
-    [key: string]: unknown;
-  };
   const produtoIds = [...new Set(data.map((item: OrdemProducaoItem) => item.produto_id))];
   
   const { data: receitasVinculadas, error: receitasError } = await supabase

@@ -1,4 +1,9 @@
-import { derivarUnidadeEmbalagem } from '@/domain/embalagem/painel-quantidade';
+import {
+  buildEmbalagemCardDisplayEntries,
+  buildEmbalagemDisplayEntries,
+  derivarUnidadeEmbalagem,
+  pedidoUsaCaixasOuPacotes,
+} from '@/domain/embalagem/painel-quantidade';
 import type { PainelLoteEmbalagem, PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { RealizadoItemEmbalagem } from '@/domain/types/realizado';
 
@@ -27,7 +32,7 @@ export function loteToPainelItem(
   pedido: PainelPedidoEmbalagem,
   lote: PainelLoteEmbalagem,
 ): PainelLoteItem {
-  const { unidade, valor } = derivarUnidadeEmbalagem(lote.quantidade);
+  const exibicao = resolverExibicaoLoteEmbalagem(pedido, lote);
 
   return {
     loteId: lote.loteId,
@@ -35,9 +40,9 @@ export function loteToPainelItem(
     produto: pedido.produto,
     observacao: pedido.observacao,
     congelado: pedido.congelado ?? 'Não',
-    unidade,
-    aProduzir: valor,
-    produzido: valor,
+    unidade: exibicao.unidade,
+    aProduzir: exibicao.produzido,
+    produzido: exibicao.produzido,
     dataFabricacao: pedido.dataFabricacao,
     caixas: lote.quantidade.caixas,
     pacotes: lote.quantidade.pacotes,
@@ -67,7 +72,34 @@ export function loteToPainelItem(
 }
 
 export function isPedidoEmbalagemFinalizado(pedido: PainelPedidoEmbalagem): boolean {
-  const meta = derivarUnidadeEmbalagem(pedido.pedido);
-  const produzido = derivarUnidadeEmbalagem(pedido.produzido);
-  return meta.valor > 0 && produzido.valor >= meta.valor;
+  if (pedidoUsaCaixasOuPacotes(pedido.pedido)) {
+    const meta = derivarUnidadeEmbalagem(pedido.pedido);
+    const produzido = derivarUnidadeEmbalagem(pedido.produzido);
+    return meta.valor > 0 && produzido.valor >= meta.valor;
+  }
+  return pedido.aProduzir > 0 && pedido.produzidoScalar >= pedido.aProduzir;
+}
+
+function resolverExibicaoLoteEmbalagem(
+  pedido: PainelPedidoEmbalagem,
+  lote: PainelLoteEmbalagem,
+): { unidade: PainelLoteItem['unidade']; produzido: number } {
+  if (pedidoUsaCaixasOuPacotes(pedido.pedido)) {
+    const { unidade, valor } = derivarUnidadeEmbalagem(lote.quantidade);
+    return { unidade, produzido: valor };
+  }
+
+  const valor =
+    pedido.unidade === 'kg' ? lote.quantidade.kg : lote.quantidade.unidades;
+  return { unidade: pedido.unidade, produzido: valor };
+}
+
+export function buildLoteEmbalagemDisplayEntries(
+  pedido: Pick<PainelPedidoEmbalagem, 'pedido' | 'unidade'>,
+  quantidade: PainelLoteEmbalagem['quantidade'],
+) {
+  if (pedidoUsaCaixasOuPacotes(pedido.pedido)) {
+    return buildEmbalagemDisplayEntries(quantidade);
+  }
+  return buildEmbalagemCardDisplayEntries(quantidade, pedido.unidade);
 }

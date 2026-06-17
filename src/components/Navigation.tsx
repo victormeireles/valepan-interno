@@ -155,16 +155,16 @@ export default function Navigation({ hideHeader = false }: NavigationProps) {
                   📋 Meta de Produção
                 </h3>
                 <Link
-                  href="/meta/producao"
+                  href="/ordens-producao"
                   onClick={closeMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/meta/producao')
+                    isActive('/ordens-producao')
                       ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="material-icons text-xl mr-3">assignment</span>
-                  Meta: Produção
+                  <span className="material-icons text-xl mr-3">format_list_numbered</span>
+                  Ordens de Produção
                 </Link>
                 <Link
                   href="/meta/embalagem"

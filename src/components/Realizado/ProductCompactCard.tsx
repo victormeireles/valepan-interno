@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 
 interface ProductCompactCardProps {
   produto: string;
+  /** Tipo de estoque / cliente exibido antes do produto. */
+  cliente?: string;
   produzido: number;
   aProduzir: number;
   unidade: string;
@@ -31,8 +33,13 @@ interface ProductCompactCardProps {
   productionStatusOverride?: ProductionStatus;
 }
 
+function EtapaTitleSeparator() {
+  return <span className="text-gray-500 text-xs flex-shrink-0">·</span>;
+}
+
 export default function ProductCompactCard({
   produto,
+  cliente,
   produzido,
   aProduzir,
   unidade,
@@ -88,22 +95,19 @@ export default function ProductCompactCard({
       {/* Farol de Status */}
       <div className={`w-3 h-3 rounded-full flex-shrink-0 ${statusColor}`} />
 
-      {/* Nome do Produto e Observação */}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="text-sm font-semibold text-white break-words">
-            {produto}
-          </span>
-          {congelado && (
-            <span className="material-icons text-blue-300 text-xs flex-shrink-0">
-              ac_unit
-            </span>
-          )}
-        </div>
-        {observacao && (
-          <span className="text-xs text-gray-400 italic flex-shrink-0 whitespace-nowrap">
-            {observacao}
-          </span>
+      {/* Cliente, observação e produto */}
+      <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
+        {cliente ? (
+          <span className="text-xs text-gray-300 flex-shrink-0">{cliente}</span>
+        ) : null}
+        {cliente && (observacao || produto) ? <EtapaTitleSeparator /> : null}
+        {observacao ? (
+          <span className="text-xs text-gray-400 italic flex-shrink-0">{observacao}</span>
+        ) : null}
+        {(cliente || observacao) && produto ? <EtapaTitleSeparator /> : null}
+        <span className="text-sm font-semibold text-white break-words">{produto}</span>
+        {congelado && (
+          <span className="material-icons text-blue-300 text-xs flex-shrink-0">ac_unit</span>
         )}
       </div>
 

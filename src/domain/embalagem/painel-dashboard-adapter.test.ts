@@ -7,6 +7,7 @@ import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 
 const pedido: PainelPedidoEmbalagem = {
   pedidoEmbalagemId: 'p1',
+  ordemPlanejamento: 1,
   cliente: 'HB',
   produto: 'Brioche',
   observacao: '',
@@ -58,5 +59,19 @@ describe('pedidosToDashboardItems', () => {
     const items = pedidosToDashboardItems([pedido]);
     expect(items[0].cliente).toBe('HB');
     expect(items[1].caixas).toBe(50);
+  });
+
+  it('ignora pedidos medidos só em unidades', () => {
+    const pedidoUn: PainelPedidoEmbalagem = {
+      ...pedido,
+      pedido: { caixas: 0, pacotes: 0, unidades: 1000, kg: 0 },
+      produzido: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
+      unidade: 'un',
+      aProduzir: 1000,
+      produzidoScalar: 0,
+      lotes: [],
+    };
+    expect(pedidosToDashboardItems([pedidoUn])).toHaveLength(0);
+    expect(pedidosToDashboardSnapshots([pedidoUn])).toHaveLength(0);
   });
 });

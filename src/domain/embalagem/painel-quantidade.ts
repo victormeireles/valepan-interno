@@ -6,6 +6,11 @@ import {
 
 export type UnidadePrincipal = 'cx' | 'pct' | 'un' | 'kg';
 
+/** Pedido medido em caixas ou pacotes (entra no dashboard de caixas). */
+export function pedidoUsaCaixasOuPacotes(q: Quantidade): boolean {
+  return q.caixas > 0 || q.pacotes > 0;
+}
+
 export function somarQuantidades(items: Quantidade[]): Quantidade {
   return items.reduce(
     (acc, q) => ({
@@ -46,6 +51,56 @@ export function buildEmbalagemDisplayEntries(
     { quantidade: q.caixas, unidade: 'cx' },
     { quantidade: q.pacotes, unidade: 'pct' },
   ]);
+}
+
+export function buildEmbalagemCardDisplayEntries(
+  q: Quantidade,
+  unidade: UnidadePrincipal,
+): QuantityBreakdownEntry[] {
+  if (unidade === 'un') {
+    return QuantityBreakdown.buildEntries([{ quantidade: q.unidades, unidade: 'un' }]);
+  }
+  if (unidade === 'kg') {
+    return QuantityBreakdown.buildEntries([{ quantidade: q.kg, unidade: 'kg' }]);
+  }
+  return buildEmbalagemDisplayEntries(q);
+}
+
+export type ExibicaoCardEmbalagem = {
+  unidade: UnidadePrincipal;
+  produzido: number;
+  meta: number;
+  detalhesProduzido: QuantityBreakdownEntry[];
+  detalhesMeta: QuantityBreakdownEntry[];
+};
+
+/** Valores escalares e breakdown para o card do painel (cx/pct ou un/kg). */
+export function resolverExibicaoCardEmbalagem(params: {
+  pedido: Quantidade;
+  produzido: Quantidade;
+  unidadePrincipal: UnidadePrincipal;
+  produzidoScalar: number;
+  aProduzir: number;
+}): ExibicaoCardEmbalagem {
+  if (pedidoUsaCaixasOuPacotes(params.pedido)) {
+    const meta = derivarUnidadeEmbalagem(params.pedido);
+    const produzido = derivarUnidadeEmbalagem(params.produzido);
+    return {
+      unidade: meta.unidade,
+      produzido: produzido.valor,
+      meta: meta.valor,
+      detalhesProduzido: buildEmbalagemDisplayEntries(params.produzido),
+      detalhesMeta: buildEmbalagemDisplayEntries(params.pedido),
+    };
+  }
+
+  return {
+    unidade: params.unidadePrincipal,
+    produzido: params.produzidoScalar,
+    meta: params.aProduzir,
+    detalhesProduzido: buildEmbalagemCardDisplayEntries(params.produzido, params.unidadePrincipal),
+    detalhesMeta: buildEmbalagemCardDisplayEntries(params.pedido, params.unidadePrincipal),
+  };
 }
 
 export function quantidadeTemSaldoPedido(q: Quantidade): boolean {

@@ -14,84 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _ordens_producao_legacy: {
-        Row: {
-          assadeira_id: string | null
-          created_at: string | null
-          data_producao: string | null
-          id: string
-          lote_codigo: string
-          ordem_planejamento: number | null
-          pedido_id: string | null
-          prioridade: number | null
-          produto_id: string
-          qtd_planejada: number
-          status: string | null
-        }
-        Insert: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id: string
-          qtd_planejada: number
-          status?: string | null
-        }
-        Update: {
-          assadeira_id?: string | null
-          created_at?: string | null
-          data_producao?: string | null
-          id?: string
-          lote_codigo?: string
-          ordem_planejamento?: number | null
-          pedido_id?: string | null
-          prioridade?: number | null
-          produto_id?: string
-          qtd_planejada?: number
-          status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ordens_producao_assadeira_id_fkey"
-            columns: ["assadeira_id"]
-            isOneToOne: false
-            referencedRelation: "assadeiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "pedidos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_pedido_id_fkey"
-            columns: ["pedido_id"]
-            isOneToOne: false
-            referencedRelation: "relatorio_producao_pedidos_v"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "produtos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ordens_producao_produto_id_fkey"
-            columns: ["produto_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["produto_id"]
-          },
-        ]
-      }
       assadeiras: {
         Row: {
           ativo: boolean
@@ -1800,6 +1722,106 @@ export type Database = {
           },
         ]
       }
+      fermentacao_lotes: {
+        Row: {
+          assadeiras: number
+          created_at: string
+          foto_id: string | null
+          foto_uploaded_at: string | null
+          foto_url: string | null
+          id: string
+          modo: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id: string
+          producao_anterior: Json | null
+          produzido_em: string
+          unidades: number
+        }
+        Insert: {
+          assadeiras?: number
+          created_at?: string
+          foto_id?: string | null
+          foto_uploaded_at?: string | null
+          foto_url?: string | null
+          id?: string
+          modo: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id: string
+          producao_anterior?: Json | null
+          produzido_em?: string
+          unidades?: number
+        }
+        Update: {
+          assadeiras?: number
+          created_at?: string
+          foto_id?: string | null
+          foto_uploaded_at?: string | null
+          foto_url?: string | null
+          id?: string
+          modo?: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id?: string
+          producao_anterior?: Json | null
+          produzido_em?: string
+          unidades?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fermentacao_lotes_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forno_lotes: {
+        Row: {
+          assadeiras: number
+          created_at: string
+          foto_id: string | null
+          foto_uploaded_at: string | null
+          foto_url: string | null
+          id: string
+          modo: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id: string
+          producao_anterior: Json | null
+          produzido_em: string
+          unidades: number
+        }
+        Insert: {
+          assadeiras?: number
+          created_at?: string
+          foto_id?: string | null
+          foto_uploaded_at?: string | null
+          foto_url?: string | null
+          id?: string
+          modo: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id: string
+          producao_anterior?: Json | null
+          produzido_em?: string
+          unidades?: number
+        }
+        Update: {
+          assadeiras?: number
+          created_at?: string
+          foto_id?: string | null
+          foto_uploaded_at?: string | null
+          foto_url?: string | null
+          id?: string
+          modo?: Database["public"]["Enums"]["producao_lote_modo"]
+          ordem_producao_id?: string
+          producao_anterior?: Json | null
+          produzido_em?: string
+          unidades?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forno_lotes_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insumos: {
         Row: {
           ativo: boolean | null
@@ -2147,7 +2169,7 @@ export type Database = {
       }
       ordens_producao: {
         Row: {
-          assadeira_id: string
+          assadeira_id: string | null
           assadeiras: number
           caixas: number
           created_at: string
@@ -2164,7 +2186,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          assadeira_id: string
+          assadeira_id?: string | null
           assadeiras?: number
           caixas?: number
           created_at?: string
@@ -2181,7 +2203,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          assadeira_id?: string
+          assadeira_id?: string | null
           assadeiras?: number
           caixas?: number
           created_at?: string
@@ -4043,6 +4065,7 @@ export type Database = {
         | "ajuste_saida"
       estoque_movimento_origem: "embalagem" | "saida" | "ajuste_manual"
       frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
+      producao_lote_modo: "parcial" | "substituicao"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
       tipo_pedido_enum: "valepan" | "hamburgueria"
       tipo_receita:
@@ -4059,49 +4082,6 @@ export type Database = {
         | "cadastro_realizado"
         | "em_analise_valepan"
         | "em_analise_distribuidor"
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-  interno: {
-    Tables: {
-      whatsapp_notificacoes_config: {
-        Row: {
-          id: string
-          embalagem_habilitado: boolean
-          fermentacao_habilitado: boolean
-          forno_habilitado: boolean
-          saidas_habilitado: boolean
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          embalagem_habilitado?: boolean
-          fermentacao_habilitado?: boolean
-          forno_habilitado?: boolean
-          saidas_habilitado?: boolean
-          updated_at?: string
-        }
-        Relationships: []
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4261,6 +4241,7 @@ export const Constants = {
       ],
       estoque_movimento_origem: ["embalagem", "saida", "ajuste_manual"],
       frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],
+      producao_lote_modo: ["parcial", "substituicao"],
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
       tipo_pedido_enum: ["valepan", "hamburgueria"],
       tipo_receita: [

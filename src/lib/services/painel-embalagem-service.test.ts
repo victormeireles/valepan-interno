@@ -64,6 +64,12 @@ describe('buildPainelPedido', () => {
 
     expect(painel.congelado).toBe('Sim');
   });
+
+  it('propaga ordemPlanejamento do pedido', () => {
+    const painel = buildPainelPedido(basePedido, 'HB', 'Brioche 65g', [], false, 'Não');
+
+    expect(painel.ordemPlanejamento).toBe(1);
+  });
 });
 
 describe('mapLoteToPainel', () => {

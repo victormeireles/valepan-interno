@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadPhotoToDrive } from '@/lib/googleDrive';
 import { getGoogleSheetsClient } from '@/lib/googleSheets';
-import { PEDIDOS_FORNO_CONFIG } from '@/config/forno';
-import { PEDIDOS_FERMENTACAO_CONFIG } from '@/config/fermentacao';
 import { PEDIDOS_RESFRIAMENTO_CONFIG } from '@/config/resfriamento';
 import { parseSaidaId, saidaIdToDriveRowNumber } from '@/domain/saidas/saida-id';
 
@@ -25,10 +23,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Processo é obrigatório' }, { status: 400 });
     }
 
-    if (processType === 'embalagem') {
+    if (processType === 'embalagem' || processType === 'fermentacao' || processType === 'forno') {
       if (!loteId) {
         return NextResponse.json(
-          { error: 'loteId é obrigatório para fotos de embalagem.' },
+          { error: 'loteId é obrigatório para este processo.' },
           { status: 400 },
         );
       }
@@ -125,6 +123,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (processType === 'fermentacao') {
+      const { fermentacaoLoteRepository } = await import(
+        '@/data/producao-etapa/FermentacaoLoteRepository'
+      );
+      await fermentacaoLoteRepository.updateById(loteId, {
+        fotos: {
+          fotoUrl: uploadResult.photoUrl,
+          fotoId: uploadResult.photoId,
+          fotoUploadedAt: new Date().toISOString(),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        photoUrl: uploadResult.photoUrl,
+        photoId: uploadResult.photoId,
+        photoType,
+        message: 'Foto enviada com sucesso',
+      });
+    }
+
+    if (processType === 'forno') {
+      const { fornoLoteRepository } = await import('@/data/producao-etapa/FornoLoteRepository');
+      await fornoLoteRepository.updateById(loteId, {
+        fotos: {
+          fotoUrl: uploadResult.photoUrl,
+          fotoId: uploadResult.photoId,
+          fotoUploadedAt: new Date().toISOString(),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        photoUrl: uploadResult.photoUrl,
+        photoId: uploadResult.photoId,
+        photoType,
+        message: 'Foto enviada com sucesso',
+      });
+    }
+
     if (processType === 'saidas') {
       return NextResponse.json({
         success: true,
@@ -136,27 +174,14 @@ export async function POST(request: NextRequest) {
     }
 
     const sheets = await getGoogleSheetsClient();
-    let config;
-    if (processType === 'forno') {
-      config = PEDIDOS_FORNO_CONFIG.destinoPedidos;
-    } else if (processType === 'fermentacao') {
-      config = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
-    } else if (processType === 'resfriamento') {
-      config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
-    } else {
+    if (processType !== 'resfriamento') {
       return NextResponse.json({ error: 'Processo inválido' }, { status: 400 });
     }
+    const config = PEDIDOS_RESFRIAMENTO_CONFIG.destinoPedidos;
     const { spreadsheetId, tabName } = config;
 
-    let startColumn: string;
     const columnsCount = 3;
-    if (processType === 'forno') {
-      startColumn = 'L';
-    } else if (processType === 'fermentacao') {
-      startColumn = 'S';
-    } else {
-      startColumn = 'Z';
-    }
+    const startColumn = 'Z';
 
     const endColumn = String.fromCharCode(startColumn.charCodeAt(0) + columnsCount - 1);
     const range = `${tabName}!${startColumn}${rowNumber}:${endColumn}${rowNumber}`;

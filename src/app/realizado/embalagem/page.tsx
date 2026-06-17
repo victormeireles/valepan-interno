@@ -16,12 +16,15 @@ import {
   snapshotsToDashboardItems,
 } from '@/domain/embalagem/painel-dashboard-adapter';
 import {
-  buildEmbalagemDisplayEntries,
-  derivarUnidadeEmbalagem,
+  resolverExibicaoCardEmbalagem,
 } from '@/domain/embalagem/painel-quantidade';
+import {
+  splitPedidosEmbalagemEmGrupos,
+  type EmbalagemPainelGroup,
+} from '@/domain/embalagem/embalagem-painel-adapter';
 import { hasEmbalagemQuantity } from '@/domain/realizado/embalagem-group-by-produto';
 import {
-  isPedidoEmbalagemFinalizado,
+  buildLoteEmbalagemDisplayEntries,
   loteToPainelItem,
   type PainelLoteItem,
 } from '@/domain/realizado/painel-pedido-adapter';
@@ -29,7 +32,6 @@ import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
-import { RealizadoGroup } from '@/domain/types/realizado';
 import { ProducaoData } from '@/domain/types';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import {
@@ -38,13 +40,6 @@ import {
   getTodayISOInBrazilTimezone,
 } from '@/lib/utils/date-utils';
 import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
-
-type EmbalagemGroup = RealizadoGroup & {
-  cliente?: string;
-  dataFabricacao?: string;
-  observacao?: string;
-  pedidos: PainelPedidoEmbalagem[];
-};
 
 function horarioEmbalagemParaCard(item: PainelLoteItem): string | undefined {
   if (!hasEmbalagemQuantity(item)) return undefined;
@@ -69,16 +64,19 @@ function renderPedidoAccordion(
   pedido: PainelPedidoEmbalagem,
   groupKey: string,
   opts: {
-    renderEmbalagemLot: (item: PainelLoteItem) => ReactNode;
+    renderEmbalagemLot: (pedido: PainelPedidoEmbalagem, item: PainelLoteItem) => ReactNode;
     onNovoLote: (p: PainelPedidoEmbalagem) => void;
     showNovoLote: boolean;
     productionStatusOverride?: 'not-started' | 'partial' | 'complete';
   },
 ) {
-  const metaEmbalagem = derivarUnidadeEmbalagem(pedido.pedido);
-  const produzidoEmbalagem = derivarUnidadeEmbalagem(pedido.produzido);
-  const parentProduzido = buildEmbalagemDisplayEntries(pedido.produzido);
-  const parentMeta = buildEmbalagemDisplayEntries(pedido.pedido);
+  const exibicao = resolverExibicaoCardEmbalagem({
+    pedido: pedido.pedido,
+    produzido: pedido.produzido,
+    unidadePrincipal: pedido.unidade,
+    produzidoScalar: pedido.produzidoScalar,
+    aProduzir: pedido.aProduzir,
+  });
   const instanceId = `${groupKey}|${pedido.pedidoEmbalagemId}`;
 
   return (
@@ -86,12 +84,12 @@ function renderPedidoAccordion(
       key={instanceId}
       instanceId={instanceId}
       produto={pedido.produto}
-      somaProduzido={produzidoEmbalagem.valor}
-      somaAProduzir={metaEmbalagem.valor}
-      unidade={metaEmbalagem.unidade}
+      somaProduzido={exibicao.produzido}
+      somaAProduzir={exibicao.meta}
+      unidade={exibicao.unidade}
       congelado={pedido.congelado === 'Sim'}
-      detalhesProduzido={parentProduzido}
-      detalhesMeta={parentMeta}
+      detalhesProduzido={exibicao.detalhesProduzido}
+      detalhesMeta={exibicao.detalhesMeta}
       horarioEmbalagem={
         pedido.producaoUpdatedAt
           ? formatLocalTimeHHmm(pedido.producaoUpdatedAt) ?? undefined
@@ -101,7 +99,7 @@ function renderPedidoAccordion(
       onNovoLote={opts.showNovoLote ? () => opts.onNovoLote(pedido) : undefined}
       renderLots={() =>
         pedido.lotes.map((lote) =>
-          opts.renderEmbalagemLot(loteToPainelItem(pedido, lote)),
+          opts.renderEmbalagemLot(pedido, loteToPainelItem(pedido, lote)),
         )
       }
     />
@@ -320,13 +318,15 @@ export default function ProducaoEmbalagemPage() {
   }, []);
 
   const renderEmbalagemLot = useCallback(
-    (embalagemItem: PainelLoteItem) => {
+    (pedido: PainelPedidoEmbalagem, embalagemItem: PainelLoteItem) => {
       const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.loteId}`;
       const isItemLoading = loadingCardId === itemKey;
       const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
-      const produzidoDetalhes = buildEmbalagemDisplayEntries({
+      const produzidoDetalhes = buildLoteEmbalagemDisplayEntries(pedido, {
         caixas: embalagemItem.caixas ?? 0,
         pacotes: embalagemItem.pacotes ?? 0,
+        unidades: embalagemItem.unidades ?? 0,
+        kg: embalagemItem.kg ?? 0,
       });
 
       const isDeleting = deletingLoteId === embalagemItem.loteId;
@@ -463,49 +463,10 @@ export default function ProducaoEmbalagemPage() {
   const dashboardPrev = comparisonPrevItems;
   const dashboardWeek = comparisonWeekItems;
 
-  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
-    const groups: Record<string, PainelPedidoEmbalagem[]> = {};
-
-    pedidos.forEach((pedido) => {
-      const dataFab = pedido.dataFabricacao || selectedDate;
-      const obs = pedido.observacao?.trim() || '';
-      const groupKey = `${pedido.cliente}|${dataFab}|${obs}`;
-      if (!groups[groupKey]) groups[groupKey] = [];
-      groups[groupKey].push(pedido);
-    });
-
-    const gruposNaoFinalizados: EmbalagemGroup[] = [];
-    const gruposFinalizados: EmbalagemGroup[] = [];
-
-    Object.entries(groups).forEach(([groupKey, groupPedidos]) => {
-      const [cliente, dataFab, obs] = groupKey.split('|');
-      const naoFinal = groupPedidos.filter((p) => !isPedidoEmbalagemFinalizado(p));
-      const final = groupPedidos.filter((p) => isPedidoEmbalagemFinalizado(p));
-
-      if (naoFinal.length > 0) {
-        gruposNaoFinalizados.push({
-          key: groupKey,
-          cliente,
-          dataFabricacao: dataFab,
-          observacao: obs || undefined,
-          items: [],
-          pedidos: naoFinal,
-        });
-      }
-      if (final.length > 0) {
-        gruposFinalizados.push({
-          key: groupKey,
-          cliente,
-          dataFabricacao: dataFab,
-          observacao: obs || undefined,
-          items: [],
-          pedidos: final,
-        });
-      }
-    });
-
-    return { gruposNaoFinalizados, gruposFinalizados };
-  }, [pedidos, selectedDate]);
+  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(
+    () => splitPedidosEmbalagemEmGrupos(pedidos, selectedDate),
+    [pedidos, selectedDate],
+  );
 
   const totais = useMemo(() => {
     const totalCaixasProduzido = pedidos.reduce((sum, p) => sum + p.produzido.caixas, 0);
@@ -572,7 +533,7 @@ export default function ProducaoEmbalagemPage() {
                       columnCount={1}
                       groups={gruposNaoFinalizados}
                       renderGroup={(group) => {
-                        const g = group as EmbalagemGroup;
+                        const g = group as EmbalagemPainelGroup;
                         return (
                           <ClientGroup
                             cliente={g.cliente}
@@ -585,7 +546,7 @@ export default function ProducaoEmbalagemPage() {
                                 ...accordionOpts,
                                 showNovoLote: true,
                                 productionStatusOverride:
-                                  derivarUnidadeEmbalagem(pedido.produzido).valor === 0
+                                  pedido.produzidoScalar === 0
                                     ? 'not-started'
                                     : 'partial',
                               }),
@@ -604,7 +565,7 @@ export default function ProducaoEmbalagemPage() {
                       columnCount={1}
                       groups={gruposFinalizados}
                       renderGroup={(group) => {
-                        const g = group as EmbalagemGroup;
+                        const g = group as EmbalagemPainelGroup;
                         return (
                           <ClientGroup
                             cliente={g.cliente}

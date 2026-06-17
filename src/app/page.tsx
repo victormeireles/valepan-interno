@@ -41,31 +41,6 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
             <Link
-              href="/meta/producao"
-              className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-blue-300/50 overflow-hidden transform hover:-translate-y-1"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-50/0 via-slate-50/0 to-blue-50/0 group-hover:from-slate-50/50 group-hover:via-slate-50/30 group-hover:to-blue-50/50 transition-all duration-500"></div>
-              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100/0 to-indigo-100/0 group-hover:from-blue-100/30 group-hover:to-indigo-100/20 rounded-full blur-2xl transition-all duration-500 -translate-y-1/2 translate-x-1/2"></div>
-              <div className="relative">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800 rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                  <span className="text-3xl sm:text-4xl">📊</span>
-                </div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
-                  Meta: Produção
-                </h3>
-                <p className="text-base sm:text-lg text-gray-600 leading-relaxed mb-6">
-                  Define metas para Fermentação e Forno
-                </p>
-                <div className="flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-2 transition-all duration-300">
-                  <span className="text-sm font-semibold uppercase tracking-wider">Acessar</span>
-                  <svg className="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </div>
-              </div>
-            </Link>
-
-            <Link
               href="/meta/embalagem"
               className="group relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 p-8 sm:p-10 border border-gray-100/50 hover:border-blue-300/50 overflow-hidden transform hover:-translate-y-1"
             >

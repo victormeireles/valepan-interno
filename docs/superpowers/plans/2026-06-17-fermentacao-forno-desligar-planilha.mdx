@@ -1,0 +1,761 @@
+# Fermentação e Forno — Desligar planilha — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Meta de fermentação e forno lê `ordens_producao`; realizado grava em `fermentacao_lotes` e `forno_lotes`; planilha congelada; `/meta/producao` removida; UI hierárquica igual embalagem.
+
+**Architecture:** Espelhar padrão embalagem Fase C — repositories e services por etapa, domínio compartilhado em `src/domain/producao-etapa/`, painéis agregam ordens + lotes. Sem estoque. Sem backfill.
+
+**Tech Stack:** Next.js 15 App Router, Supabase, Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-06-17-fermentacao-forno-desligar-planilha-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_FERMENTACAO_FORNO_LOTES_TABLES.sql` | Enum + tabelas |
+| `FERMENTACAO_LOTES_RLS.sql` / `FORNO_LOTES_RLS.sql` | RLS |
+| `src/domain/types/fermentacao-lote.ts` | Tipos domínio fermentação |
+| `src/domain/types/forno-lote.ts` | Tipos domínio forno |
+| `src/domain/types/painel-etapa.ts` | Resposta API painel |
+| `src/domain/producao-etapa/etapa-quantidade.ts` | Soma, saldo, escalar |
+| `src/domain/producao-etapa/painel-ordem-builder.ts` | `buildPainelOrdem` |
+| `src/data/producao-etapa/FermentacaoLoteRepository.ts` | CRUD fermentação |
+| `src/data/producao-etapa/FornoLoteRepository.ts` | CRUD forno |
+| `src/lib/services/fermentacao-lote-service.ts` | Regras negócio fermentação |
+| `src/lib/services/forno-lote-service.ts` | Regras negócio forno |
+| `src/lib/services/painel-fermentacao-service.ts` | GET painel fermentação |
+| `src/lib/services/painel-forno-service.ts` | GET painel forno |
+| `src/app/api/painel/fermentacao/route.ts` | Substituir planilha |
+| `src/app/api/painel/forno/route.ts` | Substituir planilha |
+| `src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts` | POST novo lote |
+| `src/app/api/producao/fermentacao/lote/[loteId]/route.ts` | GET/PUT/DELETE |
+| `src/app/api/producao/forno/ordem/[ordemId]/lote/route.ts` | POST novo lote |
+| `src/app/api/producao/forno/lote/[loteId]/route.ts` | GET/PUT/DELETE |
+| `src/app/realizado/fermentacao/page.tsx` | UI hierárquica |
+| `src/app/realizado/forno/page.tsx` | UI hierárquica |
+| `src/components/Realizado/EtapaProductAccordion.tsx` | Accordion genérico (extraído de embalagem) |
+| `src/domain/realizado/etapa-painel-adapter.ts` | `ordens` → grupos UI |
+| `src/lib/services/daily-summary/fermentacao-daily-summary-service.ts` | Ler DB |
+| `src/lib/services/daily-summary/forno-daily-summary-service.ts` | Ler DB |
+| `src/app/api/upload/photo/route.ts` | `loteId` para fermentação/forno |
+
+**Remover:**
+
+- `src/app/meta/producao/page.tsx`
+- `src/app/api/submit/forno-pedido/route.ts`
+- `src/app/api/producao/fermentacao/[rowId]/route.ts`
+- `src/app/api/producao/forno/[rowId]/route.ts`
+- `src/app/api/producao/forno/[rowId]/partial/route.ts`
+- `src/app/api/forno/edit/[rowId]/route.ts`
+- `src/app/api/forno/delete/[rowId]/route.ts`
+
+---
+
+## Fase 0 — Schema
+
+### Task 0: Migration tabelas de lotes
+
+**Files:**
+- Create: `CREATE_FERMENTACAO_FORNO_LOTES_TABLES.sql`
+- Create: `FERMENTACAO_LOTES_RLS.sql`
+- Create: `FORNO_LOTES_RLS.sql`
+
+- [ ] **Step 1: SQL principal**
+
+```sql
+DO $$ BEGIN
+  CREATE TYPE producao_lote_modo AS ENUM ('parcial', 'substituicao');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS fermentacao_lotes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  produzido_em timestamptz NOT NULL DEFAULT now(),
+  modo producao_lote_modo NOT NULL,
+  ordem_producao_id uuid NOT NULL REFERENCES ordens_producao(id) ON DELETE RESTRICT,
+  assadeiras numeric(12, 3) NOT NULL DEFAULT 0,
+  unidades integer NOT NULL DEFAULT 0,
+  foto_url text,
+  foto_id text,
+  foto_uploaded_at timestamptz,
+  producao_anterior jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_fermentacao_lotes_ordem
+  ON fermentacao_lotes(ordem_producao_id);
+CREATE INDEX IF NOT EXISTS idx_fermentacao_lotes_produzido
+  ON fermentacao_lotes(produzido_em DESC);
+
+CREATE TABLE IF NOT EXISTS forno_lotes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  produzido_em timestamptz NOT NULL DEFAULT now(),
+  modo producao_lote_modo NOT NULL,
+  ordem_producao_id uuid NOT NULL REFERENCES ordens_producao(id) ON DELETE RESTRICT,
+  assadeiras numeric(12, 3) NOT NULL DEFAULT 0,
+  unidades integer NOT NULL DEFAULT 0,
+  foto_url text,
+  foto_id text,
+  foto_uploaded_at timestamptz,
+  producao_anterior jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_forno_lotes_ordem ON forno_lotes(ordem_producao_id);
+CREATE INDEX IF NOT EXISTS idx_forno_lotes_produzido ON forno_lotes(produzido_em DESC);
+```
+
+- [ ] **Step 2: RLS** (copiar padrão `EMBALAGEM_LOTES_RLS.sql` para cada tabela)
+
+- [ ] **Step 3: Aplicar no Supabase** e rodar `npm run gen:types`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CREATE_FERMENTACAO_FORNO_LOTES_TABLES.sql FERMENTACAO_LOTES_RLS.sql FORNO_LOTES_RLS.sql src/types/database.ts types/database.ts
+git commit -m "feat(db): tabelas fermentacao_lotes e forno_lotes"
+```
+
+---
+
+## Fase 1 — Domínio compartilhado
+
+### Task 1: Tipos e quantidade de etapa
+
+**Files:**
+- Create: `src/domain/types/fermentacao-lote.ts`
+- Create: `src/domain/types/forno-lote.ts`
+- Create: `src/domain/types/painel-etapa.ts`
+- Create: `src/domain/producao-etapa/etapa-quantidade.ts`
+- Create: `src/domain/producao-etapa/etapa-quantidade.test.ts`
+
+- [ ] **Step 1: Testes falhando**
+
+```typescript
+// src/domain/producao-etapa/etapa-quantidade.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  somarLotesEtapa,
+  derivarEscalarEtapa,
+  calcularSaldoEtapa,
+  type EtapaQuantidade,
+} from './etapa-quantidade';
+
+describe('etapa-quantidade', () => {
+  it('soma assadeiras de lotes', () => {
+    const total = somarLotesEtapa([
+      { assadeiras: 2, unidades: 0 },
+      { assadeiras: 3, unidades: 0 },
+    ]);
+    expect(total).toEqual({ assadeiras: 5, unidades: 0 });
+  });
+
+  it('derivar escalar LT quando meta tem assadeira', () => {
+    expect(
+      derivarEscalarEtapa(
+        { assadeiras: 10, unidades: 240 },
+        { assadeiras: 4, unidades: 0 },
+        'assadeiras',
+      ),
+    ).toEqual({ unidade: 'lt', aProduzir: 10, produzido: 4 });
+  });
+
+  it('calcular saldo', () => {
+    const meta: EtapaQuantidade = { assadeiras: 10, unidades: 0 };
+    const produzido: EtapaQuantidade = { assadeiras: 3, unidades: 0 };
+    expect(calcularSaldoEtapa(meta, produzido, 'assadeiras')).toBe(7);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste — deve falhar**
+
+Run: `npm test -- src/domain/producao-etapa/etapa-quantidade.test.ts`
+Expected: FAIL — módulo não encontrado
+
+- [ ] **Step 3: Implementar**
+
+```typescript
+// src/domain/producao-etapa/etapa-quantidade.ts
+export type ModoQuantidadeEtapa = 'assadeiras' | 'unidades';
+
+export type EtapaQuantidade = {
+  assadeiras: number;
+  unidades: number;
+};
+
+export function resolveModoQuantidadeEtapa(assadeiraId: string | null | undefined): ModoQuantidadeEtapa {
+  return assadeiraId ? 'assadeiras' : 'unidades';
+}
+
+export function somarLotesEtapa(lotes: EtapaQuantidade[]): EtapaQuantidade {
+  return lotes.reduce(
+    (acc, l) => ({
+      assadeiras: acc.assadeiras + Number(l.assadeiras || 0),
+      unidades: acc.unidades + Number(l.unidades || 0),
+    }),
+    { assadeiras: 0, unidades: 0 },
+  );
+}
+
+export function derivarEscalarEtapa(
+  pedido: EtapaQuantidade,
+  produzido: EtapaQuantidade,
+  modo: ModoQuantidadeEtapa,
+): { unidade: 'lt' | 'un'; aProduzir: number; produzido: number } {
+  if (modo === 'assadeiras') {
+    return {
+      unidade: 'lt',
+      aProduzir: pedido.assadeiras,
+      produzido: produzido.assadeiras,
+    };
+  }
+  return {
+    unidade: 'un',
+    aProduzir: pedido.unidades,
+    produzido: produzido.unidades,
+  };
+}
+
+export function calcularSaldoEtapa(
+  pedido: EtapaQuantidade,
+  produzido: EtapaQuantidade,
+  modo: ModoQuantidadeEtapa,
+): number {
+  const escalar = derivarEscalarEtapa(pedido, produzido, modo);
+  return Math.max(0, escalar.aProduzir - escalar.produzido);
+}
+
+export function validarQuantidadeLote(
+  qty: EtapaQuantidade,
+  modo: ModoQuantidadeEtapa,
+): void {
+  if (modo === 'assadeiras' && qty.assadeiras <= 0) {
+    throw new Error('Informe assadeiras maior que zero.');
+  }
+  if (modo === 'unidades' && qty.unidades <= 0) {
+    throw new Error('Informe unidades maior que zero.');
+  }
+}
+```
+
+- [ ] **Step 4: Tipos de lote e painel** (`fermentacao-lote.ts`, `forno-lote.ts`, `painel-etapa.ts` — espelhar campos do schema)
+
+- [ ] **Step 5: Rodar testes — deve passar**
+
+Run: `npm test -- src/domain/producao-etapa/etapa-quantidade.test.ts`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/producao-etapa/ src/domain/types/fermentacao-lote.ts src/domain/types/forno-lote.ts src/domain/types/painel-etapa.ts
+git commit -m "feat(producao-etapa): quantidade e tipos de domínio"
+```
+
+### Task 2: `buildPainelOrdem`
+
+**Files:**
+- Create: `src/domain/producao-etapa/painel-ordem-builder.ts`
+- Create: `src/domain/producao-etapa/painel-ordem-builder.test.ts`
+
+- [ ] **Step 1: Teste com ordem + 2 lotes**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { buildPainelOrdem } from './painel-ordem-builder';
+import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
+import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
+
+const ordem: OrdemProducaoRecord = {
+  id: 'ordem-1',
+  dataProducao: '2026-06-17',
+  dataFabricacaoEtiqueta: '2026-06-17',
+  tipoEstoqueId: 'tipo-1',
+  produtoId: 'prod-1',
+  observacao: '',
+  assadeiraId: 'ass-1',
+  assadeiras: 10,
+  ordemPlanejamento: 1,
+  quantidade: { caixas: 0, pacotes: 0, unidades: 240, kg: 0 },
+  createdAt: '',
+  updatedAt: '',
+};
+
+const lotes: FermentacaoLoteRecord[] = [
+  {
+    id: 'l1',
+    createdAt: '',
+    modo: 'parcial',
+    ordemProducaoId: 'ordem-1',
+    assadeiras: 3,
+    unidades: 0,
+    produzidoEm: '2026-06-17T10:00:00Z',
+  },
+  {
+    id: 'l2',
+    createdAt: '',
+    modo: 'parcial',
+    ordemProducaoId: 'ordem-1',
+    assadeiras: 2,
+    unidades: 0,
+    produzidoEm: '2026-06-17T11:00:00Z',
+  },
+];
+
+describe('buildPainelOrdem', () => {
+  it('agrega produzido e monta lotes do painel', () => {
+    const item = buildPainelOrdem({
+      ordem,
+      lotes,
+      produto: 'Brioche',
+      tipoEstoque: 'Valepan',
+      assadeiraNome: '24',
+    });
+    expect(item.ordemProducaoId).toBe('ordem-1');
+    expect(item.aProduzir).toBe(10);
+    expect(item.produzido).toBe(5);
+    expect(item.lotes).toHaveLength(2);
+    expect(item.unidade).toBe('lt');
+  });
+});
+```
+
+- [ ] **Step 2: Implementar `buildPainelOrdem`** usando `somarLotesEtapa`, `derivarEscalarEtapa`, `resolveModoQuantidadeEtapa`
+
+- [ ] **Step 3: Testes passam + commit**
+
+```bash
+git commit -m "feat(producao-etapa): buildPainelOrdem"
+```
+
+---
+
+## Fase 2 — Repositories
+
+### Task 3: `FermentacaoLoteRepository`
+
+**Files:**
+- Create: `src/data/producao-etapa/FermentacaoLoteRepository.ts`
+
+- [ ] **Step 1: Implementar** espelhando `EmbalagemLoteRepository` com métodos:
+  - `insert(input: FermentacaoLoteInsert): Promise<FermentacaoLoteRecord>`
+  - `findById(id: string)`
+  - `updateById(id, patch)`
+  - `deleteById(id)`
+  - `listByOrdemProducaoIds(ids: string[]): Promise<Map<string, FermentacaoLoteRecord[]>>`
+
+- [ ] **Step 2: Export singleton** `export const fermentacaoLoteRepository = new FermentacaoLoteRepository()`
+
+- [ ] **Step 3: Commit**
+
+### Task 4: `FornoLoteRepository`
+
+**Files:**
+- Create: `src/data/producao-etapa/FornoLoteRepository.ts`
+
+- [ ] **Step 1:** Cópia estrutural de `FermentacaoLoteRepository` apontando para `forno_lotes`
+
+- [ ] **Step 2: Commit**
+
+---
+
+## Fase 3 — Lote services
+
+### Task 5: `fermentacao-lote-service`
+
+**Files:**
+- Create: `src/lib/services/fermentacao-lote-service.ts`
+- Create: `src/lib/services/fermentacao-lote-service.test.ts`
+
+- [ ] **Step 1: Teste validação saldo**
+
+```typescript
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
+  ordemProducaoRepository: {
+    findById: vi.fn().mockResolvedValue({
+      id: 'o1',
+      assadeiraId: 'a1',
+      assadeiras: 10,
+      quantidade: { unidades: 240, caixas: 0, pacotes: 0, kg: 0 },
+    }),
+  },
+}));
+
+vi.mock('@/data/producao-etapa/FermentacaoLoteRepository', () => ({
+  fermentacaoLoteRepository: {
+    listByOrdemProducaoIds: vi.fn().mockResolvedValue(
+      new Map([['o1', [{ assadeiras: 8, unidades: 0 }]]]),
+    ),
+    insert: vi.fn(),
+  },
+}));
+
+describe('FermentacaoLoteService', () => {
+  it('rejeita lote acima do saldo', async () => {
+    const { fermentacaoLoteService } = await import('./fermentacao-lote-service');
+    await expect(
+      fermentacaoLoteService.criarLotePorOrdem({
+        ordemProducaoId: 'o1',
+        quantidade: { assadeiras: 5, unidades: 0 },
+      }),
+    ).rejects.toThrow(/saldo/i);
+  });
+});
+```
+
+- [ ] **Step 2: Implementar métodos**
+
+```typescript
+export class FermentacaoLoteService {
+  async criarLotePorOrdem(input: {
+    ordemProducaoId: string;
+    quantidade: EtapaQuantidade;
+    fotos?: EtapaLoteFotos;
+  }): Promise<FermentacaoLoteRecord> { /* validar saldo + insert modo parcial */ }
+
+  async atualizarLote(loteId: string, input: { quantidade: EtapaQuantidade; fotos?: EtapaLoteFotos }): Promise<FermentacaoLoteRecord> { /* validar meta + update modo substituicao */ }
+
+  async excluirLote(loteId: string): Promise<void> { /* delete */ }
+}
+export const fermentacaoLoteService = new FermentacaoLoteService();
+```
+
+- [ ] **Step 3: Testes passam + commit**
+
+### Task 6: `forno-lote-service`
+
+**Files:**
+- Create: `src/lib/services/forno-lote-service.ts`
+- Create: `src/lib/services/forno-lote-service.test.ts`
+
+- [ ] **Step 1:** Espelhar Task 5 para forno
+
+- [ ] **Step 2: Commit**
+
+---
+
+## Fase 4 — Painel services e GET APIs
+
+### Task 7: `painel-fermentacao-service`
+
+**Files:**
+- Create: `src/lib/services/painel-fermentacao-service.ts`
+- Create: `src/lib/services/painel-fermentacao-service.test.ts`
+- Modify: `src/app/api/painel/fermentacao/route.ts`
+
+- [ ] **Step 1: Service**
+
+```typescript
+export class PainelFermentacaoService {
+  async getPainelForDate(date: string): Promise<PainelEtapaResponse> {
+    const ordens = await ordemProducaoRepository.listByDataProducao(date);
+    if (ordens.length === 0) return { date, ordens: [] };
+    const ids = ordens.map((o) => o.id);
+    const lotesByOrdem = await fermentacaoLoteRepository.listByOrdemProducaoIds(ids);
+    // resolver nomes produto/tipo/assadeira (copiar padrão painel-embalagem-service)
+    const ordensPainel = ordens.map((ordem) =>
+      buildPainelOrdem({ ordem, lotes: lotesByOrdem.get(ordem.id) ?? [], ...nomes }),
+    );
+    return { date, ordens: ordensPainel };
+  }
+}
+```
+
+- [ ] **Step 2: Substituir corpo de `route.ts`**
+
+```typescript
+import { painelFermentacaoService } from '@/lib/services/painel-fermentacao-service';
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const date = searchParams.get('date') ?? getTodayISOInBrazilTimezone();
+  const painel = await painelFermentacaoService.getPainelForDate(date);
+  return NextResponse.json(painel);
+}
+```
+
+- [ ] **Step 3: Teste unitário do service + commit**
+
+### Task 8: `painel-forno-service`
+
+**Files:**
+- Create: `src/lib/services/painel-forno-service.ts`
+- Modify: `src/app/api/painel/forno/route.ts`
+
+- [ ] **Step 1:** Espelhar Task 7 com `fornoLoteRepository`
+
+- [ ] **Step 2: Commit**
+
+---
+
+## Fase 5 — Rotas CRUD de lotes
+
+### Task 9: POST novo lote fermentação
+
+**Files:**
+- Create: `src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts`
+
+- [ ] **Step 1: Implementar POST**
+
+```typescript
+export async function POST(request: Request, context: { params: Promise<{ ordemId: string }> }) {
+  const { ordemId } = await context.params;
+  const body = await request.json();
+  const assadeiras = Number(body.assadeiras) || 0;
+  const unidades = Number(body.unidades) || 0;
+  const lote = await fermentacaoLoteService.criarLotePorOrdem({
+    ordemProducaoId: ordemId,
+    quantidade: { assadeiras, unidades },
+    fotos: {
+      fotoUrl: body.fotoUrl,
+      fotoId: body.fotoId,
+      fotoUploadedAt: body.fotoUploadedAt,
+    },
+  });
+  try {
+    await whatsAppNotificationService.notifyFermentacaoProduction(/* meta + produzido agregado */);
+  } catch { /* opcional */ }
+  revalidatePath('/api/painel/fermentacao');
+  return NextResponse.json({ message: 'Lote criado', loteId: lote.id });
+}
+```
+
+- [ ] **Step 2: Commit**
+
+### Task 10: GET/PUT/DELETE lote fermentação
+
+**Files:**
+- Create: `src/app/api/producao/fermentacao/lote/[loteId]/route.ts`
+
+- [ ] **Step 1:** Espelhar `src/app/api/producao/embalagem/lote/[loteId]/route.ts` adaptando campos (`assadeiras`/`unidades`, foto única)
+
+- [ ] **Step 2: Commit**
+
+### Task 11: Rotas forno (POST + GET/PUT/DELETE)
+
+**Files:**
+- Create: `src/app/api/producao/forno/ordem/[ordemId]/lote/route.ts`
+- Create: `src/app/api/producao/forno/lote/[loteId]/route.ts`
+
+- [ ] **Step 1:** Espelhar Tasks 9–10 para forno
+
+- [ ] **Step 2: Commit**
+
+### Task 12: Upload de fotos
+
+**Files:**
+- Modify: `src/app/api/upload/photo/route.ts`
+- Modify: `src/components/ProducaoModal.tsx`
+
+- [ ] **Step 1: Em `upload/photo/route.ts`**, para `processType === 'fermentacao' | 'forno'`:
+  - Exigir `loteId` (ou permitir upload pré-save com `ordemId` + gravar no body do POST lote — preferir fluxo embalagem: upload após criar lote ou passar loteId em draft)
+  - **Padrão:** após insert do lote, upload usa `loteId`; remover branch que escreve na planilha para fermentação/forno
+
+```typescript
+if (processType === 'fermentacao' || processType === 'forno') {
+  if (!loteId) {
+    return NextResponse.json({ error: 'loteId é obrigatório' }, { status: 400 });
+  }
+  // upload Drive + UPDATE fermentacao_lotes/forno_lotes SET foto_* WHERE id = loteId
+  return NextResponse.json({ success: true, photoUrl, photoId });
+}
+```
+
+- [ ] **Step 2: `ProducaoModal`** — para fermentação/forno, enviar `loteId` no FormData de foto (como embalagem)
+
+- [ ] **Step 3: Commit**
+
+---
+
+## Fase 6 — UI realizado
+
+### Task 13: Componentes compartilhados
+
+**Files:**
+- Create: `src/components/Realizado/EtapaProductAccordion.tsx`
+- Create: `src/domain/realizado/etapa-painel-adapter.ts`
+- Modify: `src/components/Realizado/index.ts` (export)
+
+- [ ] **Step 1: Extrair `EtapaProductAccordion`** de `EmbalagemProductAccordion.tsx`:
+  - Remover prop `congelado` (não aplica)
+  - Renomear `horarioEmbalagem` → `horarioProducao`
+  - Manter `onNovoLote`, expand, `renderLots`
+
+- [ ] **Step 2: Adapter**
+
+```typescript
+// etapa-painel-adapter.ts
+export function ordemToFlatItem(ordem: PainelOrdemEtapa): RealizadoItemFermentacao { /* para compat */ }
+export function loteToPainelItem(ordem: PainelOrdemEtapa, lote: PainelLoteEtapa): PainelLoteItemEtapa { /* */ }
+export function splitOrdensPorFinalizacao(ordens: PainelOrdemEtapa[]): { naoFinalizados; finalizados } {
+  // >= 90% → finalizados (manter regra atual)
+}
+```
+
+- [ ] **Step 3: Commit**
+
+### Task 14: Refatorar `/realizado/fermentacao`
+
+**Files:**
+- Modify: `src/app/realizado/fermentacao/page.tsx`
+- Modify: `src/hooks/useLatestDataDate.ts`
+
+- [ ] **Step 1: Consumir `data.ordens`** em vez de `data.items`
+
+```typescript
+const res = await fetch(`/api/painel/fermentacao?date=${selectedDate}`);
+const data = await res.json();
+setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
+```
+
+- [ ] **Step 2: Render** com `EtapaProductAccordion` por ordem; filhos = lotes; handlers:
+  - Novo lote → `POST /api/producao/fermentacao/ordem/${ordemProducaoId}/lote`
+  - Editar → `GET/PUT .../lote/${loteId}`
+  - Excluir → `DELETE .../lote/${loteId}`
+
+- [ ] **Step 3: `ProducaoModal`** — passar `mode="fermentacao"`, `ordemProducaoId`, `loteId`, `modoQuantidade`
+
+- [ ] **Step 4: Habilitar parcial no modal** — remover guard `APENAS para modo embalagem` em `ProducaoModal.tsx` para fermentação/forno; endpoint parcial vira POST novo lote
+
+- [ ] **Step 5: Atualizar `useLatestDataDate`**
+
+```typescript
+const hasData =
+  endpoint === 'embalagem'
+    ? Array.isArray(data.pedidos) && data.pedidos.length > 0
+    : endpoint === 'fermentacao' || endpoint === 'forno'
+      ? Array.isArray(data.ordens) && data.ordens.length > 0
+      : Array.isArray(data.items) && data.items.length > 0;
+```
+
+- [ ] **Step 6: Commit**
+
+### Task 15: Refatorar `/realizado/forno`
+
+**Files:**
+- Modify: `src/app/realizado/forno/page.tsx`
+
+- [ ] **Step 1:** Espelhar Task 14 com rotas `forno`
+
+- [ ] **Step 2: Commit**
+
+---
+
+## Fase 7 — WhatsApp e daily summary
+
+### Task 16: Daily summary DB
+
+**Files:**
+- Modify: `src/lib/services/daily-summary/fermentacao-daily-summary-service.ts`
+- Modify: `src/lib/services/daily-summary/forno-daily-summary-service.ts`
+- Create: `src/lib/services/daily-summary/fermentacao-daily-summary-service.test.ts` (se não existir)
+
+- [ ] **Step 1: Substituir `loadRows` da planilha** por chamada ao painel service:
+
+```typescript
+protected async loadPainelOrdens(date: string): Promise<PainelOrdemEtapa[]> {
+  const painel = await painelFermentacaoService.getPainelForDate(date);
+  return painel.ordens;
+}
+```
+
+- [ ] **Step 2: Adaptar `parseRow` → mapear `PainelOrdemEtapa` para `FermentacaoParsedRow`**
+
+- [ ] **Step 3: Testes + commit**
+
+### Task 17: Payload WhatsApp pós-lote
+
+**Files:**
+- Modify: `src/lib/services/whatsapp-notification-service.ts` (se necessário)
+- Rotas POST/PUT lote (Tasks 9–11)
+
+- [ ] **Step 1: Após criar/editar lote**, buscar ordem + lotes agregados e chamar `notifyFermentacaoProduction` / `notifyFornoProduction` com:
+  - `meta`: `{ latas, unidades, kg }` derivado da ordem (`assadeiras` → latas)
+  - `produzido`: agregado pós-save
+
+- [ ] **Step 2: Commit**
+
+---
+
+## Fase 8 — Limpeza
+
+### Task 18: Remover `/meta/producao`
+
+**Files:**
+- Delete: `src/app/meta/producao/page.tsx`
+- Modify: `src/components/Navigation.tsx`
+- Modify: `src/app/page.tsx`
+
+- [ ] **Step 1: Remover links** `/meta/producao` do menu e home
+
+- [ ] **Step 2: Deletar página**
+
+- [ ] **Step 3: Commit**
+
+### Task 19: Remover rotas legadas planilha
+
+**Files:** (lista na seção "Remover" acima)
+
+- [ ] **Step 1: Deletar arquivos de rota** fermentação/forno baseados em `rowId`, `forno-pedido`, `forno/edit`, `forno/delete`
+
+- [ ] **Step 2: Grep por referências** (`rowId`, `forno-pedido`, `PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos` em rotas ativas) e limpar
+
+- [ ] **Step 3: Atualizar testes** (`src/domain/assadeiras/assadeira-factor-routes.test.ts` — remover `forno-pedido` se aplicável)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git commit -m "chore: remove rotas legadas planilha fermentacao/forno e meta/producao"
+```
+
+### Task 20: Verificação final
+
+- [ ] **Step 1: Rodar suite**
+
+Run: `npm test`
+Expected: PASS
+
+- [ ] **Step 2: Rodar lint**
+
+Run: `npm run lint`
+
+- [ ] **Step 3: Build**
+
+Run: `npm run build`
+Expected: sucesso
+
+- [ ] **Step 4: Smoke manual**
+  1. Criar ordem em `/ordens-producao` para hoje
+  2. Abrir `/realizado/fermentacao` — ordem aparece, produzido 0
+  3. Novo lote parcial — card atualiza, expand mostra lote
+  4. Repetir em `/realizado/forno`
+  5. Confirmar painel TV (`/api/painel/fermentacao?date=hoje`) retorna `ordens`
+
+- [ ] **Step 5: Commit final** (se ajustes)
+
+---
+
+## Self-review (spec → plano)
+
+| Requisito spec | Task |
+|----------------|------|
+| `fermentacao_lotes` + `forno_lotes` | Task 0 |
+| Enum `producao_lote_modo` | Task 0 |
+| Meta `ordens_producao` | Tasks 7–8 |
+| UI hierárquica igual embalagem | Tasks 13–15 |
+| Novo lote / editar / excluir | Tasks 5–6, 9–11 |
+| Quantidade assadeiras vs unidades | Tasks 1–2 |
+| Fotos no lote | Task 12 |
+| WhatsApp + daily summary DB | Tasks 16–17 |
+| Remover `/meta/producao` | Task 18 |
+| Corte planilha | Task 19 |
+| Sem backfill | (nenhum task de sync) |
+| Sem estoque | (nenhum `estoqueService` nos services) |

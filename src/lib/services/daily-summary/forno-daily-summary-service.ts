@@ -1,57 +1,65 @@
-import { PEDIDOS_FORNO_CONFIG } from "@/config/forno";
-import { getProductionStatus } from "@/domain/types/realizado";
+import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
+import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import { getProductionStatus } from '@/domain/types/realizado';
+import { painelFornoService } from '@/lib/services/painel-forno-service';
 
 import {
   BaseDailySummaryService,
   ItemQuantityInfo,
   QuantityByUnit,
   StageSummaryResult,
-} from "./base-daily-summary-service";
-
-type FornoRow = string[];
+} from './base-daily-summary-service';
 
 interface FornoParsedRow {
   produto: string;
-  unit: "lt" | "un" | "kg";
+  unit: 'lt' | 'un';
   meta: number;
   produzido: number;
   metaBreakdown: QuantityByUnit;
 }
 
-export class FornoDailySummaryService extends BaseDailySummaryService {
-  protected stage = "forno";
+function etapaQuantidadeToBreakdown(qty: EtapaQuantidade): QuantityByUnit {
+  const breakdown: QuantityByUnit = {};
+  if (qty.assadeiras > 0) breakdown.lt = qty.assadeiras;
+  if (qty.unidades > 0) breakdown.un = qty.unidades;
+  return breakdown;
+}
 
-  protected async loadRows(): Promise<string[][]> {
-    const { spreadsheetId, tabName } = PEDIDOS_FORNO_CONFIG.destinoPedidos;
-    const rows = await this.readSheet(spreadsheetId, `${tabName}!A:N`);
-    return rows.slice(1);
+export class FornoDailySummaryService extends BaseDailySummaryService {
+  protected stage = 'forno';
+
+  protected async loadRows(date: string): Promise<string[][]> {
+    void date;
+    return [];
   }
 
   async build(date: string): Promise<StageSummaryResult> {
-    const rows = await this.loadRows();
-    return this.buildSummary(date, rows);
+    const { ordens } = await painelFornoService.getPainelForDate(date);
+    return this.buildSummaryFromOrdens(date, ordens);
   }
 
-  protected buildSummary(
+  protected buildSummary(date: string, rows: string[][]): StageSummaryResult {
+    void rows;
+    return this.buildSummaryFromOrdens(date, []);
+  }
+
+  protected buildSummaryFromOrdens(
     date: string,
-    rows: FornoRow[],
+    ordens: PainelOrdemEtapa[],
   ): StageSummaryResult {
     const completeTotals = this.createEmptyTotals();
     const partialTotals = this.createEmptyTotals();
     const notProducedTotals = this.createEmptyTotals();
     const highlighted: ItemQuantityInfo[] = [];
 
-    rows.forEach((row) => {
-      const dataProducao = this.normalizeDate(row[0]);
-      if (dataProducao !== date) return;
-
-      const parsed = this.parseRow(row);
+    ordens.forEach((ordem) => {
+      const parsed = this.parseOrdem(ordem);
       if (!parsed) return;
 
       const status = getProductionStatus(parsed.produzido, parsed.meta);
 
       switch (status) {
-        case "complete": {
+        case 'complete': {
           completeTotals.itemCount += 1;
           this.addToQuantity(
             completeTotals.produced,
@@ -60,7 +68,7 @@ export class FornoDailySummaryService extends BaseDailySummaryService {
           );
           break;
         }
-        case "partial": {
+        case 'partial': {
           partialTotals.itemCount += 1;
           this.addToQuantity(
             partialTotals.produced,
@@ -70,7 +78,7 @@ export class FornoDailySummaryService extends BaseDailySummaryService {
           this.addToQuantity(partialTotals.meta!, parsed.unit, parsed.meta);
           break;
         }
-        case "not-started": {
+        case 'not-started': {
           notProducedTotals.itemCount += 1;
           this.addToQuantity(notProducedTotals.meta!, parsed.unit, parsed.meta);
           if (highlighted.length < 3) {
@@ -100,53 +108,18 @@ export class FornoDailySummaryService extends BaseDailySummaryService {
     };
   }
 
-  private parseRow(row: FornoRow): FornoParsedRow | null {
-    const produto = (row[1] || "").toString().trim();
-    if (!produto) return null;
-
-    const metaLatas = Number(row[2] || 0);
-    const metaUnidades = Number(row[3] || 0);
-    const metaKg = Number(row[4] || 0);
-
-    const prodLatas = Number(row[7] || 0);
-    const prodUnidades = Number(row[8] || 0);
-    const prodKg = Number(row[9] || 0);
-
-    const metaBreakdown: QuantityByUnit = {};
-    if (metaLatas > 0) metaBreakdown.lt = metaLatas;
-    if (metaUnidades > 0) metaBreakdown.un = metaUnidades;
-    if (metaKg > 0) metaBreakdown.kg = metaKg;
-
-    let unit: "lt" | "un" | "kg" | null = null;
-    let meta = 0;
-    let produzido = 0;
-
-    if (metaLatas > 0) {
-      unit = "lt";
-      meta = metaLatas;
-      produzido = prodLatas;
-    } else if (metaUnidades > 0) {
-      unit = "un";
-      meta = metaUnidades;
-      produzido = prodUnidades;
-    } else if (metaKg > 0) {
-      unit = "kg";
-      meta = metaKg;
-      produzido = prodKg;
-    }
-
-    if (!unit || meta <= 0) return null;
+  private parseOrdem(ordem: PainelOrdemEtapa): FornoParsedRow | null {
+    const produto = ordem.produto.trim();
+    if (!produto || ordem.aProduzir <= 0) return null;
 
     return {
       produto,
-      unit,
-      meta,
-      produzido,
-      metaBreakdown,
+      unit: ordem.unidade,
+      meta: ordem.aProduzir,
+      produzido: ordem.produzido,
+      metaBreakdown: etapaQuantidadeToBreakdown(ordem.pedido),
     };
   }
 }
 
 export const fornoDailySummaryService = new FornoDailySummaryService();
-
-

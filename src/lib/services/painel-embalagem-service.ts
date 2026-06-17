@@ -1,5 +1,6 @@
 import { pedidosToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
 import { buildPainelPedido } from '@/domain/embalagem/painel-pedido-builder';
+import { sortPorOrdemPlanejamento } from '@/domain/realizado/ordem-planejamento-sort';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type {
   CargaEmbalagemResponse,
@@ -59,15 +60,7 @@ export class PainelEmbalagemService {
       );
     }
 
-    result.sort((a, b) => {
-      const clienteCmp = a.cliente.localeCompare(b.cliente, 'pt-BR');
-      if (clienteCmp !== 0) return clienteCmp;
-      const prodCmp = a.produto.localeCompare(b.produto, 'pt-BR');
-      if (prodCmp !== 0) return prodCmp;
-      return a.pedidoEmbalagemId.localeCompare(b.pedidoEmbalagemId);
-    });
-
-    return result;
+    return sortPorOrdemPlanejamento(result);
   }
 
   async getPainelForDate(date: string): Promise<PainelEmbalagemResponse> {

@@ -41,10 +41,14 @@ const CONFLICT_COLUMNS =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ORDENS_PRODUCAO_TABLE = 'ordens_producao' as any;
 
+function toCalendarDate(value: string): string {
+  return extractCalendarDate(value) || value;
+}
+
 function toDbInsert(input: OrdemProducaoUpsert): OrdemProducaoInsertRow {
   return {
-    data_producao: input.dataProducao,
-    data_fabricacao_etiqueta: input.dataFabricacaoEtiqueta,
+    data_producao: toCalendarDate(input.dataProducao),
+    data_fabricacao_etiqueta: toCalendarDate(input.dataFabricacaoEtiqueta),
     tipo_estoque_id: input.tipoEstoqueId,
     produto_id: input.produtoId,
     observacao: input.observacao,
@@ -175,8 +179,8 @@ export class OrdemProducaoRepository {
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
       .update({
-        data_producao: fields.dataProducao,
-        data_fabricacao_etiqueta: fields.dataFabricacaoEtiqueta,
+        data_producao: toCalendarDate(fields.dataProducao),
+        data_fabricacao_etiqueta: toCalendarDate(fields.dataFabricacaoEtiqueta),
         tipo_estoque_id: fields.tipoEstoqueId,
         produto_id: fields.produtoId,
         observacao: fields.observacao,
