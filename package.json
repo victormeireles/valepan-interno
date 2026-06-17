@@ -23,6 +23,9 @@
     "test:reconcile-estoque": "vitest run src/domain/estoque/estoque-reconcile.test.ts"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.83.0",
     "canvas": "^3.2.0",
     "classnames": "^2.5.1",
