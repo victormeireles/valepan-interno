@@ -23,6 +23,7 @@ export type CreateFromLatasInput = {
   produto: string;
   latas: number;
   observacao: string;
+  assadeiraNome?: string;
 };
 
 export type UpdateFieldsInput = {
@@ -68,7 +69,15 @@ export class OrdemProducaoMetaService {
       input.tipoEstoque,
       input.produto,
     );
-    const assadeira = await pedidoEmbalagemService.resolveAssadeiraDefault(produtoId);
+    const assadeira = await pedidoEmbalagemService.resolveAssadeiraForProduto(
+      produtoId,
+      input.assadeiraNome,
+    );
+    if (!assadeira) {
+      throw new EstoqueResolverError(
+        `Produto "${input.produto}" não possui assadeira — use unidades`,
+      );
+    }
     const quantidade = deriveQuantidadesFromAssadeiras({
       assadeiras: input.latas,
       unidadesPorAssadeira: assadeira.unidadesPorAssadeiraEfetiva,
@@ -189,6 +198,38 @@ export class OrdemProducaoMetaService {
         `Meta (${latas} latas) menor que produzido (~${produzidoLatas.toFixed(2)} latas) para ${produtoLabel}`,
       );
     }
+  }
+
+  async updateUnidades(id: string, unidades: number): Promise<OrdemProducaoRecord> {
+    const existing = await ordemProducaoRepository.findById(id);
+    if (!existing) throw new Error('Pedido não encontrado');
+
+    const hasAssadeira = await pedidoEmbalagemService.hasAssadeiraForProduto(existing.produtoId);
+    if (hasAssadeira) {
+      throw new Error('Produto com assadeira — use latas para atualizar a meta');
+    }
+
+    if (!Number.isFinite(unidades) || unidades <= 0) {
+      throw new EstoqueResolverError('Informe ao menos 1 unidade');
+    }
+
+    const produzido = await embalagemLoteRepository.sumQuantidadeByPedidoId(id);
+    const totalProduzido =
+      produzido.caixas + produzido.pacotes + produzido.unidades + produzido.kg;
+    if (totalProduzido > 0 && unidades < produzido.unidades - 1e-6) {
+      throw new Error(
+        `Meta (${unidades} un) menor que produzido (${produzido.unidades} un)`,
+      );
+    }
+
+    const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(existing.produtoId);
+    const quantidade = deriveQuantidadesFromUnidades({ unidades, boxUnits });
+
+    return ordemProducaoRepository.updateQuantidades(id, {
+      assadeiraId: '',
+      assadeiras: 0,
+      quantidade,
+    });
   }
 
   async updateQuantidade(id: string, latas: number): Promise<OrdemProducaoRecord> {

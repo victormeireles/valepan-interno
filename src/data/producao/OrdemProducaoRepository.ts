@@ -139,7 +139,7 @@ export class OrdemProducaoRepository {
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
       .update({
-        assadeira_id: fields.assadeiraId,
+        assadeira_id: fields.assadeiraId || null,
         assadeiras: fields.assadeiras,
         caixas: fields.quantidade.caixas,
         pacotes: fields.quantidade.pacotes,
@@ -209,16 +209,20 @@ export class OrdemProducaoRepository {
   }
 
   async findByKey(key: OrdemProducaoKey): Promise<OrdemProducaoRecord | null> {
-    const { data, error } = await this.supabase
+    let query = this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
       .select()
       .eq('data_producao', key.dataProducao)
       .eq('data_fabricacao_etiqueta', key.dataFabricacaoEtiqueta)
       .eq('tipo_estoque_id', key.tipoEstoqueId)
       .eq('produto_id', key.produtoId)
-      .eq('observacao', key.observacao)
-      .eq('assadeira_id', key.assadeiraId || null)
-      .maybeSingle();
+      .eq('observacao', key.observacao);
+
+    query = key.assadeiraId
+      ? query.eq('assadeira_id', key.assadeiraId)
+      : query.is('assadeira_id', null);
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw new Error(`Erro ao buscar ordem produção: ${error.message}`);

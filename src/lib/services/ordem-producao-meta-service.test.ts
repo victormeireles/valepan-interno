@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const upsertMany = vi.fn();
 const nextOrdemPlanejamento = vi.fn();
 const resolveIds = vi.fn();
-const resolveAssadeiraDefault = vi.fn();
+const resolveAssadeiraForProduto = vi.fn();
 const validatePayloadItems = vi.fn();
 
 vi.mock('@/lib/services/estoque-resolver-service', () => ({
@@ -33,7 +33,7 @@ vi.mock('@/data/embalagem/EmbalagemLoteRepository', () => ({
 vi.mock('@/lib/services/pedido-embalagem-service', () => ({
   pedidoEmbalagemService: {
     resolveIds: (...args: unknown[]) => resolveIds(...args),
-    resolveAssadeiraDefault: (...args: unknown[]) => resolveAssadeiraDefault(...args),
+    resolveAssadeiraForProduto: (...args: unknown[]) => resolveAssadeiraForProduto(...args),
     validatePayloadItems: (...args: unknown[]) => validatePayloadItems(...args),
   },
   EstoqueResolverError: class EstoqueResolverError extends Error {},
@@ -47,7 +47,7 @@ describe('OrdemProducaoMetaService.createFromLatas', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resolveIds.mockResolvedValue({ tipoEstoqueId: 'tipo-1', produtoId: 'prod-1' });
-    resolveAssadeiraDefault.mockResolvedValue({
+    resolveAssadeiraForProduto.mockResolvedValue({
       assadeiraId: 'ass-1',
       unidadesPorAssadeiraEfetiva: 24,
       boxUnits: 48,

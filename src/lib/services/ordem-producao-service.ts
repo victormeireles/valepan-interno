@@ -42,10 +42,23 @@ export class OrdemProducaoService {
     unidadesPorAssadeiraEfetiva: number;
     boxUnits: number | null;
   }> {
-    const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+    const resolved = await this.resolveAssadeiraForProduto(produtoId);
     if (!resolved) {
       throw new EstoqueResolverError(`Produto sem assadeira: ${produtoId}`);
     }
+    return resolved;
+  }
+
+  async resolveAssadeiraForProduto(
+    produtoId: string,
+    assadeiraNome?: string | null,
+  ): Promise<{
+    assadeiraId: string;
+    unidadesPorAssadeiraEfetiva: number;
+    boxUnits: number | null;
+  } | null> {
+    const list = await assadeiraResolver.resolveForProduto(produtoId);
+    if (list.length === 0) return null;
 
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const { data: produto } = await supabase
@@ -53,11 +66,32 @@ export class OrdemProducaoService {
       .select('box_units')
       .eq('id', produtoId)
       .maybeSingle();
+    const boxUnits = produto?.box_units ?? null;
+
+    const nome = assadeiraNome?.trim();
+    if (!nome) {
+      const resolved = list[0];
+      return {
+        assadeiraId: resolved.assadeira_id,
+        unidadesPorAssadeiraEfetiva: resolved.unidades_efetivas,
+        boxUnits,
+      };
+    }
+
+    const normalized = nome.toLocaleLowerCase('pt-BR');
+    const match = list.find(
+      (v) => v.assadeira_nome.toLocaleLowerCase('pt-BR') === normalized,
+    );
+    if (!match) {
+      throw new EstoqueResolverError(
+        `Assadeira "${nome}" não encontrada para este produto`,
+      );
+    }
 
     return {
-      assadeiraId: resolved.assadeira_id,
-      unidadesPorAssadeiraEfetiva: resolved.unidades_efetivas,
-      boxUnits: produto?.box_units ?? null,
+      assadeiraId: match.assadeira_id,
+      unidadesPorAssadeiraEfetiva: match.unidades_efetivas,
+      boxUnits,
     };
   }
 

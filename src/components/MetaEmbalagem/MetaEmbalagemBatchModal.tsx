@@ -10,8 +10,12 @@ type BatchPreviewItem = {
   tipoEstoque: string;
   produto: string;
   observacao: string;
+  assadeira?: string;
+  modoQuantidade: 'latas' | 'unidades';
   latasNova: number;
   latasAtual?: number;
+  unidadesNova?: number;
+  unidadesAtual?: number;
   caixasDerivadas?: number;
   erro?: string;
 };
@@ -30,10 +34,10 @@ type BatchPreviewResult = {
 type Step = 'input' | 'preview';
 
 const FORMAT_HINT =
-  'data produção;data etiqueta;tipo estoque;produto;latas;observação';
+  'data produção;data etiqueta;tipo estoque;produto;latas/un;assadeira;observação';
 
-const EXAMPLE = `2026-06-09;2026-06-09;Valepan;HB Brioche 65g;1000;
-2026-06-09;2026-06-09;Valepan;HB Gergelim 65g;350;lata nova`;
+const EXAMPLE = `2026-06-09;2026-06-09;Valepan;HB Brioche 65g;1000;;
+2026-06-09;2026-06-09;Valepan;HB Gergelim 65g;350;;lata nova`;
 
 interface MetaEmbalagemBatchModalProps {
   isOpen: boolean;
@@ -181,6 +185,9 @@ export default function MetaEmbalagemBatchModal({
               <p className="text-xs text-gray-500" id={`${textareaId}-hint`}>
                 {FORMAT_HINT}
               </p>
+              <p className="text-xs text-gray-600">
+                Assadeira vazia usa a padrão do produto. Produtos sem assadeira: informe unidades na coluna latas/un.
+              </p>
               <textarea
                 id={textareaId}
                 aria-describedby={`${textareaId}-hint`}
@@ -222,7 +229,8 @@ export default function MetaEmbalagemBatchModal({
                         <th className="px-3 py-2 font-medium">Ação</th>
                         <th className="px-3 py-2 font-medium">Produto</th>
                         <th className="px-3 py-2 font-medium hidden sm:table-cell">Estoque</th>
-                        <th className="px-3 py-2 font-medium text-right tabular-nums">Latas</th>
+                        <th className="px-3 py-2 font-medium hidden md:table-cell">Assadeira</th>
+                        <th className="px-3 py-2 font-medium text-right tabular-nums">Qtd</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
@@ -341,12 +349,23 @@ function PreviewRow({ item }: { item: BatchPreviewItem }) {
     erro: 'text-red-400',
   }[item.acao];
 
-  const qtyDisplay =
-    item.acao === 'alterar' && item.latasAtual != null
-      ? `${formatLatas(item.latasAtual)} → ${formatLatas(item.latasNova)}`
-      : item.acao === 'erro'
-        ? '—'
-        : formatLatas(item.latasNova);
+  const qtyDisplay = (() => {
+    if (item.acao === 'erro') return '—';
+
+    if (item.modoQuantidade === 'unidades') {
+      const nova = item.unidadesNova ?? 0;
+      const atual = item.unidadesAtual;
+      if (item.acao === 'alterar' && atual != null) {
+        return `${formatQty(atual)} un → ${formatQty(nova)} un`;
+      }
+      return `${formatQty(nova)} un`;
+    }
+
+    if (item.acao === 'alterar' && item.latasAtual != null) {
+      return `${formatQty(item.latasAtual)} lt → ${formatQty(item.latasNova)} lt`;
+    }
+    return `${formatQty(item.latasNova)} lt`;
+  })();
 
   return (
     <tr className="bg-gray-950/40 hover:bg-gray-900/40">
@@ -363,6 +382,9 @@ function PreviewRow({ item }: { item: BatchPreviewItem }) {
         {item.caixasDerivadas != null && item.caixasDerivadas > 0 ? (
           <div className="text-xs text-gray-600">≈ {item.caixasDerivadas} cx</div>
         ) : null}
+        {item.assadeira ? (
+          <div className="text-xs text-gray-500 md:hidden">Assadeira: {item.assadeira}</div>
+        ) : null}
         {item.erro ? (
           <div className="mt-1 text-xs text-red-400">{item.erro}</div>
         ) : null}
@@ -371,11 +393,14 @@ function PreviewRow({ item }: { item: BatchPreviewItem }) {
         </div>
       </td>
       <td className="hidden px-3 py-2.5 text-gray-400 sm:table-cell">{item.tipoEstoque}</td>
+      <td className="hidden px-3 py-2.5 text-gray-400 md:table-cell">
+        {item.assadeira ?? (item.modoQuantidade === 'unidades' ? '—' : 'padrão')}
+      </td>
       <td className="px-3 py-2.5 text-right font-medium tabular-nums">{qtyDisplay}</td>
     </tr>
   );
 }
 
-function formatLatas(value: number): string {
+function formatQty(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }

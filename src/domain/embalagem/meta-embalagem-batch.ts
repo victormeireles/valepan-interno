@@ -7,6 +7,7 @@ export type MetaEmbalagemBatchRow = {
   tipoEstoque: string;
   produto: string;
   latas: number;
+  assadeira: string;
   observacao: string;
 };
 
@@ -23,6 +24,31 @@ export type MetaEmbalagemBatchParseResult = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+const FORMAT_HINT =
+  'data produção;data etiqueta;tipo estoque;produto;latas/un;assadeira;observação';
+
+function splitBatchColumns(parts: string[]): {
+  qtyRaw: string;
+  assadeira: string;
+  observacao: string;
+} {
+  if (parts.length >= 7) {
+    const [, , , , qtyRaw, assadeira, ...obsParts] = parts;
+    return {
+      qtyRaw,
+      assadeira: assadeira.trim(),
+      observacao: normalizeObservacao(obsParts.join(';')),
+    };
+  }
+
+  const [, , , , qtyRaw, ...obsParts] = parts;
+  return {
+    qtyRaw,
+    assadeira: '',
+    observacao: normalizeObservacao(obsParts.join(';')),
+  };
+}
+
 export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchParseResult {
   const rows: MetaEmbalagemBatchRow[] = [];
   const errors: MetaEmbalagemBatchParseError[] = [];
@@ -38,13 +64,13 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
       errors.push({
         linha,
         texto: raw,
-        erro: 'Formato inválido — use: data produção;data etiqueta;tipo estoque;produto;latas;observação',
+        erro: `Formato inválido — use: ${FORMAT_HINT}`,
       });
       continue;
     }
 
-    const [dataProducao, dataEtiqueta, tipoEstoque, produto, qtyRaw, ...obsParts] = parts;
-    const observacao = normalizeObservacao(obsParts.join(';'));
+    const [dataProducao, dataEtiqueta, tipoEstoque, produto] = parts;
+    const { qtyRaw, assadeira, observacao } = splitBatchColumns(parts);
 
     if (!ISO_DATE.test(dataProducao)) {
       errors.push({ linha, texto: raw, erro: 'Data de produção inválida (use AAAA-MM-DD)' });
@@ -76,6 +102,7 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
       tipoEstoque,
       produto,
       latas,
+      assadeira,
       observacao,
     });
   }
@@ -91,7 +118,7 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
       errors.push({
         linha: row.linha,
         texto: `${row.produto}`,
-        erro: 'Chave duplicada no lote — mesma combinação de datas, estoque, produto e observação',
+        erro: 'Chave duplicada no lote — mesma combinação de datas, estoque, produto, assadeira e observação',
       });
     }
   }
@@ -101,13 +128,16 @@ export function parseMetaEmbalagemBatchText(text: string): MetaEmbalagemBatchPar
 
 export function metaEmbalagemBatchRowKey(row: Pick<
   MetaEmbalagemBatchRow,
-  'dataProducao' | 'dataEtiqueta' | 'tipoEstoque' | 'produto' | 'observacao'
+  'dataProducao' | 'dataEtiqueta' | 'tipoEstoque' | 'produto' | 'assadeira' | 'observacao'
 >): string {
   return [
     row.dataProducao,
     row.dataEtiqueta,
     row.tipoEstoque.toLocaleLowerCase('pt-BR'),
     row.produto.toLocaleLowerCase('pt-BR'),
+    row.assadeira.toLocaleLowerCase('pt-BR'),
     row.observacao,
   ].join('|');
 }
+
+export { FORMAT_HINT as META_EMBALAGEM_BATCH_FORMAT_HINT };
