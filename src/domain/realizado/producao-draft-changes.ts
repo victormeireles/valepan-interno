@@ -13,8 +13,6 @@ const PHOTO_FIELDS = [
   'fornoFotoId',
   'fermentacaoFotoUrl',
   'fermentacaoFotoId',
-  'resfriamentoFotoUrl',
-  'resfriamentoFotoId',
 ] as const;
 
 function hasUnsavedQuantitiesOrObs(data: ProducaoData): boolean {

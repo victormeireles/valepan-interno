@@ -28,7 +28,6 @@ function generateFileName(
     | 'pallet'
     | 'forno'
     | 'fermentacao'
-    | 'resfriamento'
     | 'saida',
 ): string {
   return `${rowId}-${photoType.toUpperCase()}.jpg`;
@@ -146,7 +145,6 @@ export async function uploadPhotoToDrive(
     | 'pallet'
     | 'forno'
     | 'fermentacao'
-    | 'resfriamento'
     | 'saida',
 ): Promise<PhotoUploadResult> {
   try {

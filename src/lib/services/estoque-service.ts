@@ -11,8 +11,6 @@ import {
   criarQuantidadeZerada,
 } from '@/domain/estoque/quantidade-calculo';
 import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
-import { estoqueSheetManager } from '@/lib/managers/estoque-sheet-manager';
-import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { clientesService } from './clientes-service';
 import { tiposEstoqueService } from './tipos-estoque-service';
 import {
@@ -211,19 +209,6 @@ export class EstoqueService {
 
     const atualizadoEm = new Date().toISOString();
 
-    try {
-      await estoqueSheetManager.upsertQuantidade(
-        { cliente: input.tipoEstoqueNome, produto: input.produtoNome },
-        saldo,
-        {
-          atualizadoEm,
-          inventarioAtualizadoEm: saldoAtualRow?.updated_at ?? atualizadoEm,
-        },
-      );
-    } catch (error) {
-      console.error('[EstoqueService] Falha dual-write estoque planilha:', error);
-    }
-
     return {
       record: {
         cliente: input.tipoEstoqueNome,
@@ -239,16 +224,6 @@ export class EstoqueService {
   private async listarSaldosComFallback(
     options?: ListSaldosOptions,
   ): Promise<EstoqueRecord[]> {
-    const count = await estoqueRepository.countSaldos();
-
-    if (count === 0) {
-      const records = await estoqueSheetManager.listAll();
-      if (!options?.apenasProdutosAtivos) {
-        return records;
-      }
-      return this.filtrarRegistrosProdutosAtivos(records);
-    }
-
     const saldos = await estoqueRepository.listAllSaldos(options);
     return saldos.map((saldo) => ({
       cliente: saldo.tipoEstoqueNome,
@@ -263,16 +238,6 @@ export class EstoqueService {
       ordemFamilia: saldo.ordemFamilia,
       ordemNaFamilia: saldo.ordemNaFamilia,
     }));
-  }
-
-  private async filtrarRegistrosProdutosAtivos(
-    records: EstoqueRecord[],
-  ): Promise<EstoqueRecord[]> {
-    const productService = new SupabaseProductService();
-    const produtosAtivos = await productService.listProducts();
-    const nomesAtivos = new Set(produtosAtivos.map((produto) => produto.nome));
-
-    return records.filter((record) => nomesAtivos.has(record.produto));
   }
 
   private normalizarQuantidade(quantidade: Quantidade): Quantidade {

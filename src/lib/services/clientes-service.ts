@@ -60,6 +60,21 @@ export class ClientesService {
     return this.mapRecord(data);
   }
 
+  public async listActiveDisplayNames(): Promise<string[]> {
+    const client = this.resolveClient();
+    const { data, error } = await client
+      .from('clientes')
+      .select('nome_fantasia')
+      .eq('ativo', true)
+      .order('nome_fantasia', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar clientes: ${error.message}`);
+    }
+
+    return (data ?? []).map((record) => record.nome_fantasia);
+  }
+
   public async findByStockTypeName(
     tipoEstoqueNome: string,
   ): Promise<ClienteDTO[]> {

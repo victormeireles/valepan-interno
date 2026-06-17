@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getColumnOptions } from '@/lib/googleSheets';
-import { SAIDAS_SHEET_CONFIG } from '@/config/saidas';
+import { clientesService } from '@/lib/services/clientes-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
 const productService = new SupabaseProductService();
@@ -11,21 +10,14 @@ export async function GET(request: Request) {
 
   try {
     if (type === 'clientes') {
-      const { spreadsheetId, tabName, column, headerRow } =
-        SAIDAS_SHEET_CONFIG.origemClientes;
-      const options = await getColumnOptions(
-        spreadsheetId,
-        tabName,
-        column,
-        headerRow,
-      );
+      const options = await clientesService.listActiveDisplayNames();
       return NextResponse.json({ options });
     }
 
     if (type === 'produtos') {
       const products = await productService.listProducts();
-      const options = products.map(product => product.nome);
-      const productsWithUnits = products.map(product => ({
+      const options = products.map((product) => product.nome);
+      const productsWithUnits = products.map((product) => ({
         produto: product.nome,
         unidade: product.unidadeNomeResumido || 'un',
       }));
@@ -41,5 +33,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-

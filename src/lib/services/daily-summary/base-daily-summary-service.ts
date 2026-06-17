@@ -1,4 +1,3 @@
-import { readSheetValues } from "@/lib/googleSheets";
 import { normalizeToISODate } from "@/lib/utils/date-utils";
 
 export type UnitKey = "lt" | "un" | "kg" | "cx" | "pct";
@@ -83,10 +82,6 @@ export abstract class BaseDailySummaryService {
     date: string,
     rows: string[][],
   ): StageSummaryResult;
-
-  protected async readSheet(spreadsheetId: string, range: string) {
-    return readSheetValues(spreadsheetId, range);
-  }
 }
 
 
