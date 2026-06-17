@@ -4,12 +4,29 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Database } from '@/types/database';
+import type { Database } from '@/types/database';
 import { ProductionOrderStatus } from '@/domain/types/producao-etapas';
 
-type ProductionOrderRow = Database['public']['Tables']['_ordens_producao_legacy']['Row'];
-type ProductionOrderInsert = Database['public']['Tables']['_ordens_producao_legacy']['Insert'];
-type ProductionOrderUpdate = Database['public']['Tables']['_ordens_producao_legacy']['Update'];
+// Tabela legada fora do Database gerado (fila /producao/fila).
+type ProductionOrderRow = {
+  id: string;
+  lote_codigo: string;
+  pedido_id: string | null;
+  produto_id: string;
+  qtd_planejada: number;
+  prioridade: number;
+  status: ProductionOrderStatus;
+  data_producao: string | null;
+  created_at: string | null;
+};
+type ProductionOrderInsert = Omit<ProductionOrderRow, 'id' | 'created_at'> & {
+  id?: string;
+  created_at?: string | null;
+};
+type ProductionOrderUpdate = Partial<ProductionOrderInsert>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LEGACY_ORDENS_PRODUCAO_TABLE = '_ordens_producao_legacy' as any;
 
 export interface ProductionOrder {
   id: string;
@@ -42,6 +59,10 @@ export interface UpdateProductionOrderInput {
 export class ProductionOrderRepository {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
+  private asRow(value: unknown): ProductionOrderRow {
+    return value as ProductionOrderRow;
+  }
+
   /**
    * Cria uma nova ordem de produção
    */
@@ -59,7 +80,7 @@ export class ProductionOrderRepository {
     };
 
     const { data, error } = await this.supabase
-      .from('_ordens_producao_legacy')
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .insert(insertData)
       .select()
       .single();
@@ -68,7 +89,7 @@ export class ProductionOrderRepository {
       throw new Error(`Erro ao criar ordem de produção: ${error.message}`);
     }
 
-    return this.mapRowToDomain(data);
+    return this.mapRowToDomain(this.asRow(data));
   }
 
   /**
@@ -94,7 +115,7 @@ export class ProductionOrderRepository {
     });
 
     const { data, error } = await this.supabase
-      .from('_ordens_producao_legacy')
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .update(updateData)
       .eq('id', id)
       .select()
@@ -104,7 +125,7 @@ export class ProductionOrderRepository {
       throw new Error(`Erro ao atualizar ordem de produção: ${error.message}`);
     }
 
-    return this.mapRowToDomain(data);
+    return this.mapRowToDomain(this.asRow(data));
   }
 
   /**
@@ -115,7 +136,7 @@ export class ProductionOrderRepository {
     
     try {
       const { data, error } = await this.supabase
-        .from('_ordens_producao_legacy')
+        .from(LEGACY_ORDENS_PRODUCAO_TABLE)
         .select('*')
         .eq('id', id)
         .maybeSingle();
@@ -132,7 +153,7 @@ export class ProductionOrderRepository {
       }
 
       console.log('[ProductionOrderRepository] Ordem encontrada:', { id, found: !!data });
-      return data ? this.mapRowToDomain(data) : null;
+      return data ? this.mapRowToDomain(this.asRow(data)) : null;
     } catch (err) {
       console.error('[ProductionOrderRepository] Erro ao buscar ordem:', {
         id,
@@ -148,7 +169,7 @@ export class ProductionOrderRepository {
    */
   async findByStatus(status: ProductionOrderStatus): Promise<ProductionOrder[]> {
     const { data, error } = await this.supabase
-      .from('_ordens_producao_legacy')
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .select('*')
       .eq('status', status)
       .order('prioridade', { ascending: false })
@@ -158,7 +179,7 @@ export class ProductionOrderRepository {
       throw new Error(`Erro ao buscar ordens por status: ${error.message}`);
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data || []).map((row) => this.mapRowToDomain(this.asRow(row)));
   }
 
   /**
@@ -166,7 +187,7 @@ export class ProductionOrderRepository {
    */
   async findActive(): Promise<ProductionOrder[]> {
     const { data, error } = await this.supabase
-      .from('_ordens_producao_legacy')
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .select('*')
       .neq('status', 'concluido')
       .neq('status', 'cancelado')
@@ -178,7 +199,7 @@ export class ProductionOrderRepository {
       throw new Error(`Erro ao buscar ordens ativas: ${error.message}`);
     }
 
-    return (data || []).map((row) => this.mapRowToDomain(row));
+    return (data || []).map((row) => this.mapRowToDomain(this.asRow(row)));
   }
 
   /**
@@ -188,14 +209,15 @@ export class ProductionOrderRepository {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
 
-    const { data: lastOp } = await this.supabase
-      .from('_ordens_producao_legacy')
+    const { data: lastOpRaw } = await this.supabase
+      .from(LEGACY_ORDENS_PRODUCAO_TABLE)
       .select('lote_codigo')
       .ilike('lote_codigo', `OP-${dateStr}-%`)
       .order('lote_codigo', { ascending: false })
       .limit(1)
       .maybeSingle();
 
+    const lastOp = lastOpRaw as { lote_codigo?: string } | null;
     let sequence = 1;
     if (lastOp?.lote_codigo) {
       const parts = lastOp.lote_codigo.split('-');
