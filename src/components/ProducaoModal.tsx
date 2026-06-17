@@ -318,7 +318,9 @@ export default function ProducaoModal({
       
       // Upload de fotos se houver
       const canUploadPhotos =
-        mode === 'embalagem' ? Boolean(loteId) : Boolean(rowId);
+        mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao'
+          ? Boolean(loteId) || Boolean(rowId)
+          : Boolean(rowId);
 
       if (canUploadPhotos && hasPhotos) {
         setPhotoLoading(true);
@@ -330,15 +332,17 @@ export default function ProducaoModal({
           if (photoFile) {
             const formDataPhoto = new FormData();
             formDataPhoto.append('photo', photoFile);
-            if (mode === 'embalagem' && loteId) {
+            if ((mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') && loteId) {
               formDataPhoto.append('loteId', loteId);
-              formDataPhoto.append('process', 'embalagem');
+              if (mode === 'embalagem') formDataPhoto.append('process', 'embalagem');
+              if (mode === 'forno') formDataPhoto.append('process', 'forno');
+              if (mode === 'fermentacao') formDataPhoto.append('process', 'fermentacao');
             } else if (rowId) {
               formDataPhoto.append('rowId', rowId.toString());
             }
             formDataPhoto.append('photoType', mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : photoType);
-            if (mode === 'forno') formDataPhoto.append('process', 'forno');
-            if (mode === 'fermentacao') formDataPhoto.append('process', 'fermentacao');
+            if (mode === 'forno' && !loteId) formDataPhoto.append('process', 'forno');
+            if (mode === 'fermentacao' && !loteId) formDataPhoto.append('process', 'fermentacao');
             if (mode === 'resfriamento') formDataPhoto.append('process', 'resfriamento');
             
             uploadPromises.push(
