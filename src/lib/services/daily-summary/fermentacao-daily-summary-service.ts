@@ -1,58 +1,66 @@
-import { PEDIDOS_FERMENTACAO_CONFIG } from "@/config/fermentacao";
-import { getProductionStatus } from "@/domain/types/realizado";
+import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
+import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import { getProductionStatus } from '@/domain/types/realizado';
+import { painelFermentacaoService } from '@/lib/services/painel-fermentacao-service';
 
 import {
   BaseDailySummaryService,
   ItemQuantityInfo,
   QuantityByUnit,
   StageSummaryResult,
-} from "./base-daily-summary-service";
-
-type FermentacaoRow = string[];
+} from './base-daily-summary-service';
 
 interface FermentacaoParsedRow {
   produto: string;
-  unit: "lt" | "un" | "kg";
+  unit: 'lt' | 'un';
   meta: number;
   produzido: number;
   metaBreakdown: QuantityByUnit;
   produzidoBreakdown: QuantityByUnit;
 }
 
-export class FermentacaoDailySummaryService extends BaseDailySummaryService {
-  protected stage = "fermentacao";
+function etapaQuantidadeToBreakdown(qty: EtapaQuantidade): QuantityByUnit {
+  const breakdown: QuantityByUnit = {};
+  if (qty.assadeiras > 0) breakdown.lt = qty.assadeiras;
+  if (qty.unidades > 0) breakdown.un = qty.unidades;
+  return breakdown;
+}
 
-  protected async loadRows(): Promise<string[][]> {
-    const { spreadsheetId, tabName } = PEDIDOS_FERMENTACAO_CONFIG.destinoPedidos;
-    const rows = await this.readSheet(spreadsheetId, `${tabName}!A:U`);
-    return rows.slice(1);
+export class FermentacaoDailySummaryService extends BaseDailySummaryService {
+  protected stage = 'fermentacao';
+
+  protected async loadRows(date: string): Promise<string[][]> {
+    void date;
+    return [];
   }
 
   async build(date: string): Promise<StageSummaryResult> {
-    const rows = await this.loadRows();
-    return this.buildSummary(date, rows);
+    const { ordens } = await painelFermentacaoService.getPainelForDate(date);
+    return this.buildSummaryFromOrdens(date, ordens);
   }
 
-  protected buildSummary(
+  protected buildSummary(date: string, rows: string[][]): StageSummaryResult {
+    void rows;
+    return this.buildSummaryFromOrdens(date, []);
+  }
+
+  protected buildSummaryFromOrdens(
     date: string,
-    rows: FermentacaoRow[],
+    ordens: PainelOrdemEtapa[],
   ): StageSummaryResult {
     const completeTotals = this.createEmptyTotals();
     const partialTotals = this.createEmptyTotals();
     const notProducedTotals = this.createEmptyTotals();
     const highlighted: ItemQuantityInfo[] = [];
 
-    rows.forEach((row) => {
-      const dataPedido = this.normalizeDate(row[0]);
-      if (dataPedido !== date) return;
-
-      const parsed = this.parseRow(row);
+    ordens.forEach((ordem) => {
+      const parsed = this.parseOrdem(ordem);
       if (!parsed) return;
 
       const status = getProductionStatus(parsed.produzido, parsed.meta);
 
       switch (status) {
-        case "complete": {
+        case 'complete': {
           completeTotals.itemCount += 1;
           this.addToQuantity(
             completeTotals.produced,
@@ -61,7 +69,7 @@ export class FermentacaoDailySummaryService extends BaseDailySummaryService {
           );
           break;
         }
-        case "partial": {
+        case 'partial': {
           partialTotals.itemCount += 1;
           this.addToQuantity(
             partialTotals.produced,
@@ -75,7 +83,7 @@ export class FermentacaoDailySummaryService extends BaseDailySummaryService {
           );
           break;
         }
-        case "not-started": {
+        case 'not-started': {
           notProducedTotals.itemCount += 1;
           this.addToQuantity(
             notProducedTotals.meta!,
@@ -109,62 +117,20 @@ export class FermentacaoDailySummaryService extends BaseDailySummaryService {
     };
   }
 
-  private parseRow(row: FermentacaoRow): FermentacaoParsedRow | null {
-    const produto = (row[1] || "").toString().trim();
-    if (!produto) return null;
-
-    const metaLatas = Number(row[2] || 0);
-    const metaUnidades = Number(row[3] || 0);
-    const metaKg = Number(row[4] || 0);
-
-    const prodLatas = Number(row[14] || 0);
-    const prodUnidades = Number(row[15] || 0);
-    const prodKg = Number(row[16] || 0);
-
-    const metaBreakdown: QuantityByUnit = {};
-    if (metaLatas > 0) metaBreakdown.lt = metaLatas;
-    if (metaUnidades > 0) metaBreakdown.un = metaUnidades;
-    if (metaKg > 0) metaBreakdown.kg = metaKg;
-
-    const produzidoBreakdown: QuantityByUnit = {};
-    if (prodLatas > 0) produzidoBreakdown.lt = prodLatas;
-    if (prodUnidades > 0) produzidoBreakdown.un = prodUnidades;
-    if (prodKg > 0) produzidoBreakdown.kg = prodKg;
-
-    let unit: "lt" | "un" | "kg" | null = null;
-    let meta = 0;
-    let produzido = 0;
-
-    if (metaLatas > 0) {
-      unit = "lt";
-      meta = metaLatas;
-      produzido = prodLatas;
-    } else if (metaUnidades > 0) {
-      unit = "un";
-      meta = metaUnidades;
-      produzido = prodUnidades;
-    } else if (metaKg > 0) {
-      unit = "kg";
-      meta = metaKg;
-      produzido = prodKg;
-    }
-
-    if (!unit || meta <= 0) {
-      return null;
-    }
+  private parseOrdem(ordem: PainelOrdemEtapa): FermentacaoParsedRow | null {
+    const produto = ordem.produto.trim();
+    if (!produto || ordem.aProduzir <= 0) return null;
 
     return {
       produto,
-      unit,
-      meta,
-      produzido,
-      metaBreakdown,
-      produzidoBreakdown,
+      unit: ordem.unidade,
+      meta: ordem.aProduzir,
+      produzido: ordem.produzido,
+      metaBreakdown: etapaQuantidadeToBreakdown(ordem.pedido),
+      produzidoBreakdown: etapaQuantidadeToBreakdown(ordem.produzidoBreakdown),
     };
   }
 }
 
 export const fermentacaoDailySummaryService =
   new FermentacaoDailySummaryService();
-
-

@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
 import { fermentacaoLoteService } from '@/lib/services/fermentacao-lote-service';
+import { notifyEtapaProductionAfterLoteSave } from '@/lib/services/etapa-production-notification';
+import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
 export async function GET(
   _request: Request,
@@ -64,6 +66,11 @@ export async function PUT(
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
     }
 
+    const lote = await fermentacaoLoteRepository.findById(loteId);
+    if (!lote) {
+      return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
+    }
+
     await fermentacaoLoteService.atualizarLote(loteId, {
       quantidade: { assadeiras: loteAssadeiras, unidades: loteUnidades },
       fotos: {
@@ -72,6 +79,25 @@ export async function PUT(
         fotoUploadedAt: fotoUploadedAt || undefined,
       },
     });
+
+    try {
+      const ordem = await ordemProducaoRepository.findById(lote.ordemProducaoId);
+      if (ordem) {
+        const [produto, lotesByOrdem] = await Promise.all([
+          new SupabaseProductService().findById(ordem.produtoId),
+          fermentacaoLoteRepository.listByOrdemProducaoIds([ordem.id]),
+        ]);
+
+        await notifyEtapaProductionAfterLoteSave({
+          stage: 'fermentacao',
+          ordem,
+          produtoNome: produto?.nome || 'Produto não informado',
+          lotes: lotesByOrdem.get(ordem.id) ?? [],
+        });
+      }
+    } catch {
+      // notificação opcional
+    }
 
     revalidatePath('/api/painel/fermentacao');
 
