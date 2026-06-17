@@ -1,0 +1,685 @@
+# Tela Ordens de Produção (`/ordens-producao`) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Entregar a tela `/ordens-producao` com listagem ordenável por drag-and-drop, CRUD via modal novo, importação CSV reutilizada e visual Warm Industrial — substituindo o fluxo de planejamento de `meta/embalagem` sem removê-la.
+
+**Architecture:** Backend fino em novas rotas REST delegando a `ordens-producao-painel-service` (listagem com nomes resolvidos) e `ordemProducaoMetaService` (CRUD). Frontend modular em `src/components/OrdensProducao/` com manager client-side para fetch/reorder. DnD via `@dnd-kit`. Formulário single-item reutilizando padrões de `CreatePedidoModalAssadeiras` + `usePedidoItemModoEntrada`.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Tailwind 4, `@dnd-kit/core` + `@dnd-kit/sortable`, Vitest, Supabase.
+
+**Spec:** `docs/superpowers/specs/2026-06-17-ordens-producao-tela-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/ordens-producao/ordem-quantidade-label.ts` | `formatOrdemQuantidadeLabel`, `resolveModoQuantidade` |
+| `src/domain/ordens-producao/ordem-quantidade-label.test.ts` | testes do formatador |
+| `src/domain/types/ordens-producao-painel.ts` | DTOs da listagem |
+| `src/lib/services/ordens-producao-painel-service.ts` | monta resposta GET com nomes |
+| `src/lib/services/ordens-producao-painel-service.test.ts` | testes do painel service |
+| `src/lib/services/ordem-producao-meta-service.ts` | `updateFromForm` (edição latas/unidades) |
+| `src/app/api/ordens-producao/route.ts` | GET list + POST create |
+| `src/app/api/ordens-producao/[id]/route.ts` | PUT update + DELETE |
+| `src/lib/managers/ordens-producao-list-manager.ts` | fetch, reorder, CRUD HTTP |
+| `src/components/OrdensProducao/*.tsx` | UI da página |
+| `src/app/ordens-producao/page.tsx` | rota |
+| `src/components/Navigation.tsx` | link no menu |
+
+---
+
+### Task 1: Domínio — label de quantidade
+
+**Files:**
+- Create: `src/domain/ordens-producao/ordem-quantidade-label.ts`
+- Create: `src/domain/ordens-producao/ordem-quantidade-label.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import {
+  formatOrdemQuantidadeLabel,
+  resolveModoQuantidade,
+} from './ordem-quantidade-label';
+
+describe('resolveModoQuantidade', () => {
+  it('retorna unidades sem assadeira', () => {
+    expect(resolveModoQuantidade('', 0)).toBe('unidades');
+  });
+
+  it('retorna latas com assadeira', () => {
+    expect(resolveModoQuantidade('ass-1', 12)).toBe('latas');
+  });
+});
+
+describe('formatOrdemQuantidadeLabel', () => {
+  it('formata latas com derivados', () => {
+    expect(
+      formatOrdemQuantidadeLabel({
+        modo: 'latas',
+        assadeiras: 12,
+        unidades: 480,
+        caixas: 20,
+      }),
+    ).toBe('12 LT → 480 UN • 20 CX');
+  });
+
+  it('formata unidades sem caixas', () => {
+    expect(
+      formatOrdemQuantidadeLabel({
+        modo: 'unidades',
+        assadeiras: 0,
+        unidades: 500,
+        caixas: 0,
+      }),
+    ).toBe('500 UN');
+  });
+
+  it('formata unidades com caixas', () => {
+    expect(
+      formatOrdemQuantidadeLabel({
+        modo: 'unidades',
+        assadeiras: 0,
+        unidades: 1000,
+        caixas: 41,
+      }),
+    ).toBe('1000 UN • 41 CX');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/domain/ordens-producao/ordem-quantidade-label.test.ts`  
+Expected: FAIL — módulo não encontrado
+
+- [ ] **Step 3: Implementar**
+
+```typescript
+export type ModoQuantidadeOrdem = 'latas' | 'unidades';
+
+export function resolveModoQuantidade(
+  assadeiraId: string,
+  assadeiras: number,
+): ModoQuantidadeOrdem {
+  if (!assadeiraId && assadeiras <= 0) return 'unidades';
+  return 'latas';
+}
+
+export function formatOrdemQuantidadeLabel(input: {
+  modo: ModoQuantidadeOrdem;
+  assadeiras: number;
+  unidades: number;
+  caixas: number;
+}): string {
+  if (input.modo === 'unidades') {
+    const cx = input.caixas > 0 ? ` • ${input.caixas} CX` : '';
+    return `${input.unidades} UN${cx}`;
+  }
+  const base = `${input.assadeiras} LT → ${input.unidades} UN`;
+  return input.caixas > 0 ? `${base} • ${input.caixas} CX` : base;
+}
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/domain/ordens-producao/ordem-quantidade-label.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/ordens-producao/
+git commit -m "feat(ordens-producao): formatador de label de quantidade"
+```
+
+---
+
+### Task 2: Tipos + painel service
+
+**Files:**
+- Create: `src/domain/types/ordens-producao-painel.ts`
+- Create: `src/lib/services/ordens-producao-painel-service.ts`
+- Create: `src/lib/services/ordens-producao-painel-service.test.ts`
+
+- [ ] **Step 1: Criar tipos**
+
+`src/domain/types/ordens-producao-painel.ts`:
+
+```typescript
+import type { ModoQuantidadeOrdem } from '@/domain/ordens-producao/ordem-quantidade-label';
+
+export type OrdemProducaoPainelItem = {
+  id: string;
+  ordemPlanejamento: number;
+  dataProducao: string;
+  dataEtiqueta: string;
+  tipoEstoque: string;
+  produto: string;
+  observacao: string;
+  modoQuantidade: ModoQuantidadeOrdem;
+  assadeiras: number;
+  assadeiraNome?: string;
+  unidades: number;
+  caixas: number;
+  quantidadeLabel: string;
+};
+
+export type OrdensProducaoListResponse = {
+  date: string;
+  resumo: {
+    totalOrdens: number;
+    totalLatas: number;
+    totalUnidades: number;
+  };
+  ordens: OrdemProducaoPainelItem[];
+};
+```
+
+- [ ] **Step 2: Escrever teste do service (mock repositório)**
+
+`ordens-producao-painel-service.test.ts` — mock `ordemProducaoRepository.listByDataProducao`, `tiposEstoqueService.findByIds`, `SupabaseProductService.findByIds`, e supabase assadeiras. Testar que:
+- ordena por `ordemPlanejamento`
+- calcula `resumo.totalLatas` somando `assadeiras`
+- gera `quantidadeLabel` correto para ordem com e sem assadeira
+
+- [ ] **Step 3: Implementar `OrdensProducaoPainelService`**
+
+```typescript
+export class OrdensProducaoPainelService {
+  async getListForDate(date: string): Promise<OrdensProducaoListResponse> {
+    const ordens = await ordemProducaoRepository.listByDataProducao(date);
+    if (ordens.length === 0) {
+      return { date, resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0 }, ordens: [] };
+    }
+    // resolver tipos, produtos, nomes de assadeira por assadeiraId
+    // mapear cada ordem → OrdemProducaoPainelItem
+    // resumo: totalOrdens, totalLatas = sum(assadeiras), totalUnidades = sum(unidades)
+  }
+}
+export const ordensProducaoPainelService = new OrdensProducaoPainelService();
+```
+
+Buscar nomes de assadeira:
+
+```typescript
+const assadeiraIds = [...new Set(ordens.map((o) => o.assadeiraId).filter(Boolean))];
+const { data: assadeiras } = await supabase.from('assadeiras').select('id, nome').in('id', assadeiraIds);
+```
+
+- [ ] **Step 4: Rodar testes**
+
+Run: `npm test -- src/lib/services/ordens-producao-painel-service.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/types/ordens-producao-painel.ts src/lib/services/ordens-producao-painel-service.ts src/lib/services/ordens-producao-painel-service.test.ts
+git commit -m "feat(ordens-producao): painel service para listagem com nomes resolvidos"
+```
+
+---
+
+### Task 3: Meta service — `updateFromForm`
+
+**Files:**
+- Modify: `src/lib/services/ordem-producao-meta-service.ts`
+- Modify: `src/lib/services/ordem-producao-meta-service.test.ts`
+
+`updateFields` atual sempre chama `resolveAssadeiraDefault` e quebra produtos sem assadeira. Adicionar método unificado para a nova tela.
+
+- [ ] **Step 1: Adicionar tipo e testes**
+
+```typescript
+export type UpdateFromFormInput = {
+  dataProducao: string;
+  dataEtiqueta: string;
+  tipoEstoque: string;
+  produto: string;
+  observacao: string;
+  modoQuantidade: 'latas' | 'unidades';
+  latas?: number;
+  unidades?: number;
+  assadeiraNome?: string;
+};
+```
+
+Testes:
+- `updateFromForm` com `modoQuantidade: 'latas'` chama `updatePedidoFields` com assadeiras derivadas
+- `updateFromForm` com `modoQuantidade: 'unidades'` persiste `assadeiraId: ''`, `assadeiras: 0`
+- rejeita se produto com assadeira receber modo `unidades`
+
+- [ ] **Step 2: Implementar `updateFromForm`**
+
+Lógica:
+1. `resolveIds` para tipo/produto
+2. Se `modoQuantidade === 'unidades'`: validar sem assadeira, `deriveQuantidadesFromUnidades`, `updatePedidoFields` com assadeira vazia
+3. Se `modoQuantidade === 'latas'`: `resolveAssadeiraForProduto(produtoId, assadeiraNome)`, derivar quantidade, `assertMetaNotBelowProduzido`, `updatePedidoFields`
+4. Preservar `ordemPlanejamento` existente
+
+- [ ] **Step 3: Rodar testes**
+
+Run: `npm test -- src/lib/services/ordem-producao-meta-service.test.ts`  
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/ordem-producao-meta-service.ts src/lib/services/ordem-producao-meta-service.test.ts
+git commit -m "feat(ordens-producao): updateFromForm com suporte latas e unidades"
+```
+
+---
+
+### Task 4: APIs REST
+
+**Files:**
+- Create: `src/app/api/ordens-producao/route.ts`
+- Create: `src/app/api/ordens-producao/[id]/route.ts`
+
+- [ ] **Step 1: GET + POST em `route.ts`**
+
+```typescript
+// GET ?date=YYYY-MM-DD
+export async function GET(request: Request) {
+  const date = new URL(request.url).searchParams.get('date') ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: 'Data inválida' }, { status: 400 });
+  }
+  const data = await ordensProducaoPainelService.getListForDate(date);
+  return NextResponse.json(data);
+}
+
+// POST body: OrdemProducaoCreateBody (spec)
+export async function POST(request: Request) {
+  const body = await request.json();
+  // validar campos obrigatórios
+  try {
+    if (body.modoQuantidade === 'unidades') {
+      const record = await ordemProducaoMetaService.createSemAssadeira({ ... });
+      return NextResponse.json({ id: record.id }, { status: 201 });
+    }
+    const record = await ordemProducaoMetaService.createFromLatas({
+      ...,
+      assadeiraNome: body.assadeiraNome,
+    });
+    return NextResponse.json({ id: record.id }, { status: 201 });
+  } catch (e) {
+    if (e instanceof EstoqueResolverError) return NextResponse.json({ error: e.message }, { status: 400 });
+    ...
+  }
+}
+```
+
+- [ ] **Step 2: PUT + DELETE em `[id]/route.ts`**
+
+```typescript
+export async function PUT(request, { params }) {
+  const { id } = await params;
+  const body = await request.json();
+  await ordemProducaoMetaService.updateFromForm(id, body);
+  return NextResponse.json({ message: 'Ordem atualizada' });
+}
+
+export async function DELETE(_request, { params }) {
+  const { id } = await params;
+  await ordemProducaoMetaService.delete(id);
+  return new NextResponse(null, { status: 204 });
+}
+```
+
+Tratar erros de produção registrada → 400 com mensagem do service.
+
+- [ ] **Step 3: Verificar build**
+
+Run: `npm run build`  
+Expected: compila sem erros de tipo
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/api/ordens-producao/
+git commit -m "feat(ordens-producao): APIs GET/POST/PUT/DELETE"
+```
+
+---
+
+### Task 5: Dependência DnD + manager client
+
+**Files:**
+- Modify: `package.json`
+- Create: `src/lib/managers/ordens-producao-list-manager.ts`
+
+- [ ] **Step 1: Instalar @dnd-kit**
+
+```bash
+npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
+```
+
+- [ ] **Step 2: Implementar manager**
+
+```typescript
+import type { OrdensProducaoListResponse, OrdemProducaoPainelItem } from '@/domain/types/ordens-producao-painel';
+
+export class OrdensProducaoListManager {
+  async fetchList(date: string): Promise<OrdensProducaoListResponse> {
+    const res = await fetch(`/api/ordens-producao?date=${date}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Falha ao carregar ordens');
+    return data;
+  }
+
+  async reorder(dataProducao: string, orderedIds: string[]): Promise<void> {
+    const res = await fetch('/api/ordens-producao/reorder', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataProducao, orderedIds }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Falha ao reordenar');
+    }
+  }
+
+  async create(body: OrdemProducaoCreateBody): Promise<void> { ... }
+  async update(id: string, body: OrdemProducaoCreateBody): Promise<void> { ... }
+  async remove(id: string): Promise<void> { ... }
+}
+
+export const ordensProducaoListManager = new OrdensProducaoListManager();
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add package.json package-lock.json src/lib/managers/ordens-producao-list-manager.ts
+git commit -m "feat(ordens-producao): dnd-kit e list manager"
+```
+
+---
+
+### Task 6: Componentes visuais base
+
+**Files:**
+- Create: `src/components/OrdensProducao/ordens-producao-theme.ts`
+- Create: `src/components/OrdensProducao/OrdensProducaoToolbar.tsx`
+- Create: `src/components/OrdensProducao/OrdemProducaoRow.tsx`
+- Create: `src/components/OrdensProducao/OrdensProducaoEmptyState.tsx`
+- Create: `src/components/OrdensProducao/OrdensProducaoListSkeleton.tsx`
+
+- [ ] **Step 1: Tokens de tema**
+
+`ordens-producao-theme.ts`:
+
+```typescript
+export const ordensProducaoPageClass = 'min-h-screen bg-stone-50 text-stone-900';
+export const ordensProducaoPanelClass =
+  'bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden';
+export const ordensProducaoPrimaryButtonClass =
+  'min-h-11 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2';
+export const ordensProducaoSecondaryButtonClass =
+  'min-h-11 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-stone-200 text-stone-700 rounded-xl font-medium hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2';
+```
+
+- [ ] **Step 2: Toolbar**
+
+Props: `date`, `onDateChange`, `resumo`, `onNovaOrdem`, `onImportarCsv`, `loading`
+
+Layout conforme spec: título à esquerda, data + resumo + botões à direita. Sticky com `bg-stone-50/95 backdrop-blur`.
+
+- [ ] **Step 3: Row**
+
+Props: `item: OrdemProducaoPainelItem`, `filterDate`, `onEdit`, `onDelete`, `onMoveUp`, `onMoveDown`, `dragHandleProps`, `isDragging`
+
+Colunas em grid desktop: `# | produto | tipo | qtd | etiqueta | obs | ações`
+
+Badge âmbar na data etiqueta quando `item.dataEtiqueta !== filterDate`.
+
+- [ ] **Step 4: Empty + Skeleton**
+
+Empty: mensagem + dois botões (Nova ordem, Importar CSV).  
+Skeleton: 5 linhas com `animate-pulse` em `stone-200`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/OrdensProducao/
+git commit -m "feat(ordens-producao): componentes base Warm Industrial"
+```
+
+---
+
+### Task 7: Lista com drag-and-drop
+
+**Files:**
+- Create: `src/components/OrdensProducao/OrdensProducaoList.tsx`
+
+- [ ] **Step 1: Implementar DnD**
+
+```typescript
+'use client';
+
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+```
+
+- Usar `PointerSensor` com `activationConstraint: { distance: 8 }` para não conflitar com clique
+- `SortableOrdemRow` wrapper com `useSortable({ id: item.id })`
+- `onDragEnd`: `arrayMove` local → chamar `onReorder(orderedIds)` do parent
+- Parent faz optimistic update; em erro, reverte
+
+- [ ] **Step 2: Fallback ↑↓**
+
+Menu `more_vert` com Editar, Excluir, Mover para cima, Mover para baixo — desabilitar no primeiro/último item.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/OrdensProducao/OrdensProducaoList.tsx
+git commit -m "feat(ordens-producao): lista ordenável com dnd-kit"
+```
+
+---
+
+### Task 8: Modal criar/editar
+
+**Files:**
+- Create: `src/components/OrdensProducao/OrdemProducaoFormModal.tsx`
+- Create: `src/components/OrdensProducao/useOrdemProducaoForm.ts`
+
+- [ ] **Step 1: Hook de formulário**
+
+`useOrdemProducaoForm.ts` — single item, adaptar lógica de `usePedidoItemModoEntrada` para índice fixo `0`:
+
+- Ao selecionar produto → `GET /api/produtos/${encodeURIComponent(nome)}/assadeiras`
+- Define modo `latas` vs `unidades`
+- Calcula preview com `deriveQuantidadesFromAssadeiras` / `deriveQuantidadesFromUnidades`
+
+- [ ] **Step 2: Modal**
+
+Props:
+```typescript
+type OrdemProducaoFormModalProps = {
+  isOpen: boolean;
+  mode: 'create' | 'edit';
+  initialItem?: OrdemProducaoPainelItem;
+  defaultDate: string;
+  tipoEstoqueOptions: string[];
+  produtoOptions: string[];
+  loading?: boolean;
+  onClose: () => void;
+  onSave: (body: OrdemProducaoCreateBody) => Promise<void>;
+  onDelete?: () => Promise<void>;
+};
+```
+
+Campos: `DateInput`, `AutocompleteInput` (tipo, produto), quantidade dinâmica, `TextInput` observação.
+
+Reutilizar componentes de `src/components/FormControls/`.
+
+Botão excluir (vermelho) só em `mode === 'edit'`. Confirmação `window.confirm` antes de excluir.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/OrdensProducao/OrdemProducaoFormModal.tsx src/components/OrdensProducao/useOrdemProducaoForm.ts
+git commit -m "feat(ordens-producao): modal de criar/editar ordem"
+```
+
+---
+
+### Task 9: Batch wrapper + página
+
+**Files:**
+- Create: `src/components/OrdensProducao/OrdensProducaoBatchModal.tsx`
+- Create: `src/components/OrdensProducao/OrdensProducaoPageClient.tsx`
+- Create: `src/app/ordens-producao/page.tsx`
+
+- [ ] **Step 1: Batch wrapper**
+
+```typescript
+import MetaEmbalagemBatchModal from '@/components/MetaEmbalagem/MetaEmbalagemBatchModal';
+
+export default function OrdensProducaoBatchModal({ isOpen, onClose, onSuccess }: Props) {
+  return <MetaEmbalagemBatchModal isOpen={isOpen} onClose={onClose} onSuccess={onSuccess} />;
+}
+```
+
+- [ ] **Step 2: PageClient**
+
+Estado:
+- `date` (default `getTodayISOInBrazilTimezone()`)
+- `list`, `loading`, `error`, `toast`
+- modais: form, batch
+- `formMode`, `editingItem`
+- options: carregar `/api/options/embalagem?type=clientes` e `produtos` no mount
+
+Fluxo:
+1. `loadList()` via manager ao mudar `date`
+2. `handleReorder` optimistic
+3. `handleSave` create/update → reload → toast sucesso
+4. `handleDelete` → reload
+5. batch `onSuccess` → reload
+
+Toast simples: banner no topo (padrão das outras telas) ou div fixa `aria-live="polite"`.
+
+Manter arquivo < 200 linhas — extrair handlers para `useOrdensProducaoPage.ts` se necessário.
+
+- [ ] **Step 3: Rota**
+
+`src/app/ordens-producao/page.tsx`:
+
+```typescript
+import OrdensProducaoPageClient from '@/components/OrdensProducao/OrdensProducaoPageClient';
+
+export default function OrdensProducaoPage() {
+  return <OrdensProducaoPageClient />;
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/OrdensProducao/OrdensProducaoBatchModal.tsx src/components/OrdensProducao/OrdensProducaoPageClient.tsx src/app/ordens-producao/
+git commit -m "feat(ordens-producao): página com listagem, modais e batch"
+```
+
+---
+
+### Task 10: Navegação + verificação final
+
+**Files:**
+- Modify: `src/components/Navigation.tsx`
+
+- [ ] **Step 1: Adicionar link no menu**
+
+Na seção "Meta de Produção", **antes** de "Meta: Embalagem":
+
+```tsx
+<Link
+  href="/ordens-producao"
+  onClick={closeMenu}
+  className={/* mesmo padrão dos outros links */}
+>
+  <span className="material-icons text-xl mr-3">format_list_numbered</span>
+  Ordens de Produção
+</Link>
+```
+
+- [ ] **Step 2: Rodar lint e build**
+
+```bash
+npm run lint
+npm run build
+npm test
+```
+
+Expected: sem erros
+
+- [ ] **Step 3: Verificação manual**
+
+1. Abrir `/ordens-producao` — lista vazia ou ordens do dia
+2. Criar ordem com produto com assadeira (latas)
+3. Criar ordem sem assadeira (unidades) se houver produto assim
+4. Arrastar para reordenar — prioridade persiste após reload
+5. Editar e excluir ordem sem produção
+6. Importar CSV — preview + apply + lista atualiza
+7. Confirmar que `/meta/embalagem` ainda funciona
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/Navigation.tsx
+git commit -m "feat(ordens-producao): link no menu e verificação final"
+```
+
+---
+
+## Self-review (spec → plano)
+
+| Requisito spec | Task |
+|----------------|------|
+| Rota `/ordens-producao` | Task 9 |
+| Filtro de data | Task 6, 9 |
+| Lista ordenável | Task 7 |
+| Sem progresso/etiqueta | Task 6 (row sem barra de progresso) |
+| CRUD campos CSV | Task 3, 4, 8 |
+| Import CSV reutilizado | Task 9 |
+| Warm Industrial UI | Task 6 |
+| APIs novas | Task 4 |
+| Menu novo | Task 10 |
+| meta/embalagem backup | Nenhuma alteração nela |
+| Arquivos ≤ 500 linhas | Hook extraído se PageClient crescer |
+| Critérios de aceite | Task 10 verificação manual |
+
+**Gaps resolvidos:** `updateFromForm` adicionado para edição de produtos sem assadeira (lacuna do `updateFields` atual).
+
+---
+
+## Opções de execução
+
+**Plano salvo em `docs/superpowers/plans/2026-06-17-ordens-producao-tela.mdx`.**
+
+**1. Subagent-Driven (recomendado)** — subagent por task, revisão entre tasks, iteração rápida
+
+**2. Inline Execution** — executar tasks nesta sessão com checkpoints para revisão
+
+Qual abordagem prefere?
