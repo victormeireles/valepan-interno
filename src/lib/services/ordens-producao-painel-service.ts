@@ -1,7 +1,9 @@
+import { resolveAssadeiraDisplayVariant } from '@/domain/ordens-producao/ordem-assadeira-display';
 import {
   formatOrdemQuantidadeLabel,
   resolveModoQuantidade,
 } from '@/domain/ordens-producao/ordem-quantidade-label';
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import type {
   OrdensProducaoListResponse,
   OrdemProducaoPainelItem,
@@ -34,10 +36,11 @@ export class OrdensProducaoPainelService {
     const produtoIds = [...new Set(ordens.map((o) => o.produtoId))];
     const assadeiraIds = [...new Set(ordens.map((o) => o.assadeiraId).filter(Boolean))];
 
-    const [tipos, produtos, assadeiras] = await Promise.all([
+    const [tipos, produtos, assadeiras, defaultAssadeiraByProduto] = await Promise.all([
       tiposEstoqueService.findByIds(tipoIds),
       this.productService.findByIds(produtoIds),
       this.loadAssadeiraNames(assadeiraIds),
+      this.loadDefaultAssadeiraIds(produtoIds),
     ]);
 
     const tipoNomeById = new Map(tipos.map((t) => [t.id, t.nome]));
@@ -45,7 +48,13 @@ export class OrdensProducaoPainelService {
     const assadeiraNomeById = new Map(assadeiras.map((a) => [a.id, a.nome]));
 
     const items = ordens.map((ordem) =>
-      this.mapOrdemToPainelItem(ordem, tipoNomeById, produtoNomeById, assadeiraNomeById),
+      this.mapOrdemToPainelItem(
+        ordem,
+        tipoNomeById,
+        produtoNomeById,
+        assadeiraNomeById,
+        defaultAssadeiraByProduto,
+      ),
     );
 
     return {
@@ -71,11 +80,22 @@ export class OrdensProducaoPainelService {
     return (data ?? []) as AssadeiraRow[];
   }
 
+  private async loadDefaultAssadeiraIds(produtoIds: string[]): Promise<Map<string, string>> {
+    const entries = await Promise.all(
+      produtoIds.map(async (produtoId) => {
+        const resolved = await assadeiraResolver.resolveDefaultForProduto(produtoId);
+        return [produtoId, resolved?.assadeira_id ?? ''] as const;
+      }),
+    );
+    return new Map(entries);
+  }
+
   private mapOrdemToPainelItem(
     ordem: OrdemProducaoRecord,
     tipoNomeById: Map<string, string>,
     produtoNomeById: Map<string, string>,
     assadeiraNomeById: Map<string, string>,
+    defaultAssadeiraByProduto: Map<string, string>,
   ): OrdemProducaoPainelItem {
     const modoQuantidade = resolveModoQuantidade(ordem.assadeiraId, ordem.assadeiras);
     const unidades = ordem.quantidade.unidades;
@@ -83,6 +103,11 @@ export class OrdensProducaoPainelService {
     const assadeiraNome = ordem.assadeiraId
       ? assadeiraNomeById.get(ordem.assadeiraId)
       : undefined;
+    const assadeiraVariant = resolveAssadeiraDisplayVariant({
+      assadeiraId: ordem.assadeiraId,
+      assadeiras: ordem.assadeiras,
+      produtoDefaultAssadeiraId: defaultAssadeiraByProduto.get(ordem.produtoId),
+    });
 
     return {
       id: ordem.id,
@@ -95,6 +120,7 @@ export class OrdensProducaoPainelService {
       modoQuantidade,
       assadeiras: ordem.assadeiras,
       assadeiraNome,
+      assadeiraVariant,
       unidades,
       caixas,
       quantidadeLabel: formatOrdemQuantidadeLabel({

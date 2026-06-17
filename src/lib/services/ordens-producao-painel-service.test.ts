@@ -5,6 +5,13 @@ const listByDataProducao = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
+const resolveDefaultForProduto = vi.fn();
+
+vi.mock('@/domain/assadeiras/assadeira-resolver', () => ({
+  assadeiraResolver: {
+    resolveDefaultForProduto: (...args: unknown[]) => resolveDefaultForProduto(...args),
+  },
+}));
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
@@ -64,6 +71,12 @@ function makeOrdem(
 describe('OrdensProducaoPainelService.getListForDate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveDefaultForProduto.mockImplementation(async (produtoId: string) => {
+      if (produtoId === 'prod-1') {
+        return { assadeira_id: 'ass-1', assadeira_nome: 'Lata 40', unidades_efetivas: 40 };
+      }
+      return null;
+    });
     findByIdsTipos.mockResolvedValue([
       {
         id: 'tipo-1',
@@ -133,6 +146,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       modoQuantidade: 'latas',
       assadeiras: 12,
       assadeiraNome: 'Lata 40',
+      assadeiraVariant: 'padrao',
       unidades: 480,
       caixas: 20,
       quantidadeLabel: '12 LT → 480 UN • 20 CX',
@@ -156,6 +170,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       modoQuantidade: 'unidades',
       assadeiras: 0,
       assadeiraNome: undefined,
+      assadeiraVariant: 'sem',
       quantidadeLabel: '1000 UN • 41 CX',
     });
     expect(assadeirasIn).not.toHaveBeenCalled();
@@ -187,6 +202,26 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       totalOrdens: 3,
       totalLatas: 20,
       totalUnidades: 1300,
+    });
+  });
+
+  it('marca assadeira alternativa quando difere da padrao', async () => {
+    listByDataProducao.mockResolvedValue([
+      makeOrdem('op-alt', { assadeiraId: 'ass-2', assadeiras: 10 }),
+    ]);
+    assadeirasIn.mockResolvedValue({
+      data: [
+        { id: 'ass-1', nome: 'Lata 40' },
+        { id: 'ass-2', nome: 'Lata nova' },
+      ],
+      error: null,
+    });
+
+    const result = await ordensProducaoPainelService.getListForDate('2026-06-17');
+
+    expect(result.ordens[0]).toMatchObject({
+      assadeiraNome: 'Lata nova',
+      assadeiraVariant: 'alternativa',
     });
   });
 });

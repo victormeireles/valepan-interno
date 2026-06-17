@@ -1,3 +1,4 @@
+import type { AssadeiraDisplayVariant } from '@/domain/ordens-producao/ordem-assadeira-display';
 import type { ModoQuantidadeOrdem } from '@/domain/ordens-producao/ordem-quantidade-label';
 
 export type OrdemProducaoPainelItem = {
@@ -11,6 +12,7 @@ export type OrdemProducaoPainelItem = {
   modoQuantidade: ModoQuantidadeOrdem;
   assadeiras: number;
   assadeiraNome?: string;
+  assadeiraVariant: AssadeiraDisplayVariant;
   unidades: number;
   caixas: number;
   quantidadeLabel: string;

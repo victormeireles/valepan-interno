@@ -31,6 +31,12 @@ export const ordensProducaoMetaTextClass = 'text-sm text-stone-500 tabular-nums'
 export const ordensProducaoEtiquetaBadgeClass =
   'inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800';
 
+export const ordensProducaoAssadeiraAltBadgeClass =
+  'shrink-0 rounded border border-amber-200 bg-amber-50 px-1 py-px text-[10px] font-bold uppercase leading-tight tracking-wide text-amber-800';
+
+export const ordensProducaoRowClass =
+  'group border-b border-stone-100 px-3 py-2 last:border-b-0 odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40';
+
 export const ordensProducaoToastSuccessClass =
   'rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800';
 
