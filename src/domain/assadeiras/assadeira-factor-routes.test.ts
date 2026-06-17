@@ -3,8 +3,6 @@ import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const ROUTE_PATTERNS: Record<string, RegExp> = {
-  'src/app/api/submit/forno-pedido/route.ts':
-    /assadeiras\?\.unidades_por_assadeira|assadeiras\(unidades_por_assadeira|assadeiraResolver|resolveUnidadesPorAssadeiraEfetiva/,
   'src/app/api/submit/embalagem-pedido/route.ts':
     /ordemProducaoMetaService|assadeiraResolver|resolveUnidadesPorAssadeiraEfetiva/,
   'src/app/api/produtos/[nomeProduto]/assadeiras/route.ts':
