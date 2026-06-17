@@ -41,7 +41,7 @@ export function useLatestDataDate(endpoint: ApiEndpoint): string {
             const hasData =
               endpoint === 'embalagem'
                 ? Array.isArray(data.pedidos) && data.pedidos.length > 0
-                : Array.isArray(data.items) && data.items.length > 0;
+                : Array.isArray(data.ordens) && data.ordens.length > 0;
             if (hasData) {
               setLatestDate(dateString);
               return;

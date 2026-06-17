@@ -1,19 +1,27 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
-import { RealizadoHeader, ProductCompactCard, ThreeColumnLayout } from '@/components/Realizado';
-import { RealizadoItemFermentacao, RealizadoGroup } from '@/domain/types/realizado';
+import {
+  EtapaProductAccordion,
+  ProductCompactCard,
+  RealizadoHeader,
+  ThreeColumnLayout,
+} from '@/components/Realizado';
+import {
+  loteToPainelItemEtapa,
+  splitOrdensPorFinalizacao,
+  type PainelLoteItemEtapa,
+} from '@/domain/realizado/etapa-painel-adapter';
+import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import type { RealizadoGroup } from '@/domain/types/realizado';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
+import type { ProducaoData } from '@/domain/types';
 
-type PainelItem = RealizadoItemFermentacao & {
-  fermentacaoFotoId?: string;
-  fermentacaoFotoUploadedAt?: string;
-  pedidoLatas?: number;
-  pedidoUnidades?: number;
-  pedidoKg?: number;
-  observacao?: string;
+type EtapaGroup = RealizadoGroup & {
+  ordem: PainelOrdemEtapa;
 };
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
@@ -23,197 +31,348 @@ function getVisibleErrorMessage(error: unknown, fallback: string): string | null
 
 export default function ProducaoFermentacaoPage() {
   const latestDate = useLatestDataDate('fermentacao');
-  const [items, setItems] = useState<PainelItem[]>([]);
+  const [ordens, setOrdens] = useState<PainelOrdemEtapa[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(latestDate);
   const [producaoModalOpen, setProducaoModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<PainelItem | null>(null);
+  const [isNewLoteModal, setIsNewLoteModal] = useState(false);
+  const [selectedOrdem, setSelectedOrdem] = useState<PainelOrdemEtapa | null>(null);
+  const [editingLote, setEditingLote] = useState<PainelLoteItemEtapa | null>(null);
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+  const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
+  const [creatingLoteOrdemId, setCreatingLoteOrdemId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDate(latestDate);
   }, [latestDate]);
 
+  const refreshPainelData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/painel/fermentacao?date=${selectedDate}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+      setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
+    } catch (err) {
+      console.error('Erro ao recarregar painel de fermentação:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [selectedDate]);
+
+  const loadPainel = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/painel/fermentacao?date=${selectedDate}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
+      setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
+    } catch (err) {
+      setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate]);
+
   useEffect(() => {
-    const load = async () => {
+    void loadPainel();
+  }, [loadPainel]);
+
+  useEffect(() => {
+    if (producaoModalOpen) return;
+    const interval = setInterval(() => void refreshPainelData(), 60_000);
+    return () => clearInterval(interval);
+  }, [producaoModalOpen, refreshPainelData]);
+
+  const handleEditProducao = useCallback(
+    async (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
+      if (!lote.loteId) {
+        setMessage('Este lote não pode ser editado');
+        return;
+      }
+
       try {
-        setLoading(true);
-        const res = await fetch(`/api/painel/fermentacao?date=${selectedDate}`);
+        setLoadingCardId(lote.loteId);
+        setProducaoLoading(true);
+        const res = await fetch(`/api/producao/fermentacao/lote/${lote.loteId}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        setItems((data.items || []) as PainelItem[]);
-      } catch (err) {
-        setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-
-    if (!producaoModalOpen) {
-      const interval = setInterval(load, 60_000);
-      return () => clearInterval(interval);
-    }
-  }, [selectedDate, producaoModalOpen]);
-
-  const handleEditProducao = async (item: PainelItem) => {
-    if (!item.rowId) {
-      setMessage('Este item não pode ser editado');
-      return;
-    }
-
-    try {
-      setLoadingCardId(`${item.produto}-${item.rowId}`);
-      setProducaoLoading(true);
-      const res = await fetch(`/api/producao/fermentacao/${item.rowId}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados de produção de fermentação');
-
-      setEditingItem({
-        ...item,
-        latas: data.data.latas || 0,
-        unidades: data.data.unidades || 0,
-        kg: data.data.kg || 0,
-        pedidoLatas: data.data.pedidoLatas || 0,
-        pedidoUnidades: data.data.pedidoUnidades || 0,
-        pedidoKg: data.data.pedidoKg || 0,
-        fermentacaoFotoUrl: data.data.fermentacaoFotoUrl,
-        fermentacaoFotoId: data.data.fermentacaoFotoId,
-        fermentacaoFotoUploadedAt: data.data.fermentacaoFotoUploadedAt,
-      });
-      setProducaoModalOpen(true);
-    } catch (err) {
-      setMessage(getVisibleErrorMessage(err, 'Erro ao carregar dados de produção'));
-    } finally {
-      setProducaoLoading(false);
-      setLoadingCardId(null);
-    }
-  };
-
-  const refreshPainelData = async () => {
-    try {
-      const painelRes = await fetch(`/api/painel/fermentacao?date=${selectedDate}`);
-      const painelData = await painelRes.json();
-      if (painelRes.ok) {
-        setItems((painelData.items || []) as PainelItem[]);
-      }
-    } catch (err) {
-      console.error('Erro ao recarregar dados do painel:', err);
-    }
-  };
-
-  const handleSaveProducao = async (producaoData: { caixas: number; unidades: number; kg: number }) => {
-    if (!editingItem?.rowId) return;
-
-    try {
-      setProducaoLoading(true);
-      setMessage(null);
-
-      const res = await fetch(`/api/producao/fermentacao/${editingItem.rowId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latas: producaoData.caixas, unidades: producaoData.unidades, kg: producaoData.kg }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção de fermentação');
-
-      setMessage('Produção de fermentação salva com sucesso!');
-      await refreshPainelData();
-      setTimeout(() => setMessage(null), 3000);
-    } catch (err) {
-      setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção'));
-    } finally {
-      setProducaoLoading(false);
-    }
-  };
-
-  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(() => {
-    const groups: { [key: string]: PainelItem[] } = {};
-    items.forEach(item => {
-      const groupKey = `${item.dataProducao || selectedDate}`;
-      if (!groups[groupKey]) groups[groupKey] = [];
-      groups[groupKey].push(item);
-    });
-    
-    const gruposNaoFinalizados: RealizadoGroup[] = [];
-    const gruposFinalizados: RealizadoGroup[] = [];
-    
-    Object.entries(groups).forEach(([groupKey, groupItems]) => {
-      const naoFinalizados: PainelItem[] = [];
-      const finalizados: PainelItem[] = [];
-      
-      groupItems.forEach(item => {
-        const porcentagem = item.aProduzir > 0 ? (item.produzido / item.aProduzir) * 100 : 0;
-        if (porcentagem >= 90) {
-          finalizados.push(item);
-        } else {
-          naoFinalizados.push(item);
+        if (!res.ok) {
+          throw new Error(data.error || 'Falha ao carregar dados de produção');
         }
-      });
-      
-      if (naoFinalizados.length > 0) {
-        gruposNaoFinalizados.push({
-          key: groupKey,
-          items: naoFinalizados,
-        });
-      }
-      
-      if (finalizados.length > 0) {
-        gruposFinalizados.push({
-          key: groupKey,
-          items: finalizados,
-        });
-      }
-    });
-    
-    return { gruposNaoFinalizados, gruposFinalizados };
-  }, [items, selectedDate]);
 
-  const renderGroup = (group: RealizadoGroup) => (
-    <div className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-3 space-y-2">
-      <div className="border-b border-slate-600/30 pb-1">
-        {/* Header vazio para manter consistência visual */}
-      </div>
-      
-      <div className="space-y-1.5">
-        {group.items.map((item, idx) => {
-          const fermentacaoItem = item as PainelItem;
-          const itemKey = `${fermentacaoItem.produto}-${fermentacaoItem.rowId}`;
-          const isItemLoading = loadingCardId === itemKey;
-          const produzidoDetalhes = QuantityBreakdown.buildEntries([
-            { quantidade: fermentacaoItem.latas, unidade: 'lt' },
-            { quantidade: fermentacaoItem.unidades, unidade: 'un' },
-            { quantidade: fermentacaoItem.kg, unidade: 'kg' },
-          ]);
-          const metaDetalhes = QuantityBreakdown.buildEntries([
-            { quantidade: fermentacaoItem.pedidoLatas, unidade: 'lt' },
-            { quantidade: fermentacaoItem.pedidoUnidades, unidade: 'un' },
-            { quantidade: fermentacaoItem.pedidoKg, unidade: 'kg' },
-          ]);
-          
-          return (
-            <ProductCompactCard
-              key={`${fermentacaoItem.produto}-${idx}`}
-              produto={fermentacaoItem.produto}
-              produzido={fermentacaoItem.produzido}
-              aProduzir={fermentacaoItem.aProduzir}
-              unidade={fermentacaoItem.unidade}
-              hasPhoto={Boolean(fermentacaoItem.fermentacaoFotoUrl)}
-              photoColor="white"
-              onPhotoClick={() => window.open(fermentacaoItem.fermentacaoFotoUrl, '_blank')}
-              onClick={() => handleEditProducao(fermentacaoItem)}
-              isLoading={isItemLoading}
-              detalhesProduzido={produzidoDetalhes}
-              detalhesMeta={metaDetalhes}
-              observacao={fermentacaoItem.observacao}
+        const ordemAtual =
+          ordens.find((item) => item.ordemProducaoId === data.ordemProducaoId) ?? ordem;
+
+        setSelectedOrdem(ordemAtual);
+        setEditingLote({
+          ...lote,
+          ordemProducaoId: data.ordemProducaoId || lote.ordemProducaoId,
+          assadeiras: data.data.assadeiras || 0,
+          unidades: data.data.unidades || 0,
+          fotoUrl: data.data.fotoUrl,
+          fotoId: data.data.fotoId,
+          fotoUploadedAt: data.data.fotoUploadedAt,
+        });
+        setIsNewLoteModal(false);
+        setProducaoModalOpen(true);
+      } catch (err) {
+        setMessage(getVisibleErrorMessage(err, 'Erro ao carregar lote de fermentação'));
+      } finally {
+        setProducaoLoading(false);
+        setLoadingCardId(null);
+      }
+    },
+    [ordens],
+  );
+
+  const handleNovoLote = useCallback((ordem: PainelOrdemEtapa) => {
+    setCreatingLoteOrdemId(ordem.ordemProducaoId);
+    setSelectedOrdem(ordem);
+    setEditingLote(null);
+    setIsNewLoteModal(true);
+    setProducaoModalOpen(true);
+    setCreatingLoteOrdemId(null);
+  }, []);
+
+  const handleDeleteLote = useCallback(
+    async (lote: PainelLoteItemEtapa) => {
+      if (!lote.loteId) {
+        setMessage('Este lote não pode ser excluído');
+        return;
+      }
+      const confirmou = window.confirm('Excluir este lote de fermentação?');
+      if (!confirmou) return;
+
+      setDeletingLoteId(lote.loteId);
+      setMessage(null);
+      try {
+        const res = await fetch(`/api/producao/fermentacao/lote/${lote.loteId}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao excluir lote');
+        await refreshPainelData();
+      } catch (err) {
+        setMessage(getVisibleErrorMessage(err, 'Erro ao excluir lote'));
+      } finally {
+        setDeletingLoteId(null);
+      }
+    },
+    [refreshPainelData],
+  );
+
+  const handleSaveProducao = useCallback(
+    async (producaoData: ProducaoData) => {
+      if (!editingLote?.loteId) return;
+
+      try {
+        setProducaoLoading(true);
+        setMessage(null);
+        const res = await fetch(`/api/producao/fermentacao/lote/${editingLote.loteId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assadeiras: producaoData.caixas,
+            unidades: producaoData.unidades,
+            fotoUrl: producaoData.fermentacaoFotoUrl,
+            fotoId: producaoData.fermentacaoFotoId,
+            fotoUploadedAt: producaoData.fermentacaoFotoUploadedAt,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
+        setMessage('Produção de fermentação atualizada com sucesso!');
+        await refreshPainelData();
+        setTimeout(() => setMessage(null), 3000);
+      } catch (err) {
+        setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção de fermentação'));
+      } finally {
+        setProducaoLoading(false);
+      }
+    },
+    [editingLote, refreshPainelData],
+  );
+
+  const renderLote = useCallback(
+    (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
+      const produzidoDetalhes = QuantityBreakdown.buildEntries([
+        { quantidade: lote.assadeiras || 0, unidade: 'lt' },
+        { quantidade: lote.unidades || 0, unidade: 'un' },
+      ]);
+      const isDeleting = deletingLoteId === lote.loteId;
+      const trailingSlot = (
+        <button
+          type="button"
+          className="
+            inline-flex items-center justify-center
+            min-h-11 min-w-11 rounded-md text-red-400
+            hover:bg-gray-700/50 hover:text-red-300
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500
+            disabled:opacity-60 disabled:cursor-wait
+          "
+          aria-label={`Excluir lote de ${lote.produto}`}
+          aria-busy={isDeleting}
+          disabled={isDeleting}
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleDeleteLote(lote);
+          }}
+        >
+          {isDeleting ? (
+            <span
+              className="inline-block h-5 w-5 rounded-full border-2 border-red-400/30 border-t-red-400 animate-spin motion-reduce:animate-none"
+              aria-hidden
             />
-          );
-        })}
-      </div>
-    </div>
+          ) : (
+            <span className="material-icons text-xl" aria-hidden>
+              delete_outline
+            </span>
+          )}
+        </button>
+      );
+
+      return (
+        <ProductCompactCard
+          key={lote.loteId}
+          produto={lote.produto}
+          produzido={lote.produzido}
+          aProduzir={lote.aProduzir}
+          unidade={lote.unidade}
+          hasPhoto={Boolean(lote.fotoUrl)}
+          photoColor="white"
+          onPhotoClick={() => {
+            if (lote.fotoUrl) window.open(lote.fotoUrl, '_blank', 'noopener,noreferrer');
+          }}
+          onClick={() => void handleEditProducao(ordem, lote)}
+          isLoading={loadingCardId === lote.loteId}
+          detalhesProduzido={produzidoDetalhes}
+          horarioEmbalagem={formatLocalTimeHHmm(lote.produzidoEm || '') ?? undefined}
+          trailingSlot={trailingSlot}
+        />
+      );
+    },
+    [deletingLoteId, handleDeleteLote, handleEditProducao, loadingCardId],
+  );
+
+  const renderOrdemAccordion = useCallback(
+    (ordem: PainelOrdemEtapa, allowNovoLote: boolean) => {
+      const detalhesProduzido = QuantityBreakdown.buildEntries([
+        { quantidade: ordem.produzidoBreakdown.assadeiras, unidade: 'lt' },
+        { quantidade: ordem.produzidoBreakdown.unidades, unidade: 'un' },
+      ]);
+      const detalhesMeta = QuantityBreakdown.buildEntries([
+        { quantidade: ordem.pedido.assadeiras, unidade: 'lt' },
+        { quantidade: ordem.pedido.unidades, unidade: 'un' },
+      ]);
+
+      return (
+        <EtapaProductAccordion
+          key={ordem.ordemProducaoId}
+          instanceId={`${selectedDate}|${ordem.ordemProducaoId}`}
+          produto={ordem.produto}
+          somaProduzido={ordem.produzido}
+          somaAProduzir={ordem.aProduzir}
+          unidade={ordem.unidade}
+          detalhesProduzido={detalhesProduzido}
+          detalhesMeta={detalhesMeta}
+          horarioProducao={undefined}
+          onNovoLote={
+            allowNovoLote && ordem.produzido < ordem.aProduzir
+              ? () => handleNovoLote(ordem)
+              : undefined
+          }
+          isNovoLoteLoading={creatingLoteOrdemId === ordem.ordemProducaoId}
+          renderLots={() =>
+            ordem.lotes.map((lote) => renderLote(ordem, loteToPainelItemEtapa(ordem, lote)))
+          }
+        />
+      );
+    },
+    [creatingLoteOrdemId, handleNovoLote, renderLote, selectedDate],
+  );
+
+  const { naoFinalizados, finalizados } = useMemo(
+    () => splitOrdensPorFinalizacao(ordens),
+    [ordens],
+  );
+
+  const gruposNaoFinalizados = useMemo<EtapaGroup[]>(
+    () =>
+      naoFinalizados.map((ordem) => ({
+        key: ordem.ordemProducaoId,
+        items: [],
+        ordem,
+      })),
+    [naoFinalizados],
+  );
+
+  const gruposFinalizados = useMemo<EtapaGroup[]>(
+    () =>
+      finalizados.map((ordem) => ({
+        key: ordem.ordemProducaoId,
+        items: [],
+        ordem,
+      })),
+    [finalizados],
+  );
+
+  const renderGroup = useCallback(
+    (group: RealizadoGroup, allowNovoLote: boolean) => {
+      const typedGroup = group as EtapaGroup;
+      return (
+        <div className="bg-slate-800/20 border border-slate-600/30 rounded-lg p-3 space-y-2">
+          {renderOrdemAccordion(typedGroup.ordem, allowNovoLote)}
+        </div>
+      );
+    },
+    [renderOrdemAccordion],
+  );
+
+  const onCloseModal = useCallback(() => {
+    setProducaoModalOpen(false);
+    setIsNewLoteModal(false);
+    setSelectedOrdem(null);
+    setEditingLote(null);
+  }, []);
+
+  const selectedPedidoQuantidades = useMemo(() => {
+    if (!selectedOrdem) return undefined;
+    return {
+      caixas: selectedOrdem.pedido.assadeiras,
+      pacotes: 0,
+      unidades: selectedOrdem.pedido.unidades,
+      kg: 0,
+    };
+  }, [selectedOrdem]);
+
+  const selectedInitialData = useMemo(() => {
+    if (!selectedOrdem) return undefined;
+    if (isNewLoteModal) {
+      return {
+        caixas: 0,
+        pacotes: 0,
+        unidades: 0,
+        kg: 0,
+      };
+    }
+
+    return {
+      caixas: editingLote?.assadeiras || 0,
+      pacotes: 0,
+      unidades: editingLote?.unidades || 0,
+      kg: 0,
+      fermentacaoFotoUrl: editingLote?.fotoUrl,
+      fermentacaoFotoId: editingLote?.fotoId,
+      fermentacaoFotoUploadedAt: editingLote?.fotoUploadedAt,
+    };
+  }, [selectedOrdem, isNewLoteModal, editingLote]);
+
+  const totalLotes = useMemo(
+    () => ordens.reduce((sum, ordem) => sum + ordem.lotes.length, 0),
+    [ordens],
   );
 
   return (
@@ -227,74 +386,75 @@ export default function ProducaoFermentacaoPage() {
 
       <div className="p-4">
         {message && (
-          <div className={`mb-4 p-4 rounded-md border ${
-            message.includes('sucesso') || message.includes('salva')
-              ? 'bg-green-800/30 border-green-600 text-green-100'
-              : 'bg-red-800/30 border-red-600 text-red-100'
-          }`}>
+          <div
+            className={`mb-4 p-4 rounded-md border ${
+              message.includes('sucesso')
+                ? 'bg-green-800/30 border-green-600 text-green-100'
+                : 'bg-red-800/30 border-red-600 text-red-100'
+            }`}
+          >
             {message}
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-16 text-gray-400 text-xl">Carregando...</div>
+          <div className="text-center py-16 text-gray-200 text-xl">Carregando...</div>
         ) : (
           <>
-            {/* Seção de Cards Não Finalizados */}
+            {refreshing ? (
+              <div
+                className="mb-3 flex items-center gap-2 text-sm text-gray-200"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-400 border-t-amber-200 animate-spin motion-reduce:animate-none" />
+                Atualizando dados...
+              </div>
+            ) : null}
+
             {gruposNaoFinalizados.length > 0 && (
               <div className="mb-8">
                 <ThreeColumnLayout
                   groups={gruposNaoFinalizados}
-                  columnCount={1}
-                  renderGroup={renderGroup}
+                  columnCount={3}
+                  renderGroup={(group) => renderGroup(group, true)}
                 />
               </div>
             )}
 
-            {/* Seção de Cards Finalizados */}
             {gruposFinalizados.length > 0 && (
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
                 <ThreeColumnLayout
                   groups={gruposFinalizados}
-                  columnCount={1}
-                  renderGroup={renderGroup}
+                  columnCount={3}
+                  renderGroup={(group) => renderGroup(group, false)}
                 />
               </div>
             )}
           </>
         )}
 
-        <footer className="mt-6 text-center text-gray-400 text-sm">
-          {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {items.length} itens
+        <footer className="mt-6 text-center text-gray-200 text-sm">
+          {gruposNaoFinalizados.length + gruposFinalizados.length} ordens • {totalLotes} lotes
         </footer>
       </div>
 
       <ProducaoModal
         isOpen={producaoModalOpen}
-        onClose={() => { setProducaoModalOpen(false); setEditingItem(null); }}
+        onClose={onCloseModal}
+        isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
         onSaveSuccess={refreshPainelData}
-        initialData={editingItem ? {
-          caixas: editingItem.latas || 0,
-          pacotes: 0,
-          unidades: editingItem.unidades || 0,
-          kg: editingItem.kg || 0,
-          fermentacaoFotoUrl: editingItem.fermentacaoFotoUrl,
-          fermentacaoFotoId: editingItem.fermentacaoFotoId,
-          fermentacaoFotoUploadedAt: editingItem.fermentacaoFotoUploadedAt,
-        } : undefined}
-        produto={editingItem?.produto || ''}
-        cliente={''}
-        rowId={editingItem?.rowId}
-        pedidoQuantidades={editingItem ? {
-          caixas: editingItem.pedidoLatas || 0,
-          pacotes: 0,
-          unidades: editingItem.pedidoUnidades || 0,
-          kg: editingItem.pedidoKg || 0,
-        } : undefined}
+        initialData={selectedInitialData}
+        produto={selectedOrdem?.produto || ''}
+        cliente={selectedOrdem?.tipoEstoque || ''}
+        loteId={editingLote?.loteId}
+        ordemProducaoId={selectedOrdem?.ordemProducaoId}
+        pedidoQuantidades={selectedPedidoQuantidades}
         loading={producaoLoading}
         mode="fermentacao"
+        modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}
       />
     </div>
   );

@@ -26,6 +26,8 @@ interface ProducaoModalProps {
   loteId?: string;
   /** Novo lote via botão + — salva por pedido canônico no DB. */
   pedidoEmbalagemId?: string;
+  /** Novo fluxo de etapas: identifica a ordem para criar lote parcial. */
+  ordemProducaoId?: string;
   congelado?: 'Sim' | 'Não';
   pedidoQuantidades?: {
     caixas: number;
@@ -40,6 +42,7 @@ interface ProducaoModalProps {
     kg: number;
   };
   mode?: 'embalagem' | 'forno' | 'fermentacao' | 'resfriamento';
+  modoQuantidade?: 'assadeiras' | 'unidades';
   /** Aberto via botão "+" (novo lote), não edição de lote existente. */
   isNewLote?: boolean;
 }
@@ -56,10 +59,12 @@ export default function ProducaoModal({
   rowId,
   loteId,
   pedidoEmbalagemId,
+  ordemProducaoId,
   congelado = 'Não',
   pedidoQuantidades,
   pedidoMetaOriginal,
   mode = 'embalagem',
+  modoQuantidade = 'assadeiras',
   isNewLote = false,
 }: ProducaoModalProps) {
   const [formData, setFormData] = useState<ProducaoData>({
@@ -90,6 +95,11 @@ export default function ProducaoModal({
   >(null);
   const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
 
+  const isEtapaMode = mode === 'forno' || mode === 'fermentacao';
+  const showAssadeirasField = !isEtapaMode || modoQuantidade === 'assadeiras';
+  const showUnidadesField = !isEtapaMode || modoQuantidade === 'unidades';
+  const showKgField = !isEtapaMode;
+
   const camposVisiveis: CamposRealizadoEmbalagem = useMemo(() => {
     if (mode !== 'embalagem' || !pedidoMetaOriginal) {
       return { caixas: true, pacotes: true, unidades: true, kg: true };
@@ -99,42 +109,60 @@ export default function ProducaoModal({
 
   const sanitizeQuantidades = useCallback(
     (data: ProducaoData): ProducaoData => {
-      if (mode !== 'embalagem') return data;
-      return {
-        ...data,
-        caixas: camposVisiveis.caixas ? data.caixas : 0,
-        pacotes: camposVisiveis.pacotes ? data.pacotes : 0,
-        unidades: camposVisiveis.unidades ? data.unidades : 0,
-        kg: camposVisiveis.kg ? data.kg : 0,
-      };
+      if (mode === 'embalagem') {
+        return {
+          ...data,
+          caixas: camposVisiveis.caixas ? data.caixas : 0,
+          pacotes: camposVisiveis.pacotes ? data.pacotes : 0,
+          unidades: camposVisiveis.unidades ? data.unidades : 0,
+          kg: camposVisiveis.kg ? data.kg : 0,
+        };
+      }
+
+      if (isEtapaMode) {
+        return {
+          ...data,
+          caixas: showAssadeirasField ? data.caixas : 0,
+          pacotes: 0,
+          unidades: showUnidadesField ? data.unidades : 0,
+          kg: 0,
+        };
+      }
+
+      return data;
     },
-    [mode, camposVisiveis],
+    [mode, camposVisiveis, isEtapaMode, showAssadeirasField, showUnidadesField],
   );
 
   const totalQtyVisivel = useCallback(
     (data: ProducaoData) => {
       const q = sanitizeQuantidades(data);
+      if (isEtapaMode) {
+        return (q.caixas || 0) + (q.unidades || 0);
+      }
       return (q.caixas || 0) + (q.pacotes || 0) + (q.unidades || 0) + (q.kg || 0);
     },
-    [sanitizeQuantidades],
+    [sanitizeQuantidades, isEtapaMode],
   );
 
   // Sincronizar só ao abrir o modal ou trocar a linha. Não listar `initialData` nas deps:
   // o pai recria o objeto a cada render e reaplicaria valores antigos por cima do que o usuário digitou.
   useEffect(() => {
     if (!isOpen || !initialData) return;
-    if (isNewLote && pedidoEmbalagemId) {
+    if (isNewLote && (pedidoEmbalagemId || ordemProducaoId)) {
       setFormData(initialData);
       return;
     }
     if (mode === 'embalagem') {
       if (!loteId) return;
+    } else if (mode === 'forno' || mode === 'fermentacao') {
+      if (!loteId && !ordemProducaoId) return;
     } else if (!rowId) {
       return;
     }
     setFormData(initialData);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `initialData` omitido: o pai recria o objeto a cada render
-  }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId, mode]);
+  }, [isOpen, rowId, loteId, isNewLote, pedidoEmbalagemId, ordemProducaoId, mode]);
 
   const buildLotePayload = useCallback(
     (data: ProducaoData) => ({
@@ -170,13 +198,22 @@ export default function ProducaoModal({
         if (!photoFile) continue;
         const formDataPhoto = new FormData();
         formDataPhoto.append('photo', photoFile);
-        formDataPhoto.append('photoType', photoType);
+        const resolvedPhotoType =
+          mode === 'forno'
+            ? 'forno'
+            : mode === 'fermentacao'
+              ? 'fermentacao'
+              : photoType;
+        formDataPhoto.append('photoType', resolvedPhotoType);
         formDataPhoto.append('loteId', target.loteId);
-        formDataPhoto.append('process', 'embalagem');
+        formDataPhoto.append(
+          'process',
+          mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : 'embalagem',
+        );
         uploadPromises.push(
           fetch('/api/upload/photo', { method: 'POST', body: formDataPhoto }),
         );
-        photoTypes.push(photoType);
+        photoTypes.push(resolvedPhotoType);
       }
 
       const uploadResults = await Promise.all(uploadPromises);
@@ -202,7 +239,7 @@ export default function ProducaoModal({
         fotos[`${prefix}FotoUploadedAt`] = now;
       }
 
-      if (Object.keys(fotos).length > 0) {
+      if (mode === 'embalagem' && Object.keys(fotos).length > 0) {
         const syncRes = await fetch(`/api/producao/embalagem/lote/${target.loteId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -216,11 +253,13 @@ export default function ProducaoModal({
 
       setPhotoLoading(false);
     },
-    [photoFiles],
+    [photoFiles, mode],
   );
 
   const executeSaveNovoLote = useCallback(async () => {
-    if (!pedidoEmbalagemId) return;
+    const podeCriarLote =
+      mode === 'embalagem' ? Boolean(pedidoEmbalagemId) : Boolean(ordemProducaoId);
+    if (!podeCriarLote) return;
 
     if (totalQtyVisivel(formData) <= 0) {
       setMessage({
@@ -236,14 +275,23 @@ export default function ProducaoModal({
       setIsSubmitting(true);
       setMessage(null);
 
-      const res = await fetch(
-        `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildLotePayload(payload)),
-        },
-      );
+      const endpoint =
+        mode === 'embalagem'
+          ? `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`
+          : `/api/producao/${mode}/ordem/${ordemProducaoId}/lote`;
+      const body =
+        mode === 'embalagem'
+          ? buildLotePayload(payload)
+          : {
+              assadeiras: payload.caixas,
+              unidades: payload.unidades,
+            };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
 
@@ -268,6 +316,8 @@ export default function ProducaoModal({
     }
   }, [
     pedidoEmbalagemId,
+    ordemProducaoId,
+    mode,
     formData,
     buildLotePayload,
     uploadPendingPhotos,
@@ -302,7 +352,11 @@ export default function ProducaoModal({
   };
 
   const executeSubmit = async () => {
-    if (isNewLote && pedidoEmbalagemId && mode === 'embalagem') {
+    if (
+      isNewLote &&
+      (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
+      (pedidoEmbalagemId || ordemProducaoId)
+    ) {
       await executeSaveNovoLote();
       return;
     }
@@ -429,7 +483,9 @@ export default function ProducaoModal({
   const handlePhotoManagerRemove = async (photoType: 'pacote' | 'etiqueta' | 'pallet') => {
     if (mode === 'embalagem') {
       if (!loteId) return;
-    } else if (!rowId) {
+    } else if ((mode === 'forno' || mode === 'fermentacao') && !loteId) {
+      return;
+    } else if (mode !== 'forno' && mode !== 'fermentacao' && !rowId) {
       return;
     }
     
@@ -448,11 +504,26 @@ export default function ProducaoModal({
         return;
       }
 
-      const typeParam = mode === 'forno' ? 'forno' : mode === 'fermentacao' ? 'fermentacao' : mode === 'resfriamento' ? 'resfriamento' : photoType;
-      const processParam = mode === 'forno' ? '&process=forno' : mode === 'fermentacao' ? '&process=fermentacao' : mode === 'resfriamento' ? '&process=resfriamento' : '';
-      const res = await fetch(`/api/photo/${rowId}?type=${typeParam}${processParam}`, {
-        method: 'DELETE',
-      });
+      let res: Response;
+      if ((mode === 'forno' || mode === 'fermentacao') && loteId) {
+        res = await fetch(`/api/producao/${mode}/lote/${loteId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assadeiras: formData.caixas || 0,
+            unidades: formData.unidades || 0,
+            fotoUrl: null,
+            fotoId: null,
+            fotoUploadedAt: null,
+          }),
+        });
+      } else {
+        const typeParam = mode === 'resfriamento' ? 'resfriamento' : photoType;
+        const processParam = mode === 'resfriamento' ? '&process=resfriamento' : '';
+        res = await fetch(`/api/photo/${rowId}?type=${typeParam}${processParam}`, {
+          method: 'DELETE',
+        });
+      }
       
       if (!res.ok) {
         const data = await res.json();
@@ -480,9 +551,18 @@ export default function ProducaoModal({
     }
   };
 
-  // Verificar se é produção parcial (produção < pedido) - APENAS para modo embalagem
+  // Verificar se é produção parcial (produção < pedido)
   const isPartialProduction = (): boolean => {
-    if (mode !== 'embalagem' || !pedidoQuantidades) return false;
+    if (!pedidoQuantidades) return false;
+
+    if (isEtapaMode) {
+      if (modoQuantidade === 'assadeiras') {
+        return pedidoQuantidades.caixas > 0 && formData.caixas < pedidoQuantidades.caixas;
+      }
+      return pedidoQuantidades.unidades > 0 && formData.unidades < pedidoQuantidades.unidades;
+    }
+
+    if (mode !== 'embalagem') return false;
 
     return (
       (camposVisiveis.caixas &&
@@ -500,14 +580,42 @@ export default function ProducaoModal({
     );
   };
 
-  // Handler para salvar produção parcial - APENAS para modo embalagem
+  // Handler para salvar produção parcial
   const handleSavePartial = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Prevenir múltiplos cliques
-    if (isSubmitting || mode !== 'embalagem') return;
+    if (isSubmitting) return;
 
-    if (isNewLote && pedidoEmbalagemId) {
+    if (
+      isNewLote &&
+      (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
+      (pedidoEmbalagemId || ordemProducaoId)
+    ) {
+      if (mode === 'embalagem') {
+        const validator = new PhotoValidator(formData, photoFiles, cliente);
+        const validationResult = validator.validate();
+        if (!validationResult.isValid && validationResult.errorMessage) {
+          setPhotoWarningMessage(validationResult.errorMessage);
+          setShowPhotoWarning(true);
+          setPendingAction('partial');
+          return;
+        }
+      }
+      await executeSaveNovoLote();
+      return;
+    }
+
+    const hasPartialTarget =
+      mode === 'embalagem'
+        ? Boolean(pedidoEmbalagemId || loteId)
+        : mode === 'forno' || mode === 'fermentacao'
+          ? Boolean(ordemProducaoId)
+          : false;
+
+    if (!hasPartialTarget) return;
+
+    if (mode === 'embalagem') {
       const validator = new PhotoValidator(formData, photoFiles, cliente);
       const validationResult = validator.validate();
       if (!validationResult.isValid && validationResult.errorMessage) {
@@ -516,35 +624,33 @@ export default function ProducaoModal({
         setPendingAction('partial');
         return;
       }
-      await executeSaveNovoLote();
-      return;
     }
 
-    if (!loteId && !pedidoEmbalagemId) return;
-
-    // Validação de fotos obrigatórias
-    const validator = new PhotoValidator(formData, photoFiles, cliente);
-    const validationResult = validator.validate();
-    
-    // Se faltam fotos, mostrar modal de confirmação
-    if (!validationResult.isValid && validationResult.errorMessage) {
-      setPhotoWarningMessage(validationResult.errorMessage);
-      setShowPhotoWarning(true);
-      setPendingAction('partial');
-      return;
-    }
-
-    // Executar o salvamento parcial
     await executeSavePartial();
   };
 
   const executeSavePartial = async () => {
-    if (isNewLote && pedidoEmbalagemId) {
+    if (
+      isNewLote &&
+      (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
+      (pedidoEmbalagemId || ordemProducaoId)
+    ) {
       await executeSaveNovoLote();
       return;
     }
 
-    if (!loteId && !pedidoEmbalagemId) return;
+    const partialEndpoint =
+      mode === 'embalagem'
+        ? pedidoEmbalagemId
+          ? `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`
+          : null
+        : mode === 'forno' || mode === 'fermentacao'
+          ? ordemProducaoId
+            ? `/api/producao/${mode}/ordem/${ordemProducaoId}/lote`
+            : null
+          : null;
+
+    if (!partialEndpoint) return;
 
     if (totalQtyVisivel(formData) <= 0) {
       setMessage({
@@ -560,24 +666,24 @@ export default function ProducaoModal({
       setIsSubmitting(true);
       setMessage(null);
 
-      if (pedidoEmbalagemId) {
-        const res = await fetch(
-          `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildLotePayload(payload)),
-          },
-        );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro ao salvar produção parcial');
+      const body =
+        mode === 'embalagem'
+          ? buildLotePayload(payload)
+          : {
+              assadeiras: payload.caixas,
+              unidades: payload.unidades,
+            };
+      const res = await fetch(partialEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar produção parcial');
 
-        const createdLoteId = data.loteId as string | undefined;
-        if (createdLoteId) {
-          await uploadPendingPhotos({ loteId: createdLoteId });
-        }
-      } else {
-        throw new Error('Pedido de embalagem não informado para salvar parcial');
+      const createdLoteId = data.loteId as string | undefined;
+      if (createdLoteId) {
+        await uploadPendingPhotos({ loteId: createdLoteId });
       }
 
       if (onSaveSuccess) await onSaveSuccess();
@@ -803,22 +909,23 @@ export default function ProducaoModal({
                 <div>
                   <strong>Pedido:</strong>
                   <div className="mt-1 flex flex-wrap gap-3">
-                    {pedidoQuantidades.caixas > 0 && (
+                    {showAssadeirasField && pedidoQuantidades.caixas > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium">
-                        {pedidoQuantidades.caixas} {mode === 'forno' || mode === 'fermentacao' || mode === 'resfriamento' ? 'Latas' : 'Caixas'}
+                        {pedidoQuantidades.caixas}{' '}
+                        {isEtapaMode || mode === 'resfriamento' ? 'Latas' : 'Caixas'}
                       </span>
                     )}
-                    {pedidoQuantidades.pacotes > 0 && (
+                    {!isEtapaMode && pedidoQuantidades.pacotes > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-800 text-xs font-medium">
                         {pedidoQuantidades.pacotes} Pacotes
                       </span>
                     )}
-                    {pedidoQuantidades.unidades > 0 && (
+                    {showUnidadesField && pedidoQuantidades.unidades > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-100 text-yellow-800 text-xs font-medium">
                         {pedidoQuantidades.unidades} Unidades
                       </span>
                     )}
-                    {pedidoQuantidades.kg > 0 && (
+                    {showKgField && pedidoQuantidades.kg > 0 && (
                       <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 text-xs font-medium">
                         {pedidoQuantidades.kg} Kg
                       </span>
@@ -831,27 +938,33 @@ export default function ProducaoModal({
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
-              <NumberInput
-                label="Latas"
-                value={formData.caixas}
-                onChange={(value) => setFormData(prev => ({ ...prev, caixas: value }))}
-                min={0}
-                step={1}
-              />
-              <NumberInput
-                label="Unidades"
-                value={formData.unidades}
-                onChange={(value) => setFormData(prev => ({ ...prev, unidades: value }))}
-                min={0}
-                step={1}
-              />
-              <NumberInput
-                label="Kg"
-                value={formData.kg}
-                onChange={(value) => setFormData(prev => ({ ...prev, kg: value }))}
-                min={0}
-                step={1}
-              />
+              {showAssadeirasField && (
+                <NumberInput
+                  label="Latas"
+                  value={formData.caixas}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, caixas: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
+              {showUnidadesField && (
+                <NumberInput
+                  label="Unidades"
+                  value={formData.unidades}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, unidades: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
+              {showKgField && (
+                <NumberInput
+                  label="Kg"
+                  value={formData.kg}
+                  onChange={(value) => setFormData((prev) => ({ ...prev, kg: value }))}
+                  min={0}
+                  step={1}
+                />
+              )}
             </div>
 
             {/* Seção de Fotos */}
@@ -904,7 +1017,19 @@ export default function ProducaoModal({
               >
                 Cancelar
               </button>
-              
+              {isEtapaMode && !isNewLote && Boolean(ordemProducaoId) && isPartialProduction() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const e = { preventDefault: () => {} } as React.FormEvent;
+                    void handleSavePartial(e);
+                  }}
+                  className="px-6 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                  disabled={loading || isSubmitting}
+                >
+                  Salvar parcial
+                </button>
+              )}
               <button
                 type="submit"
                 className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
