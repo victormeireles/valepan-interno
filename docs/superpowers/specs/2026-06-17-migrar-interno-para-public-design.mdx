@@ -1,0 +1,110 @@
+# Design: Migrar schema `interno` → `public` e dropar `interno`
+
+**Data:** 2026-06-17  
+**Status:** Aprovado pelo stakeholder  
+**Motivação:** Schema `interno` foi criado como experimento e abandonado; todo o app usa `public`.
+
+## Contexto
+
+Varredura do repositório e do banco (projeto `pklyjtbqtbhqbiqzlmep`):
+
+- **Código:** única referência runtime é `src/lib/services/whatsapp-config-service.ts` → `.schema('interno').from('whatsapp_notificacoes_config')`.
+- **Banco:** schema `interno` contém **28 tabelas** — cópias antigas de dados já vivos em `public` (menos linhas em quase todas).
+- **Exceção ativa:** `interno.whatsapp_notificacoes_config` (1 linha) — toggles WhatsApp; **não existe** em `public`.
+- Migration histórica: `whatsapp_notificacoes_config_move_to_interno` (2026-06-02).
+
+**Objetivo:** mover `whatsapp_notificacoes_config` para `public`, atualizar o código, dropar schema `interno` inteiro (`DROP SCHEMA interno CASCADE`).
+
+## Decisões (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Escopo DB | Dropar schema `interno` inteiro após migrar WhatsApp |
+| Dados WhatsApp | Copiar linha existente (`INSERT ... SELECT`) — preservar toggles |
+| Abordagem | Migração única + deploy coordenado |
+| RLS | `public.whatsapp_notificacoes_config` com RLS on, sem policies anon/auth (só service_role via API) |
+| Types | Regenerar `types/database.ts` após migration |
+
+## Falsos positivos (não migrar)
+
+| Item | Motivo |
+|------|--------|
+| Coluna `notificado_interno` | Nome de coluna em `whatsapp_notificacao_log` |
+| `valepan-interno.vercel.app` | Nome do deploy Vercel |
+| Docs com "scroll interno", "estoque interno" | Prosa em português |
+
+## Migration SQL
+
+Ordem:
+
+1. `CREATE TABLE public.whatsapp_notificacoes_config` — mesma estrutura de `interno.whatsapp_notificacoes_config`:
+   - `id uuid PK DEFAULT gen_random_uuid()`
+   - `embalagem_habilitado boolean NOT NULL DEFAULT false`
+   - `fermentacao_habilitado boolean NOT NULL DEFAULT false`
+   - `forno_habilitado boolean NOT NULL DEFAULT false`
+   - `saidas_habilitado boolean NOT NULL DEFAULT false`
+   - `updated_at timestamptz NOT NULL DEFAULT now()`
+2. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` — sem policies para `authenticated`/`anon`
+3. `INSERT INTO public.whatsapp_notificacoes_config SELECT ... FROM interno.whatsapp_notificacoes_config`
+4. Fallback se `interno` vazio: `INSERT` com defaults `false`
+5. `DROP SCHEMA interno CASCADE`
+
+Arquivo sugerido: migration Supabase `20260617200000_drop_interno_move_whatsapp_config_to_public.sql` (ou `apply_migration` via MCP).
+
+## Alterações de código
+
+### `src/lib/services/whatsapp-config-service.ts`
+
+- Remover função `internoSchema()` e comentário sobre schema não gerado
+- Usar `client.from('whatsapp_notificacoes_config')` (default `public`)
+- Remover casts `any` onde possível após types gerados
+
+### Repositório
+
+| Arquivo | Ação |
+|---------|------|
+| `WHATSAPP_NOTIFICACOES_CONFIG.sql` | Reescrever para `public` |
+| `WHATSAPP_NOTIFICACOES_CONFIG_MOVE_TO_INTERNO.sql` | Manter como histórico; adicionar comentário no topo indicando superseded |
+| `env.example` | `public.whatsapp_notificacoes_config` |
+| `types/database.ts` | `npm run gen:types` |
+| `src/types/database.ts` | Sincronizar se o projeto mantiver cópia |
+
+## O que não muda
+
+- `/api/config/whatsapp`, `/config/whatsapp`
+- `WhatsAppNotificationService` e pontos de chamada de notificação
+- Demais tabelas `public.*`
+
+## Ordem de deploy
+
+1. Aplicar migration em produção (cria `public` + drop `interno`)
+2. Deploy do código que lê `public`
+3. Regenerar types localmente e commitar
+
+**Importante:** migration deve rodar **antes** ou **junto** do deploy; código novo falha se `interno` já foi dropado e `public` ainda não existe.
+
+## Verificação
+
+| Check | Critério |
+|-------|----------|
+| Schema | `SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'interno'` → vazio |
+| Tabela | `public.whatsapp_notificacoes_config` existe com 1 linha |
+| API | `GET /api/config/whatsapp` retorna toggles |
+| UI | `/config/whatsapp` persiste alterações |
+| Gate | Envio WhatsApp respeita toggle após save de produção |
+| Build | `npm run build` + `npm test` |
+| Types | `whatsapp_notificacoes_config` em `database.ts` |
+
+## Riscos
+
+| Risco | Mitigação |
+|-------|-----------|
+| Outro consumer de `interno` | Nenhum no código deste repo; stakeholder confirmou abandono |
+| Perda de toggles | `INSERT ... SELECT` |
+| Deploy desincronizado | Migration primeiro |
+
+## Fora de escopo
+
+- Renomear deploy `valepan-interno`
+- Unificar duplicata `src/types/database.ts` vs `types/database.ts` além do regen
+- Migrar dados das 27 tabelas órfãs de `interno` (já obsoletas vs `public`)
