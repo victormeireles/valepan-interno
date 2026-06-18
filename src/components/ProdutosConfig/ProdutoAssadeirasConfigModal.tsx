@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import {
-  getProdutoAssadeiraRegraPreview,
-  type ProdutoAssadeiraLink,
-  type ProdutoComAssadeirasResumo,
-} from '@/app/actions/produto-assadeiras-actions';
+import { getProdutoAssadeiraRegraPreview } from '@/app/actions/produto-assadeiras-actions';
+import type {
+  ProdutoAssadeiraLink,
+  ProdutoComAssadeirasResumo,
+} from '@/domain/assadeiras/produto-assadeira-types';
 import ProdutoAssadeiraLinksMobileList from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinksMobileList';
 import ProdutoAssadeiraLinksTable from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinksTable';
 import ProdutoAssadeiraRegraPreview from '@/components/ProdutosConfig/ProdutoAssadeiraRegraPreview';

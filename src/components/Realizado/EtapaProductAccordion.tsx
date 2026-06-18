@@ -9,6 +9,7 @@ export interface EtapaProductAccordionProps {
   instanceId: string;
   produto: string;
   cliente?: string;
+  assadeiraNome?: string;
   observacao?: string;
   somaProduzido: number;
   somaAProduzir: number;
@@ -30,6 +31,7 @@ export default function EtapaProductAccordion({
   instanceId,
   produto,
   cliente,
+  assadeiraNome,
   observacao,
   somaProduzido,
   somaAProduzir,
@@ -111,6 +113,8 @@ export default function EtapaProductAccordion({
       <ProductCompactCard
         produto={produto}
         cliente={cliente}
+        assadeiraNome={assadeiraNome}
+        clienteAsBadge
         observacao={observacao}
         produzido={somaProduzido}
         aProduzir={somaAProduzir}

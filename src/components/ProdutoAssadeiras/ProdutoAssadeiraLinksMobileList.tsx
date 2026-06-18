@@ -1,6 +1,6 @@
 'use client';
 
-import type { ProdutoAssadeiraLink } from '@/app/actions/produto-assadeiras-actions';
+import type { ProdutoAssadeiraLink } from '@/domain/assadeiras/produto-assadeira-types';
 
 type Props = {
   links: ProdutoAssadeiraLink[];

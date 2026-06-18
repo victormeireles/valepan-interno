@@ -7,9 +7,11 @@ import {
   deleteAllProdutoAssadeiraLinks,
   deleteProdutoAssadeiraLink,
   getProdutoAssadeiraLinks,
-  type ProdutoAssadeiraLink,
-  type ProdutoComAssadeirasResumo,
 } from '@/app/actions/produto-assadeiras-actions';
+import type {
+  ProdutoAssadeiraLink,
+  ProdutoComAssadeirasResumo,
+} from '@/domain/assadeiras/produto-assadeira-types';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import ProdutoAssadeiraLinkModal from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal';
 import ProdutoAssadeirasConfigModal from '@/components/ProdutosConfig/ProdutoAssadeirasConfigModal';

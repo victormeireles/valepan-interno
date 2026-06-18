@@ -7,7 +7,6 @@ import {
   produtoAssadeiraResumoManager,
 } from '@/domain/assadeiras/produto-assadeira-resumo-manager';
 import type {
-  AssadeiraOrigem,
   ProdutoAssadeiraLink,
   ProdutoComAssadeirasResumo,
 } from '@/domain/assadeiras/produto-assadeira-types';
@@ -17,8 +16,6 @@ import {
 } from '@/domain/assadeiras/produto-assadeira-validation';
 import type { AssadeiraVinculoResolvido } from '@/domain/assadeiras/assadeira-resolver-types';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
-
-export type { AssadeiraOrigem, ProdutoAssadeiraLink, ProdutoComAssadeirasResumo };
 
 type LinkMutationResult =
   | { success: true; link: ProdutoAssadeiraLink; produto: ProdutoComAssadeirasResumo }

@@ -250,6 +250,7 @@ export default function ProducaoFornoPage() {
           instanceId={`${selectedDate}|${ordem.ordemProducaoId}`}
           produto={ordem.produto}
           cliente={ordem.tipoEstoque}
+          assadeiraNome={ordem.assadeiraNome}
           observacao={ordem.observacao || undefined}
           somaProduzido={ordem.produzido}
           somaAProduzir={ordem.aProduzir}

@@ -1,12 +1,5 @@
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
-// Schema `interno` não está no Database gerado; acesso via service_role em runtime.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function internoSchema(client: ReturnType<typeof supabaseClientFactory.createServiceRoleClient>): any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (client as any).schema('interno');
-}
-
 export type WhatsAppNotificationType =
   | 'embalagem'
   | 'fermentacao'
@@ -85,7 +78,7 @@ export class WhatsAppConfigService {
     }
 
     const client = supabaseClientFactory.createServiceRoleClient();
-    const { data, error } = await internoSchema(client)
+    const { data, error } = await client
       .from('whatsapp_notificacoes_config')
       .select(
         'embalagem_habilitado, fermentacao_habilitado, forno_habilitado, saidas_habilitado, updated_at',
@@ -121,7 +114,7 @@ export class WhatsAppConfigService {
     }
 
     const client = supabaseClientFactory.createServiceRoleClient();
-    const { data: existing, error: readError } = await internoSchema(client)
+    const { data: existing, error: readError } = await client
       .from('whatsapp_notificacoes_config')
       .select('id')
       .limit(1)
@@ -131,7 +124,7 @@ export class WhatsAppConfigService {
       throw new Error('Configuração WhatsApp não encontrada no banco');
     }
 
-    const { data, error } = await internoSchema(client)
+    const { data, error } = await client
       .from('whatsapp_notificacoes_config')
       .update({ ...rowPatch, updated_at: new Date().toISOString() })
       .eq('id', existing.id)

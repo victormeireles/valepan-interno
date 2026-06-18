@@ -1,6 +1,6 @@
 'use client';
 
-import type { ProdutoComAssadeirasResumo } from '@/app/actions/produto-assadeiras-actions';
+import type { ProdutoComAssadeirasResumo } from '@/domain/assadeiras/produto-assadeira-types';
 
 export const ALL_CATEGORIES_TAB_ID = 'all';
 

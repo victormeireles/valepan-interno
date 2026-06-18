@@ -1,3 +1,4 @@
+-- HISTÓRICO: superseded por DROP_INTERNO_MOVE_WHATSAPP_TO_PUBLIC.sql (2026-06-17)
 -- Migração one-off: mover whatsapp_notificacoes_config de public → interno
 -- (já aplicada em produção via Supabase migration whatsapp_notificacoes_config_move_to_interno)
 

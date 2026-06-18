@@ -3,11 +3,16 @@
 import { getProductionStatus, getStatusColor, type ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown, QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 import type { ReactNode } from 'react';
+import EtapaCardTitleRow from './EtapaCardTitleRow';
 
 interface ProductCompactCardProps {
   produto: string;
   /** Tipo de estoque / cliente exibido antes do produto. */
   cliente?: string;
+  /** Nome da assadeira (telas de fermentação/forno). */
+  assadeiraNome?: string;
+  /** Exibe cliente como badge com inicial (fermentação/forno). */
+  clienteAsBadge?: boolean;
   produzido: number;
   aProduzir: number;
   unidade: string;
@@ -40,6 +45,8 @@ function EtapaTitleSeparator() {
 export default function ProductCompactCard({
   produto,
   cliente,
+  assadeiraNome,
+  clienteAsBadge = false,
   produzido,
   aProduzir,
   unidade,
@@ -95,21 +102,30 @@ export default function ProductCompactCard({
       {/* Farol de Status */}
       <div className={`w-3 h-3 rounded-full flex-shrink-0 ${statusColor}`} />
 
-      {/* Cliente, observação e produto */}
-      <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
-        {cliente ? (
-          <span className="text-xs text-gray-300 flex-shrink-0">{cliente}</span>
-        ) : null}
-        {cliente && (observacao || produto) ? <EtapaTitleSeparator /> : null}
-        {observacao ? (
-          <span className="text-xs text-gray-400 italic flex-shrink-0">{observacao}</span>
-        ) : null}
-        {(cliente || observacao) && produto ? <EtapaTitleSeparator /> : null}
-        <span className="text-sm font-semibold text-white break-words">{produto}</span>
-        {congelado && (
-          <span className="material-icons text-blue-300 text-xs flex-shrink-0">ac_unit</span>
-        )}
-      </div>
+      {clienteAsBadge ? (
+        <EtapaCardTitleRow
+          cliente={cliente}
+          produto={produto}
+          assadeiraNome={assadeiraNome}
+          observacao={observacao}
+          congelado={congelado}
+        />
+      ) : (
+        <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
+          {cliente ? (
+            <span className="text-xs text-gray-300 flex-shrink-0">{cliente}</span>
+          ) : null}
+          {cliente && (observacao || produto) ? <EtapaTitleSeparator /> : null}
+          {observacao ? (
+            <span className="text-xs text-gray-400 italic flex-shrink-0">{observacao}</span>
+          ) : null}
+          {(cliente || observacao) && produto ? <EtapaTitleSeparator /> : null}
+          <span className="text-sm font-semibold text-white break-words">{produto}</span>
+          {congelado && (
+            <span className="material-icons text-blue-300 text-xs flex-shrink-0">ac_unit</span>
+          )}
+        </div>
+      )}
 
       {/* Ícone de Foto */}
       {hasPhoto && (

@@ -3832,6 +3832,33 @@ export type Database = {
           },
         ]
       }
+      whatsapp_notificacoes_config: {
+        Row: {
+          embalagem_habilitado: boolean
+          fermentacao_habilitado: boolean
+          forno_habilitado: boolean
+          id: string
+          saidas_habilitado: boolean
+          updated_at: string
+        }
+        Insert: {
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          id?: string
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Update: {
+          embalagem_habilitado?: boolean
+          fermentacao_habilitado?: boolean
+          forno_habilitado?: boolean
+          id?: string
+          saidas_habilitado?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_pedido_mensagem: {
         Row: {
           created_at: string

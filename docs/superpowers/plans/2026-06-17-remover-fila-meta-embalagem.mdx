@@ -1,0 +1,395 @@
+# Remover Fila de Produção e Meta: Embalagem — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Remover do app as telas legadas de Fila de Produção e Meta: Embalagem, incluindo código morto exclusivo, sem quebrar Ordens de Produção nem Realizado: Embalagem.
+
+**Architecture:** Remoção em bloco (opção B do spec): primeiro UI (menu + home + conditional nav), depois rotas e arquivos exclusivos, por último verificação com `grep` + `npm run build` + `npm test`. APIs em `src/app/api/producao/*` e módulo de batch (`MetaEmbalagemBatchModal`) permanecem — são usados por fluxos ativos.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Vitest, Supabase (sem migration).
+
+**Spec:** `docs/superpowers/specs/2026-06-17-remover-fila-meta-embalagem-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Ação | Caminho | Motivo |
+|------|---------|--------|
+| Modify | `src/components/Navigation.tsx` | Remover Fila + Meta Embalagem; limpar `useSearchParams` |
+| Modify | `src/components/ConditionalNavigation.tsx` | Remover `isProducaoPage` |
+| Modify | `src/app/page.tsx` | Remover seção Meta de Produção (só tinha Meta Embalagem) |
+| Delete | `src/app/producao/fila/` | Rota fila |
+| Delete | `src/app/producao/etapas/` | Etapas massa/fermentação |
+| Delete | `src/app/meta/embalagem/page.tsx` | Tela meta embalagem |
+| Delete | `src/app/actions/producao-actions.ts` | Actions legadas da fila |
+| Delete | `src/app/actions/producao-massa-actions.ts` | Actions massa |
+| Delete | `src/app/actions/producao-etapas-actions.ts` | Actions etapas |
+| Delete | `src/components/Producao/` | 8 componentes exclusivos da fila |
+| Delete | `src/domain/production/` | Managers legados |
+| Delete | `src/data/production/` | Repositories legados |
+| Delete | `src/domain/types/producao-massa.ts` | Types exclusivos da fila |
+| Delete | `src/components/EditModal.tsx` | Só usado em meta embalagem |
+| Delete | `src/components/EtiquetaModal.tsx` | Só usado em meta embalagem |
+| Delete | `src/components/CreatePedidoModal.tsx` | Re-export do modal removido |
+| Delete | `src/components/CreatePedidoModalAssadeiras.tsx` | Só usado em meta embalagem |
+| Keep | `src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts` | Usado em Ordens de Produção |
+| Keep | `src/components/MetaEmbalagem/` | Batch CSV em Ordens |
+| Keep | `src/app/api/producao/**` | APIs de Realizado (forno, fermentação, embalagem) |
+
+---
+
+### Task 1: Limpar navegação lateral
+
+**Files:**
+- Modify: `src/components/Navigation.tsx`
+
+- [ ] **Step 1: Remover link Meta: Embalagem**
+
+Apagar o bloco `<Link href="/meta/embalagem" ...> ... Meta: Embalagem </Link>` (linhas ~169–180).
+
+- [ ] **Step 2: Remover seção Fila de Produção inteira**
+
+Apagar desde o comentário `{/* Fila de Produção */}` até o fechamento do `</div>` da seção (5 links + heading + separador anterior se ficar órfão).
+
+O bloco removido inclui:
+- Heading `🏭 Fila de Produção`
+- Links para `/producao/fila?station=planejamento|massa|fermentacao|forno|embalagem`
+
+- [ ] **Step 3: Remover `useSearchParams` se não for mais usado**
+
+No topo do arquivo, remover:
+
+```typescript
+import { usePathname, useSearchParams } from 'next/navigation';
+```
+
+Substituir por:
+
+```typescript
+import { usePathname } from 'next/navigation';
+```
+
+E remover a linha:
+
+```typescript
+const searchParams = useSearchParams();
+```
+
+- [ ] **Step 4: Verificar que o menu compila**
+
+Run: `npx tsc --noEmit 2>&1 | Select-String Navigation`  
+Expected: sem erros em `Navigation.tsx`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/Navigation.tsx
+git commit -m "chore: remove fila de producao e meta embalagem do menu"
+```
+
+---
+
+### Task 2: Limpar home e ConditionalNavigation
+
+**Files:**
+- Modify: `src/app/page.tsx`
+- Modify: `src/components/ConditionalNavigation.tsx`
+
+- [ ] **Step 1: Remover seção Meta de Produção da home**
+
+Em `src/app/page.tsx`, apagar o bloco inteiro `{/* Seção de Meta de Produção */}` (linhas ~34–68), incluindo heading e o único card `Meta: Embalagem`.
+
+A home passa direto de Header para `{/* Seção de Produção Realizada */}`.
+
+- [ ] **Step 2: Remover `isProducaoPage` de ConditionalNavigation**
+
+Em `src/components/ConditionalNavigation.tsx`, remover:
+
+```typescript
+const isProducaoPage = pathname?.startsWith('/producao/');
+```
+
+E remover `isProducaoPage ||` da condição do `if`.
+
+Resultado esperado:
+
+```typescript
+'use client';
+
+import { usePathname } from 'next/navigation';
+import Navigation from './Navigation';
+
+export default function ConditionalNavigation() {
+  const pathname = usePathname();
+
+  const isRealizadoPage = pathname?.startsWith('/realizado/');
+  const isDashboardPage = pathname?.startsWith('/painel/dashboard-estoque');
+  const isInsumosPage = pathname?.startsWith('/insumos');
+  const isReceitasPage = pathname?.startsWith('/receitas');
+  const isProdutoReceitasPage = pathname?.startsWith('/produtos/receitas');
+  const isConfigPage = pathname?.startsWith('/config');
+
+  if (
+    isRealizadoPage ||
+    isDashboardPage ||
+    isInsumosPage ||
+    isReceitasPage ||
+    isProdutoReceitasPage ||
+    isConfigPage
+  ) {
+    return <Navigation hideHeader />;
+  }
+
+  return <Navigation />;
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/page.tsx src/components/ConditionalNavigation.tsx
+git commit -m "chore: remove meta embalagem da home e flag producao do nav"
+```
+
+---
+
+### Task 3: Apagar rotas de página
+
+**Files:**
+- Delete: `src/app/producao/fila/page.tsx`
+- Delete: `src/app/producao/fila/ProductionQueueClient.tsx`
+- Delete: `src/app/producao/etapas/[ordemId]/massa/page.tsx`
+- Delete: `src/app/producao/etapas/[ordemId]/massa/MassaStepClient.tsx`
+- Delete: `src/app/producao/etapas/[ordemId]/fermentacao/page.tsx`
+- Delete: `src/app/producao/etapas/[ordemId]/fermentacao/FermentacaoStepClient.tsx`
+- Delete: `src/app/meta/embalagem/page.tsx`
+
+- [ ] **Step 1: Deletar arquivos listados acima**
+
+Run (PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force "src/app/producao/fila"
+Remove-Item -Recurse -Force "src/app/producao/etapas"
+Remove-Item -Recurse -Force "src/app/meta/embalagem"
+```
+
+Se `src/app/producao/` ficar vazio, remover o diretório também:
+
+```powershell
+Remove-Item -Recurse -Force "src/app/producao" -ErrorAction SilentlyContinue
+```
+
+- [ ] **Step 2: Confirmar que rotas antigas não existem mais**
+
+Run:
+
+```powershell
+Test-Path "src/app/producao/fila/page.tsx"
+Test-Path "src/app/meta/embalagem/page.tsx"
+```
+
+Expected: ambos `False`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add -A src/app/producao src/app/meta/embalagem
+git commit -m "chore: remove rotas da fila de producao e meta embalagem"
+```
+
+---
+
+### Task 4: Apagar server actions da fila
+
+**Files:**
+- Delete: `src/app/actions/producao-actions.ts`
+- Delete: `src/app/actions/producao-massa-actions.ts`
+- Delete: `src/app/actions/producao-etapas-actions.ts`
+
+- [ ] **Step 1: Deletar os três arquivos**
+
+```powershell
+Remove-Item "src/app/actions/producao-actions.ts"
+Remove-Item "src/app/actions/producao-massa-actions.ts"
+Remove-Item "src/app/actions/producao-etapas-actions.ts"
+```
+
+- [ ] **Step 2: Buscar imports órfãos**
+
+Run:
+
+```powershell
+rg "producao-actions|producao-massa-actions|producao-etapas-actions" src
+```
+
+Expected: nenhum resultado (arquivos já deletados nas tasks anteriores)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add -A src/app/actions
+git commit -m "chore: remove server actions legadas da fila de producao"
+```
+
+---
+
+### Task 5: Apagar componentes e domínio legado da fila
+
+**Files:**
+- Delete: `src/components/Producao/` (pasta inteira)
+- Delete: `src/domain/production/` (pasta inteira)
+- Delete: `src/data/production/` (pasta inteira)
+- Delete: `src/domain/types/producao-massa.ts`
+
+- [ ] **Step 1: Deletar pastas e arquivo de types**
+
+```powershell
+Remove-Item -Recurse -Force "src/components/Producao"
+Remove-Item -Recurse -Force "src/domain/production"
+Remove-Item -Recurse -Force "src/data/production"
+Remove-Item "src/domain/types/producao-massa.ts"
+```
+
+- [ ] **Step 2: Buscar referências remanescentes**
+
+Run:
+
+```powershell
+rg "components/Producao|domain/production|data/production|producao-massa" src
+```
+
+Expected: nenhum import ativo (ignorar comentários em docs se aparecerem)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add -A src/components/Producao src/domain/production src/data/production src/domain/types/producao-massa.ts
+git commit -m "chore: remove componentes e dominio legado da fila de producao"
+```
+
+---
+
+### Task 6: Apagar componentes órfãos da meta embalagem
+
+**Files:**
+- Delete: `src/components/EditModal.tsx`
+- Delete: `src/components/EtiquetaModal.tsx`
+- Delete: `src/components/CreatePedidoModal.tsx`
+- Delete: `src/components/CreatePedidoModalAssadeiras.tsx`
+- Keep: `src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts`
+
+- [ ] **Step 1: Deletar os quatro componentes**
+
+```powershell
+Remove-Item "src/components/EditModal.tsx"
+Remove-Item "src/components/EtiquetaModal.tsx"
+Remove-Item "src/components/CreatePedidoModal.tsx"
+Remove-Item "src/components/CreatePedidoModalAssadeiras.tsx"
+```
+
+- [ ] **Step 2: Confirmar que `usePedidoItemModoEntrada` permanece**
+
+Run:
+
+```powershell
+Test-Path "src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts"
+rg "usePedidoItemModoEntrada" src
+```
+
+Expected: arquivo existe; import em `src/components/OrdensProducao/useOrdemProducaoForm.ts`
+
+- [ ] **Step 3: Atualizar descrição do teste de etiqueta (cosmético)**
+
+Em `src/domain/etiquetas/etiqueta-legacy-payload.test.ts`, linha 5, trocar:
+
+```typescript
+it('monta body compatível com EtiquetaModal', () => {
+```
+
+por:
+
+```typescript
+it('monta body compatível com payload legado de etiqueta', () => {
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A src/components/EditModal.tsx src/components/EtiquetaModal.tsx src/components/CreatePedidoModal.tsx src/components/CreatePedidoModalAssadeiras.tsx src/domain/etiquetas/etiqueta-legacy-payload.test.ts
+git commit -m "chore: remove modais exclusivos da meta embalagem"
+```
+
+---
+
+### Task 7: Verificação final (build + testes)
+
+**Files:** nenhum novo
+
+- [ ] **Step 1: Busca global por referências proibidas**
+
+Run:
+
+```powershell
+rg "/producao/fila|/meta/embalagem|producao-actions|producao-massa-actions|producao-etapas-actions|ProductionOrderRepository|components/Producao|CreatePedidoModalAssadeiras|from '@/components/EditModal'" src docs/superpowers/plans/2026-06-17-remover-fila-meta-embalagem.mdx
+```
+
+Expected: zero matches em `src/` (matches em docs/spec são aceitáveis)
+
+- [ ] **Step 2: Rodar build**
+
+Run: `npm run build`  
+Expected: exit code 0, sem erros TypeScript
+
+- [ ] **Step 3: Rodar testes**
+
+Run: `npm test`  
+Expected: todos passam (especialmente `meta-embalagem-batch`, `ordens-producao-painel-service`, `etiqueta-legacy-payload`)
+
+- [ ] **Step 4: Rodar lint nos arquivos alterados**
+
+Run: `npm run lint -- --max-warnings=0 src/components/Navigation.tsx src/components/ConditionalNavigation.tsx src/app/page.tsx`  
+Expected: sem erros
+
+- [ ] **Step 5: Commit final (se houver ajustes de build)**
+
+```bash
+git add -A
+git commit -m "chore: fix imports apos remocao da fila e meta embalagem"
+```
+
+(Só commitar se Step 2–4 exigirem correções adicionais.)
+
+---
+
+### Task 8: Smoke test manual (checklist do spec)
+
+- [ ] Menu lateral **não** exibe "Fila de Produção" nem "Meta: Embalagem"
+- [ ] Home **não** exibe seção/card Meta: Embalagem
+- [ ] `/ordens-producao` abre normalmente; botão "Importar CSV" abre modal de batch
+- [ ] `/realizado/embalagem` carrega pedidos do dia
+- [ ] `/producao/fila` e `/meta/embalagem` retornam **404**
+
+Run dev server: `npm run dev`  
+Navegar manualmente ou via browser automation nas URLs acima.
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito do spec | Task |
+|-------------------|------|
+| Remover menu Fila de Produção | Task 1 |
+| Remover link Meta: Embalagem do menu | Task 1 |
+| Remover card Meta: Embalagem da home | Task 2 |
+| Remover `isProducaoPage` | Task 2 |
+| Apagar rotas `/producao/fila`, `/producao/etapas/*`, `/meta/embalagem` | Task 3 |
+| Apagar actions da fila | Task 4 |
+| Apagar `components/Producao/`, `domain/production/`, `data/production/` | Task 5 |
+| Apagar modais órfãos da meta | Task 6 |
+| Manter batch modal + `usePedidoItemModoEntrada` | Tasks 5–6 (keep explícito) |
+| Manter APIs `/api/producao/*` e Realizado | Não tocado |
+| Build + testes + 404 | Tasks 7–8 |
+| Sem migration DB | Não tocado |
+| Sem redirects | Não tocado |

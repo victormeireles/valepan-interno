@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLegacyEtiquetaGerarBody } from './etiqueta-legacy-payload';
 
 describe('buildLegacyEtiquetaGerarBody', () => {
-  it('monta body compatível com EtiquetaModal', () => {
+  it('monta body compatível com payload legado de etiqueta', () => {
     const body = buildLegacyEtiquetaGerarBody({
       produtoNome: 'HB Brioche',
       tipoEstoqueNome: 'Cliente X',

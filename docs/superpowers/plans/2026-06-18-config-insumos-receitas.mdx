@@ -1,0 +1,759 @@
+# Migrar Insumos e Receitas para Config — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Mover `/insumos` e `/receitas` para `/config/insumos` e `/config/receitas` no padrão visual das telas de config (ConfigShell, tabela + lista mobile), atualizar navegação e remover rotas antigas sem redirect.
+
+**Architecture:** Reimplementar UI seguindo `TiposEstoqueClient` como referência. Reutilizar `InsumoModal`, `ReceitaModal` e server actions existentes. Tipos importados com `import type` de `@/app/actions/*-actions` (interfaces inline, não re-export). Hub `/config` alimentado por `config-sections.ts`.
+
+**Tech Stack:** Next.js App Router, React 19, Supabase server actions, Tailwind CSS, Material Icons.
+
+**Spec:** `docs/superpowers/specs/2026-06-18-config-insumos-receitas-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/config/config-sections.ts` | Entradas Insumos + Receitas no hub |
+| `src/app/config/insumos/page.tsx` | SSR `getInsumos(true)` |
+| `src/app/config/insumos/InsumosConfigClient.tsx` | Filtros, sort, modal, toast |
+| `src/components/Insumos/InsumosConfigTable.tsx` | Tabela desktop sortável |
+| `src/components/Insumos/InsumosConfigMobileList.tsx` | Lista mobile |
+| `src/app/config/receitas/page.tsx` | SSR `getReceitas(true)` |
+| `src/app/config/receitas/ReceitasConfigClient.tsx` | Filtros, sort, modal, toast |
+| `src/components/Receitas/ReceitasConfigTable.tsx` | Tabela desktop sortável |
+| `src/components/Receitas/ReceitasConfigMobileList.tsx` | Lista mobile |
+| `src/app/actions/insumos-actions.ts` | `revalidatePath('/config/insumos')` |
+| `src/app/actions/receitas-actions.ts` | `RECEITAS_PATH = '/config/receitas'` |
+| `src/components/Navigation.tsx` | Remover Insumos/Receitas de Cadastros |
+| `src/components/ConditionalNavigation.tsx` | Remover checks legados |
+
+**Remover ao final:** `src/app/insumos/`, `src/app/receitas/`
+
+---
+
+### Task 1: Hub — adicionar seções
+
+**Files:**
+- Modify: `src/config/config-sections.ts`
+
+- [ ] **Step 1: Inserir Insumos e Receitas após Produtos**
+
+```typescript
+// src/config/config-sections.ts — trecho após entrada Produtos
+  {
+    href: '/config/insumos',
+    label: 'Insumos',
+    icon: 'inventory',
+    description: 'Matérias-primas e custos unitários',
+  },
+  {
+    href: '/config/receitas',
+    label: 'Receitas',
+    icon: 'menu_book',
+    description: 'Receitas de massa, brilho, confeito e mais',
+  },
+```
+
+Ordem final: Assadeiras → Regras → Produtos → **Insumos** → **Receitas** → Tipos de estoque → WhatsApp.
+
+- [ ] **Step 2: Verificar hub**
+
+Abrir `http://localhost:3000/config` — dois novos cards devem aparecer (links 404 até Task 2/4).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/config/config-sections.ts
+git commit -m "feat(config): adicionar Insumos e Receitas ao hub de configurações"
+```
+
+---
+
+### Task 2: Insumos — tabela e lista mobile
+
+**Files:**
+- Create: `src/components/Insumos/InsumosConfigTable.tsx`
+- Create: `src/components/Insumos/InsumosConfigMobileList.tsx`
+
+- [ ] **Step 1: Criar `InsumosConfigTable.tsx`**
+
+```tsx
+'use client';
+
+import type { Insumo } from '@/app/actions/insumos-actions';
+
+export type InsumoSortKey = 'nome' | 'unidade' | 'custo_unitario' | 'ativo';
+
+type Props = {
+  items: Insumo[];
+  sortKey: InsumoSortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (key: InsumoSortKey) => void;
+  onRowClick: (item: Insumo) => void;
+  embedded?: boolean;
+};
+
+function sortAriaValue(key: InsumoSortKey, activeKey: InsumoSortKey, dir: 'asc' | 'desc') {
+  if (key !== activeKey) return 'none' as const;
+  return dir === 'asc' ? ('ascending' as const) : ('descending' as const);
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function unidadeLabel(insumo: Insumo) {
+  return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '—';
+}
+
+export default function InsumosConfigTable({
+  items,
+  sortKey,
+  sortDir,
+  onSort,
+  onRowClick,
+  embedded = false,
+}: Props) {
+  const headers: { key: InsumoSortKey; label: string }[] = [
+    { key: 'nome', label: 'Nome' },
+    { key: 'unidade', label: 'Unidade' },
+    { key: 'custo_unitario', label: 'Custo unitário' },
+    { key: 'ativo', label: 'Status' },
+  ];
+
+  const wrapperClassName = embedded
+    ? 'hidden md:block overflow-x-auto'
+    : 'hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden';
+
+  return (
+    <div className={wrapperClassName}>
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-100">
+          <tr>
+            {headers.map(({ key, label }) => (
+              <th
+                key={key}
+                scope="col"
+                className="px-4 py-3 font-semibold text-gray-600 text-left"
+                aria-sort={sortAriaValue(key, sortKey, sortDir)}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSort(key)}
+                  className="inline-flex items-center gap-1 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                >
+                  {label}
+                  {sortKey === key && (
+                    <span className="material-icons text-base" aria-hidden="true">
+                      {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  )}
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr
+              key={item.id}
+              tabIndex={0}
+              onClick={() => onRowClick(item)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onRowClick(item);
+                }
+              }}
+              className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                !item.ativo ? 'opacity-60' : ''
+              }`}
+            >
+              <td className="px-4 py-3 font-medium text-gray-900">{item.nome}</td>
+              <td className="px-4 py-3 text-gray-600">{unidadeLabel(item)}</td>
+              <td className="px-4 py-3 text-gray-900 tabular-nums">
+                {formatCurrency(item.custo_unitario)}
+              </td>
+              <td className="px-4 py-3">
+                <span
+                  className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                    item.ativo
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {item.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `InsumosConfigMobileList.tsx`**
+
+```tsx
+'use client';
+
+import type { Insumo } from '@/app/actions/insumos-actions';
+
+type Props = {
+  items: Insumo[];
+  onRowClick: (item: Insumo) => void;
+};
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+export default function InsumosConfigMobileList({ items, onRowClick }: Props) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="md:hidden p-3 pt-0 space-y-2 border-t border-gray-100">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onRowClick(item)}
+          className={`w-full min-h-11 rounded-2xl border bg-white p-4 shadow-sm text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            item.ativo ? 'border-gray-200' : 'border-gray-200 opacity-60'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-900 truncate">{item.nome}</p>
+              <p className="mt-1 text-sm text-gray-600">
+                {item.unidades?.nome_resumido || item.unidades?.nome || '—'}
+              </p>
+              <p className="mt-1 text-sm font-medium text-gray-900 tabular-nums">
+                {formatCurrency(item.custo_unitario)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span
+                className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                  item.ativo ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {item.ativo ? 'Ativo' : 'Inativo'}
+              </span>
+              <span className="material-icons text-gray-400" aria-hidden="true">
+                chevron_right
+              </span>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Insumos/InsumosConfigTable.tsx src/components/Insumos/InsumosConfigMobileList.tsx
+git commit -m "feat(config): componentes de tabela e lista mobile para insumos"
+```
+
+---
+
+### Task 3: Insumos — client e page
+
+**Files:**
+- Create: `src/app/config/insumos/page.tsx`
+- Create: `src/app/config/insumos/InsumosConfigClient.tsx`
+
+- [ ] **Step 1: Criar `page.tsx`**
+
+```tsx
+import { Suspense } from 'react';
+import { getInsumos } from '@/app/actions/insumos-actions';
+import InsumosConfigClient from './InsumosConfigClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function InsumosConfigPage() {
+  const insumos = await getInsumos(true);
+
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+      <InsumosConfigClient initialInsumos={insumos} />
+    </Suspense>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `InsumosConfigClient.tsx`**
+
+Copiar estrutura de `TiposEstoqueClient.tsx` com estas adaptações:
+
+- `StatusFilter = 'todos' | 'ativos' | 'inativos'` — default URL sem param = `ativos`
+- `setStatusFilter` usa `router.replace` em `/config/insumos?status=...`
+- Filtro extra: `filterUnidade` (state local, select com unidades únicas derivadas de `initialInsumos`)
+- Sort keys: usar `InsumoSortKey`; para coluna `unidade`, comparar `unidadeLabel(a)` vs `unidadeLabel(b)` no `useMemo` de sort
+- `ConfigPageHeader` title="Insumos" icon="inventory" action="Novo insumo"
+- Descrição: `Matérias-primas usadas nas receitas, com custo e unidade de medida.`
+- Modal: `<InsumoModal isOpen onClose onSaved insumo={editing} />` — ver props em `src/components/Insumos/InsumoModal.tsx`
+- `handleSaved`: toast `Insumo salvo com sucesso` + `router.refresh()`
+- Empty states: mensagens para sem dados / sem resultados / botão limpar filtros
+
+Função auxiliar de sort para unidade (dentro do client):
+
+```typescript
+function unidadeSortValue(insumo: Insumo) {
+  return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '';
+}
+
+// no sort do useMemo, quando sortKey === 'unidade':
+const av = sortKey === 'unidade' ? unidadeSortValue(a) : a[sortKey as keyof Insumo];
+```
+
+- [ ] **Step 3: Testar manualmente**
+
+Abrir `/config/insumos` — listar, buscar, filtrar unidade, alternar status, criar e editar insumo.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/config/insumos/
+git commit -m "feat(config): tela de insumos no padrão de configurações"
+```
+
+---
+
+### Task 4: Insumos — atualizar revalidatePath
+
+**Files:**
+- Modify: `src/app/actions/insumos-actions.ts`
+
+- [ ] **Step 1: Trocar todas as ocorrências**
+
+```typescript
+// Antes
+revalidatePath('/insumos');
+
+// Depois
+revalidatePath('/config/insumos');
+```
+
+Há 3 ocorrências (create, update, delete).
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/actions/insumos-actions.ts
+git commit -m "fix(insumos): revalidar rota /config/insumos"
+```
+
+---
+
+### Task 5: Receitas — tabela e lista mobile
+
+**Files:**
+- Create: `src/components/Receitas/ReceitasConfigTable.tsx`
+- Create: `src/components/Receitas/ReceitasConfigMobileList.tsx`
+
+- [ ] **Step 1: Criar `ReceitasConfigTable.tsx`**
+
+```tsx
+'use client';
+
+import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
+
+export type ReceitaSortKey = 'nome' | 'tipo' | 'codigo' | 'ativo';
+
+const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
+  massa: 'Massa',
+  brilho: 'Brilho',
+  confeito: 'Confeito',
+  antimofo: 'Antimofo',
+  embalagem: 'Embalagem',
+  caixa: 'Caixa',
+};
+
+type Props = {
+  items: ReceitaWithRelations[];
+  sortKey: ReceitaSortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (key: ReceitaSortKey) => void;
+  onRowClick: (item: ReceitaWithRelations) => void;
+  embedded?: boolean;
+};
+
+function isAtiva(receita: ReceitaWithRelations) {
+  return receita.ativo !== false;
+}
+
+function countIngredientes(receita: ReceitaWithRelations) {
+  return receita.receita_ingredientes?.length ?? 0;
+}
+
+function countProdutos(receita: ReceitaWithRelations) {
+  return (receita.produto_receitas ?? []).filter((link) => link.ativo).length;
+}
+
+export default function ReceitasConfigTable({
+  items,
+  sortKey,
+  sortDir,
+  onSort,
+  onRowClick,
+  embedded = false,
+}: Props) {
+  const sortAriaValue = (key: ReceitaSortKey) => {
+    if (key !== sortKey) return 'none' as const;
+    return sortDir === 'asc' ? ('ascending' as const) : ('descending' as const);
+  };
+
+  const wrapperClassName = embedded
+    ? 'hidden md:block overflow-x-auto'
+    : 'hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden';
+
+  const headers: { key: ReceitaSortKey | null; label: string }[] = [
+    { key: 'nome', label: 'Nome' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'codigo', label: 'Código' },
+    { key: null, label: 'Ingredientes' },
+    { key: null, label: 'Produtos' },
+    { key: 'ativo', label: 'Status' },
+  ];
+
+  return (
+    <div className={wrapperClassName}>
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-100">
+          <tr>
+            {headers.map(({ key, label }) => (
+              <th
+                key={label}
+                scope="col"
+                className="px-4 py-3 font-semibold text-gray-600 text-left"
+                aria-sort={key ? sortAriaValue(key) : undefined}
+              >
+                {key ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(key)}
+                    className="inline-flex items-center gap-1 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                  >
+                    {label}
+                    {sortKey === key && (
+                      <span className="material-icons text-base" aria-hidden="true">
+                        {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  label
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr
+              key={item.id}
+              tabIndex={0}
+              onClick={() => onRowClick(item)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onRowClick(item);
+                }
+              }}
+              className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                !isAtiva(item) ? 'opacity-60' : ''
+              }`}
+            >
+              <td className="px-4 py-3 font-medium text-gray-900">{item.nome}</td>
+              <td className="px-4 py-3 text-gray-600">{TIPO_LABELS[item.tipo]}</td>
+              <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.codigo || '—'}</td>
+              <td className="px-4 py-3 text-gray-600 tabular-nums">{countIngredientes(item)}</td>
+              <td className="px-4 py-3 text-gray-600 tabular-nums">{countProdutos(item)}</td>
+              <td className="px-4 py-3">
+                <span
+                  className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                    isAtiva(item)
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {isAtiva(item) ? 'Ativa' : 'Inativa'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `ReceitasConfigMobileList.tsx`**
+
+```tsx
+'use client';
+
+import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
+
+const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
+  massa: 'Massa',
+  brilho: 'Brilho',
+  confeito: 'Confeito',
+  antimofo: 'Antimofo',
+  embalagem: 'Embalagem',
+  caixa: 'Caixa',
+};
+
+type Props = {
+  items: ReceitaWithRelations[];
+  onRowClick: (item: ReceitaWithRelations) => void;
+};
+
+export default function ReceitasConfigMobileList({ items, onRowClick }: Props) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="md:hidden p-3 pt-0 space-y-2 border-t border-gray-100">
+      {items.map((item) => {
+        const ativa = item.ativo !== false;
+        const ingredientes = item.receita_ingredientes?.length ?? 0;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onRowClick(item)}
+            className={`w-full min-h-11 rounded-2xl border bg-white p-4 shadow-sm text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              ativa ? 'border-gray-200' : 'border-gray-200 opacity-60'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {TIPO_LABELS[item.tipo]}
+                </p>
+                <p className="font-semibold text-gray-900 truncate">{item.nome}</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {ingredientes} ingrediente{ingredientes === 1 ? '' : 's'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                    ativa ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {ativa ? 'Ativa' : 'Inativa'}
+                </span>
+                <span className="material-icons text-gray-400" aria-hidden="true">
+                  chevron_right
+                </span>
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Receitas/ReceitasConfigTable.tsx src/components/Receitas/ReceitasConfigMobileList.tsx
+git commit -m "feat(config): componentes de tabela e lista mobile para receitas"
+```
+
+---
+
+### Task 6: Receitas — client e page
+
+**Files:**
+- Create: `src/app/config/receitas/page.tsx`
+- Create: `src/app/config/receitas/ReceitasConfigClient.tsx`
+
+- [ ] **Step 1: Criar `page.tsx`**
+
+```tsx
+import { Suspense } from 'react';
+import { getReceitas } from '@/app/actions/receitas-actions';
+import ReceitasConfigClient from './ReceitasConfigClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function ReceitasConfigPage() {
+  const receitas = await getReceitas(true);
+
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+      <ReceitasConfigClient initialReceitas={receitas} />
+    </Suspense>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `ReceitasConfigClient.tsx`**
+
+Espelhar `TiposEstoqueClient` / `InsumosConfigClient` com:
+
+- `StatusFilter = 'todos' | 'ativos' | 'inativos'` — default `ativos`
+- Filtro `filterTipo` (select; opções de `ReceitasClient.tsx` legado)
+- `tipoOptions` e labels copiados do `ReceitasClient.tsx` atual
+- Sort: `ReceitaSortKey`; para `ativo`, comparar `receita.ativo !== false`
+- `ConfigPageHeader` title="Receitas" icon="menu_book" action="Nova receita"
+- Descrição: `Cadastro de receitas por tipo (massa, brilho, confeito, etc.) e seus ingredientes.`
+- Modal: `<ReceitaModal isOpen receita={editingReceita} onClose onSaved />` — ver `src/components/Receitas/ReceitaModal.tsx`
+- `resultLabel`: `N receita(s)`
+
+- [ ] **Step 3: Testar manualmente**
+
+Abrir `/config/receitas` — listar, buscar, filtrar tipo/status, criar e editar receita.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/config/receitas/
+git commit -m "feat(config): tela de receitas no padrão de configurações"
+```
+
+---
+
+### Task 7: Receitas — atualizar revalidatePath
+
+**Files:**
+- Modify: `src/app/actions/receitas-actions.ts`
+
+- [ ] **Step 1: Atualizar constante**
+
+```typescript
+// Antes
+const RECEITAS_PATH = '/receitas';
+
+// Depois
+const RECEITAS_PATH = '/config/receitas';
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/actions/receitas-actions.ts
+git commit -m "fix(receitas): revalidar rota /config/receitas"
+```
+
+---
+
+### Task 8: Navegação
+
+**Files:**
+- Modify: `src/components/Navigation.tsx`
+- Modify: `src/components/ConditionalNavigation.tsx`
+
+- [ ] **Step 1: `Navigation.tsx` — remover links Insumos e Receitas**
+
+Na seção Cadastros, manter **apenas**:
+
+```tsx
+<Link href="/produtos/receitas" ...>
+  <span className="material-icons text-xl mr-3">category</span>
+  Receitas x Produto
+</Link>
+```
+
+Remover os dois `<Link>` para `/insumos` e `/receitas`.
+
+- [ ] **Step 2: `ConditionalNavigation.tsx` — simplificar**
+
+```tsx
+// Remover:
+const isInsumosPage = pathname?.startsWith('/insumos');
+const isReceitasPage = pathname?.startsWith('/receitas');
+
+// Remover do if:
+isInsumosPage ||
+isReceitasPage ||
+```
+
+`isConfigPage` já cobre `/config/insumos` e `/config/receitas`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Navigation.tsx src/components/ConditionalNavigation.tsx
+git commit -m "refactor(nav): insumos e receitas acessíveis só via configurações"
+```
+
+---
+
+### Task 9: Remover rotas legadas
+
+**Files:**
+- Delete: `src/app/insumos/page.tsx`
+- Delete: `src/app/insumos/InsumosClient.tsx`
+- Delete: `src/app/receitas/page.tsx`
+- Delete: `src/app/receitas/ReceitasClient.tsx`
+
+- [ ] **Step 1: Buscar referências restantes**
+
+```bash
+rg "/insumos|/receitas" src --glob "!src/app/insumos/**" --glob "!src/app/receitas/**"
+```
+
+Corrigir qualquer link hardcoded encontrado (exceto `/produtos/receitas` e `/config/receitas`).
+
+- [ ] **Step 2: Deletar pastas legadas**
+
+```bash
+rm -rf src/app/insumos src/app/receitas
+```
+
+- [ ] **Step 3: Verificar 404 nas rotas antigas**
+
+`/insumos` e `/receitas` devem retornar 404.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "refactor: remover telas legadas de insumos e receitas"
+```
+
+---
+
+### Task 10: Verificação final
+
+- [ ] **Step 1: Checklist manual (spec)**
+
+- [ ] `/config` — cards Insumos e Receitas na ordem correta
+- [ ] `/config/insumos` — CRUD completo, filtros, sort, mobile
+- [ ] `/config/receitas` — CRUD completo, filtros, sort, mobile
+- [ ] Menu Cadastros — só Receitas x Produto
+- [ ] Menu Configurações — ativo em `/config/*`
+- [ ] `/insumos` e `/receitas` — 404
+- [ ] Salvar insumo/receita — toast + lista atualiza
+- [ ] `npm run build` sem erros novos
+
+- [ ] **Step 2: Commit final (se ajustes pendentes)**
+
+Somente se houver correções do checklist.
+
+---
+
+## Notas de implementação
+
+1. **`InsumoModal` props:** ler `src/components/Insumos/InsumoModal.tsx` antes de wire-up — adaptar nomes `insumo` vs `editingInsumo` conforme interface existente.
+2. **`ReceitaModal` props:** `receita` pode ser `null` para create; `onSaved` já chama refresh no client legado.
+3. **Sort por unidade (insumos):** não usar `a['unidade']` direto — campo não existe no tipo; usar helper `unidadeSortValue`.
+4. **Default status `ativos`:** quando `searchParams.get('status')` for null, tratar como `'ativos'` (diferente de TiposEstoque que usa `'todas'`).
+5. **Arquivos &lt; 500 linhas:** se `InsumosConfigClient` ou `ReceitasConfigClient` passar de ~400 linhas, extrair `compareValues` e `primaryButtonClassName` para `src/components/Config/config-list-utils.ts`.

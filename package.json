@@ -16,7 +16,8 @@
     "migrate:produto-assadeiras-excecoes": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts",
     "migrate:produto-assadeiras-excecoes:dry": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts --dry-run",
     "migrate:tipos-estoque-etiqueta-flags": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts",
-    "migrate:tipos-estoque-etiqueta-flags:dry": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts --dry-run"
+    "migrate:tipos-estoque-etiqueta-flags:dry": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts --dry-run",
+    "audit:tables": "npx tsx scripts/audit-unused-tables.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

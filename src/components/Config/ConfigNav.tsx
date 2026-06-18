@@ -2,26 +2,27 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const NAV = [
-  { href: '/config/assadeiras', label: 'Assadeiras', icon: 'bakery_dining' },
-  { href: '/config/regras-assadeiras', label: 'Regras de assadeira', icon: 'rule' },
-  { href: '/config/tipos-estoque', label: 'Tipos de estoque', icon: 'warehouse' },
-  { href: '/config/produtos', label: 'Produtos', icon: 'inventory_2' },
-  { href: '/config/whatsapp', label: 'WhatsApp', icon: 'chat' },
-] as const;
+import { CONFIG_SECTIONS } from '@/config/config-sections';
 
 export default function ConfigNav() {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Seções de configuração" className="mb-6 lg:mb-0 lg:w-52 shrink-0">
+      <Link
+        href="/config"
+        className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+      >
+        <span className="material-icons text-base">arrow_back</span>
+        Todas as configurações
+      </Link>
+
       <p className="hidden lg:block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 px-1">
         Seções
       </p>
 
       <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden snap-x">
-        {NAV.map((item) => {
+        {CONFIG_SECTIONS.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
@@ -42,7 +43,7 @@ export default function ConfigNav() {
       </div>
 
       <div className="hidden lg:flex lg:flex-col lg:gap-1">
-        {NAV.map((item) => {
+        {CONFIG_SECTIONS.map((item) => {
           const active = pathname === item.href;
           return (
             <Link

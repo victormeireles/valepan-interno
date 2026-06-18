@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import ConfigNav from '@/components/Config/ConfigNav';
 
 function openGlobalMenu() {
@@ -8,6 +9,9 @@ function openGlobalMenu() {
 }
 
 export default function ConfigShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isHub = pathname === '/config';
+
   return (
     <div className="min-h-dvh bg-white text-gray-900 [color-scheme:light]">
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
@@ -51,8 +55,8 @@ export default function ConfigShell({ children }: { children: React.ReactNode })
           <span className="font-medium text-gray-900">Configurações</span>
         </nav>
 
-        <div className="lg:flex lg:gap-8 lg:items-start">
-          <ConfigNav />
+        <div className={isHub ? undefined : 'lg:flex lg:gap-8 lg:items-start'}>
+          {!isHub && <ConfigNav />}
           <div className="flex-1 min-w-0">{children}</div>
         </div>
       </div>

@@ -5,9 +5,11 @@ import type { Assadeira } from '@/app/actions/assadeiras-actions';
 import {
   createProdutoAssadeiraLink,
   updateProdutoAssadeiraLink,
-  type ProdutoAssadeiraLink,
-  type ProdutoComAssadeirasResumo,
 } from '@/app/actions/produto-assadeiras-actions';
+import type {
+  ProdutoAssadeiraLink,
+  ProdutoComAssadeirasResumo,
+} from '@/domain/assadeiras/produto-assadeira-types';
 import AssadeiraCapacityPreview from '@/components/Assadeiras/AssadeiraCapacityPreview';
 import { resolveUnidadesPorAssadeiraEfetiva } from '@/domain/producao/assadeira-factor';
 

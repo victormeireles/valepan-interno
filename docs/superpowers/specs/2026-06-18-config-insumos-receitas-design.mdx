@@ -1,0 +1,240 @@
+# Design: Migrar Insumos e Receitas para Configurações
+
+**Data:** 2026-06-18  
+**Status:** Aprovado pelo stakeholder  
+**Fase 2 (fora de escopo):** Migrar Receitas x Produto (`/produtos/receitas`)
+
+## Contexto
+
+As telas `/insumos` e `/receitas` usam layout legado (`DashboardHeader`, stats cards, grid de cards). As telas em `/config/*` seguem padrão unificado: `ConfigShell`, `ConfigNav`, `ConfigPageHeader`, filtros compactos, tabela desktop + lista mobile, toast de feedback.
+
+O menu lateral tem seção **Cadastros** com Insumos, Receitas e Receitas x Produto. Após migração recente do hub `/config`, Insumos e Receitas devem entrar no mesmo padrão e sair do menu principal.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Escopo | Migrar **Insumos** e **Receitas** apenas |
+| Receitas x Produto | Fase 2 — permanece em `/produtos/receitas` |
+| Layout | Tabela desktop + lista mobile (padrão Tipos de estoque / Assadeiras) |
+| Shell | `ConfigShell` + `ConfigNav` + `ConfigPageHeader` |
+| Stats cards | Removidos — contagem no rodapé dos filtros |
+| Rotas novas | `/config/insumos`, `/config/receitas` |
+| Rotas antigas | Removidas **sem redirect** |
+| Menu lateral | Insumos e Receitas saem de Cadastros; ficam só no hub `/config` |
+| Cadastros no menu | Mantém apenas **Receitas x Produto** |
+| Modais | Reutilizar `InsumoModal` e `ReceitaModal` existentes |
+| Server actions | Reutilizar `insumos-actions` e `receitas-actions`; atualizar `revalidatePath` |
+| Tipos em actions | Não reexportar tipos de arquivos `'use server'` — importar de módulo de domínio ou inline |
+
+## Fora de escopo
+
+- Migrar `/produtos/receitas` (Receitas x Produto)
+- Redirects de `/insumos` ou `/receitas` para novas rotas
+- Refatorar modais ou lógica de negócio das actions
+- Componente genérico `ConfigCrudPage` (YAGNI)
+
+## Rotas
+
+| Antes | Depois | Ação |
+|-------|--------|------|
+| `/insumos` | `/config/insumos` | Nova tela; remover pasta `src/app/insumos/` |
+| `/receitas` | `/config/receitas` | Nova tela; remover pasta `src/app/receitas/` |
+| `/produtos/receitas` | — | Sem mudança |
+
+## Hub `/config` — ordem das seções
+
+1. Assadeiras
+2. Regras de assadeira
+3. Produtos
+4. **Insumos** (novo)
+5. **Receitas** (novo)
+6. Tipos de estoque
+7. WhatsApp
+
+Entradas em `src/config/config-sections.ts`:
+
+| href | label | icon | description |
+|------|-------|------|-------------|
+| `/config/insumos` | Insumos | `inventory` | Matérias-primas e custos unitários |
+| `/config/receitas` | Receitas | `menu_book` | Receitas de massa, brilho, confeito e mais |
+
+## Layout compartilhado
+
+Ambas as telas herdam `src/app/config/layout.tsx` → `ConfigShell`:
+
+- Header sticky com breadcrumb (desktop) e botão menu global
+- `ConfigNav` lateral (desktop) / pills scrolláveis (mobile) — exceto no hub `/config`
+- Link "Todas as configurações" no `ConfigNav` aponta para `/config`
+- Conteúdo em `flex-1` à direita da nav
+
+Padrão de cada `*ConfigClient` (referência: `TiposEstoqueClient`):
+
+1. `ConfigPageHeader` — título, ícone Material, botão primário "Novo"
+2. Parágrafo descritivo curto abaixo do header
+3. Toast `role="status"` após salvar
+4. Barra de filtros (busca + selects + pills de status)
+5. Contagem de resultados (`"N insumos"` / `"N receitas"`)
+6. `*ConfigTable` (hidden md+) + `*ConfigMobileList` (md:hidden)
+7. Modal de create/edit
+
+Botão primário: classe `primaryButtonClassName` de TiposEstoque (min-h-11, gray-900).
+
+## `/config/insumos`
+
+### Dados
+
+- Server page: `getInsumos(true)` — inclui inativos; filtro de status no client
+- Tipo `Insumo` importado de `@/app/actions/insumos-actions` apenas no server; componentes client usam tipo do mesmo local **ou** extraído para `@/domain/insumos/insumo-types.ts` se necessário evitar import de `'use server'`
+
+### Tabela desktop — colunas
+
+| Coluna | sortable | Notas |
+|--------|----------|-------|
+| Nome | sim | |
+| Unidade | sim | `unidades.nome_resumido` ou `unidades.nome` |
+| Custo unitário | sim | `Intl.NumberFormat pt-BR BRL` |
+| Status | sim | Badge Ativo / Inativo |
+
+Clique na linha → abre `InsumoModal` em modo edição.
+
+### Lista mobile
+
+Card por insumo: nome, unidade, custo formatado, badge status. Toque → editar.
+
+### Filtros
+
+- Busca por nome (texto, client-side)
+- Unidade (select; opções derivadas dos dados carregados)
+- Status via query `?status=ativos|inativos|todos` — padrão `ativos`
+- `router.replace` para persistir status na URL (padrão TiposEstoque)
+
+### Ações
+
+- **Novo insumo** → `InsumoModal` (create)
+- **Editar** → clique na linha
+- **Desativar** → mantém fluxo atual do modal/action (`deleteInsumo` = soft delete)
+
+### Empty state
+
+Mensagem contextual: sem dados vs. sem resultados de filtro.
+
+## `/config/receitas`
+
+### Dados
+
+- Server page: `getReceitas()` (comportamento atual)
+- Tipo `ReceitaWithRelations` — mesmo cuidado com `'use server'` que insumos
+
+### Tabela desktop — colunas
+
+| Coluna | sortable | Notas |
+|--------|----------|-------|
+| Nome | sim | |
+| Tipo | sim | Labels: Massa, Brilho, Confeito, Antimofo, Embalagem, Caixa |
+| Código | sim | Monoespaçado; `—` se vazio |
+| Ingredientes | não | Contagem `receita_ingredientes.length` |
+| Produtos | não | Contagem de `produto_receitas` ativos |
+| Status | sim | Badge Ativa / Inativa |
+
+Clique na linha → abre `ReceitaModal` em modo edição.
+
+### Lista mobile
+
+Nome, tipo (label), contagem de ingredientes, badge status. Toque → editar.
+
+### Filtros
+
+- Busca por nome
+- Tipo (select com `tipoOptions` existentes)
+- Status via query `?status=ativos|inativos|todos` — padrão `ativos`
+
+### Ações
+
+- **Nova receita** → `ReceitaModal` (create)
+- **Editar** → clique na linha
+
+## Arquitetura de arquivos
+
+### Novos
+
+```
+src/app/config/insumos/
+  page.tsx
+  InsumosConfigClient.tsx
+
+src/app/config/receitas/
+  page.tsx
+  ReceitasConfigClient.tsx
+
+src/components/Insumos/
+  InsumosConfigTable.tsx
+  InsumosConfigMobileList.tsx
+
+src/components/Receitas/
+  ReceitasConfigTable.tsx
+  ReceitasConfigMobileList.tsx
+```
+
+Cada arquivo &lt; 500 linhas (regra do projeto). Lógica de sort/filter fica no `*ConfigClient`.
+
+### Removidos (última etapa da implementação)
+
+```
+src/app/insumos/          (page.tsx, InsumosClient.tsx)
+src/app/receitas/         (page.tsx, ReceitasClient.tsx)
+```
+
+### Modificados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/config/config-sections.ts` | +Insumos, +Receitas na ordem definida |
+| `src/components/Navigation.tsx` | Remover links Insumos e Receitas de Cadastros |
+| `src/components/ConditionalNavigation.tsx` | Remover `isInsumosPage` e `isReceitasPage` (já cobertos por `isConfigPage`) |
+| `src/app/actions/insumos-actions.ts` | `revalidatePath('/config/insumos')` em vez de `/insumos` |
+| `src/app/actions/receitas-actions.ts` | `revalidatePath('/config/receitas')` em vez de `/receitas` |
+
+## Navegação — estado final do menu
+
+```
+Meta de Produção
+  └ Ordens de Produção
+Produção Realizada
+  └ ...
+Estoque
+  └ ...
+Cadastros
+  └ Receitas x Produto    ← único item restante
+Configurações             ← hub com Insumos e Receitas
+```
+
+## Fluxo de implementação (ordem sugerida)
+
+1. Adicionar entradas em `config-sections.ts`
+2. Implementar `/config/insumos` (page + client + table + mobile list)
+3. Atualizar `insumos-actions` revalidatePath
+4. Implementar `/config/receitas` (page + client + table + mobile list)
+5. Atualizar `receitas-actions` revalidatePath
+6. Atualizar `Navigation.tsx` e `ConditionalNavigation.tsx`
+7. Remover pastas `src/app/insumos/` e `src/app/receitas/`
+8. Verificar manualmente: hub, ambas telas, criar/editar/desativar, filtros, mobile
+
+## Testes manuais
+
+- [ ] `/config` exibe cards Insumos e Receitas na ordem correta
+- [ ] `/config/insumos` — listar, buscar, filtrar unidade/status, criar, editar, desativar
+- [ ] `/config/receitas` — listar, buscar, filtrar tipo/status, criar, editar
+- [ ] Menu: Cadastros só tem Receitas x Produto; Configurações destaca em `/config/*`
+- [ ] `/insumos` e `/receitas` retornam 404
+- [ ] Toast aparece após salvar
+- [ ] Tabela sortável no desktop; lista usável no mobile (touch ≥ 44px)
+- [ ] `ReceitaModal` / `InsumoModal` continuam funcionando sem alteração de contrato
+
+## Riscos e mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| Import de tipos de `'use server'` quebra build | Tipos em módulo de domínio ou import type apenas de definições não-action |
+| Links internos para `/insumos` ou `/receitas` | Grep no repo antes de remover rotas |
+| `getInsumos()` default só ativos | Usar `getInsumos(true)` na nova page |

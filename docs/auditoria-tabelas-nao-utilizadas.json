@@ -1,0 +1,1752 @@
+{
+  "generatedAt": "2026-06-18T00:25:24.566Z",
+  "revisionNote": "pos-remocao-fila-meta-embalagem-2026-06-17",
+  "summary": {
+    "total": 72,
+    "used": 19,
+    "unused": 53,
+    "freedByLegacyRemoval": [
+      "producao_etapas_log",
+      "producao_massa_ingredientes",
+      "masseiras",
+      "pedidos"
+    ]
+  },
+  "audits": [
+    {
+      "table": "usuarios",
+      "rows": 108,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "clientes",
+      "rows": 251,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/api/clientes/flags-etiqueta/route.ts",
+          "line": 20,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "src/app/api/clientes/flags-etiqueta/route.ts",
+          "line": 32,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "src/app/api/options/embalagem/route.ts",
+          "line": 9,
+          "type": "literal_string",
+          "snippet": "const type = searchParams.get('type'); // 'clientes' | 'produtos'"
+        },
+        {
+          "file": "src/app/api/options/saidas/route.ts",
+          "line": 12,
+          "type": "literal_string",
+          "snippet": "if (type === 'clientes') {"
+        },
+        {
+          "file": "src/lib/services/clientes-service.ts",
+          "line": 28,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "src/lib/services/clientes-service.ts",
+          "line": 38,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "src/lib/services/clientes-service.ts",
+          "line": 66,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "src/lib/services/clientes-service.ts",
+          "line": 98,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        },
+        {
+          "file": "scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+          "line": 20,
+          "type": "from_literal",
+          "snippet": ".from('clientes')"
+        }
+      ]
+    },
+    {
+      "table": "pedidos",
+      "rows": 2099,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "pedido_itens",
+      "rows": 6328,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "verification_tokens",
+      "rows": 36,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produtos",
+      "rows": 93,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 37,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/app/api/options/forno/route.ts",
+          "line": 8,
+          "type": "literal_string",
+          "snippet": "const type = searchParams.get('type'); // 'produtos'"
+        },
+        {
+          "file": "src/app/api/options/generic/route.ts",
+          "line": 28,
+          "type": "literal_string",
+          "snippet": "} else if (table === 'produtos' && extraFields.includes('unidade_padrao_id')) {"
+        },
+        {
+          "file": "src/app/api/options/saidas/route.ts",
+          "line": 17,
+          "type": "literal_string",
+          "snippet": "if (type === 'produtos') {"
+        },
+        {
+          "file": "src/app/config/produtos/ProdutosConfigClient.tsx",
+          "line": 105,
+          "type": "literal_string",
+          "snippet": "if (produtoId && config === 'assadeiras' && produtos.some((p) => p.id === produtoId)) {"
+        },
+        {
+          "file": "src/components/Etiquetas/etiqueta-prefill-loader.ts",
+          "line": 55,
+          "type": "literal_string",
+          "snippet": "fetchEtiquetaGenericOptions('produtos', ["
+        },
+        {
+          "file": "src/components/Etiquetas/EtiquetaManualFormFields.tsx",
+          "line": 52,
+          "type": "dynamic_url",
+          "snippet": "'/api/options/generic?table=produtos&labelField=nome&valueField=id',"
+        },
+        {
+          "file": "src/components/FormControls/SelectRemoteAutocomplete.tsx",
+          "line": 68,
+          "type": "dynamic_url",
+          "snippet": "baseUrl = `/api/options/generic?table=produtos&labelField=nome${extraParam}`;"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 31,
+          "type": "select_relation",
+          "snippet": "'*, tipos_estoque(nome), produtos(nome, ativo, produto_familia_id, ordem_na_familia, produto_familias(nome_exibicao, ord"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 196,
+          "type": "select_relation",
+          "snippet": ".select('*, tipos_estoque(nome), produtos(nome)')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 213,
+          "type": "select_relation",
+          "snippet": ".select('*, tipos_estoque(nome), produtos(nome)')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 310,
+          "type": "select_relation",
+          "snippet": ".select('*, tipos_estoque(nome), produtos(nome)')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 34,
+          "type": "select_relation",
+          "snippet": "'*, tipos_estoque(nome), produtos!inner(nome, ativo, produto_familia_id, ordem_na_familia, produto_familias(nome_exibica"
+        },
+        {
+          "file": "src/domain/assadeiras/assadeira-resolver.ts",
+          "line": 93,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 91,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 137,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 174,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/features/stock-dashboard/components/NewStockDialog.tsx",
+          "line": 347,
+          "type": "literal_string",
+          "snippet": "stage=\"produtos\""
+        },
+        {
+          "file": "src/lib/services/ordem-producao-service.ts",
+          "line": 33,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/lib/services/ordem-producao-service.ts",
+          "line": 65,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 33,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 56,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 75,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 89,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "scripts/migrate-produto-assadeiras-to-excecoes.ts",
+          "line": 36,
+          "type": "select_relation",
+          "snippet": ".select('produto_id, assadeira_id, produtos(nome)');"
+        },
+        {
+          "file": "scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+          "line": 55,
+          "type": "from_literal",
+          "snippet": ".from('produtos')"
+        },
+        {
+          "file": "scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+          "line": 63,
+          "type": "from_literal",
+          "snippet": "await supabase.from('produtos').update({ nome_etiqueta: nomeEtiqueta }).eq('id', produto.id);"
+        }
+      ]
+    },
+    {
+      "table": "categorias",
+      "rows": 19,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 119,
+          "type": "from_literal",
+          "snippet": ".from('categorias')"
+        },
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 37,
+          "type": "select_relation",
+          "snippet": "'id, categoria_id, peso_g, assadeira_id, unidades_por_assadeira, ordem, ativo, created_at, updated_at, categorias(nome),"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 15,
+          "type": "select_relation",
+          "snippet": "'id, nome, categoria_id, unit_weight, categorias(nome)';"
+        }
+      ]
+    },
+    {
+      "table": "cliente_categorias",
+      "rows": 158,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "enderecos_entrega",
+      "rows": 268,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "sugestoes_envio_logs",
+      "rows": 0,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "tipos_estoque",
+      "rows": 5,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/components/Etiquetas/etiqueta-prefill-loader.ts",
+          "line": 64,
+          "type": "literal_string",
+          "snippet": "fetchEtiquetaGenericOptions('tipos_estoque', ["
+        },
+        {
+          "file": "src/components/Etiquetas/EtiquetaManualFormFields.tsx",
+          "line": 55,
+          "type": "dynamic_url",
+          "snippet": "'/api/options/generic?table=tipos_estoque&labelField=nome&valueField=id&extraFields=possui_etiqueta',"
+        },
+        {
+          "file": "src/lib/services/clientes-service.ts",
+          "line": 85,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-admin-service.ts",
+          "line": 41,
+          "type": "from_literal",
+          "snippet": "let query = client.from('tipos_estoque').select(SELECT_COLUMNS).order('nome', { ascending: true });"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-admin-service.ts",
+          "line": 57,
+          "type": "from_literal",
+          "snippet": "let query = client.from('tipos_estoque').select('id').ilike('nome', nome.trim()).limit(1);"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-admin-service.ts",
+          "line": 74,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-admin-service.ts",
+          "line": 89,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-admin-service.ts",
+          "line": 108,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-service.ts",
+          "line": 26,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-service.ts",
+          "line": 44,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-service.ts",
+          "line": 66,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "src/lib/services/tipos-estoque-service.ts",
+          "line": 87,
+          "type": "from_literal",
+          "snippet": ".from('tipos_estoque')"
+        },
+        {
+          "file": "scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+          "line": 25,
+          "type": "from_literal",
+          "snippet": "const { data: tipos } = await supabase.from('tipos_estoque').select('id, nome, congelado, mostrar_texto_congelado');"
+        },
+        {
+          "file": "scripts/migrate-tipos-estoque-etiqueta-flags.ts",
+          "line": 46,
+          "type": "from_literal",
+          "snippet": "const { error: upErr } = await supabase.from('tipos_estoque').update(patch).eq('id', tipo.id);"
+        }
+      ]
+    },
+    {
+      "table": "empresas",
+      "rows": 3,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "cliente_precos",
+      "rows": 1974,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "parcelas",
+      "rows": 11,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "parcelas_empresa",
+      "rows": 25,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "integracao_produtos",
+      "rows": 271,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "masseiras",
+      "rows": 4,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "receitas",
+      "rows": 35,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 105,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 68,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 120,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 170,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 219,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 243,
+          "type": "from_literal",
+          "snippet": ".from('receitas')"
+        },
+        {
+          "file": "src/lib/utils/production-conversions.ts",
+          "line": 143,
+          "type": "literal_string",
+          "snippet": "unitLabel: \"receitas\","
+        }
+      ]
+    },
+    {
+      "table": "receita_masseira_parametros",
+      "rows": 8,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "receita_ingredientes",
+      "rows": 178,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 265,
+          "type": "from_literal",
+          "snippet": ".from('receita_ingredientes')"
+        },
+        {
+          "file": "src/app/actions/receitas-actions.ts",
+          "line": 282,
+          "type": "from_literal",
+          "snippet": ".from('receita_ingredientes')"
+        }
+      ]
+    },
+    {
+      "table": "unidades",
+      "rows": 14,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 34,
+          "type": "select_relation",
+          "snippet": "'id, produto_id, assadeira_id, unidades_por_assadeira, ordem, assadeiras(nome, unidades_por_assadeira, ativo)';"
+        },
+        {
+          "file": "src/app/api/estoque/item/route.ts",
+          "line": 51,
+          "type": "literal_string",
+          "snippet": "'unidades',"
+        },
+        {
+          "file": "src/app/api/options/generic/route.ts",
+          "line": 27,
+          "type": "select_relation",
+          "snippet": "selectQuery = `${baseFields}, unidades (nome_resumido)`;"
+        },
+        {
+          "file": "src/app/api/options/generic/route.ts",
+          "line": 30,
+          "type": "select_relation",
+          "snippet": "selectQuery = `${baseFields}, unidades (nome_resumido)`;"
+        },
+        {
+          "file": "src/app/api/ordens-producao/route.ts",
+          "line": 15,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/app/api/ordens-producao/[id]/route.ts",
+          "line": 14,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/app/realizado/saidas/page.tsx",
+          "line": 15,
+          "type": "literal_string",
+          "snippet": "const PRIMARY_ORDER: Array<keyof SaidaQuantidade> = ['caixas', 'pacotes', 'unidades', 'kg'];"
+        },
+        {
+          "file": "src/components/CreatePedidoModal/usePedidoItemModoEntrada.ts",
+          "line": 5,
+          "type": "literal_string",
+          "snippet": "export type ModoEntradaQuantidade = 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/components/FormControls/SelectRemoteAutocomplete.tsx",
+          "line": 70,
+          "type": "dynamic_url",
+          "snippet": "baseUrl = `/api/options/generic?table=unidades&labelField=nome_resumido${extraParam}`;"
+        },
+        {
+          "file": "src/components/Insumos/InsumoModal.tsx",
+          "line": 225,
+          "type": "literal_string",
+          "snippet": "stage=\"unidades\""
+        },
+        {
+          "file": "src/components/MetaEmbalagem/MetaEmbalagemBatchModal.tsx",
+          "line": 14,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/components/OrdensProducao/useOrdemProducaoForm.ts",
+          "line": 61,
+          "type": "literal_string",
+          "snippet": "unidades: order.modoQuantidade === 'unidades' ? order.unidades : 0,"
+        },
+        {
+          "file": "src/components/ProducaoModal.tsx",
+          "line": 47,
+          "type": "literal_string",
+          "snippet": "modoQuantidade?: 'assadeiras' | 'unidades';"
+        },
+        {
+          "file": "src/components/Saidas/NovaSaidaModal.tsx",
+          "line": 341,
+          "type": "literal_string",
+          "snippet": "{(['caixas', 'pacotes', 'unidades', 'kg'] as Array<keyof SaidaQuantidade>).map("
+        },
+        {
+          "file": "src/components/Saidas/SaidasRealizadoModal.tsx",
+          "line": 382,
+          "type": "literal_string",
+          "snippet": "{(['caixas', 'pacotes', 'unidades', 'kg'] as Array<"
+        },
+        {
+          "file": "src/domain/assadeiras/assadeira-resolver.ts",
+          "line": 67,
+          "type": "select_relation",
+          "snippet": "'assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)',"
+        },
+        {
+          "file": "src/domain/assadeiras/assadeira-resolver.ts",
+          "line": 113,
+          "type": "select_relation",
+          "snippet": "'assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)',"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 18,
+          "type": "select_relation",
+          "snippet": "'categoria_id, peso_g, assadeira_id, unidades_por_assadeira, assadeiras(nome, unidades_por_assadeira, ativo)';"
+        },
+        {
+          "file": "src/domain/embalagem/embalagem-lote-modal.test.ts",
+          "line": 30,
+          "type": "literal_string",
+          "snippet": "dimensao: 'unidades',"
+        },
+        {
+          "file": "src/domain/embalagem/embalagem-lote-modal.ts",
+          "line": 30,
+          "type": "literal_string",
+          "snippet": "if (meta.unidades > 0) return 'unidades';"
+        },
+        {
+          "file": "src/domain/ordens-producao/ordem-assadeira-display.ts",
+          "line": 11,
+          "type": "literal_string",
+          "snippet": "if (modo === 'unidades' || !input.assadeiraId) return 'sem';"
+        },
+        {
+          "file": "src/domain/ordens-producao/ordem-quantidade-label.test.ts",
+          "line": 9,
+          "type": "literal_string",
+          "snippet": "expect(resolveModoQuantidade('', 0)).toBe('unidades');"
+        },
+        {
+          "file": "src/domain/ordens-producao/ordem-quantidade-label.ts",
+          "line": 7,
+          "type": "literal_string",
+          "snippet": "if (!assadeiraId && assadeiras <= 0) return 'unidades';"
+        },
+        {
+          "file": "src/domain/producao-etapa/etapa-quantidade.ts",
+          "line": 11,
+          "type": "literal_string",
+          "snippet": "return assadeiraId ? 'assadeiras' : 'unidades';"
+        },
+        {
+          "file": "src/domain/producao-etapa/painel-dashboard-adapter.test.ts",
+          "line": 46,
+          "type": "literal_string",
+          "snippet": "ordem({ modoQuantidade: 'unidades', pedido: { assadeiras: 0, unidades: 100 } }),"
+        },
+        {
+          "file": "src/domain/producao-etapa/painel-ordem-builder.test.ts",
+          "line": 102,
+          "type": "literal_string",
+          "snippet": "expect(item.modoQuantidade).toBe('unidades');"
+        },
+        {
+          "file": "src/domain/realizado/embalagem-group-by-produto.ts",
+          "line": 41,
+          "type": "literal_string",
+          "snippet": "export function hasEmbalagemQuantity(item: Pick<EmbalagemGroupRow, 'caixas' | 'pacotes' | 'unidades' | 'kg'>): boolean {"
+        },
+        {
+          "file": "src/domain/realizado/etapa-painel-adapter.test.ts",
+          "line": 43,
+          "type": "literal_string",
+          "snippet": "'unidades',"
+        },
+        {
+          "file": "src/domain/realizado/producao-draft-changes.ts",
+          "line": 3,
+          "type": "literal_string",
+          "snippet": "const QTY_FIELDS = ['caixas', 'pacotes', 'unidades', 'kg'] as const;"
+        },
+        {
+          "file": "src/domain/types/painel-etapa.ts",
+          "line": 4,
+          "type": "literal_string",
+          "snippet": "export type ModoQuantidadePainelEtapa = 'assadeiras' | 'unidades';"
+        },
+        {
+          "file": "src/features/stock-dashboard/components/NewStockDialog.tsx",
+          "line": 372,
+          "type": "literal_string",
+          "snippet": "{(['caixas', 'pacotes', 'unidades', 'kg'] as Array<"
+        },
+        {
+          "file": "src/features/stock-dashboard/components/StockAdjustmentDialog.tsx",
+          "line": 111,
+          "type": "literal_string",
+          "snippet": "{(['caixas', 'pacotes', 'unidades', 'kg'] as Array<"
+        },
+        {
+          "file": "src/features/stock-dashboard/components/StockOutflowDialog.tsx",
+          "line": 358,
+          "type": "literal_string",
+          "snippet": "{(['caixas', 'pacotes', 'unidades', 'kg'] as Array<"
+        },
+        {
+          "file": "src/lib/managers/ordens-producao-list-manager.ts",
+          "line": 9,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/lib/services/daily-summary/fermentacao-daily-summary-service.test.ts",
+          "line": 95,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'unidades',"
+        },
+        {
+          "file": "src/lib/services/fermentacao-lote-service.ts",
+          "line": 48,
+          "type": "literal_string",
+          "snippet": "const qty = modo === 'assadeiras' ? quantidade.assadeiras : quantidade.unidades;"
+        },
+        {
+          "file": "src/lib/services/forno-lote-service.ts",
+          "line": 45,
+          "type": "literal_string",
+          "snippet": "const qty = modo === 'assadeiras' ? quantidade.assadeiras : quantidade.unidades;"
+        },
+        {
+          "file": "src/lib/services/meta-embalagem-batch-service.ts",
+          "line": 27,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/lib/services/ordem-producao-meta-service.test.ts",
+          "line": 181,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'unidades',"
+        },
+        {
+          "file": "src/lib/services/ordem-producao-meta-service.ts",
+          "line": 63,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'latas' | 'unidades';"
+        },
+        {
+          "file": "src/lib/services/ordens-producao-painel-service.test.ts",
+          "line": 170,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'unidades',"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 35,
+          "type": "select_relation",
+          "snippet": "'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, un"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 58,
+          "type": "select_relation",
+          "snippet": "'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, un"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 77,
+          "type": "select_relation",
+          "snippet": "'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, un"
+        },
+        {
+          "file": "src/lib/services/products/supabase-product-service.ts",
+          "line": 91,
+          "type": "select_relation",
+          "snippet": "'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, un"
+        },
+        {
+          "file": "src/lib/utils/whatsapp-message-formatter.ts",
+          "line": 230,
+          "type": "literal_string",
+          "snippet": "key: 'unidades' as const,"
+        }
+      ]
+    },
+    {
+      "table": "insumos",
+      "rows": 78,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/insumos-actions.ts",
+          "line": 41,
+          "type": "from_literal",
+          "snippet": ".from('insumos')"
+        },
+        {
+          "file": "src/app/actions/insumos-actions.ts",
+          "line": 71,
+          "type": "from_literal",
+          "snippet": ".from('insumos')"
+        },
+        {
+          "file": "src/app/actions/insumos-actions.ts",
+          "line": 110,
+          "type": "from_literal",
+          "snippet": ".from('insumos')"
+        },
+        {
+          "file": "src/app/actions/insumos-actions.ts",
+          "line": 165,
+          "type": "from_literal",
+          "snippet": ".from('insumos')"
+        },
+        {
+          "file": "src/app/actions/insumos-actions.ts",
+          "line": 193,
+          "type": "from_literal",
+          "snippet": ".from('insumos')"
+        },
+        {
+          "file": "src/app/api/options/generic/route.ts",
+          "line": 25,
+          "type": "literal_string",
+          "snippet": "if (table === 'insumos') {"
+        },
+        {
+          "file": "src/components/FormControls/SelectRemoteAutocomplete.tsx",
+          "line": 72,
+          "type": "dynamic_url",
+          "snippet": "baseUrl = `/api/options/generic?table=insumos&labelField=nome${extraParam}`;"
+        },
+        {
+          "file": "src/components/Receitas/ReceitaModal.tsx",
+          "line": 333,
+          "type": "literal_string",
+          "snippet": "stage=\"insumos\""
+        }
+      ]
+    },
+    {
+      "table": "produto_receitas",
+      "rows": 258,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 48,
+          "type": "from_literal",
+          "snippet": ".from('produto_receitas')"
+        },
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 121,
+          "type": "from_literal",
+          "snippet": ".from('produto_receitas')"
+        },
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 139,
+          "type": "from_literal",
+          "snippet": ".from('produto_receitas')"
+        },
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 149,
+          "type": "from_literal",
+          "snippet": "const { error } = await supabase.from('produto_receitas').insert({"
+        },
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 179,
+          "type": "from_literal",
+          "snippet": ".from('produto_receitas')"
+        },
+        {
+          "file": "src/app/actions/produto-receitas-actions.ts",
+          "line": 198,
+          "type": "from_literal",
+          "snippet": ".from('produto_receitas')"
+        }
+      ]
+    },
+    {
+      "table": "usuario_clientes",
+      "rows": 107,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produto_tags",
+      "rows": 6,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produto_tag_associacoes",
+      "rows": 43,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "producao_etapas_log",
+      "rows": 87,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "producao_massa_ingredientes",
+      "rows": 155,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "caminhoes",
+      "rows": 3,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "pedido_itens_lotes",
+      "rows": 5500,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "fechamentos",
+      "rows": 35,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "distribuidor_precos_revenda",
+      "rows": 104,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "parceiros_indicadores",
+      "rows": 2,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "whatsapp_pedido_sessao",
+      "rows": 22,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "cadastro_hamburgueria_comentarios",
+      "rows": 34,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "vendedores",
+      "rows": 2,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "cobranca_whatsapp_envios",
+      "rows": 450,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produto_familias",
+      "rows": 18,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produto_familia_tags",
+      "rows": 4,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "produto_familia_tag_associacoes",
+      "rows": 16,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "clube_pontos_transacoes",
+      "rows": 23,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "clube_beneficios",
+      "rows": 3,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "clube_resgates",
+      "rows": 0,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "clube_config",
+      "rows": 7,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "veiculos_logistica",
+      "rows": 6,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "roteiros_entrega",
+      "rows": 75,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "roteiro_veiculos",
+      "rows": 242,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "roteiro_paradas",
+      "rows": 306,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "whatsapp_pedido_mensagem",
+      "rows": 118,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "usuario_papeis",
+      "rows": 108,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "assadeiras",
+      "rows": 10,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/assadeiras-actions.ts",
+          "line": 32,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/app/actions/assadeiras-actions.ts",
+          "line": 62,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/app/actions/assadeiras-actions.ts",
+          "line": 98,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/app/actions/assadeiras-actions.ts",
+          "line": 127,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 63,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/app/realizado/fermentacao/page.tsx",
+          "line": 448,
+          "type": "literal_string",
+          "snippet": "modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}"
+        },
+        {
+          "file": "src/app/realizado/forno/page.tsx",
+          "line": 448,
+          "type": "literal_string",
+          "snippet": "modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}"
+        },
+        {
+          "file": "src/components/ProdutosConfig/AssadeiraStatusBadge.tsx",
+          "line": 15,
+          "type": "literal_string",
+          "snippet": "count === 1 ? 'assadeira' : 'assadeiras';"
+        },
+        {
+          "file": "src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx",
+          "line": 6,
+          "type": "literal_string",
+          "snippet": "export type ProdutoConfigMenuAction = 'assadeiras';"
+        },
+        {
+          "file": "src/domain/producao-etapa/etapa-quantidade.test.ts",
+          "line": 23,
+          "type": "literal_string",
+          "snippet": "'assadeiras',"
+        },
+        {
+          "file": "src/domain/producao-etapa/painel-dashboard-adapter.test.ts",
+          "line": 19,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'assadeiras',"
+        },
+        {
+          "file": "src/domain/producao-etapa/painel-dashboard-adapter.ts",
+          "line": 8,
+          "type": "literal_string",
+          "snippet": "return ordem.modoQuantidade === 'assadeiras' && ordem.pedido.assadeiras > 0;"
+        },
+        {
+          "file": "src/domain/producao-etapa/painel-ordem-builder.test.ts",
+          "line": 56,
+          "type": "literal_string",
+          "snippet": "expect(item.modoQuantidade).toBe('assadeiras');"
+        },
+        {
+          "file": "src/domain/realizado/etapa-painel-adapter.test.ts",
+          "line": 18,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'assadeiras',"
+        },
+        {
+          "file": "src/domain/realizado/etapa-painel-adapter.ts",
+          "line": 13,
+          "type": "literal_string",
+          "snippet": "if (modo === 'assadeiras') {"
+        },
+        {
+          "file": "src/lib/services/daily-summary/fermentacao-daily-summary-service.test.ts",
+          "line": 22,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'assadeiras',"
+        },
+        {
+          "file": "src/lib/services/daily-summary/forno-daily-summary-service.test.ts",
+          "line": 22,
+          "type": "literal_string",
+          "snippet": "modoQuantidade: 'assadeiras',"
+        },
+        {
+          "file": "src/lib/services/etapa-production-notification.ts",
+          "line": 28,
+          "type": "literal_string",
+          "snippet": "const assadeirasMode = resolveModoQuantidadeEtapa(ordem.assadeiraId) === 'assadeiras';"
+        },
+        {
+          "file": "src/lib/services/ordens-producao-painel-service.ts",
+          "line": 72,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/lib/services/painel-fermentacao-service.ts",
+          "line": 124,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        },
+        {
+          "file": "src/lib/services/painel-forno-service.ts",
+          "line": 124,
+          "type": "from_literal",
+          "snippet": ".from('assadeiras')"
+        }
+      ]
+    },
+    {
+      "table": "produto_assadeiras",
+      "rows": 11,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 81,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 108,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 162,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 195,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 224,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/app/actions/produto-assadeiras-actions.ts",
+          "line": 234,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/domain/assadeiras/assadeira-resolver.ts",
+          "line": 65,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 95,
+          "type": "from_literal",
+          "snippet": "supabase.from('produto_assadeiras').select('produto_id'),"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 143,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 170,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        },
+        {
+          "file": "scripts/migrate-produto-assadeiras-to-excecoes.ts",
+          "line": 35,
+          "type": "from_literal",
+          "snippet": ".from('produto_assadeiras')"
+        }
+      ]
+    },
+    {
+      "table": "cliente_assadeiras",
+      "rows": 0,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "distribuidor_parcelas_permitidas",
+      "rows": 5,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "estoque_consignado_movimentos",
+      "rows": 344,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "carrinhos",
+      "rows": 100,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "cliente_assadeira_bloqueios",
+      "rows": 4,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "omie_webhook_eventos",
+      "rows": 545,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "notas_fiscais",
+      "rows": 529,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "boletos",
+      "rows": 483,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "nota_fiscal_pedido",
+      "rows": 473,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "nota_fiscal_fechamento",
+      "rows": 14,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "whatsapp_notificacao_tipos",
+      "rows": 27,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "whatsapp_notificacao_log",
+      "rows": 1101,
+      "classification": "no_reference",
+      "evidences": []
+    },
+    {
+      "table": "estoque_saldos",
+      "rows": 97,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 62,
+          "type": "from_literal",
+          "snippet": ".from('estoque_saldos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 77,
+          "type": "from_literal",
+          "snippet": ".from('estoque_saldos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 97,
+          "type": "from_literal",
+          "snippet": ".from('estoque_saldos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 163,
+          "type": "from_literal",
+          "snippet": ".from('estoque_saldos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 182,
+          "type": "from_literal",
+          "snippet": ".from('estoque_saldos')"
+        }
+      ]
+    },
+    {
+      "table": "estoque_movimentos",
+      "rows": 1650,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 122,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 133,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 195,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 212,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 267,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 289,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        },
+        {
+          "file": "src/data/estoque/EstoqueRepository.ts",
+          "line": 309,
+          "type": "from_literal",
+          "snippet": ".from('estoque_movimentos')"
+        }
+      ]
+    },
+    {
+      "table": "embalagem_lotes",
+      "rows": 667,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 104,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 118,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 131,
+          "type": "from_literal",
+          "snippet": "const { error } = await this.supabase.from('embalagem_lotes').delete().eq('id', id);"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 145,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 175,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 200,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 231,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 256,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 295,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 319,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 338,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        },
+        {
+          "file": "src/data/embalagem/EmbalagemLoteRepository.ts",
+          "line": 358,
+          "type": "from_literal",
+          "snippet": ".from('embalagem_lotes')"
+        }
+      ]
+    },
+    {
+      "table": "ordens_producao",
+      "rows": 308,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/api/duplicate/embalagem-pedido/route.ts",
+          "line": 24,
+          "type": "from_literal",
+          "snippet": ".from('ordens_producao')"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 107,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 124,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 144,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 180,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 208,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | const { error } = await this.supabase.from(ORDENS_PRODUCAO_TABLE).delete().eq('i"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 217,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 242,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 255,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 273,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 289,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 329,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 351,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "src/data/producao/OrdemProducaoRepository.ts",
+          "line": 372,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        },
+        {
+          "file": "scripts/backfill-ordens-producao-assadeiras.ts",
+          "line": 97,
+          "type": "from_constant",
+          "snippet": "ORDENS_PRODUCAO_TABLE → 'ordens_producao' | .from(ORDENS_PRODUCAO_TABLE)"
+        }
+      ]
+    },
+    {
+      "table": "categoria_assadeira_regras",
+      "rows": 12,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 97,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 137,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 187,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 203,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/app/actions/categoria-assadeira-regras-actions.ts",
+          "line": 251,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/domain/assadeiras/assadeira-resolver.ts",
+          "line": 111,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 97,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        },
+        {
+          "file": "src/domain/assadeiras/produto-assadeira-resumo-manager.ts",
+          "line": 204,
+          "type": "from_literal",
+          "snippet": ".from('categoria_assadeira_regras')"
+        }
+      ]
+    },
+    {
+      "table": "etiquetas_geradas",
+      "rows": 80,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/etiquetas/EtiquetasGeradasRepository.ts",
+          "line": 21,
+          "type": "from_literal",
+          "snippet": ".from('etiquetas_geradas')"
+        },
+        {
+          "file": "src/data/etiquetas/EtiquetasGeradasRepository.ts",
+          "line": 43,
+          "type": "from_literal",
+          "snippet": ".from('etiquetas_geradas')"
+        },
+        {
+          "file": "src/data/etiquetas/EtiquetasGeradasRepository.ts",
+          "line": 63,
+          "type": "from_literal",
+          "snippet": "const { error } = await this.supabase.from('etiquetas_geradas').insert({"
+        }
+      ]
+    },
+    {
+      "table": "fermentacao_lotes",
+      "rows": 0,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/producao-etapa/FermentacaoLoteRepository.ts",
+          "line": 70,
+          "type": "from_literal",
+          "snippet": ".from('fermentacao_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FermentacaoLoteRepository.ts",
+          "line": 84,
+          "type": "from_literal",
+          "snippet": ".from('fermentacao_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FermentacaoLoteRepository.ts",
+          "line": 99,
+          "type": "from_literal",
+          "snippet": ".from('fermentacao_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FermentacaoLoteRepository.ts",
+          "line": 128,
+          "type": "from_literal",
+          "snippet": "const { error } = await this.supabase.from('fermentacao_lotes').delete().eq('id', id);"
+        },
+        {
+          "file": "src/data/producao-etapa/FermentacaoLoteRepository.ts",
+          "line": 142,
+          "type": "from_literal",
+          "snippet": ".from('fermentacao_lotes')"
+        }
+      ]
+    },
+    {
+      "table": "forno_lotes",
+      "rows": 0,
+      "classification": "used_explicit",
+      "evidences": [
+        {
+          "file": "src/data/producao-etapa/FornoLoteRepository.ts",
+          "line": 67,
+          "type": "from_literal",
+          "snippet": ".from('forno_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FornoLoteRepository.ts",
+          "line": 81,
+          "type": "from_literal",
+          "snippet": ".from('forno_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FornoLoteRepository.ts",
+          "line": 96,
+          "type": "from_literal",
+          "snippet": ".from('forno_lotes')"
+        },
+        {
+          "file": "src/data/producao-etapa/FornoLoteRepository.ts",
+          "line": 125,
+          "type": "from_literal",
+          "snippet": "const { error } = await this.supabase.from('forno_lotes').delete().eq('id', id);"
+        },
+        {
+          "file": "src/data/producao-etapa/FornoLoteRepository.ts",
+          "line": 139,
+          "type": "from_literal",
+          "snippet": ".from('forno_lotes')"
+        }
+      ]
+    }
+  ]
+}
