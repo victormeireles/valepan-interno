@@ -7,7 +7,7 @@ import { Database } from '@/types/database';
 
 type TipoReceita = Database['public']['Enums']['tipo_receita'];
 
-const PRODUTOS_PATH = '/produtos/receitas';
+const PRODUTOS_PATH = '/config/produtos';
 
 interface LinkReceitaPayload {
   produtoId: string;

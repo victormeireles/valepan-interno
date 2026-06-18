@@ -19,16 +19,28 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     description: 'Regras de uso e capacidade por produto',
   },
   {
-    href: '/config/tipos-estoque',
-    label: 'Tipos de estoque',
-    icon: 'warehouse',
-    description: 'Categorias e unidades de estoque',
-  },
-  {
     href: '/config/produtos',
     label: 'Produtos',
     icon: 'inventory_2',
     description: 'Produtos e relação com assadeiras',
+  },
+  {
+    href: '/config/insumos',
+    label: 'Insumos',
+    icon: 'inventory',
+    description: 'Matérias-primas e custos unitários',
+  },
+  {
+    href: '/config/receitas',
+    label: 'Receitas',
+    icon: 'menu_book',
+    description: 'Receitas de massa, brilho, confeito e mais',
+  },
+  {
+    href: '/config/tipos-estoque',
+    label: 'Tipos de estoque',
+    icon: 'warehouse',
+    description: 'Categorias e unidades de estoque',
   },
   {
     href: '/config/whatsapp',

@@ -106,9 +106,9 @@ export default function ProdutoAssadeirasConfigModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative bg-white w-full md:max-w-2xl md:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col"
+        className="relative bg-white w-full md:max-w-2xl md:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col min-w-0"
       >
-        <div className="border-b border-gray-100 px-6 py-5 flex items-start justify-between gap-4 shrink-0">
+        <div className="bg-gray-50/60 border-b border-gray-100 px-6 py-5 flex items-start justify-between gap-4 shrink-0">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Assadeiras
@@ -116,7 +116,7 @@ export default function ProdutoAssadeirasConfigModal({
             <h2 id={titleId} className="text-xl font-bold text-gray-900 truncate">
               {produto.nome}
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed">
               Vínculos aqui são exceções à regra de categoria + peso.
             </p>
           </div>
@@ -124,15 +124,49 @@ export default function ProdutoAssadeirasConfigModal({
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 shrink-0"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 shrink-0 transition-colors"
           >
-            <span className="material-icons" aria-hidden="true">
+            <span className="material-icons text-xl" aria-hidden="true">
               close
             </span>
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+        {!isLoadingLinks && hasExcecoes && (
+          <div className="px-6 py-4 border-b border-gray-100 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              disabled={isDeleting}
+              className="min-h-11 px-4 py-2.5 text-sm font-semibold text-rose-700 bg-white border border-rose-200 rounded-xl hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+            >
+              {isDeletingAllLinks ? (
+                <>
+                  <span
+                    className="w-4 h-4 border-2 border-rose-300 border-t-rose-700 rounded-full animate-spin"
+                    aria-hidden="true"
+                  />
+                  Removendo exceções…
+                </>
+              ) : (
+                'Remover todas as exceções'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onAddLink}
+              disabled={isDeleting}
+              className={`${primaryButtonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <span className="material-icons text-base" aria-hidden="true">
+                add
+              </span>
+              Vincular assadeira
+            </button>
+          </div>
+        )}
+
+        <div className="overflow-y-auto overflow-x-hidden flex-1 min-w-0 px-6 py-5 space-y-5">
           {hasInvalidFactor && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Alguns vínculos não têm fator efetivo. Configure pães por assadeira no tipo ou
@@ -155,56 +189,22 @@ export default function ProdutoAssadeirasConfigModal({
           )}
 
           {!isLoadingLinks && hasExcecoes ? (
-            <>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={handleDeleteAll}
-                  disabled={isDeleting}
-                  className="min-h-11 px-4 py-2.5 text-sm font-semibold text-rose-700 bg-white border border-rose-200 rounded-xl hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                >
-                  {isDeletingAllLinks ? (
-                    <>
-                      <span
-                        className="w-4 h-4 border-2 border-rose-300 border-t-rose-700 rounded-full animate-spin"
-                        aria-hidden="true"
-                      />
-                      Removendo exceções…
-                    </>
-                  ) : (
-                    'Remover todas as exceções'
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onAddLink}
-                  disabled={isDeleting}
-                  className={`${primaryButtonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <span className="material-icons text-base" aria-hidden="true">
-                    add
-                  </span>
-                  Vincular assadeira
-                </button>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 overflow-hidden">
-                <ProdutoAssadeiraLinksTable
-                  links={links}
-                  onEdit={onEditLink}
-                  onDelete={onDeleteLink}
-                  deletingLinkId={deletingLinkId}
-                  isDeletingAllLinks={isDeletingAllLinks}
-                />
-                <ProdutoAssadeiraLinksMobileList
-                  links={links}
-                  onEdit={onEditLink}
-                  onDelete={onDeleteLink}
-                  deletingLinkId={deletingLinkId}
-                  isDeletingAllLinks={isDeletingAllLinks}
-                />
-              </div>
-            </>
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <ProdutoAssadeiraLinksTable
+                links={links}
+                onEdit={onEditLink}
+                onDelete={onDeleteLink}
+                deletingLinkId={deletingLinkId}
+                isDeletingAllLinks={isDeletingAllLinks}
+              />
+              <ProdutoAssadeiraLinksMobileList
+                links={links}
+                onEdit={onEditLink}
+                onDelete={onDeleteLink}
+                deletingLinkId={deletingLinkId}
+                isDeletingAllLinks={isDeletingAllLinks}
+              />
+            </div>
           ) : !isLoadingLinks ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
               <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4">

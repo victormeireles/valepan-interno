@@ -59,7 +59,7 @@ export interface ReceitaWithRelations {
   }>;
 }
 
-const RECEITAS_PATH = '/receitas';
+const RECEITAS_PATH = '/config/receitas';
 
 export async function getReceitas(includeInactive = false) {
   const supabase = supabaseClientFactory.createServiceRoleClient();

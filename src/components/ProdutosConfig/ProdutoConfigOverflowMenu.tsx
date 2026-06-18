@@ -3,7 +3,7 @@
 import OverflowMenu from '@/components/OverflowMenu/OverflowMenu';
 import OverflowMenuItem from '@/components/OverflowMenu/OverflowMenuItem';
 
-export type ProdutoConfigMenuAction = 'assadeiras';
+export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas';
 
 type Props = {
   onSelect: (action: ProdutoConfigMenuAction) => void;
@@ -21,6 +21,11 @@ export default function ProdutoConfigOverflowMenu({ onSelect }: Props) {
         icon="bakery_dining"
         label="Assadeiras"
         onClick={() => onSelect('assadeiras')}
+      />
+      <OverflowMenuItem
+        icon="menu_book"
+        label="Receitas"
+        onClick={() => onSelect('receitas')}
       />
     </OverflowMenu>
   );

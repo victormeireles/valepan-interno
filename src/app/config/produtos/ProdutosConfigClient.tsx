@@ -12,9 +12,15 @@ import type {
   ProdutoAssadeiraLink,
   ProdutoComAssadeirasResumo,
 } from '@/domain/assadeiras/produto-assadeira-types';
+import type { ProdutoResumoComReceitas } from '@/app/actions/produto-receitas-actions';
+import type { ProdutoConfigResumo } from '@/domain/produtos/produto-config-resumo';
+import { countReceitasVinculadas } from '@/domain/produtos/produto-config-resumo';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import ProdutoAssadeiraLinkModal from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal';
 import ProdutoAssadeirasConfigModal from '@/components/ProdutosConfig/ProdutoAssadeirasConfigModal';
+import ProdutoReceitasConfigModal, {
+  type ReceitaCatalogoItem,
+} from '@/components/ProdutosConfig/ProdutoReceitasConfigModal';
 import type { ProdutoConfigMenuAction } from '@/components/ProdutosConfig/ProdutoConfigOverflowMenu';
 import ProdutosConfigCategoryTabs, {
   ALL_CATEGORIES_TAB_ID,
@@ -26,8 +32,9 @@ import ProdutosConfigTable, {
 } from '@/components/ProdutosConfig/ProdutosConfigTable';
 
 type Props = {
-  produtos: ProdutoComAssadeirasResumo[];
+  produtos: ProdutoConfigResumo[];
   assadeirasAtivas: Assadeira[];
+  receitasCatalogo: ReceitaCatalogoItem[];
 };
 
 function compareValues(a: unknown, b: unknown): number {
@@ -51,6 +58,7 @@ function sortLinks(links: ProdutoAssadeiraLink[]): ProdutoAssadeiraLink[] {
 export default function ProdutosConfigClient({
   produtos: initialProdutos,
   assadeirasAtivas,
+  receitasCatalogo,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,6 +68,7 @@ export default function ProdutosConfigClient({
   const [sortKey, setSortKey] = useState<ProdutoSortKey>('nome');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [assadeirasModalOpen, setAssadeirasModalOpen] = useState(false);
+  const [receitasModalOpen, setReceitasModalOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [activeProdutoId, setActiveProdutoId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<ProdutoAssadeiraLink | undefined>();
@@ -85,7 +94,15 @@ export default function ProdutosConfigClient({
 
   const updateProdutoResumo = useCallback((resumo: ProdutoComAssadeirasResumo) => {
     setProdutos((prev) =>
-      prev.map((item) => (item.id === resumo.id ? resumo : item)),
+      prev.map((item) =>
+        item.id === resumo.id
+          ? {
+              ...resumo,
+              receitasVinculadas: item.receitasVinculadas,
+              receitasVinculadasCount: item.receitasVinculadasCount,
+            }
+          : item,
+      ),
     );
   }, []);
 
@@ -104,10 +121,21 @@ export default function ProdutosConfigClient({
   useEffect(() => {
     const produtoId = searchParams.get('produto');
     const config = searchParams.get('config');
-    if (produtoId && config === 'assadeiras' && produtos.some((p) => p.id === produtoId)) {
+    if (!produtoId || !produtos.some((p) => p.id === produtoId)) return;
+
+    if (config === 'assadeiras') {
       setActiveProdutoId(produtoId);
+      setReceitasModalOpen(false);
       setAssadeirasModalOpen(true);
       void loadLinksForProduto(produtoId);
+      return;
+    }
+
+    if (config === 'receitas') {
+      setActiveProdutoId(produtoId);
+      setAssadeirasModalOpen(false);
+      setLinkModalOpen(false);
+      setReceitasModalOpen(true);
     }
   }, [searchParams, produtos, loadLinksForProduto]);
 
@@ -153,6 +181,7 @@ export default function ProdutosConfigClient({
   };
 
   const openAssadeirasModal = (produtoId: string) => {
+    setReceitasModalOpen(false);
     setActiveProdutoId(produtoId);
     setAssadeirasModalOpen(true);
     syncUrl(produtoId, 'assadeiras');
@@ -167,10 +196,46 @@ export default function ProdutosConfigClient({
     syncUrl(null, null);
   };
 
+  const openReceitasModal = (produtoId: string) => {
+    setAssadeirasModalOpen(false);
+    setLinkModalOpen(false);
+    setActiveProdutoId(produtoId);
+    setReceitasModalOpen(true);
+    syncUrl(produtoId, 'receitas');
+  };
+
+  const closeReceitasModal = () => {
+    setReceitasModalOpen(false);
+    setActiveProdutoId(null);
+    syncUrl(null, null);
+  };
+
+  const handleReceitasUpdated = (
+    produtoId: string,
+    receitasVinculadas: ProdutoResumoComReceitas['receitas_vinculadas'],
+  ) => {
+    setProdutos((prev) =>
+      prev.map((item) =>
+        item.id === produtoId
+          ? {
+              ...item,
+              receitasVinculadas,
+              receitasVinculadasCount: countReceitasVinculadas(receitasVinculadas),
+            }
+          : item,
+      ),
+    );
+    router.refresh();
+    setToast('Receitas atualizadas');
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const handleMenuSelect = (produtoId: string, action: ProdutoConfigMenuAction) => {
     if (action === 'assadeiras') {
       openAssadeirasModal(produtoId);
+      return;
     }
+    openReceitasModal(produtoId);
   };
 
   const handleSaved = (
@@ -258,6 +323,10 @@ export default function ProdutosConfigClient({
   return (
     <div className="space-y-4">
       <ConfigPageHeader title="Configuração de Produtos" icon="inventory_2" />
+
+      <p className="text-sm text-gray-600 -mt-2">
+        Gerencie assadeiras e receitas vinculadas a cada produto.
+      </p>
 
       {toast && (
         <div
@@ -390,6 +459,14 @@ export default function ProdutosConfigClient({
               onSaved={handleSaved}
             />
           </ProdutoAssadeirasConfigModal>
+
+          <ProdutoReceitasConfigModal
+            isOpen={receitasModalOpen}
+            produto={activeProduto}
+            receitasCatalogo={receitasCatalogo}
+            onClose={closeReceitasModal}
+            onUpdated={handleReceitasUpdated}
+          />
         </>
       )}
     </div>

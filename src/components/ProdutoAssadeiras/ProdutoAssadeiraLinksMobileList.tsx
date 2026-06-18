@@ -23,7 +23,7 @@ export default function ProdutoAssadeiraLinksMobileList({
 }: Props) {
   return (
     <div className="md:hidden divide-y divide-gray-100">
-      {links.map((link, index) => {
+      {links.map((link) => {
         const isDeletingThis =
           isDeletingAllLinks || deletingLinkId === link.id;
         const isRowBusy = isDeletingAllLinks || deletingLinkId != null;
@@ -39,11 +39,6 @@ export default function ProdutoAssadeiraLinksMobileList({
                 <span className="text-xs font-medium text-gray-500 tabular-nums">
                   Ordem {link.ordem}
                 </span>
-                {index === 0 && (
-                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                    Principal
-                  </span>
-                )}
               </div>
               <h3 className="font-semibold text-gray-900">{link.assadeira_nome}</h3>
               {!link.assadeira_ativo && (

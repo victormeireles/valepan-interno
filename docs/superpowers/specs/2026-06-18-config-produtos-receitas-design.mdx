@@ -1,0 +1,209 @@
+# Design: Receitas por Produto em `/config/produtos`
+
+**Data:** 2026-06-18  
+**Status:** Aprovado pelo stakeholder  
+**Depende de:** Migração Insumos/Receitas para config (`2026-06-18-config-insumos-receitas-design.mdx`)
+
+## Contexto
+
+A tela legada `/produtos/receitas` gerencia vínculos `produto_receitas` (6 tipos: massa, brilho, confeito, antimofo, embalagem, caixa) via matriz de colunas e `EditModal`. É o último item da seção **Cadastros** no menu lateral.
+
+`/config/produtos` já gerencia assadeiras por produto: coluna com badge, menu ⋮ → modal `ProdutoAssadeirasConfigModal`, deep link `?produto=ID&config=assadeiras`.
+
+**Objetivo:** incorporar gestão de receitas na mesma tela de produtos, remover `/produtos/receitas` e eliminar a seção Cadastros do menu.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Onde fica | `/config/produtos` — mesma tela, nova coluna + ação |
+| Coluna Receitas | Tag com **número** de receitas vinculadas (ativas) — ex. `3 receitas` |
+| Tooltip | Hover/focus lista quais (tipo + nome + quantidade) |
+| Status parcial/completo | **Não** — produto pode ter só alguns tipos; contagem basta |
+| Ação | Menu ⋮ → item **Receitas** → modal config |
+| Modal | Novo `ProdutoReceitasConfigModal` no padrão `ProdutoAssadeirasConfigModal` |
+| Lógica de vínculo | Reutilizar actions existentes (`linkReceitaAoProduto`, `updateProdutoReceita`, `unlinkProdutoReceita`) |
+| Deep link | `?produto={id}&config=receitas` |
+| Menu lateral | Remover seção **Cadastros** inteira |
+| Rota antiga | Remover `/produtos/receitas` **sem redirect** |
+| Hub `/config` | Sem nova entrada — produtos já existe |
+
+## Fora de escopo
+
+- Redirect de `/produtos/receitas`
+- Nova rota dedicada (`/config/produtos-receitas`)
+- Matriz de 6 colunas na listagem principal
+- Indicadores de “completo/parcial/pendente” para receitas
+- Alterar regras de negócio dos vínculos (1 receita por tipo por produto)
+
+## UX — listagem
+
+### Tabela desktop
+
+| Nome | Assadeiras | Receitas | Ações |
+|------|------------|----------|-------|
+
+- **Receitas:** `ProdutoReceitasCountBadge`
+  - `0 receitas` — cinza neutro
+  - `N receitas` — neutro (sem verde/amarelo de status)
+  - Tooltip: uma linha por vínculo ativo — `{Tipo}: {nome da receita} ({quantidade})`
+  - Acessível: `aria-label` descritivo; tooltip também via `title` para fallback
+
+### Lista mobile
+
+Por produto, abaixo de `AssadeiraStatusBadge`:
+- Mesmo badge de contagem + tooltip
+
+### Menu de ações
+
+`ProdutoConfigOverflowMenu`:
+- Assadeiras (`bakery_dining`) — existente
+- Receitas (`menu_book`) — novo
+
+`ProdutoConfigMenuAction`: `'assadeiras' | 'receitas'`
+
+## UX — modal `ProdutoReceitasConfigModal`
+
+Espelhar estrutura de `ProdutoAssadeirasConfigModal`:
+
+1. Overlay escuro + painel `rounded-2xl`, max-width ~lg/xl
+2. Header: ícone `menu_book`, nome do produto, botão fechar
+3. Corpo scrollável com **6 seções** (uma por `tipo_receita`):
+   - Massa, Brilho, Confeito, Antimofo, Embalagem, Caixa
+4. Por seção (`ProdutoReceitaTipoSection`):
+   - Label do tipo + texto de ajuda (helpers do `EditModal` legado)
+   - Select de receita (opções filtradas por tipo, só ativas)
+   - Input quantidade (`quantidade_por_produto`)
+   - Se já vinculado: pré-preencher select + quantidade
+   - Botões: **Salvar** (tipo) e **Remover vínculo** (se existir)
+5. Feedback de loading/erro por seção ou global
+6. Ao salvar/remover: chamar actions → toast no client pai → `router.refresh()` → atualizar contagem na lista
+
+**Não** usar `DashboardHeader` nem layout legado do `EditModal`.
+
+## Dados
+
+### SSR — `config/produtos/page.tsx`
+
+```ts
+const [produtos, assadeirasAtivas, produtosReceitas, receitas] = await Promise.all([
+  getProdutosComAssadeiras(),
+  getAssadeirasAtivas(),
+  getProdutosComReceitas(),
+  getReceitas(true),
+]);
+```
+
+Passar ao client:
+- `produtos` + mapa de receitas por `produto.id` (de `ProdutoResumoComReceitas`)
+- `receitasCatalogo`: `{ id, nome, tipo, ativo }[]` para selects do modal
+
+### Tipo fundido (client)
+
+Estender resumo na montagem (server ou client):
+
+```ts
+type ProdutoConfigResumo = ProdutoComAssadeirasResumo & {
+  receitasVinculadasCount: number;
+  receitasVinculadas: ProdutoResumoComReceitas['receitas_vinculadas'];
+};
+```
+
+- `receitasVinculadasCount` = quantidade de chaves em `receitas_vinculadas` com `ativo === true`
+- Tooltip derivado das entradas ativas
+
+### Actions
+
+`src/app/actions/produto-receitas-actions.ts`:
+- `PRODUTOS_PATH`: `/produtos/receitas` → `/config/produtos`
+- Tipos `ProdutoResumoComReceitas` permanecem (interface inline em `'use server'` — client importa com `import type`)
+
+## URL state
+
+Espelhar assadeiras em `ProdutosConfigClient`:
+
+| Param | Valores | Efeito |
+|-------|---------|--------|
+| `produto` | UUID | produto ativo |
+| `config` | `assadeiras` \| `receitas` | qual modal abrir |
+
+`useEffect` no mount: se `config=receitas` → abrir `ProdutoReceitasConfigModal`.
+
+Fechar modal → limpar params via `router.replace('/config/produtos')` (preservando outros filtros se houver).
+
+## Navegação — estado final
+
+```
+Meta de Produção → ...
+Produção Realizada → ...
+Estoque → ...
+Configurações → hub (inclui Produtos)
+```
+
+Seção **Cadastros** removida.
+
+## Arquitetura de arquivos
+
+### Novos
+
+```
+src/components/ProdutosConfig/
+  ProdutoReceitasCountBadge.tsx
+  ProdutoReceitasConfigModal.tsx
+  ProdutoReceitaTipoSection.tsx   # opcional se modal < 400 linhas sem extrair
+```
+
+### Modificados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/app/config/produtos/page.tsx` | Carregar receitas + fundir dados |
+| `src/app/config/produtos/ProdutosConfigClient.tsx` | Estado modal receitas, merge resumo, handlers |
+| `src/components/ProdutosConfig/ProdutosConfigTable.tsx` | Coluna Receitas |
+| `src/components/ProdutosConfig/ProdutosConfigMobileList.tsx` | Badge receitas |
+| `src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx` | Item Receitas |
+| `src/components/Config/ConfigPageHeader` area | Descrição menciona receitas |
+| `src/app/actions/produto-receitas-actions.ts` | `revalidatePath('/config/produtos')` |
+| `src/components/Navigation.tsx` | Remover seção Cadastros |
+| `src/components/ConditionalNavigation.tsx` | Remover `isProdutoReceitasPage` |
+
+### Removidos
+
+```
+src/app/produtos/receitas/
+  page.tsx
+  ProdutoReceitasClient.tsx
+  EditModal.tsx
+```
+
+## Ordem de implementação sugerida
+
+1. `revalidatePath` + tipos/helpers de merge no server page
+2. `ProdutoReceitasCountBadge`
+3. Coluna + mobile + overflow menu
+4. `ProdutoReceitasConfigModal` (+ seção por tipo)
+5. Wire-up em `ProdutosConfigClient` + deep link
+6. Remover rota legada + Cadastros no menu
+7. `grep` por `/produtos/receitas` no `src/`
+8. Testes manuais + `npm run build`
+
+## Testes manuais
+
+- [ ] `/config/produtos` — coluna Receitas com contagem correta
+- [ ] Tooltip mostra tipos/nomes ao hover/focus
+- [ ] ⋮ → Receitas abre modal no padrão config
+- [ ] Vincular, editar quantidade e remover por tipo
+- [ ] Deep link `?produto=X&config=receitas` abre modal
+- [ ] Salvar atualiza badge sem reload manual
+- [ ] Assadeiras continua funcionando (regressão)
+- [ ] `/produtos/receitas` → 404
+- [ ] Menu sem seção Cadastros
+- [ ] Mobile: badge + menu usáveis (touch ≥ 44px)
+
+## Riscos e mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| `ProdutosConfigClient` > 500 linhas | Extrair hooks `useProdutoReceitasModal` / `useProdutoAssadeirasModal` |
+| Duas fontes de produtos (assadeiras vs receitas) | Merge por `id` no SSR; tipos explícitos |
+| EditModal grande | Substituir por seções menores; não portar UI legada |

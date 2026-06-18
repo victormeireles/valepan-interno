@@ -125,7 +125,7 @@ export async function createInsumo(params: CreateInsumoParams) {
       throw error;
     }
 
-    revalidatePath('/insumos');
+    revalidatePath('/config/insumos');
     return { success: true, data };
   } catch (error) {
     console.error('Erro ao criar insumo:', error);
@@ -176,7 +176,7 @@ export async function updateInsumo(params: UpdateInsumoParams) {
       throw error;
     }
 
-    revalidatePath('/insumos');
+    revalidatePath('/config/insumos');
     return { success: true, data };
   } catch (error) {
     console.error('Erro ao atualizar insumo:', error);
@@ -196,7 +196,7 @@ export async function deleteInsumo(id: string) {
 
     if (error) throw error;
 
-    revalidatePath('/insumos');
+    revalidatePath('/config/insumos');
     return { success: true };
   } catch (error) {
     console.error('Erro ao deletar insumo:', error);
