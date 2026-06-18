@@ -98,6 +98,12 @@ export async function PUT(
     if (c < 0 || p < 0 || u < 0 || k < 0) {
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
     }
+    if (c + p + u + k <= 0) {
+      return NextResponse.json(
+        { error: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).' },
+        { status: 400 },
+      );
+    }
 
     const fotos: EmbalagemLoteFotos = {
       pacoteFotoUrl: pacoteFotoUrl || undefined,

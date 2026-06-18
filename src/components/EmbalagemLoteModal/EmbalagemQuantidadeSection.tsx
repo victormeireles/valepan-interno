@@ -96,7 +96,7 @@ export default function EmbalagemQuantidadeSection({
           disabled={loading || isSubmitting}
           className="mt-3 min-h-11 px-3 py-2 text-sm font-medium rounded-md border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50"
         >
-          Preencher restante
+          Preencher quantidade
         </button>
       )}
     </section>

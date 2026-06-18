@@ -98,7 +98,7 @@ export default function EmbalagemLoteModalShell({
         cliente={cliente}
         congelado={congelado}
         pedidoMetaOriginal={pedidoMetaOriginal}
-        pedidoQuantidades={pedidoQuantidades}
+        pedidoQuantidades={isNewLote ? undefined : pedidoQuantidades}
         onClose={onRequestClose}
         closeDisabled={closeDisabled}
       />
