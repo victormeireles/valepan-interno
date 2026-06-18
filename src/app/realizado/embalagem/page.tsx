@@ -300,10 +300,10 @@ export default function ProducaoEmbalagemPage() {
       pacotes: 0,
       unidades: 0,
       kg: 0,
-      pedidoCaixas: Math.max(0, pedido.pedido.caixas - pedido.produzido.caixas),
-      pedidoPacotes: Math.max(0, pedido.pedido.pacotes - pedido.produzido.pacotes),
-      pedidoUnidades: Math.max(0, pedido.pedido.unidades - pedido.produzido.unidades),
-      pedidoKg: Math.max(0, pedido.pedido.kg - pedido.produzido.kg),
+      pedidoCaixas: pedido.pedido.caixas,
+      pedidoPacotes: pedido.pedido.pacotes,
+      pedidoUnidades: pedido.pedido.unidades,
+      pedidoKg: pedido.pedido.kg,
       metaCaixas: pedido.pedido.caixas,
       metaPacotes: pedido.pedido.pacotes,
       metaUnidades: pedido.pedido.unidades,
@@ -576,7 +576,7 @@ export default function ProducaoEmbalagemPage() {
                             {g.pedidos.map((pedido) =>
                               renderPedidoAccordion(pedido, g.key, {
                                 ...accordionOpts,
-                                showNovoLote: false,
+                                showNovoLote: true,
                               }),
                             )}
                           </ClientGroup>

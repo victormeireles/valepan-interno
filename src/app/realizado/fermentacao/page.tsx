@@ -258,11 +258,7 @@ export default function ProducaoFermentacaoPage() {
           detalhesProduzido={detalhesProduzido}
           detalhesMeta={detalhesMeta}
           horarioProducao={undefined}
-          onNovoLote={
-            allowNovoLote && ordem.produzido < ordem.aProduzir
-              ? () => handleNovoLote(ordem)
-              : undefined
-          }
+          onNovoLote={allowNovoLote ? () => handleNovoLote(ordem) : undefined}
           isNovoLoteLoading={creatingLoteOrdemId === ordem.ordemProducaoId}
           renderLots={() =>
             ordem.lotes.map((lote) => renderLote(ordem, loteToPainelItemEtapa(ordem, lote)))
@@ -408,7 +404,7 @@ export default function ProducaoFermentacaoPage() {
                   <ThreeColumnLayout
                     groups={itensFinalizados}
                     columnCount={1}
-                    renderGroup={(group) => renderOrdemItem(group, false)}
+                    renderGroup={(group) => renderOrdemItem(group, true)}
                   />
                 </div>
               )}
