@@ -1,0 +1,146 @@
+# Design: Remover Fila de Produção e Meta: Embalagem
+
+**Data:** 2026-06-17  
+**Status:** Aprovado pelo stakeholder  
+**Substitui uso de:** `/producao/fila`, `/producao/etapas/*`, `/meta/embalagem`  
+**Depende de:** `2026-06-17-ordens-producao-tela-design.mdx` (planejamento migrado para `/ordens-producao`)
+
+## Contexto
+
+As telas de **Fila de Produção** (Planejamento, Massa, Fermentação, Forno, Embalagem) e **Meta: Embalagem** não são mais usadas no dia a dia. O planejamento passou para **Ordens de Produção** (`/ordens-producao`). O registro operacional continua em **Produção Realizada** (Fermentação, Forno, Embalagem).
+
+**Objetivo:** remover essas telas da navegação e apagar código morto exclusivo delas, sem quebrar Ordens de Produção nem Realizado: Embalagem.
+
+## Decisão de escopo (validada)
+
+| Tema | Decisão |
+|------|---------|
+| Profundidade | **B** — remover telas + código morto; sem redirects de URL antiga |
+| Fila de Produção | Remover seção inteira do menu e todas as rotas/componentes exclusivos |
+| Meta: Embalagem | Remover tela, link no menu e card na home |
+| Ordens de Produção | Manter; é o substituto do planejamento |
+| Realizado (Fermentação, Forno, Embalagem) | Manter |
+| Importação em lote (CSV) | Manter — usada em Ordens de Produção via `OrdensProducaoBatchModal` |
+| Banco de dados | Sem migration; tabelas legadas e histórico permanecem |
+
+## O que remover
+
+### Navegação e home
+
+- Menu lateral: seção **Fila de Produção** (5 itens: Planejamento, Massa, Fermentação, Forno, Embalagem)
+- Menu lateral: link **Meta: Embalagem**
+- Home (`src/app/page.tsx`): card **Meta: Embalagem** na seção Meta de Produção
+- `ConditionalNavigation.tsx`: remover flag `isProducaoPage` (não haverá mais rotas `/producao/*`)
+
+### Rotas (apagar diretórios)
+
+| Rota | Caminho |
+|------|---------|
+| Fila | `src/app/producao/fila/` |
+| Etapas massa/fermentação | `src/app/producao/etapas/` |
+
+Após remoção, `src/app/producao/` pode ficar vazio — remover o diretório se não restar conteúdo.
+
+| Rota | Caminho |
+|------|---------|
+| Meta embalagem | `src/app/meta/embalagem/page.tsx` |
+
+### Server actions (exclusivos da fila)
+
+- `src/app/actions/producao-actions.ts` — fila legada (`_ordens_producao_legacy`)
+- `src/app/actions/producao-massa-actions.ts`
+- `src/app/actions/producao-etapas-actions.ts`
+
+### Componentes exclusivos da fila
+
+Pasta inteira `src/components/Producao/`:
+
+- `NovaOrdemModal.tsx`
+- `MassaLotesModal.tsx`
+- `ProductionQueueClient.tsx` (em `app/producao/fila/`)
+- `ProductionStepLayout.tsx`
+- `ProductionStepHeader.tsx`
+- `ProductionProgressCard.tsx`
+- `ProductionProgressBar.tsx`
+- `ProductionFormActions.tsx`
+- `ProductionErrorAlert.tsx`
+
+### Domínio e dados legados da fila
+
+- `src/domain/production/` (managers, calculators)
+- `src/data/production/` (repositories legados)
+- `src/domain/types/producao-massa.ts`
+
+### Componentes exclusivos da meta embalagem
+
+| Arquivo | Motivo |
+|---------|--------|
+| `src/components/EditModal.tsx` | Usado apenas em `/meta/embalagem` |
+| `src/components/EtiquetaModal.tsx` | Usado apenas em `/meta/embalagem` |
+| `src/components/CreatePedidoModal.tsx` | Re-export; só a tela meta usava o modal |
+| `src/components/CreatePedidoModalAssadeiras.tsx` | Só a tela meta usava o modal |
+
+## O que manter
+
+| Artefato | Motivo |
+|----------|--------|
+| `/ordens-producao` e todo o módulo `OrdensProducao/` | Planejamento atual |
+| `MetaEmbalagemBatchModal`, `meta-embalagem-batch-service`, `domain/embalagem/meta-embalagem-batch.*` | Importação CSV em Ordens de Produção |
+| `OrdensProducaoBatchModal` | Wrapper do batch modal |
+| `CreatePedidoModal/usePedidoItemModoEntrada.ts` | Usado em `useOrdemProducaoForm` |
+| `/realizado/embalagem`, `/realizado/fermentacao`, `/realizado/forno` | Fluxos operacionais ativos |
+| APIs `/api/painel/embalagem`, `/api/embalagem/pedido/batch/*`, etc. | Realizado + batch |
+| `OrdemProducaoRepository`, `ordem-producao-meta-service` | Domínio atual de ordens |
+| Tabelas `_ordens_producao_legacy`, `producao_etapas_log` | Dados históricos; sem DROP |
+
+## Fluxo após remoção
+
+```
+Meta de Produção
+  └── Ordens de Produção (/ordens-producao)
+        └── Importação em lote (batch modal)
+
+Produção Realizada
+  ├── Fermentação
+  ├── Forno
+  └── Embalagem → /api/painel/embalagem
+```
+
+Não existe mais entrada no app para `/producao/fila` nem `/meta/embalagem`. URLs antigas retornam 404 (sem redirect).
+
+## Ordem de implementação sugerida
+
+1. Remover links do menu e card da home
+2. Apagar rotas e componentes de página
+3. Apagar actions, `components/Producao/`, `domain/production/`, `data/production/`
+4. Apagar componentes órfãos da meta (`EditModal`, `EtiquetaModal`, modais de pedido)
+5. Limpar `ConditionalNavigation`
+6. Buscar imports órfãos (`grep` + build)
+7. Rodar testes afetados
+
+## Verificação
+
+| Check | Critério |
+|-------|----------|
+| Build | `npm run build` sem erros de TypeScript |
+| Menu | Sem "Fila de Produção" e sem "Meta: Embalagem" |
+| Home | Sem card Meta: Embalagem |
+| Ordens | `/ordens-producao` abre; importação CSV funciona |
+| Realizado | `/realizado/embalagem` carrega pedidos do dia |
+| 404 | `/producao/fila`, `/meta/embalagem` retornam 404 |
+
+## Fora de escopo
+
+- Redirects de URLs antigas para `/ordens-producao`
+- Remoção de Realizado: Embalagem
+- Migration ou DROP de tabelas no Supabase
+- Card de Ordens de Produção na home (pode ser feito em tarefa separada)
+- Remoção de `/meta/producao` (não estava no menu; não mencionado pelo stakeholder)
+
+## Riscos e mitigação
+
+| Risco | Mitigação |
+|-------|-----------|
+| Bookmark de URL antiga | Aceito (opção B); stakeholder ciente de 404 |
+| Import quebrado em Ordens | Manter batch modal e `usePedidoItemModoEntrada` |
+| Testes referenciando fila | Atualizar ou remover testes órfãos no mesmo PR |
