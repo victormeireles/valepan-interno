@@ -61,6 +61,17 @@ describe('FornoLoteService', () => {
     expect(mockInsert).toHaveBeenCalled();
   });
 
+  it('rejeita lote com quantidade zero', async () => {
+    const { fornoLoteService } = await import('./forno-lote-service');
+
+    await expect(
+      fornoLoteService.criarLotePorOrdem({
+        ordemProducaoId: 'o1',
+        quantidade: { assadeiras: 0, unidades: 0 },
+      }),
+    ).rejects.toThrow(/maior que zero/i);
+  });
+
   it('atualiza lote mesmo quando o total passa da ordem', async () => {
     const { fornoLoteService } = await import('./forno-lote-service');
     const result = await fornoLoteService.atualizarLote('l1', {

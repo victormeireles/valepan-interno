@@ -61,6 +61,17 @@ describe('FermentacaoLoteService', () => {
     expect(mockInsert).toHaveBeenCalled();
   });
 
+  it('rejeita lote com quantidade zero', async () => {
+    const { fermentacaoLoteService } = await import('./fermentacao-lote-service');
+
+    await expect(
+      fermentacaoLoteService.criarLotePorOrdem({
+        ordemProducaoId: 'o1',
+        quantidade: { assadeiras: 0, unidades: 0 },
+      }),
+    ).rejects.toThrow(/maior que zero/i);
+  });
+
   it('atualiza lote mesmo quando o total passa da ordem', async () => {
     const { fermentacaoLoteService } = await import('./fermentacao-lote-service');
     const result = await fermentacaoLoteService.atualizarLote('l1', {
