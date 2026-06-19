@@ -1,31 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import RealizadoHeader from '@/components/Realizado/RealizadoHeader';
-import ThreeColumnLayout from '@/components/Realizado/ThreeColumnLayout';
-import ProductCompactCard from '@/components/Realizado/ProductCompactCard';
-import ClientGroup from '@/components/Realizado/ClientGroup';
-import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
-import { SaidaSheetRecord, SaidaQuantidade } from '@/domain/types/saidas';
-import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import SaidasRealizadoModal from '@/components/Saidas/SaidasRealizadoModal';
 import NovaSaidaModal from '@/components/Saidas/NovaSaidaModal';
-import { RealizadoGroup } from '@/domain/types/realizado';
-
-const PRIMARY_ORDER: Array<keyof SaidaQuantidade> = ['caixas', 'pacotes', 'unidades', 'kg'];
-
-const UNIT_LABEL: Record<keyof SaidaQuantidade, string> = {
-  caixas: 'cx',
-  pacotes: 'pct',
-  unidades: 'un',
-  kg: 'kg',
-};
-
-type PainelItem = SaidaSheetRecord;
+import {
+  buildSaidasItemLookup,
+  buildSaidasWorklistData,
+  SAIDAS_ETAPA_CONFIG,
+} from '@/domain/saidas/saidas-etapa-adapter';
+import {
+  saidasToDashboardItems,
+  sumSaidaCaixas,
+} from '@/domain/saidas/saidas-dashboard-adapter';
+import { SaidaSheetRecord, SaidaQuantidade } from '@/domain/types/saidas';
+import { useLatestDataDate } from '@/hooks/useLatestDataDate';
+import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 
 type RealizadoContext = {
   rowId: string;
-  item: PainelItem;
+  item: SaidaSheetRecord;
 };
 
 type NovaSaidaPayload = {
@@ -41,37 +35,9 @@ function getVisibleErrorMessage(error: unknown, fallback: string): string | null
   return /fail(?:ed)? to fetch/i.test(message) ? null : message;
 }
 
-function getPrimaryQuantity(meta: SaidaQuantidade, realizado: SaidaQuantidade) {
-  for (const key of PRIMARY_ORDER) {
-    const metaValue = meta[key] || 0;
-    const realizadoValue = realizado[key] || 0;
-    if (metaValue > 0 || realizadoValue > 0) {
-      return {
-        unit: UNIT_LABEL[key],
-        metaValue,
-        realizadoValue,
-      };
-    }
-  }
-
-  const fallbackMeta =
-    (meta.caixas || 0) + (meta.pacotes || 0) + (meta.unidades || 0) + (meta.kg || 0);
-  const fallbackRealizado =
-    (realizado.caixas || 0) +
-    (realizado.pacotes || 0) +
-    (realizado.unidades || 0) +
-    (realizado.kg || 0);
-
-  return {
-    unit: 'un',
-    metaValue: fallbackMeta,
-    realizadoValue: fallbackRealizado,
-  };
-}
-
 export default function RealizadoSaidasPage() {
   const latestDate = useLatestDataDate('saidas');
-  const [items, setItems] = useState<PainelItem[]>([]);
+  const [items, setItems] = useState<SaidaSheetRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(latestDate);
@@ -100,7 +66,7 @@ export default function RealizadoSaidasPage() {
       }
     };
 
-    loadOptions();
+    void loadOptions();
   }, []);
 
   useEffect(() => {
@@ -114,7 +80,7 @@ export default function RealizadoSaidasPage() {
         const res = await fetch(`/api/painel/saidas?date=${selectedDate}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        setItems((data.items || []) as PainelItem[]);
+        setItems((data.items || []) as SaidaSheetRecord[]);
       } catch (error) {
         setMessage(getVisibleErrorMessage(error, 'Erro ao carregar o painel'));
       } finally {
@@ -122,20 +88,22 @@ export default function RealizadoSaidasPage() {
       }
     };
 
-    load();
+    void load();
   }, [selectedDate]);
 
-  const refreshPainel = async () => {
+  const refreshPainel = useCallback(async () => {
     try {
       const res = await fetch(`/api/painel/saidas?date=${selectedDate}`);
       const data = await res.json();
-      if (res.ok) setItems((data.items || []) as PainelItem[]);
+      if (res.ok) setItems((data.items || []) as SaidaSheetRecord[]);
     } catch (error) {
       console.error('Erro ao recarregar painel de saídas:', error);
     }
-  };
+  }, [selectedDate]);
 
-  const handleEdit = async (item: PainelItem) => {
+  const itemLookup = useMemo(() => buildSaidasItemLookup(items), [items]);
+
+  const handleEdit = useCallback(async (item: SaidaSheetRecord) => {
     if (!item.id) {
       setMessage('Este item não pode ser editado');
       return;
@@ -148,7 +116,7 @@ export default function RealizadoSaidasPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar dados da saída');
 
-      const enrichedItem: PainelItem = {
+      const enrichedItem: SaidaSheetRecord = {
         ...item,
         realizado: data.data.realizado,
         meta: data.data.meta,
@@ -165,7 +133,15 @@ export default function RealizadoSaidasPage() {
       setModalLoading(false);
       setLoadingCardId(null);
     }
-  };
+  }, []);
+
+  const handleEditById = useCallback(
+    (itemId: string) => {
+      const item = itemLookup.get(itemId);
+      if (item) void handleEdit(item);
+    },
+    [itemLookup, handleEdit],
+  );
 
   const handleSaveRealizado = async ({
     realizado,
@@ -268,7 +244,6 @@ export default function RealizadoSaidasPage() {
           produto,
           observacao,
           meta: quantidade,
-          // Pula notificação se houver foto (será enviada no PUT)
           skipNotification: !!foto,
         }),
       });
@@ -282,14 +257,15 @@ export default function RealizadoSaidasPage() {
           throw new Error('Saída criada, mas falhou ao localizar a linha para anexar foto');
         }
 
-        const rows = (painelData.items || []) as PainelItem[];
+        const rows = (painelData.items || []) as SaidaSheetRecord[];
         const candidate = [...rows]
           .reverse()
-          .find((row) =>
-            row.data === data &&
-            row.cliente === cliente &&
-            row.produto === produto &&
-            (!row.saidaUpdatedAt || !row.fotoUrl)
+          .find(
+            (row) =>
+              row.data === data &&
+              row.cliente === cliente &&
+              row.produto === produto &&
+              (!row.saidaUpdatedAt || !row.fotoUrl),
           );
 
         if (!candidate?.id) {
@@ -333,150 +309,64 @@ export default function RealizadoSaidasPage() {
     }
   };
 
-  const groupedItems = useMemo((): RealizadoGroup[] => {
-    const groups: { [key: string]: PainelItem[] } = {};
-    
-    items.forEach(item => {
-      const data = item.data || selectedDate;
-      const obs = item.observacao?.trim() || '';
-      const groupKey = `${item.cliente}|${data}|${obs}`;
-      
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(item);
-    });
-    
-    const groupsArray = Object.entries(groups).map(([groupKey, groupItems]) => {
-      const [cliente, data, obs] = groupKey.split('|');
-      
-      const sortedItems = [...groupItems].sort((a, b) =>
-        a.createdAt.localeCompare(b.createdAt),
-      );
-      
-      const minRowId = sortedItems[0]?.createdAt ?? '';
-      
-      return {
-        key: groupKey,
-        cliente,
-        dataFabricacao: data,
-        observacao: obs || undefined,
-        items: sortedItems as unknown as RealizadoGroup['items'],
-        minRowId,
-      };
-    });
-    
-    const sortedGroups = groupsArray.sort((a, b) =>
-      (a.minRowId ?? '').localeCompare(b.minRowId ?? ''),
-    );
-    
-    // Remover minRowId do objeto final (usado apenas para ordenação)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return sortedGroups.map(({ minRowId, ...group }) => group);
-  }, [items, selectedDate]);
+  const totalCaixas = useMemo(() => sumSaidaCaixas(items), [items]);
+
+  const worklist = useMemo(
+    () =>
+      buildSaidasWorklistData({
+        items,
+        selectedDate,
+        loadingCardId,
+      }),
+    [items, selectedDate, loadingCardId],
+  );
+
+  const dashboardItems = useMemo(() => saidasToDashboardItems(items), [items]);
+
+  const groupCount = worklist.gruposAtivos.length;
 
   return (
-    <div className="min-h-screen text-white" style={{ backgroundColor: '#4b4943' }}>
-      <RealizadoHeader
-        title="Realizado: Saídas"
-        icon="📤"
+    <>
+      <RealizadoEtapa
+        config={SAIDAS_ETAPA_CONFIG}
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
+        toolbar={{
+          produzido: totalCaixas,
+          meta: 0,
+          falta: 0,
+          progressoPct: 0,
+          metaAtingida: false,
+        }}
+        loading={loading}
+        refreshing={false}
+        message={message}
+        worklist={worklist}
+        dashboardSaidas={{
+          items: dashboardItems,
+          totalCaixas,
+          comparisonPrev: null,
+          comparisonWeek: {
+            date: addCalendarDaysISO(selectedDate, -7),
+            items: [],
+          },
+        }}
+        footer={{
+          grupos: groupCount,
+          pedidos: items.length,
+          produzidoLabel: '',
+          metaLabel: '',
+          customLine: `${groupCount} grupo${groupCount !== 1 ? 's' : ''} • ${items.length} item${items.length !== 1 ? 's' : ''}`,
+        }}
+        callbacks={{
+          onNovoLote: handleEditById,
+          onEditLote: handleEditById,
+          onDeleteLote: () => {},
+        }}
+        onExtraAction={() => setNovaSaidaOpen(true)}
       />
 
-      <div className="p-4">
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={() => setNovaSaidaOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors text-sm font-medium"
-          >
-            + Nova Saída
-          </button>
-        </div>
-
-        {message && (
-          <div
-            className={`mb-4 p-4 rounded-md border ${
-              message.toLowerCase().includes('sucesso')
-                ? 'bg-green-800/30 border-green-600 text-green-100'
-                : 'bg-red-800/30 border-red-600 text-red-100'
-            }`}
-          >
-            {message}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-16 text-gray-200 text-xl">Carregando...</div>
-        ) : (
-          <ThreeColumnLayout
-            groups={groupedItems}
-            renderGroup={(group) => {
-              const saidasGroup = group as RealizadoGroup & {
-                cliente?: string;
-                dataFabricacao?: string;
-                observacao?: string;
-              };
-              
-              return (
-                <ClientGroup
-                  cliente={saidasGroup.cliente}
-                  dataFabricacao={saidasGroup.dataFabricacao}
-                  observacao={saidasGroup.observacao}
-                  selectedDate={selectedDate}
-                >
-                  {group.items.map((item, idx) => {
-                    const saidaItem = item as unknown as PainelItem;
-                    const itemKey = `${saidaItem.produto}-${saidaItem.id ?? idx}`;
-                    const isItemLoading = loadingCardId === saidaItem.id;
-
-                    const detalhesProduzido = QuantityBreakdown.buildEntries([
-                      { quantidade: saidaItem.realizado.caixas, unidade: 'cx' },
-                      { quantidade: saidaItem.realizado.pacotes, unidade: 'pct' },
-                      { quantidade: saidaItem.realizado.unidades, unidade: 'un' },
-                      { quantidade: saidaItem.realizado.kg, unidade: 'kg' },
-                    ]);
-
-                    const detalhesMeta = QuantityBreakdown.buildEntries([
-                      { quantidade: saidaItem.meta.caixas, unidade: 'cx' },
-                      { quantidade: saidaItem.meta.pacotes, unidade: 'pct' },
-                      { quantidade: saidaItem.meta.unidades, unidade: 'un' },
-                      { quantidade: saidaItem.meta.kg, unidade: 'kg' },
-                    ]);
-
-                    const primary = getPrimaryQuantity(saidaItem.meta, saidaItem.realizado);
-
-                    return (
-                      <ProductCompactCard
-                        key={itemKey}
-                        produto={saidaItem.produto}
-                        produzido={primary.realizadoValue}
-                        aProduzir={primary.metaValue}
-                        unidade={primary.unit}
-                        hasPhoto={Boolean(saidaItem.fotoUrl)}
-                        photoColor="white"
-                        onPhotoClick={() => {
-                          if (saidaItem.fotoUrl) window.open(saidaItem.fotoUrl, '_blank');
-                        }}
-                        onClick={() => handleEdit(saidaItem)}
-                        isLoading={isItemLoading}
-                        detalhesProduzido={detalhesProduzido}
-                        detalhesMeta={detalhesMeta}
-                      />
-                    );
-                  })}
-                </ClientGroup>
-              );
-            }}
-          />
-        )}
-
-        <footer className="mt-6 text-center text-gray-200 text-sm">
-          {groupedItems.length} grupo{groupedItems.length !== 1 ? 's' : ''} • {items.length} item{items.length !== 1 ? 's' : ''}
-        </footer>
-      </div>
-
-      {modalContext && (
+      {modalContext ? (
         <SaidasRealizadoModal
           isOpen={modalOpen}
           onClose={() => {
@@ -494,7 +384,7 @@ export default function RealizadoSaidasPage() {
           produto={modalContext.item.produto}
           rowId={modalContext.rowId}
         />
-      )}
+      ) : null}
 
       <NovaSaidaModal
         isOpen={novaSaidaOpen}
@@ -514,7 +404,6 @@ export default function RealizadoSaidasPage() {
         produtosOptions={produtosOptions}
         loading={novaSaidaLoading}
       />
-    </div>
+    </>
   );
 }
-

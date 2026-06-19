@@ -55,6 +55,17 @@ export function loteToPainelItemEtapa(
   };
 }
 
+export function getOrdemEtapaFilterStatus(
+  ordem: PainelOrdemEtapa,
+): 'pendente' | 'andamento' | 'concluido' {
+  const percentual =
+    ordem.aProduzir > 0 ? (ordem.produzido / ordem.aProduzir) * 100 : 0;
+
+  if (percentual >= 90) return 'concluido';
+  if (ordem.produzido === 0) return 'pendente';
+  return 'andamento';
+}
+
 export function splitOrdensPorFinalizacao(ordens: PainelOrdemEtapa[]): {
   naoFinalizados: PainelOrdemEtapa[];
   finalizados: PainelOrdemEtapa[];
@@ -63,10 +74,7 @@ export function splitOrdensPorFinalizacao(ordens: PainelOrdemEtapa[]): {
   const finalizados: PainelOrdemEtapa[] = [];
 
   for (const ordem of ordens) {
-    const percentual =
-      ordem.aProduzir > 0 ? (ordem.produzido / ordem.aProduzir) * 100 : 0;
-
-    if (percentual >= 90) {
+    if (getOrdemEtapaFilterStatus(ordem) === 'concluido') {
       finalizados.push(ordem);
     } else {
       naoFinalizados.push(ordem);

@@ -12,6 +12,10 @@ import EtiquetaManualFormFields, {
 } from '@/components/Etiquetas/EtiquetaManualFormFields';
 import EtiquetaModalToggleField from '@/components/Etiquetas/EtiquetaModalToggleField';
 import { loadEtiquetaPrefillData } from '@/components/Etiquetas/etiqueta-prefill-loader';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
+import { Toast } from '@/components/ui/Toast';
 import {
   extractCalendarDate,
   formatISODateBr,
@@ -37,19 +41,7 @@ type EtiquetaGerarModalProps = {
   onSuccess?: () => void;
 };
 
-const overlayClass = 'fixed inset-0 z-50 flex items-center justify-center p-4';
-const backdropClass = 'absolute inset-0 bg-black/50';
-const panelClass =
-  'relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto';
-const inputClass =
-  'min-h-11 w-full rounded-lg border border-gray-300 px-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
-const readOnlyClass =
-  'min-h-11 w-full rounded-lg border border-gray-300 px-3 bg-gray-50 text-gray-600 cursor-not-allowed';
-const labelClass = 'text-sm font-medium text-gray-700';
-const primaryButtonClass =
-  'min-h-11 inline-flex flex-1 items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
-const secondaryButtonClass =
-  'min-h-11 inline-flex flex-1 items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 bg-white text-gray-900 rounded-xl font-medium hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50';
+const readOnlyInputClass = 'bg-stone-50 text-text-muted cursor-not-allowed';
 
 export default function EtiquetaGerarModal({
   isOpen,
@@ -286,9 +278,9 @@ export default function EtiquetaGerarModal({
   };
 
   return (
-    <div className={overlayClass}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className={backdropClass}
+        className="absolute inset-0 bg-stone-900/50"
         onClick={handleBackdropClick}
         aria-hidden="true"
       />
@@ -296,44 +288,42 @@ export default function EtiquetaGerarModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="etiqueta-modal-title"
-        className={panelClass}
+        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-border-default bg-surface p-6 shadow-control"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="etiqueta-modal-title" className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <span className="material-icons" aria-hidden>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2
+            id="etiqueta-modal-title"
+            className="flex items-center gap-2 text-xl font-semibold text-text-strong"
+          >
+            <span className="material-icons text-accent" aria-hidden>
               label
             </span>
             {title}
           </h2>
-          <button
-            type="button"
+          <IconButton
+            icon="close"
+            label="Fechar"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg focus-visible:ring-2 focus-visible:ring-blue-500"
-            aria-label="Fechar"
             disabled={submitting}
-          >
-            <span className="material-icons" aria-hidden>
-              close
-            </span>
-          </button>
+          />
         </div>
 
-        {error && (
-          <div
-            role="alert"
-            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm"
-          >
+        {error ? (
+          <Toast tone="error" className="mb-4">
             {error}
-          </div>
-        )}
+          </Toast>
+        ) : null}
 
-        {loadingPrefill && mode !== 'manual' && (
-          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900" />
+        {loadingPrefill && mode !== 'manual' ? (
+          <div className="mb-4 flex items-center gap-2 text-sm text-text-muted">
+            <span
+              className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-stone-200 border-t-accent motion-reduce:animate-none"
+              aria-hidden
+            />
             Carregando configurações...
           </div>
-        )}
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'manual' ? (
@@ -344,91 +334,71 @@ export default function EtiquetaGerarModal({
             />
           ) : (
             <>
-              <div>
-                <label className={`block mb-1 ${labelClass}`}>Produto</label>
-                <input
-                  type="text"
-                  value={initialValues?.produtoNome ?? ''}
-                  readOnly
-                  className={readOnlyClass}
-                />
-              </div>
-              <div>
-                <label className={`block mb-1 ${labelClass}`}>Tipo de estoque</label>
-                <input
-                  type="text"
-                  value={tipoEstoqueNome}
-                  readOnly
-                  className={readOnlyClass}
-                />
-              </div>
-              <div>
-                <label className={`block mb-1 ${labelClass}`}>Data de fabricação</label>
-                <input
-                  type="text"
-                  value={formatISODateBr(dataFabricacao)}
-                  readOnly
-                  className={readOnlyClass}
-                />
-              </div>
+              <Input
+                label="Produto"
+                value={initialValues?.produtoNome ?? ''}
+                readOnly
+                className={readOnlyInputClass}
+              />
+              <Input
+                label="Tipo de estoque"
+                value={tipoEstoqueNome}
+                readOnly
+                className={readOnlyInputClass}
+              />
+              <Input
+                label="Data de fabricação"
+                value={formatISODateBr(dataFabricacao)}
+                readOnly
+                className={readOnlyInputClass}
+              />
             </>
           )}
 
           {(produto || mode === 'manual') && (
             <>
-              <div>
-                <label htmlFor="nome-etiqueta" className={`block mb-1 ${labelClass}`}>
-                  Nome na etiqueta
-                </label>
-                <input
-                  id="nome-etiqueta"
-                  type="text"
-                  value={nomeEtiqueta}
-                  onChange={(e) => setNomeEtiqueta(e.target.value)}
-                  maxLength={120}
-                  className={inputClass}
-                  disabled={isBusy || !produto}
-                />
-              </div>
+              <Input
+                id="nome-etiqueta"
+                label="Nome na etiqueta"
+                type="text"
+                value={nomeEtiqueta}
+                onChange={(e) => setNomeEtiqueta(e.target.value)}
+                maxLength={120}
+                disabled={isBusy || !produto}
+              />
 
-              <div>
-                <label className={`block mb-1 ${labelClass}`}>Lote</label>
-                <input type="text" value={lote} readOnly className={readOnlyClass} />
-              </div>
+              <Input
+                label="Lote"
+                value={String(lote)}
+                readOnly
+                className={readOnlyInputClass}
+              />
 
-              <div>
-                <label htmlFor="dias-validade" className={`block mb-1 ${labelClass}`}>
-                  Dias de validade (ambiente)
-                </label>
-                <input
-                  id="dias-validade"
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={diasValidade}
-                  onChange={(e) => setDiasValidade(parseInt(e.target.value, 10) || 21)}
-                  className={inputClass}
-                  disabled={isBusy || !produto}
-                />
-              </div>
+              <Input
+                id="dias-validade"
+                label="Dias de validade (ambiente)"
+                type="number"
+                min={1}
+                max={365}
+                value={diasValidade}
+                onChange={(e) => setDiasValidade(parseInt(e.target.value, 10) || 21)}
+                numeric
+                disabled={isBusy || !produto}
+              />
 
-              <div>
-                <label htmlFor="dias-validade-cong" className={`block mb-1 ${labelClass}`}>
-                  Dias de validade (congelado)
-                </label>
-                <input
-                  id="dias-validade-cong"
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={diasValidadeCongelado}
-                  onChange={(e) =>
-                    setDiasValidadeCongelado(parseInt(e.target.value, 10) || 90)
-                  }
-                  className={inputClass}
-                  disabled={isBusy || !produto}
-                />
-              </div>
+              <Input
+                id="dias-validade-cong"
+                label="Dias de validade (congelado)"
+                type="number"
+                min={1}
+                max={365}
+                value={diasValidadeCongelado}
+                onChange={(e) =>
+                  setDiasValidadeCongelado(parseInt(e.target.value, 10) || 90)
+                }
+                numeric
+                disabled={isBusy || !produto}
+              />
 
               <EtiquetaModalToggleField
                 label="Validade congelado"
@@ -447,33 +417,24 @@ export default function EtiquetaGerarModal({
           )}
 
           <div className="flex gap-3 pt-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              fullWidth
               onClick={onClose}
-              className={secondaryButtonClass}
               disabled={submitting}
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className={primaryButtonClass}
+              variant="primary"
+              icon="print"
+              fullWidth
               disabled={isBusy || !produto}
             >
-              {submitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Gerando...
-                </>
-              ) : (
-                <>
-                  <span className="material-icons text-base" aria-hidden>
-                    print
-                  </span>
-                  Gerar e imprimir
-                </>
-              )}
-            </button>
+              {submitting ? 'Gerando...' : 'Gerar e imprimir'}
+            </Button>
           </div>
         </form>
       </div>

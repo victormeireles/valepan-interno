@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import AutocompleteInput from '@/components/FormControls/AutocompleteInput';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 
 export type ManualFormValues = {
   produtoId: string;
@@ -26,11 +28,6 @@ type EtiquetaManualFormFieldsProps = {
   onChange: (values: ManualFormValues) => void;
   disabled?: boolean;
 };
-
-const inputClass =
-  'min-h-11 w-full rounded-lg border border-gray-300 px-3 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
-
-const labelClass = 'text-sm font-medium text-gray-700';
 
 export default function EtiquetaManualFormFields({
   values,
@@ -114,56 +111,41 @@ export default function EtiquetaManualFormFields({
 
   return (
     <div className="space-y-4">
-      <div>
-        <AutocompleteInput
-          label="Produto"
-          value={values.produtoNome}
-          onChange={handleProdutoChange}
-          options={produtoNames}
-          placeholder="Buscar produto..."
-          required
-          strict
-          disabled={disabled || loadingOptions}
-        />
-      </div>
+      <AutocompleteInput
+        label="Produto"
+        value={values.produtoNome}
+        onChange={handleProdutoChange}
+        options={produtoNames}
+        placeholder="Buscar produto..."
+        required
+        strict
+        disabled={disabled || loadingOptions}
+      />
 
-      <div>
-        <label htmlFor="tipo-estoque-select" className={`block mb-1 ${labelClass}`}>
-          Tipo de estoque <span className="text-red-500">*</span>
-        </label>
-        <select
-          id="tipo-estoque-select"
-          value={values.tipoEstoqueId}
-          onChange={(e) => handleTipoChange(e.target.value)}
-          className={inputClass}
-          required
-          disabled={disabled || loadingOptions}
-        >
-          <option value="">Selecione...</option>
-          {tipoOptions.map((tipo) => (
-            <option key={tipo.id} value={tipo.id}>
-              {tipo.nome}
-            </option>
-          ))}
-        </select>
-      </div>
+      <Select
+        id="tipo-estoque-select"
+        label="Tipo de estoque"
+        value={values.tipoEstoqueId}
+        onChange={(e) => handleTipoChange(e.target.value)}
+        required
+        disabled={disabled || loadingOptions}
+        options={[
+          { value: '', label: 'Selecione...' },
+          ...tipoOptions.map((tipo) => ({ value: tipo.id, label: tipo.nome })),
+        ]}
+      />
 
-      <div>
-        <label htmlFor="data-fabricacao" className={`block mb-1 ${labelClass}`}>
-          Data de fabricação <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="data-fabricacao"
-          type="date"
-          value={values.dataFabricacao}
-          onChange={(e) =>
-            onChange({ ...values, dataFabricacao: e.target.value })
-          }
-          className={inputClass}
-          required
-          disabled={disabled}
-        />
-      </div>
+      <Input
+        id="data-fabricacao"
+        label="Data de fabricação"
+        type="date"
+        value={values.dataFabricacao}
+        onChange={(e) =>
+          onChange({ ...values, dataFabricacao: e.target.value })
+        }
+        required
+        disabled={disabled}
+      />
     </div>
   );
 }

@@ -2,8 +2,15 @@
 
 import type { ProductionStatus } from '@/domain/types/realizado';
 import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
+import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { ReactNode, useId, useState } from 'react';
-import ProductCompactCard from './ProductCompactCard';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Card } from '@/components/ui/Card';
+import {
+  embalagemStatusStyles,
+  getEmbalagemProductionStatus,
+} from './embalagem/embalagem-status';
 
 export interface EmbalagemProductAccordionProps {
   instanceId: string;
@@ -16,10 +23,8 @@ export interface EmbalagemProductAccordionProps {
   detalhesMeta: QuantityBreakdownEntry[];
   horarioEmbalagem?: string;
   renderLots: () => ReactNode;
-  /** Farol do card pai (ex.: só vermelho/amarelo na fila não finalizada). */
   productionStatusOverride?: ProductionStatus;
   onNovoLote?: () => void;
-  /** Quando true, exibe spinner no botão + deste card. */
   isNovoLoteLoading?: boolean;
 }
 
@@ -44,97 +49,124 @@ export default function EmbalagemProductAccordion({
 }: EmbalagemProductAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const reactId = useId();
-  const safeInstanceId = sanitizeForHtmlId(instanceId);
-  const panelId = `${safeInstanceId}-lots-${reactId}`;
+  const panelId = `${sanitizeForHtmlId(instanceId)}-lots-${reactId}`;
 
-  const ariaLabel = expanded
-    ? `Recolher lotes de ${produto}`
-    : `Expandir lotes de ${produto}`;
-
-  const trailingActions = (
-    <div className="flex items-center shrink-0">
-      {onNovoLote ? (
-        <button
-          type="button"
-          className="
-            inline-flex items-center justify-center
-            min-h-11 min-w-11 rounded-md text-amber-400
-            hover:bg-gray-700/50
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
-            disabled:opacity-60 disabled:cursor-wait
-          "
-          aria-label={
-            isNovoLoteLoading
-              ? `Abrindo novo lote de ${produto}…`
-              : `Novo lote de ${produto}`
-          }
-          aria-busy={isNovoLoteLoading}
-          disabled={isNovoLoteLoading}
-          onClick={(e) => {
-            e.stopPropagation();
-            onNovoLote();
-          }}
-        >
-          {isNovoLoteLoading ? (
-            <span
-              className="inline-block h-5 w-5 rounded-full border-2 border-amber-400/30 border-t-amber-400 animate-spin motion-reduce:animate-none"
-              aria-hidden
-            />
-          ) : (
-            <span className="material-icons text-2xl" aria-hidden>
-              add
-            </span>
-          )}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="
-          inline-flex items-center justify-center
-          min-h-11 min-w-11 shrink-0 rounded-md text-gray-300
-          hover:bg-gray-700/50
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
-        "
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        aria-label={ariaLabel}
-        onClick={(e) => {
-          e.stopPropagation();
-          setExpanded((v) => !v);
-        }}
-      >
-        <span className="material-icons text-2xl motion-reduce:transition-none" aria-hidden>
-          {expanded ? 'expand_more' : 'chevron_right'}
-        </span>
-      </button>
-    </div>
+  const status = getEmbalagemProductionStatus(
+    somaProduzido,
+    somaAProduzir,
+    productionStatusOverride,
   );
+  const styles = embalagemStatusStyles(status);
+  const pct =
+    somaAProduzir > 0 ? Math.min(100, Math.round((somaProduzido / somaAProduzir) * 100)) : 0;
+
+  const producedBreakdown = new QuantityBreakdown(detalhesProduzido);
+  const targetBreakdown = new QuantityBreakdown(detalhesMeta);
+  const fallbackUnit = unidade ? unidade.toLowerCase() : undefined;
+  const producedLabel = producedBreakdown.format(somaProduzido, fallbackUnit);
+  const targetLabel = targetBreakdown.format(somaAProduzir, fallbackUnit);
 
   return (
-    <div className="flex flex-col gap-1">
-      <ProductCompactCard
-        produto={produto}
-        produzido={somaProduzido}
-        aProduzir={somaAProduzir}
-        unidade={unidade}
-        congelado={congelado}
-        hasPhoto={false}
-        interactive={false}
-        detalhesProduzido={detalhesProduzido}
-        detalhesMeta={detalhesMeta}
-        horarioEmbalagem={horarioEmbalagem}
-        trailingSlot={trailingActions}
-        productionStatusOverride={productionStatusOverride}
-      />
+    <Card padding="none" className="overflow-hidden shadow-control">
       <div
-        id={panelId}
-        role="region"
-        aria-label={`Lotes de ${produto}`}
-        className="border-l border-gray-700 pl-3 ml-1 flex flex-col gap-1"
-        hidden={!expanded}
+        className={[
+          'flex items-center gap-3 border-l-[3px] py-2.5 pr-3',
+          styles.border,
+        ].join(' ')}
       >
-        {expanded ? renderLots() : null}
+        <span
+          className={['ml-[13px] h-[9px] w-[9px] shrink-0 rounded-full', styles.dot].join(' ')}
+          aria-hidden="true"
+        />
+
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="min-w-0 shrink basis-[38%] sm:basis-[42%] sm:max-w-[52%]">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-base font-semibold tracking-[-0.004em] text-text-strong">
+                {produto}
+              </span>
+              {congelado ? (
+                <span
+                  className="material-icons shrink-0 text-base text-sky-500"
+                  title="Congelado"
+                  aria-label="Congelado"
+                >
+                  ac_unit
+                </span>
+              ) : null}
+            </div>
+            {horarioEmbalagem ? (
+              <div className="mt-0.5 flex items-center gap-2 text-text-muted">
+                <span className="material-icons text-[13px] text-stone-400" aria-hidden="true">
+                  schedule
+                </span>
+                <span className="font-mono text-xs tabular-nums">{horarioEmbalagem}</span>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="min-w-0 flex-1 text-right">
+            <p
+              className="truncate font-mono text-sm tabular-nums"
+              title={`${producedLabel} / ${targetLabel}`}
+            >
+              <strong className="text-text-strong">{producedLabel}</strong>
+              <span className="mx-1 text-stone-400">/</span>
+              <span className="text-text-muted">{targetLabel}</span>
+            </p>
+            <div className="mt-1.5 h-[5px] w-full overflow-hidden rounded-full bg-stone-100">
+              <div
+                className={[
+                  'h-full rounded-full transition-[width] duration-[240ms]',
+                  styles.fill,
+                ].join(' ')}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onNovoLote ? (
+            <Button
+              size="md"
+              icon="add"
+              disabled={isNovoLoteLoading}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNovoLote();
+              }}
+              className="shrink-0"
+              aria-label={`Novo lote de ${produto}`}
+            >
+              <span className="max-[520px]:sr-only">Lote</span>
+            </Button>
+          ) : null}
+
+          <IconButton
+            size="md"
+            icon={expanded ? 'expand_more' : 'chevron_right'}
+            label={expanded ? `Recolher lotes de ${produto}` : `Ver lotes de ${produto}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            aria-expanded={expanded}
+            aria-controls={panelId}
+          />
+        </div>
       </div>
-    </div>
+
+      {expanded ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-label={`Lotes de ${produto}`}
+          className="border-t border-stone-100 bg-stone-50 px-3 py-2 pl-[1.625rem]"
+        >
+          {renderLots()}
+        </div>
+      ) : null}
+    </Card>
   );
 }

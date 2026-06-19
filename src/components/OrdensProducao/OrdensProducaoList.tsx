@@ -21,13 +21,14 @@ import OrdemProducaoTableRow from '@/components/OrdensProducao/OrdemProducaoTabl
 import OrdensProducaoTableColGroup from '@/components/OrdensProducao/OrdensProducaoTableColGroup';
 import { useMdViewport } from '@/components/OrdensProducao/use-md-viewport';
 import {
+  ordensProducaoListFooterClass,
   ordensProducaoListScrollClass,
   ordensProducaoMobileListClass,
   ordensProducaoTableBodyClass,
   ordensProducaoTableClass,
-  ordensProducaoTableHeadCellClass,
   ordensProducaoTableHeadClass,
-  ordensProducaoTableQtyHeadClass,
+  ordensProducaoTableHeadProdutoClass,
+  ordensProducaoTableHeadQtyClass,
 } from '@/components/OrdensProducao/ordens-producao-table-layout';
 
 type OrdensProducaoListProps = {
@@ -89,40 +90,25 @@ export default function OrdensProducaoList({
           {isMdViewport ? (
             <table className={ordensProducaoTableClass}>
               <OrdensProducaoTableColGroup />
-              <thead className={`sticky top-0 z-10 ${ordensProducaoTableHeadClass}`}>
+              <thead className={ordensProducaoTableHeadClass}>
                 <tr>
                   <th scope="col" className="w-9 px-1 py-2.5">
                     <span className="sr-only">Reordenar</span>
                   </th>
-                  <th scope="col" className={`${ordensProducaoTableHeadCellClass} text-center`}>
-                    #
+                  <th scope="col" className="w-8 px-1 py-2.5">
+                    <span className="sr-only">Prioridade</span>
                   </th>
-                  <th scope="col" className={ordensProducaoTableHeadCellClass}>
-                    Tipo
-                  </th>
-                  <th scope="col" className={ordensProducaoTableHeadCellClass}>
+                  <th scope="col" className={ordensProducaoTableHeadProdutoClass}>
                     Produto
                   </th>
-                  <th scope="col" className={ordensProducaoTableHeadCellClass}>
-                    Assadeira
+                  <th scope="col" className={ordensProducaoTableHeadQtyClass}>
+                    Latas
                   </th>
-                  <th scope="col" className={ordensProducaoTableQtyHeadClass} title="Latas">
-                    LT
+                  <th scope="col" className={ordensProducaoTableHeadQtyClass}>
+                    Caixas
                   </th>
-                  <th scope="col" className={ordensProducaoTableQtyHeadClass} title="Caixas">
-                    CX
-                  </th>
-                  <th scope="col" className={ordensProducaoTableQtyHeadClass} title="Unidades">
-                    UN
-                  </th>
-                  <th scope="col" className={`${ordensProducaoTableHeadCellClass} text-center`}>
-                    Etq.
-                  </th>
-                  <th
-                    scope="col"
-                    className={`hidden ${ordensProducaoTableHeadCellClass} xl:table-cell`}
-                  >
-                    Obs.
+                  <th scope="col" className={ordensProducaoTableHeadQtyClass}>
+                    Unidades
                   </th>
                   <th scope="col" className="w-11 px-1 py-2.5">
                     <span className="sr-only">Ações</span>
@@ -144,6 +130,13 @@ export default function OrdensProducaoList({
           )}
         </SortableContext>
       </div>
+      <p className={ordensProducaoListFooterClass}>
+        Arraste pela alça{' '}
+        <span className="material-icons align-middle text-sm text-stone-400" aria-hidden="true">
+          drag_indicator
+        </span>{' '}
+        para reordenar a fila de produção.
+      </p>
     </DndContext>
   );
 }

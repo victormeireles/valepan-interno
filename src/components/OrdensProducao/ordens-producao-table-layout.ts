@@ -1,31 +1,28 @@
-/** Tabela desktop: largura total com colunas proporcionais (table-fixed). */
 export const ordensProducaoTableClass = 'w-full table-fixed border-collapse';
 
 export const ordensProducaoTableHeadClass =
-  'border-b border-stone-200 bg-stone-50 text-[11px] font-semibold uppercase tracking-wide text-stone-500';
+  'border-b border-border-default bg-stone-50 text-[11px] font-semibold uppercase tracking-wide text-text-muted';
 
-export const ordensProducaoTableHeadCellClass = 'px-3 py-2.5 text-left';
+export const ordensProducaoTableHeadProdutoClass = 'px-3 py-2.5 text-left';
 
-export const ordensProducaoTableQtyHeadClass =
-  'border-l border-stone-200/80 bg-stone-100/60 px-3 py-2.5 text-right';
+export const ordensProducaoTableHeadQtyClass = 'px-3 py-2.5 text-right';
 
 export const ordensProducaoTableBodyClass = 'divide-y divide-stone-100';
 
 export const ordensProducaoTableRowClass =
-  'group odd:bg-white even:bg-stone-50/50 hover:bg-amber-50/40';
+  'group odd:bg-surface even:bg-stone-50/60 hover:bg-amber-50/60';
 
-export const ordensProducaoTableCellClass =
-  'px-3 py-2.5 align-middle text-sm text-stone-700';
+export const ordensProducaoTableProdutoClass = 'px-3 py-2 align-middle';
 
 export const ordensProducaoTableQtyCellClass =
-  'border-l border-stone-100 px-3 py-2.5 text-right align-middle tabular-nums';
-
-export const ordensProducaoTableProdutoClass =
-  'max-w-0 px-3 py-2.5 align-middle';
+  'px-3 py-2.5 text-right align-middle font-mono tabular-nums text-sm';
 
 export const ordensProducaoTableTextTruncateClass = 'block truncate';
 
 export const ordensProducaoListScrollClass =
-  'max-h-[calc(100dvh-13.5rem)] overflow-y-auto overscroll-contain';
+  'max-h-[calc(100dvh-16rem)] overflow-y-auto overscroll-contain';
 
 export const ordensProducaoMobileListClass = 'divide-y divide-stone-100';
+
+export const ordensProducaoListFooterClass =
+  'border-t border-stone-100 px-4 py-3 text-xs italic text-text-muted';

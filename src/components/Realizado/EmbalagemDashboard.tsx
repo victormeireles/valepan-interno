@@ -2,6 +2,9 @@
 
 import { useMemo, type ReactNode } from 'react';
 import {
+  belowEtapaToolbarStickyTop,
+} from '@/components/ui/page-shell';
+import {
   getBrazilHourFromIso,
   formatWeekdayDayMonthBr,
   formatWeekdayPassadaDayMonthBr,
@@ -106,34 +109,117 @@ function HourAccumSplitColumns({
 }: {
   left: ReactNode;
   right: ReactNode;
-  /** Cabeçalho: compacto ao lado da data; células: metades iguais à largura da coluna. */
   inline?: boolean;
 }) {
   if (inline) {
     return (
       <span className="whitespace-nowrap align-baseline tabular-nums">
-        <span className="border-r border-gray-600/55 pr-1">{left}</span>
+        <span className="border-r border-stone-200 pr-1">{left}</span>
         <span className="pl-1">{right}</span>
       </span>
     );
   }
   return (
-    <div className="flex w-full min-w-0 items-baseline tabular-nums whitespace-nowrap">
-      <div className="min-w-0 flex-1 basis-0 border-r border-gray-600/55 pr-2 text-right">{left}</div>
+    <div className="flex w-full min-w-0 items-baseline whitespace-nowrap tabular-nums">
+      <div className="min-w-0 flex-1 basis-0 border-r border-stone-200 pr-2 text-right">{left}</div>
       <div className="min-w-0 flex-1 basis-0 pl-2 text-left">{right}</div>
     </div>
   );
 }
 
 function HourAccumColumnSubheads() {
-  const subCls =
-    'text-[13px] font-normal leading-snug tracking-normal text-gray-500 sm:text-sm';
+  const subCls = 'text-[11px] font-normal leading-none text-text-muted sm:text-xs';
   return (
     <HourAccumSplitColumns
       inline
       left={<span className={subCls}>hora</span>}
       right={<span className={subCls}>acum.</span>}
     />
+  );
+}
+
+function HourColumnHeader({
+  title,
+  emphasis = 'secondary',
+}: {
+  title: string;
+  emphasis?: 'primary' | 'secondary';
+}) {
+  return (
+    <div className="flex flex-col items-end gap-0.5 leading-tight">
+      <span
+        className={[
+          'text-[13px] leading-snug sm:text-sm',
+          emphasis === 'primary'
+            ? 'font-semibold text-amber-800'
+            : 'font-medium text-text-muted',
+        ].join(' ')}
+      >
+        {title}
+      </span>
+      <HourAccumColumnSubheads />
+    </div>
+  );
+}
+
+function StatCompare({
+  label,
+  value,
+  unit,
+  delta,
+  compact = false,
+  title,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  delta: number | null;
+  compact?: boolean;
+  title?: string;
+}) {
+  if (value === null) return null;
+  const up = (delta ?? 0) >= 0;
+  return (
+    <div
+      className={[
+        'flex min-w-0 items-center gap-2',
+        compact ? 'py-px' : 'justify-between py-1.5',
+      ].join(' ')}
+    >
+      <span
+        title={title}
+        className={[
+          'min-w-0 truncate text-text-muted',
+          compact ? 'flex-1 text-[10px] leading-tight' : 'text-sm',
+        ].join(' ')}
+      >
+        {label}
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1">
+        <span
+          className={[
+            'font-mono tabular-nums text-stone-700',
+            compact ? 'text-[11px]' : 'text-sm',
+          ].join(' ')}
+        >
+          {Math.round(value)} {unit}/h
+        </span>
+        {delta !== null ? (
+          <span
+            className={[
+              'inline-flex items-center font-mono font-semibold tabular-nums',
+              compact ? 'text-[10px]' : 'text-xs',
+              up ? 'text-success' : 'text-danger',
+            ].join(' ')}
+          >
+            <span className="material-icons text-[12px]" aria-hidden="true">
+              {up ? 'arrow_upward' : 'arrow_downward'}
+            </span>
+            {Math.abs(delta)}%
+          </span>
+        ) : null}
+      </span>
+    </div>
   );
 }
 
@@ -150,9 +236,9 @@ function HourAccumPair({
   const cxAcum = cumulativeCaixasUntilHour(map, hour);
   const hourClass =
     emphasis === 'primary'
-      ? 'font-semibold text-amber-200/95'
-      : 'font-medium text-gray-200';
-  const acumClass = emphasis === 'primary' ? 'text-gray-400' : 'text-gray-500';
+      ? 'font-semibold text-amber-800'
+      : 'font-medium text-stone-700';
+  const acumClass = emphasis === 'primary' ? 'text-text-muted' : 'text-stone-400';
   return (
     <div
       aria-label={`${cxHora} caixas nesta hora, ${cxAcum} caixas acumuladas até este intervalo`}
@@ -232,32 +318,55 @@ function PrevisaoMetricCard({
   children,
   className,
   headerAside,
+  dense = false,
 }: {
   icon: ReactNode;
   title: string;
   children: ReactNode;
   className?: string;
   headerAside?: ReactNode;
+  dense?: boolean;
 }) {
   return (
     <div
       role="group"
       aria-label={title}
-      className={`flex min-h-0 min-w-0 items-start gap-2 rounded-lg border border-gray-700/90 bg-gradient-to-br from-gray-900/80 to-gray-900/40 px-2 py-2 ${className ?? ''}`}
+      className={[
+        'flex min-h-0 min-w-0 items-start gap-2 rounded-xl border border-border-default bg-surface shadow-control',
+        dense ? 'px-2.5 py-2' : 'px-3 py-3',
+        className ?? '',
+      ].join(' ')}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-500/12 text-amber-400/95 mt-0.5">
+      <div
+        className={[
+          'mt-px flex shrink-0 items-center justify-center rounded-lg bg-amber-50 text-accent',
+          dense ? 'h-8 w-8' : 'mt-0.5 h-11 w-11 rounded-xl',
+        ].join(' ')}
+      >
         {icon}
       </div>
-      <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 text-[13px] font-semibold uppercase tracking-wide text-gray-500 leading-snug sm:text-sm">
+          <p
+            className={[
+              'min-w-0 flex-1 font-semibold uppercase tracking-wide leading-snug text-text-muted',
+              dense ? 'text-[10px]' : 'text-[13px] sm:text-sm',
+            ].join(' ')}
+          >
             {title}
           </p>
           {headerAside != null ? (
-            <div className="max-w-[min(100%,12rem)] shrink-0 text-right">{headerAside}</div>
+            <div className="max-w-[min(100%,9rem)] shrink-0 text-right">{headerAside}</div>
           ) : null}
         </div>
-        <div className="text-[13px] leading-snug text-gray-100 sm:text-[15px]">{children}</div>
+        <div
+          className={[
+            'leading-snug text-stone-700',
+            dense ? 'text-xs' : 'text-[13px] sm:text-[15px]',
+          ].join(' ')}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -361,7 +470,7 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
     agoraPct = pctNoEixo20a22(nh, nm);
   }
 
-  const tickLineClass = band === 'amanha' ? 'bg-white/50' : 'bg-gray-600/45';
+  const tickLineClass = band === 'amanha' ? 'bg-danger/40' : 'bg-stone-300/70';
 
   const barAriaLabel = [
     ritmoAnterior !== null ? `Ritmo médio ontem ${Math.round(ritmoAnterior)} caixas por hora.` : '',
@@ -395,7 +504,7 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
       <div className="grid w-full min-w-0 grid-cols-3 gap-x-0 gap-y-1.5">
         {rows.map((r) => (
           <div key={`h-${r.key}`} className="min-w-0 px-1 text-center">
-            <span className="text-sm font-semibold uppercase tracking-wide text-gray-400 sm:text-[15px] leading-snug">
+            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted sm:text-[13px] leading-snug">
               {r.label}
             </span>
           </div>
@@ -433,14 +542,14 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
 
           {showAgoraMarker && (
             <div
-              className="absolute top-1/2 z-[2] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-800 bg-white shadow-sm"
+              className="absolute top-1/2 z-[2] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-stone-400 bg-surface shadow-sm"
               style={{ left: `${agoraMarkerPct}%` }}
               title="Agora"
             />
           )}
           {showFillArrow && (
             <div
-              className="pointer-events-none absolute top-1/2 z-[2] -translate-x-[1px] -translate-y-1/2 text-white drop-shadow-sm"
+              className="pointer-events-none absolute top-1/2 z-[2] -translate-x-[1px] -translate-y-1/2 text-stone-700 drop-shadow-sm"
               style={{ left: `${fillArrowPct}%` }}
               aria-hidden
             >
@@ -454,8 +563,8 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
         {rows.map((r) => (
           <div key={r.key} className="min-w-0 px-1 text-center">
             <span
-              className={`text-sm tabular-nums leading-snug sm:text-[15px] ${
-                r.passed ? 'text-gray-600' : 'font-medium text-gray-200'
+              className={`text-xs tabular-nums leading-snug sm:text-[13px] ${
+                r.passed ? 'text-stone-400' : 'font-medium text-text-strong'
               }`}
             >
               {r.passed ? '—' : formatCxPorHora(r.taxa)}
@@ -465,15 +574,15 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
       </div>
 
       {band === 'sem_estimativa' && (
-        <p className="text-center text-[13px] leading-snug text-gray-500 sm:text-base">{fimLegenda}</p>
+        <p className="text-center text-[13px] leading-snug text-text-muted sm:text-base">{fimLegenda}</p>
       )}
 
       {ritmo.kind === 'termina' && (
-        <p className="text-center text-[13px] text-gray-500 sm:text-base">
+        <p className="text-center text-[13px] text-text-muted sm:text-base">
           Estimativa{' '}
           <span
             className={`font-semibold tabular-nums ${
-              band === 'folga' ? 'text-emerald-400/95' : 'text-amber-300/95'
+              band === 'folga' ? 'text-success-fg' : 'text-amber-700'
             }`}
           >
             {fimLegenda}
@@ -486,7 +595,7 @@ function PrevisaoAte22Ruler({ previsao }: { previsao: PrevisaoRitmoRulerInput })
 
 /** Trilho / preenchimento alinhados à barra de meta do resumo. */
 const EMBALAGEM_BAR_TRACK_CLASS =
-  'h-2.5 w-full max-w-full rounded-full bg-gray-700 overflow-hidden';
+  'h-2.5 w-full max-w-full rounded-full bg-stone-100 overflow-hidden';
 const EMBALAGEM_BAR_FILL_CLASS =
   'h-full max-w-full rounded-full motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out';
 
@@ -506,16 +615,8 @@ export default function EmbalagemDashboard({
   const totais = useMemo(() => {
     const totalCaixasProduzido = items.reduce((sum, item) => sum + (item.caixas || 0), 0);
     const totalCaixasMeta = items.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
-    const progressoCaixasPct =
-      totalCaixasMeta > 0
-        ? Math.min(100, (totalCaixasProduzido / totalCaixasMeta) * 100)
-        : 0;
-    const faltaEmbalarCx = Math.max(0, totalCaixasMeta - totalCaixasProduzido);
     return {
-      produzido: `${totalCaixasProduzido} cx`,
-      meta: `${totalCaixasMeta} cx`,
-      progressoCaixasPct,
-      faltaEmbalarCx,
+      faltaEmbalarCx: Math.max(0, totalCaixasMeta - totalCaixasProduzido),
     };
   }, [items]);
 
@@ -691,101 +792,80 @@ export default function EmbalagemDashboard({
     previsaoFinalizacao.visivel &&
     previsaoFinalizacao.falta > 0;
 
-  const forecastGridClass = useMemo(() => {
-    const hasMedia = mediaComparacao !== null;
-    if (hasMedia && showPrevisaoRulerCard)
-      return 'sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]';
-    return 'sm:grid-cols-1';
-  }, [mediaComparacao, showPrevisaoRulerCard]);
-
   return (
     <aside
-      className="min-w-0 rounded-xl border border-gray-700/80 bg-gray-800/40 p-4 shadow-inner lg:sticky lg:top-4 space-y-6"
+      className={['min-w-0 space-y-3 min-[960px]:sticky', belowEtapaToolbarStickyTop].join(' ')}
       aria-label="Painel de métricas do dia"
     >
-      <section aria-label="Resumo do dia">
-        <div className="flex flex-wrap gap-4 items-baseline justify-between">
-          <div>
-            <p className="text-[13px] uppercase tracking-wide text-gray-400 sm:text-sm">
-              Embalado / meta
-            </p>
-            <p className="text-2xl font-bold text-white tabular-nums">
-              {totais.produzido}
-              <span className="text-gray-500 font-normal mx-1">/</span>
-              <span className="text-gray-300">{totais.meta}</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[13px] text-gray-400 sm:text-sm">Falta embalar</p>
-            <p className="text-xl font-semibold text-amber-300 tabular-nums">
-              {totais.faltaEmbalarCx} cx
-            </p>
-          </div>
-        </div>
-        <div
-          className={`mt-3 ${EMBALAGEM_BAR_TRACK_CLASS}`}
-          role="progressbar"
-          aria-valuenow={Math.round(totais.progressoCaixasPct)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Embalado em caixas em relação à meta em caixas"
-        >
-          <div
-            className={`${EMBALAGEM_BAR_FILL_CLASS} bg-amber-500`}
-            style={{ width: `${Math.min(100, totais.progressoCaixasPct)}%` }}
-          />
-        </div>
-      </section>
-
       {(mediaComparacao !== null ||
         (previsaoFinalizacao.visivel && isToday)) && (
-        <section className="!mt-4 space-y-2" aria-label="Previsão e ritmo">
+        <section className="min-w-0 space-y-2" aria-label="Previsão e ritmo">
           {previsaoFinalizacao.visivel && isToday && previsaoFinalizacao.falta <= 0 && (
-            <p className="text-[13px] leading-snug text-emerald-300/95 sm:text-[15px]">
+            <p className="text-xs leading-snug text-success-fg sm:text-[13px]">
               Meta em caixas já atingida — nada a projetar.
             </p>
           )}
-          <div className={`grid grid-cols-1 items-start gap-2 ${forecastGridClass}`}>
+          <div className="flex flex-col gap-2">
             {mediaComparacao !== null && (
               <PrevisaoMetricCard
-                icon={<IconBars className="h-5 w-5" />}
+                dense
+                icon={<IconBars className="h-4 w-4" />}
                 title={`Média 7h → ${mediaComparacao.ultimoRegistroLabel}`}
               >
-                <div className="flex w-full flex-col gap-1 leading-snug">
-                  <p className="text-base font-semibold tabular-nums text-amber-200/95 sm:text-lg">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <p className="shrink-0 font-mono text-[15px] font-bold leading-none tabular-nums text-text-strong">
                     {formatCxPorHora(mediaComparacao.mediaDia)}
                   </p>
-                  {comparisonPrev ? (
-                    <p className="text-[13px] leading-snug text-gray-400 sm:text-sm">
-                      Ontem (mesma hora):{' '}
-                      <span className="tabular-nums text-gray-200">
-                        {formatCxPorHora(mediaComparacao.mediaOntem)}
-                      </span>
-                    </p>
-                  ) : null}
-                  <p className="text-[13px] leading-snug text-gray-400 sm:text-sm">
-                    Semana passada:{' '}
-                    <span className="tabular-nums text-gray-200">
-                      {formatCxPorHora(mediaComparacao.mediaSemana)}
-                    </span>
-                  </p>
+                  <div className="min-w-0 flex-1 space-y-px border-l border-stone-100 pl-2.5">
+                    {comparisonPrev ? (
+                      <StatCompare
+                        compact
+                        label="Ontem"
+                        title="Ontem (mesma hora)"
+                        value={mediaComparacao.mediaOntem}
+                        unit="cx"
+                        delta={
+                          mediaComparacao.mediaOntem
+                            ? Math.round(
+                                (mediaComparacao.mediaDia / mediaComparacao.mediaOntem - 1) * 100,
+                              )
+                            : null
+                        }
+                      />
+                    ) : null}
+                    <StatCompare
+                      compact
+                      label="Sem. passada"
+                      title="Semana passada"
+                      value={mediaComparacao.mediaSemana}
+                      unit="cx"
+                      delta={
+                        mediaComparacao.mediaSemana
+                          ? Math.round(
+                              (mediaComparacao.mediaDia / mediaComparacao.mediaSemana - 1) * 100,
+                            )
+                          : null
+                      }
+                    />
+                  </div>
                 </div>
               </PrevisaoMetricCard>
             )}
 
             {showPrevisaoRulerCard ? (
               <PrevisaoMetricCard
-                icon={<IconTimelineRuler className="h-5 w-5" />}
-                title="Previsão até fechar (ritmo de ontem)"
+                dense
+                icon={<IconTimelineRuler className="h-4 w-4" />}
+                title="Previsão até fechar"
                 className="min-h-0"
                 headerAside={
                   previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
                     <span
-                      className="inline-block text-base font-semibold tabular-nums leading-tight text-rose-200"
+                      className="inline-block text-xs font-semibold tabular-nums leading-tight text-danger"
                       title={`${formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)} caixas para o dia seguinte`}
                     >
                       {formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)}{' '}
-                      <span className="text-rose-100">cx p/ amanhã</span>
+                      <span className="font-medium text-danger/80">cx p/ amanhã</span>
                     </span>
                   ) : undefined
                 }
@@ -809,91 +889,90 @@ export default function EmbalagemDashboard({
         </section>
       )}
 
-      <section aria-label="Caixas por hora">
+      <section
+        aria-label="Caixas por hora"
+        className="overflow-hidden rounded-xl border border-border-default bg-surface shadow-control"
+      >
         {hoursUnion.length === 0 ? (
-          <p className="text-[13px] leading-snug text-gray-500 sm:text-[15px]">
+          <p className="p-4 text-[13px] leading-snug text-text-muted sm:text-[15px]">
             Nenhuma caixa com horário de registro nos dias comparados — nada a listar.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-700/80">
-            <table className="w-full min-w-[320px] table-fixed border-collapse text-[13px] sm:text-[15px] leading-snug">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[28rem] table-fixed border-collapse text-[13px] leading-snug sm:min-w-[32rem] sm:text-[15px]">
               <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[26%]" />
-                <col className="w-[26%]" />
+                <col className="w-[24%]" />
+                <col className="w-[25%]" />
+                <col className="w-[25%]" />
                 <col className="w-[26%]" />
               </colgroup>
               <thead>
-                <tr className="border-b border-gray-700 bg-gray-900/50">
+                <tr className="border-b border-border-default bg-stone-50">
                   <th
                     scope="col"
-                    className="px-3 py-2.5 text-left font-medium text-gray-300 align-bottom"
+                    className="px-3 py-2.5 text-left align-bottom font-medium text-text-muted"
                   >
                     Intervalo
                   </th>
-                  <th
-                    scope="col"
-                    className="px-3 py-2.5 text-right align-bottom font-medium text-amber-200/95"
-                  >
-                    <span className="inline-block whitespace-nowrap align-bottom">
-                      {tituloColFiltro} <HourAccumColumnSubheads />
-                    </span>
+                  <th scope="col" className="px-3 py-2.5 text-right align-bottom">
+                    <HourColumnHeader title={tituloColFiltro} emphasis="primary" />
                   </th>
-                  <th
-                    scope="col"
-                    className="px-3 py-2.5 text-right align-bottom font-medium text-gray-300"
-                  >
-                    <span className="inline-block whitespace-nowrap align-bottom">
-                      {tituloColPrev ?? 'Dia anterior (sem dados)'} <HourAccumColumnSubheads />
-                    </span>
+                  <th scope="col" className="px-3 py-2.5 text-right align-bottom">
+                    <HourColumnHeader
+                      title={tituloColPrev ?? 'Dia anterior (sem dados)'}
+                    />
                   </th>
-                  <th
-                    scope="col"
-                    className="px-3 py-2.5 text-right align-bottom font-medium text-gray-300"
-                  >
-                    <span className="inline-block whitespace-nowrap align-bottom">
-                      {tituloColD7} <HourAccumColumnSubheads />
-                    </span>
+                  <th scope="col" className="px-3 py-2.5 text-right align-bottom">
+                    <HourColumnHeader title={tituloColD7} />
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {hoursUnion.map((hour) => (
-                  <tr key={hour} className="border-b border-gray-700/60 last:border-0">
-                    <th
-                      scope="row"
-                      className="px-3 py-2 tabular-nums text-left font-medium text-gray-200"
+                {hoursUnion.map((hour, i) => {
+                  const hasToday = getCaixasForHour(mapD, hour) > 0;
+                  return (
+                    <tr
+                      key={hour}
+                      className={[
+                        'border-b border-stone-100 last:border-0',
+                        hasToday ? 'bg-amber-50/45' : i % 2 ? 'bg-stone-50/60' : 'bg-surface',
+                      ].join(' ')}
                     >
-                      {formatIntervaloHoraBr(hour)}
-                    </th>
-                    <td className="px-3 py-2 align-middle">
-                      <HourAccumPair map={mapD} hour={hour} emphasis="primary" />
-                    </td>
-                    <td className="px-3 py-2 align-middle text-gray-300">
-                      {comparisonPrev ? (
-                        <HourAccumPair map={mapPrev} hour={hour} emphasis="secondary" />
-                      ) : (
-                        <div className="text-right tabular-nums text-gray-500">—</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-middle">
-                      <HourAccumPair map={mapWeek} hour={hour} emphasis="secondary" />
-                    </td>
-                  </tr>
-                ))}
+                      <th
+                        scope="row"
+                        className="px-3 py-2 text-left font-medium tabular-nums text-stone-700"
+                      >
+                        {formatIntervaloHoraBr(hour)}
+                      </th>
+                      <td className="px-3 py-2 align-middle">
+                        <HourAccumPair map={mapD} hour={hour} emphasis="primary" />
+                      </td>
+                      <td className="px-3 py-2 align-middle text-stone-600">
+                        {comparisonPrev ? (
+                          <HourAccumPair map={mapPrev} hour={hour} emphasis="secondary" />
+                        ) : (
+                          <div className="text-right tabular-nums text-stone-400">—</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-middle">
+                        <HourAccumPair map={mapWeek} hour={hour} emphasis="secondary" />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
         {!comparisonPrev && hoursUnion.length > 0 && (
-          <p className="mt-2 text-[13px] leading-snug text-gray-500 sm:text-base">
+          <p className="px-4 pb-3 text-[13px] leading-snug text-text-muted sm:text-base">
             Não foi encontrado dia anterior com pedidos (até 14 dias atrás).
           </p>
         )}
         {caixasSemHorario > 0 && (
-          <p className="mt-2 text-[13px] leading-snug text-amber-200/80 sm:text-base">
-            {formatIntPtBrOrDash(caixasSemHorario)} caixa(s) no dia filtrado sem horário em col. Q — não entram na
-            tabela.
+          <p className="px-4 pb-4 text-[13px] leading-snug text-amber-800 sm:text-base">
+            {formatIntPtBrOrDash(caixasSemHorario)} caixa(s) no dia filtrado sem horário em col. Q — não
+            entram na tabela.
           </p>
         )}
       </section>

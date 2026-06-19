@@ -1,24 +1,30 @@
 'use client';
 
+import { Skeleton, SkeletonRow } from '@/components/ui/Skeleton';
+import { etapaTwoColumnGridClass } from '@/components/ui/page-shell';
+
 function SkeletonCard() {
   return (
     <div
-      className="rounded-lg border border-gray-700/60 bg-gray-800/40 p-3 space-y-2 motion-reduce:animate-none"
-      aria-hidden
+      className="overflow-hidden rounded-xl border border-border-default bg-surface shadow-control"
+      aria-hidden="true"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="h-4 w-2/5 rounded bg-gray-700 animate-pulse" />
-        <div className="h-4 w-16 rounded bg-gray-700 animate-pulse" />
+      <div className="flex items-center gap-3 border-l-[3px] border-l-stone-200 p-3">
+        <Skeleton width="0.5rem" height="0.5rem" radius="9999px" />
+        <div className="flex-1 space-y-2">
+          <Skeleton width="55%" height="0.875rem" />
+          <Skeleton width="30%" height="0.75rem" />
+        </div>
+        <Skeleton width="5rem" height="2.375rem" radius="9px" />
       </div>
-      <div className="h-2 w-full rounded-full bg-gray-700/80 animate-pulse" />
     </div>
   );
 }
 
 function SkeletonGroup() {
   return (
-    <div className="space-y-3" aria-hidden>
-      <div className="h-5 w-32 rounded bg-gray-700 animate-pulse" />
+    <div className="space-y-3" aria-hidden="true">
+      <Skeleton width="8rem" height="1rem" />
       <div className="space-y-2">
         <SkeletonCard />
         <SkeletonCard />
@@ -28,10 +34,28 @@ function SkeletonGroup() {
   );
 }
 
+function SkeletonForecastCard() {
+  return (
+    <div
+      className="rounded-xl border border-border-default bg-surface px-2.5 py-2 shadow-control"
+      aria-hidden="true"
+    >
+      <div className="flex gap-2">
+        <Skeleton width="2rem" height="2rem" radius="9px" />
+        <div className="flex-1 space-y-2">
+          <Skeleton width="70%" height="0.625rem" />
+          <Skeleton width="40%" height="1rem" />
+          <Skeleton width="100%" height="0.5rem" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EmbalagemPageSkeleton() {
   return (
     <div
-      className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start"
+      className={etapaTwoColumnGridClass}
       role="status"
       aria-live="polite"
       aria-busy="true"
@@ -41,10 +65,18 @@ export default function EmbalagemPageSkeleton() {
         <SkeletonGroup />
         <SkeletonGroup />
       </div>
-      <div
-        className="rounded-lg border border-gray-700/60 bg-gray-800/30 p-4 h-64 animate-pulse motion-reduce:animate-none"
-        aria-hidden
-      />
+      <div className="space-y-2">
+        <SkeletonForecastCard />
+        <SkeletonForecastCard />
+        <div className="rounded-xl border border-border-default bg-surface p-4 shadow-control">
+          <Skeleton width="40%" height="1rem" />
+          <div className="mt-4 space-y-2">
+            <SkeletonRow />
+            <SkeletonRow />
+            <SkeletonRow />
+          </div>
+        </div>
+      </div>
       <span className="sr-only">Carregando pedidos e lotes de embalagem…</span>
     </div>
   );

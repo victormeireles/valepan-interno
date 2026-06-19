@@ -2,26 +2,33 @@
 
 import React from 'react';
 import { StockDashboard } from '@/features/stock-dashboard/components/StockDashboard';
-import DashboardHeader from '@/components/DashboardHeader';
 import { useEffect, useState } from 'react';
 import { EstoqueRecord } from '@/domain/types/inventario';
 
 function StockDashboardSkeleton() {
   return (
-    <div className="animate-pulse space-y-4">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="animate-pulse space-y-6">
+      <div className="space-y-4">
+        <div className="flex justify-between gap-4">
+          <div className="h-8 w-32 rounded-lg bg-stone-100" />
+          <div className="h-9 w-56 rounded-[9px] bg-stone-100" />
+        </div>
+        <div className="flex gap-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-xl bg-gray-100" />
+            <div key={i} className="h-8 w-20 rounded-full bg-stone-100" />
           ))}
         </div>
-        <div className="mt-4 h-11 rounded-xl bg-gray-100" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-24 rounded-xl border border-stone-200 bg-white" />
+        ))}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <div
             key={i}
-            className="h-72 rounded-2xl border border-gray-200 bg-white"
+            className="h-72 rounded-2xl border border-stone-200 bg-white"
           />
         ))}
       </div>
@@ -50,16 +57,12 @@ export default function DashboardEstoquePage() {
   }, []);
 
   return (
-    <div className="relative z-0 min-h-screen bg-gray-50">
-      <DashboardHeader title="Estoque" icon="inventory_2" />
-
-      <div className="relative z-0 mx-auto max-w-[1600px] p-4 sm:p-6">
-        {loading ? (
-          <StockDashboardSkeleton />
-        ) : (
-          <StockDashboard initialData={allStock} />
-        )}
-      </div>
+    <div className="relative z-0 min-h-screen">
+      {loading ? (
+        <StockDashboardSkeleton />
+      ) : (
+        <StockDashboard initialData={allStock} />
+      )}
     </div>
   );
 }

@@ -2,13 +2,11 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { formatISODateBrNoYear } from '@/lib/utils/date-utils';
-import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
 import OrdemProducaoQtyValue from '@/components/OrdensProducao/OrdemProducaoQtyValue';
 import OrdemProducaoRowMenu from '@/components/OrdensProducao/OrdemProducaoRowMenu';
+import { buildOrdemProdutoMeta } from '@/components/OrdensProducao/ordem-producao-meta';
 import type { OrdemProducaoRowBaseProps } from '@/components/OrdensProducao/ordem-producao-row-types';
 import {
-  ordensProducaoTableCellClass,
   ordensProducaoTableProdutoClass,
   ordensProducaoTableQtyCellClass,
   ordensProducaoTableRowClass,
@@ -41,23 +39,23 @@ export default function OrdemProducaoTableRow({
   };
 
   const etiquetaDiffers = ordem.dataEtiqueta !== filterDate;
-  const observacaoDisplay = ordem.observacao.trim() || '—';
   const latasValue =
     ordem.modoQuantidade === 'latas' && ordem.assadeiras > 0 ? ordem.assadeiras : null;
   const caixasValue = ordem.caixas > 0 ? ordem.caixas : null;
+  const meta = buildOrdemProdutoMeta(ordem);
 
   return (
     <tr
       ref={setNodeRef}
       style={style}
       className={`${ordensProducaoTableRowClass} ${
-        isDragging ? 'relative z-10 bg-white shadow-lg ring-1 ring-amber-200/80' : ''
+        isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
       }`}
     >
       <td className="w-9 px-1 py-2 align-middle">
         <button
           type="button"
-          className="flex h-11 w-9 cursor-grab items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+          className="flex h-11 w-9 cursor-grab items-center justify-center rounded-[9px] text-stone-400 hover:bg-stone-100 hover:text-stone-600 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Reordenar ordem ${ordem.ordemPlanejamento}`}
           {...attributes}
           {...listeners}
@@ -68,13 +66,9 @@ export default function OrdemProducaoTableRow({
         </button>
       </td>
 
-      <td className={`${ordensProducaoTableCellClass} text-center font-semibold tabular-nums text-stone-500`}>
-        {ordem.ordemPlanejamento}
-      </td>
-
-      <td className={ordensProducaoTableCellClass}>
-        <span className={`font-medium text-stone-600 ${ordensProducaoTableTextTruncateClass}`}>
-          {ordem.tipoEstoque}
+      <td className="w-8 px-1 py-2 text-center align-middle">
+        <span className="font-mono text-xs font-semibold tabular-nums text-stone-400">
+          {ordem.ordemPlanejamento}
         </span>
       </td>
 
@@ -82,20 +76,28 @@ export default function OrdemProducaoTableRow({
         <button
           type="button"
           onClick={() => onEdit(ordem)}
-          className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-md"
+          className="w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-[9px]"
           title={ordem.produto}
         >
-          <span className={`font-semibold text-stone-900 ${ordensProducaoTableTextTruncateClass}`}>
+          <span
+            className={`font-semibold tracking-[-0.004em] text-text-strong ${ordensProducaoTableTextTruncateClass}`}
+          >
             {ordem.produto}
           </span>
+          <span
+            className={`mt-0.5 text-xs text-text-muted ${ordensProducaoTableTextTruncateClass}`}
+          >
+            {meta}
+            {etiquetaDiffers ? (
+              <>
+                {' '}
+                <span className={ordensProducaoEtiquetaBadgeClass} title="Data etiqueta diferente da produção">
+                  ≠
+                </span>
+              </>
+            ) : null}
+          </span>
         </button>
-      </td>
-
-      <td className={ordensProducaoTableCellClass}>
-        <OrdemProducaoAssadeiraCell
-          variant={ordem.assadeiraVariant}
-          nome={ordem.assadeiraNome}
-        />
       </td>
 
       <td className={ordensProducaoTableQtyCellClass}>
@@ -108,26 +110,6 @@ export default function OrdemProducaoTableRow({
 
       <td className={ordensProducaoTableQtyCellClass}>
         <OrdemProducaoQtyValue value={ordem.unidades} emphasize />
-      </td>
-
-      <td className={`${ordensProducaoTableCellClass} text-center`}>
-        <span className="inline-flex items-center justify-center gap-1 tabular-nums">
-          {formatISODateBrNoYear(ordem.dataEtiqueta)}
-          {etiquetaDiffers ? (
-            <span className={ordensProducaoEtiquetaBadgeClass} title="Data etiqueta diferente da produção">
-              ≠
-            </span>
-          ) : null}
-        </span>
-      </td>
-
-      <td className={`hidden max-w-0 px-3 py-2.5 align-middle xl:table-cell`}>
-        <span
-          className={`block truncate text-sm text-stone-500 ${ordensProducaoTableTextTruncateClass}`}
-          title={ordem.observacao.trim() || undefined}
-        >
-          {observacaoDisplay}
-        </span>
       </td>
 
       <td className="px-1 py-2 align-middle">

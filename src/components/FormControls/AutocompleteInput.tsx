@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { controlInputClassName } from '@/components/ui/Input';
 
 interface AutocompleteInputProps {
   value: string;
@@ -166,8 +167,8 @@ export default function AutocompleteInput({
   return (
     <div ref={containerRef} className="relative w-full group">
       {label && (
-        <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">
-          {label} {required && <span className="text-red-500">*</span>}
+        <label className="mb-1.5 ml-1 block text-sm font-medium tracking-[-0.004em] text-stone-700">
+          {label} {required && <span className="text-danger">*</span>}
         </label>
       )}
       <div className="relative">
@@ -181,29 +182,28 @@ export default function AutocompleteInput({
           placeholder={placeholder}
           required={required}
           disabled={disabled}
-          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={controlInputClassName({ hasIcon: true, className: 'pr-10' })}
         />
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
-          <span className={`material-icons text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+          <span
+            className={`material-icons text-stone-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          >
             expand_more
           </span>
         </div>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animation-fade-in-down">
-          <ul
-            ref={listRef}
-            className="max-h-60 overflow-auto py-1"
-          >
+        <div className="animation-fade-in-down absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border-default bg-surface shadow-control">
+          <ul ref={listRef} className="max-h-60 overflow-auto py-1">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option, index) => (
                 <li
                   key={`${option}-${index}`}
                   className={`cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors ${
                     index === highlightedIndex
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50'
+                      ? 'bg-amber-50 text-amber-800'
+                      : 'text-stone-700 hover:bg-stone-50'
                   }`}
                   onMouseDown={(e) => e.preventDefault()} // Previne blur ao clicar
                   onClick={() => handleOptionSelect(option)}
@@ -213,7 +213,7 @@ export default function AutocompleteInput({
                 </li>
               ))
             ) : (
-              <li className="px-4 py-3 text-sm text-gray-400 text-center italic">
+              <li className="px-4 py-3 text-center text-sm italic text-text-muted">
                 Nenhum resultado encontrado
               </li>
             )}

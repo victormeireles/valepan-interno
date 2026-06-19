@@ -1,6 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { controlInputClassName } from '@/components/ui/Input';
+
+const stepperBtnClass =
+  'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[9px] ' +
+  'border border-border-default bg-surface text-xl font-medium text-stone-700 ' +
+  'shadow-control transition-[background,box-shadow,transform] duration-[130ms] ' +
+  'hover:bg-stone-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50';
 
 interface NumberHalfStepInputProps {
   value: number;
@@ -13,15 +20,15 @@ interface NumberHalfStepInputProps {
   step?: number;
 }
 
-export default function NumberHalfStepInput({ 
-  value, 
-  onChange, 
-  required = false, 
-  disabled = false, 
+export default function NumberHalfStepInput({
+  value,
+  onChange,
+  required = false,
+  disabled = false,
   label,
   min = 0,
   max = 99999,
-  step = 0.5
+  step = 0.5,
 }: NumberHalfStepInputProps) {
   const [displayValue, setDisplayValue] = useState(value.toString());
 
@@ -31,14 +38,12 @@ export default function NumberHalfStepInput({
 
   const handleChange = (inputValue: string) => {
     setDisplayValue(inputValue);
-    
-    // Tentar converter para número
+
     if (inputValue === '') {
       onChange(0);
       return;
     }
 
-    // Verificar se contém "1/2"
     if (inputValue.includes('1/2')) {
       const base = inputValue.replace(/\s*1\/2\s*$/, '').trim();
       const baseNum = parseFloat(base);
@@ -48,7 +53,6 @@ export default function NumberHalfStepInput({
       }
     }
 
-    // Converter normalmente
     const num = parseFloat(inputValue);
     if (!isNaN(num) && num >= min && num <= max) {
       onChange(num);
@@ -68,22 +72,21 @@ export default function NumberHalfStepInput({
   };
 
   const formatDisplayValue = (val: number): string => {
-    // Exibir vazio quando valor for 0
     if (val === 0) {
       return '';
     }
-    
+
     if (Number.isInteger(val)) {
       return val.toString();
     }
-    
+
     const integerPart = Math.floor(val);
     const decimalPart = val - integerPart;
-    
+
     if (Math.abs(decimalPart - 0.5) < 0.001) {
       return `${integerPart} 1/2`;
     }
-    
+
     return val.toString();
   };
 
@@ -93,20 +96,20 @@ export default function NumberHalfStepInput({
 
   return (
     <div className="w-full">
-      <label className="block text-base font-semibold text-gray-800 mb-3">
-        {label} {required && <span className="text-red-500">*</span>}
+      <label className="mb-3 block text-sm font-medium tracking-[-0.004em] text-stone-700">
+        {label} {required && <span className="text-danger">*</span>}
       </label>
-      
-      <div className="flex items-center space-x-1 max-w-full">
+
+      <div className="flex max-w-full items-center space-x-1">
         <button
           type="button"
           onClick={handleDecrement}
           disabled={disabled || value <= min}
-          className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
+          className={stepperBtnClass}
         >
           −
         </button>
-        
+
         <input
           type="text"
           value={displayValue}
@@ -115,20 +118,23 @@ export default function NumberHalfStepInput({
           required={required}
           disabled={disabled}
           placeholder="Ex: 3 ou 3 1/2"
-          className="flex-1 min-w-[80px] sm:min-w-[100px] md:min-w-[120px] px-2 sm:px-3 py-4 text-sm sm:text-base md:text-lg text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 placeholder-gray-500 shadow-sm"
+          className={controlInputClassName({
+            numeric: true,
+            className: 'flex-1 min-w-[80px] text-center sm:min-w-[100px] md:min-w-[120px]',
+          })}
         />
-        
+
         <button
           type="button"
           onClick={handleIncrement}
           disabled={disabled || value >= max}
-          className="px-2 sm:px-3 md:px-3 py-4 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 font-bold text-xl sm:text-2xl rounded-lg border-2 border-gray-300 hover:border-gray-400 disabled:border-gray-200 transition-colors flex items-center justify-center shadow-sm hover:shadow-md min-w-[40px] sm:min-w-[45px] md:min-w-[45px] flex-shrink-0"
+          className={stepperBtnClass}
         >
           +
         </button>
       </div>
-      
-      <p className="text-sm text-gray-600 mt-2 font-medium">
+
+      <p className="mt-2 text-sm font-medium text-text-muted">
         Use números inteiros ou inteiros + 1/2 (ex: 3, 3.5, 3 1/2)
       </p>
     </div>

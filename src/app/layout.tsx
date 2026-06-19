@@ -30,18 +30,17 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
-        {/* Google Material Icons */}
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col bg-app antialiased`}
       >
         <Suspense fallback={null}>
           <ConditionalNavigation />
         </Suspense>
-        <main className="min-h-screen">
-          {children}
-        </main>
+        <div className="flex w-full flex-1 flex-col px-4 pb-6 sm:px-6 lg:px-8">
+          <main className="w-full flex-1 py-6">{children}</main>
+        </div>
       </body>
     </html>
   );

@@ -57,16 +57,15 @@ export default function EstoqueAuditoriaPage() {
   }, [carregar]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Auditoria de estoque</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Histórico de alterações no estoque por tipo de estoque e produto.
-          </p>
-        </div>
+    <div className="w-full">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Auditoria de estoque</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Histórico de alterações no estoque por tipo de estoque e produto.
+        </p>
+      </div>
 
-        <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-white p-4 shadow-sm">
+      <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-white p-4 shadow-sm">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Origem</span>
             <select
@@ -166,7 +165,6 @@ export default function EstoqueAuditoriaPage() {
             </table>
           </div>
         )}
-      </div>
     </div>
   );
 }

@@ -1,299 +1,225 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-interface NavigationProps {
-  hideHeader?: boolean;
+interface NavItem {
+  href: string;
+  label: string;
+  icon: string;
+  match?: (pathname: string) => boolean;
 }
 
-export default function Navigation({ hideHeader = false }: NavigationProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const pathname = usePathname();
+const NAV_ITEMS: NavItem[] = [
+  { href: '/', label: 'Início', icon: 'home', match: (p) => p === '/' },
+  {
+    href: '/ordens-producao',
+    label: 'Ordens',
+    icon: 'format_list_numbered',
+    match: (p) => p.startsWith('/ordens-producao'),
+  },
+  {
+    href: '/realizado/fermentacao',
+    label: 'Fermentação',
+    icon: 'eco',
+    match: (p) => p.startsWith('/realizado/fermentacao'),
+  },
+  {
+    href: '/realizado/forno',
+    label: 'Forno',
+    icon: 'local_fire_department',
+    match: (p) => p.startsWith('/realizado/forno'),
+  },
+  {
+    href: '/realizado/embalagem',
+    label: 'Embalagem',
+    icon: 'inventory_2',
+    match: (p) => p.startsWith('/realizado/embalagem'),
+  },
+  {
+    href: '/realizado/saidas',
+    label: 'Saídas',
+    icon: 'assignment_turned_in',
+    match: (p) => p.startsWith('/realizado/saidas'),
+  },
+  {
+    href: '/etiquetas',
+    label: 'Etiquetas',
+    icon: 'label',
+    match: (p) => p.startsWith('/etiquetas'),
+  },
+  {
+    href: '/painel/dashboard-estoque',
+    label: 'Estoque',
+    icon: 'dashboard',
+    match: (p) => p.startsWith('/painel/dashboard-estoque'),
+  },
+  {
+    href: '/config',
+    label: 'Configurações',
+    icon: 'settings',
+    match: (p) => p.startsWith('/config'),
+  },
+];
 
-  const toggleMenu = () => setIsOpen(!isOpen);
-  const closeMenu = () => setIsOpen(false);
+const SIDE_ZONE_CLASS = 'w-[5.5rem] shrink-0 sm:w-[6.5rem] lg:w-[7.5rem]';
 
-  // Listener para evento de toggle vindo de RealizadoHeader
-  useEffect(() => {
-    const handleToggleMenu = () => {
-      setIsOpen(prev => !prev);
-    };
+function isItemActive(item: NavItem, pathname: string) {
+  return item.match ? item.match(pathname) : pathname === item.href;
+}
 
-    window.addEventListener('toggle-menu', handleToggleMenu);
-    return () => {
-      window.removeEventListener('toggle-menu', handleToggleMenu);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const closeIfMobile = () => {
-      if (window.innerWidth < 1024) {
-        setIsOpen(false);
-      }
-    };
-    closeIfMobile();
-    window.addEventListener('resize', closeIfMobile);
-    return () => window.removeEventListener('resize', closeIfMobile);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (window.innerWidth < 1024) {
-      setIsOpen(false);
-    }
-  }, [pathname]);
-
-  const isActive = (path: string) => pathname === path;
-
-  const baseClasses =
-    'fixed top-0 right-0 h-full w-80 bg-white shadow-xl transform transition-all duration-300 ease-in-out z-50';
-  const drawerState = isOpen
-    ? 'translate-x-0 opacity-100 pointer-events-auto'
-    : 'translate-x-full opacity-0 pointer-events-none';
-  const menuClasses = `${baseClasses} ${drawerState}`;
-
+function DesktopNavLink({
+  item,
+  active,
+}: {
+  item: NavItem;
+  active: boolean;
+}) {
   return (
-    <>
-      {/* Header com botão hambúrguer */}
-      {!hideHeader && (
-        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo/Título */}
-            <div className="flex items-center">
-              <Link 
-                href="/" 
-                className="text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors"
-                onClick={closeMenu}
-              >
-                Valepan
-              </Link>
-            </div>
-
-            {/* Botão hambúrguer */}
-            <button
-              onClick={toggleMenu}
-              className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Abrir menu"
-            >
-              <div className="w-6 h-6 flex flex-col justify-center space-y-1">
-                <span 
-                  className={`block h-0.5 w-6 bg-current transition-all duration-300 ${
-                    isOpen ? 'rotate-45 translate-y-1.5' : ''
-                  }`}
-                />
-                <span 
-                  className={`block h-0.5 w-6 bg-current transition-all duration-300 ${
-                    isOpen ? 'opacity-0' : ''
-                  }`}
-                />
-                <span 
-                  className={`block h-0.5 w-6 bg-current transition-all duration-300 ${
-                    isOpen ? '-rotate-45 -translate-y-1.5' : ''
-                  }`}
-                />
-              </div>
-            </button>
-          </div>
-        </div>
-        </header>
-      )}
-
-      {/* Overlay para fechar o menu - apenas em mobile */}
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={closeMenu}
-        />
-      )}
-
-      {/* Menu lateral */}
-      {isOpen && (
-        <div
-          className={`${menuClasses}`}
-        >
-        <div className="flex flex-col h-full">
-          {/* Cabeçalho do menu */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Menu</h2>
-            <button
-              onClick={closeMenu}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              aria-label="Fechar menu"
-            >
-              <span className="material-icons text-xl">close</span>
-            </button>
-          </div>
-
-          {/* Navegação principal */}
-          <nav className="flex-1 overflow-y-auto py-6">
-            <div className="px-6 space-y-2">
-              {/* Página inicial */}
-              <Link
-                href="/"
-                onClick={closeMenu}
-                className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                  isActive('/') 
-                    ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <span className="material-icons text-xl mr-3">home</span>
-                Página Inicial
-              </Link>
-
-              {/* Separador */}
-              <div className="my-4 border-t border-gray-200" />
-
-              {/* Meta de Produção */}
-              <div className="space-y-1">
-                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                  📋 Meta de Produção
-                </h3>
-                <Link
-                  href="/ordens-producao"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/ordens-producao')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">format_list_numbered</span>
-                  Ordens de Produção
-                </Link>
-              </div>
-
-              {/* Separador */}
-              <div className="my-4 border-t border-gray-200" />
-
-              {/* Produção Realizada */}
-              <div className="space-y-1">
-                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                  ✅ Produção Realizada
-                </h3>
-                <Link
-                  href="/realizado/fermentacao"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/realizado/fermentacao')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">eco</span>
-                  Realizado: Fermentação
-                </Link>
-                <Link
-                  href="/realizado/forno"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/realizado/forno')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">local_fire_department</span>
-                  Realizado: Forno
-                </Link>
-                <Link
-                  href="/realizado/embalagem"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/realizado/embalagem')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">inventory_2</span>
-                  Realizado: Embalagem
-                </Link>
-                <Link
-                  href="/etiquetas"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/etiquetas')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">label</span>
-                  Etiquetas
-                </Link>
-                <Link
-                  href="/realizado/saidas"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/realizado/saidas')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">assignment_turned_in</span>
-                  Realizado: Saídas
-                </Link>
-              </div>
-
-              {/* Separador */}
-              <div className="my-4 border-t border-gray-200" />
-
-              {/* Estoque */}
-              <div className="space-y-1">
-                <h3 className="px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                  📦 Estoque
-                </h3>
-                <Link
-                  href="/painel/dashboard-estoque"
-                  onClick={closeMenu}
-                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                    isActive('/painel/dashboard-estoque')
-                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="material-icons text-xl mr-3">dashboard</span>
-                  Estoque
-                </Link>
-              </div>
-
-              {/* Separador */}
-              <div className="my-4 border-t border-gray-200" />
-
-              {/* Configurações */}
-              <Link
-                href="/config"
-                onClick={closeMenu}
-                className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                  pathname?.startsWith('/config')
-                    ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-700'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <span className="material-icons text-xl mr-3">settings</span>
-                Configurações
-              </Link>
-
-            </div>
-          </nav>
-
-          {/* Rodapé do menu */}
-          <div className="p-6 border-t border-gray-200">
-            <div className="text-center">
-              <p className="text-sm text-gray-500">
-                Sistema de Produção
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Mobile First
-              </p>
-            </div>
-          </div>
-        </div>
-        </div>
-      )}
-    </>
+    <Link
+      href={item.href}
+      className={[
+        'inline-flex items-center gap-1 rounded-[9px] px-2 py-1.5 text-[0.8125rem] font-medium leading-none tracking-[-0.004em] whitespace-nowrap',
+        'transition-[background,color] duration-[130ms] ease-out',
+        active
+          ? 'border border-white/35 bg-white/10 text-white'
+          : 'border border-transparent text-white/65 hover:bg-white/8 hover:text-white/90',
+      ].join(' ')}
+    >
+      <span className="material-icons text-base" aria-label={item.label}>
+        {item.icon}
+      </span>
+      <span>{item.label}</span>
+    </Link>
   );
 }
 
+export default function Navigation() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname() ?? '';
+
+  const closeMobile = () => setMobileOpen(false);
+  const toggleMobile = () => setMobileOpen((open) => !open);
+
+  useEffect(() => {
+    const handleToggleMenu = () => setMobileOpen((open) => !open);
+    window.addEventListener('toggle-menu', handleToggleMenu);
+    return () => window.removeEventListener('toggle-menu', handleToggleMenu);
+  }, []);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const closeOnDesktop = () => {
+      if (window.innerWidth >= 1024) setMobileOpen(false);
+    };
+    closeOnDesktop();
+    window.addEventListener('resize', closeOnDesktop);
+    return () => window.removeEventListener('resize', closeOnDesktop);
+  }, []);
+
+  return (
+    <>
+      <header className="sticky top-0 z-50 w-full bg-brand-vinho">
+        <div className="flex h-[3.75rem] w-full items-center px-4 sm:px-6 lg:px-8">
+          <div className={`flex items-center ${SIDE_ZONE_CLASS}`}>
+            <Link href="/" className="shrink-0" onClick={closeMobile}>
+              <Image
+                src="/logo-full-light.svg"
+                alt="Valepan"
+                width={88}
+                height={28}
+                priority
+                className="h-7 w-auto"
+              />
+            </Link>
+          </div>
+
+          <nav
+            aria-label="Principal"
+            className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex"
+          >
+            {NAV_ITEMS.map((item) => (
+              <DesktopNavLink
+                key={item.href}
+                item={item}
+                active={isItemActive(item, pathname)}
+              />
+            ))}
+          </nav>
+
+          <div
+            className={`hidden items-center justify-end lg:flex ${SIDE_ZONE_CLASS}`}
+            aria-hidden="true"
+          />
+
+          <button
+            type="button"
+            onClick={toggleMobile}
+            className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-[9px] text-white/90 transition-colors duration-[130ms] hover:bg-white/10 lg:hidden"
+            aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={mobileOpen}
+          >
+            <span className="material-icons" aria-hidden="true">
+              {mobileOpen ? 'close' : 'menu'}
+            </span>
+          </button>
+        </div>
+      </header>
+
+      {mobileOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-stone-900/40 lg:hidden"
+          aria-label="Fechar menu"
+          onClick={closeMobile}
+        />
+      ) : null}
+
+      <aside
+        className={[
+          'fixed right-0 top-0 z-50 flex h-dvh w-[min(100%,20rem)] flex-col border-l border-border-default bg-surface pt-[3.75rem] shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] transition-transform duration-[220ms] ease-out lg:hidden',
+          mobileOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none',
+        ].join(' ')}
+        aria-hidden={!mobileOpen}
+      >
+        <nav aria-label="Principal mobile" className="flex-1 overflow-y-auto p-3">
+          <ul className="space-y-1">
+            {NAV_ITEMS.map((item) => {
+              const active = isItemActive(item, pathname);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={closeMobile}
+                    className={[
+                      'flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-sm font-medium tracking-[-0.004em] transition-colors duration-[130ms]',
+                      active
+                        ? 'bg-amber-50 text-amber-900'
+                        : 'text-stone-700 hover:bg-stone-50',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'material-icons text-xl',
+                        active ? 'text-accent' : 'text-stone-500',
+                      ].join(' ')}
+                      aria-label={item.label}
+                    >
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </aside>
+    </>
+  );
+}

@@ -1,52 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
-import {
-  RealizadoHeader,
-  ProductCompactCard,
-  ClientGroup,
-  ThreeColumnLayout,
-  EmbalagemDashboard,
-  EmbalagemProductAccordion,
-  EmbalagemPageSkeleton,
-} from '@/components/Realizado';
+import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import {
   pedidosToDashboardItems,
   snapshotsToDashboardItems,
 } from '@/domain/embalagem/painel-dashboard-adapter';
+import { splitPedidosEmbalagemEmGrupos } from '@/domain/embalagem/embalagem-painel-adapter';
 import {
-  resolverExibicaoCardEmbalagem,
-} from '@/domain/embalagem/painel-quantidade';
-import {
-  splitPedidosEmbalagemEmGrupos,
-  type EmbalagemPainelGroup,
-} from '@/domain/embalagem/embalagem-painel-adapter';
-import { hasEmbalagemQuantity } from '@/domain/realizado/embalagem-group-by-produto';
-import {
-  buildLoteEmbalagemDisplayEntries,
-  loteToPainelItem,
-  type PainelLoteItem,
-} from '@/domain/realizado/painel-pedido-adapter';
+  buildEmbalagemLoteLookup,
+  buildEmbalagemPedidoLookup,
+  buildEmbalagemWorklistData,
+  EMBALAGEM_ETAPA_CONFIG,
+} from '@/domain/embalagem/embalagem-etapa-adapter';
+import type { PainelLoteItem } from '@/domain/realizado/painel-pedido-adapter';
 import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 import { ProducaoData } from '@/domain/types';
-import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import {
   addCalendarDaysISO,
-  formatLocalTimeHHmm,
   getTodayISOInBrazilTimezone,
 } from '@/lib/utils/date-utils';
-import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
-
-function horarioEmbalagemParaCard(item: PainelLoteItem): string | undefined {
-  if (!hasEmbalagemQuantity(item)) return undefined;
-  const raw = item.producaoUpdatedAt?.trim();
-  if (!raw) return undefined;
-  return formatLocalTimeHHmm(raw) ?? undefined;
-}
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
   const message = error instanceof Error ? error.message : fallback;
@@ -58,52 +35,6 @@ function formatQuantidade(caixas: number, pacotes: number): string {
   if (caixas > 0) parts.push(`${caixas} cx`);
   if (pacotes > 0) parts.push(`${pacotes} pct`);
   return parts.length > 0 ? parts.join(' + ') : '0';
-}
-
-function renderPedidoAccordion(
-  pedido: PainelPedidoEmbalagem,
-  groupKey: string,
-  opts: {
-    renderEmbalagemLot: (pedido: PainelPedidoEmbalagem, item: PainelLoteItem) => ReactNode;
-    onNovoLote: (p: PainelPedidoEmbalagem) => void;
-    showNovoLote: boolean;
-    productionStatusOverride?: 'not-started' | 'partial' | 'complete';
-  },
-) {
-  const exibicao = resolverExibicaoCardEmbalagem({
-    pedido: pedido.pedido,
-    produzido: pedido.produzido,
-    unidadePrincipal: pedido.unidade,
-    produzidoScalar: pedido.produzidoScalar,
-    aProduzir: pedido.aProduzir,
-  });
-  const instanceId = `${groupKey}|${pedido.pedidoEmbalagemId}`;
-
-  return (
-    <EmbalagemProductAccordion
-      key={instanceId}
-      instanceId={instanceId}
-      produto={pedido.produto}
-      somaProduzido={exibicao.produzido}
-      somaAProduzir={exibicao.meta}
-      unidade={exibicao.unidade}
-      congelado={pedido.congelado === 'Sim'}
-      detalhesProduzido={exibicao.detalhesProduzido}
-      detalhesMeta={exibicao.detalhesMeta}
-      horarioEmbalagem={
-        pedido.producaoUpdatedAt
-          ? formatLocalTimeHHmm(pedido.producaoUpdatedAt) ?? undefined
-          : undefined
-      }
-      productionStatusOverride={opts.productionStatusOverride}
-      onNovoLote={opts.showNovoLote ? () => opts.onNovoLote(pedido) : undefined}
-      renderLots={() =>
-        pedido.lotes.map((lote) =>
-          opts.renderEmbalagemLot(pedido, loteToPainelItem(pedido, lote)),
-        )
-      }
-    />
-  );
 }
 
 export default function ProducaoEmbalagemPage() {
@@ -119,11 +50,12 @@ export default function ProducaoEmbalagemPage() {
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
-  const [photoDropdownOpen, setPhotoDropdownOpen] = useState<string | null>(null);
-  const [comparisonWeekItems, setComparisonWeekItems] = useState<EmbalagemDashboardItem[]>(
-    [],
+  const [comparisonWeekItems, setComparisonWeekItems] = useState(
+    snapshotsToDashboardItems([]),
   );
-  const [comparisonPrevItems, setComparisonPrevItems] = useState<EmbalagemDashboardItem[]>([]);
+  const [comparisonPrevItems, setComparisonPrevItems] = useState(
+    snapshotsToDashboardItems([]),
+  );
   const [comparisonWeekDate, setComparisonWeekDate] = useState<string>(() =>
     addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
   );
@@ -198,17 +130,18 @@ export default function ProducaoEmbalagemPage() {
     }
   }, [selectedDate]);
 
-  // Carrega só quando a data muda — abrir/fechar modal NÃO recarrega a tela
   useEffect(() => {
     void loadCargaEmbalagem(true);
   }, [selectedDate, loadCargaEmbalagem]);
 
-  // Atualização em background; pausa enquanto o modal está aberto
   useEffect(() => {
     if (producaoModalOpen) return;
     const interval = setInterval(() => void refreshPedidosOnly(), 60_000);
     return () => clearInterval(interval);
   }, [selectedDate, producaoModalOpen, refreshPedidosOnly]);
+
+  const pedidoLookup = useMemo(() => buildEmbalagemPedidoLookup(pedidos), [pedidos]);
+  const loteLookup = useMemo(() => buildEmbalagemLoteLookup(pedidos), [pedidos]);
 
   const handleEditProducao = useCallback(async (item: PainelLoteItem) => {
     if (!item.loteId) {
@@ -312,121 +245,28 @@ export default function ProducaoEmbalagemPage() {
     setProducaoModalOpen(true);
   }, []);
 
-  const handlePhotoClick = useCallback((item: PainelLoteItem) => {
-    const itemKey = `${item.cliente}-${item.produto}-${item.loteId}`;
-    setPhotoDropdownOpen((prev) => (prev === itemKey ? null : itemKey));
-  }, []);
-
-  const renderEmbalagemLot = useCallback(
-    (pedido: PainelPedidoEmbalagem, embalagemItem: PainelLoteItem) => {
-      const itemKey = `${embalagemItem.cliente}-${embalagemItem.produto}-${embalagemItem.loteId}`;
-      const isItemLoading = loadingCardId === itemKey;
-      const photoStatus = getEmbalagemPhotoStatus(embalagemItem);
-      const produzidoDetalhes = buildLoteEmbalagemDisplayEntries(pedido, {
-        caixas: embalagemItem.caixas ?? 0,
-        pacotes: embalagemItem.pacotes ?? 0,
-        unidades: embalagemItem.unidades ?? 0,
-        kg: embalagemItem.kg ?? 0,
-      });
-
-      const isDeleting = deletingLoteId === embalagemItem.loteId;
-
-      const deleteButton = embalagemItem.loteId ? (
-        <button
-          type="button"
-          className="
-            inline-flex items-center justify-center
-            min-h-11 min-w-11 rounded-md text-red-400
-            hover:bg-gray-700/50 hover:text-red-300
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500
-            disabled:opacity-60 disabled:cursor-wait
-          "
-          aria-label={`Excluir lote de ${embalagemItem.produto}`}
-          aria-busy={isDeleting}
-          disabled={isDeleting || isItemLoading}
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleDeleteLote(embalagemItem);
-          }}
-        >
-          {isDeleting ? (
-            <span
-              className="inline-block h-5 w-5 rounded-full border-2 border-red-400/30 border-t-red-400 animate-spin motion-reduce:animate-none"
-              aria-hidden
-            />
-          ) : (
-            <span className="material-icons text-xl" aria-hidden>
-              delete_outline
-            </span>
-          )}
-        </button>
-      ) : null;
-
-      return (
-        <div key={itemKey} className="relative">
-          <ProductCompactCard
-            produto={embalagemItem.produto}
-            produzido={embalagemItem.produzido}
-            aProduzir={embalagemItem.aProduzir}
-            unidade={embalagemItem.unidade}
-            congelado={embalagemItem.congelado === 'Sim'}
-            hasPhoto={photoStatus.hasPhoto}
-            photoColor={photoStatus.color}
-            onPhotoClick={() => handlePhotoClick(embalagemItem)}
-            onClick={() => void handleEditProducao(embalagemItem)}
-            isLoading={isItemLoading}
-            detalhesProduzido={produzidoDetalhes}
-            horarioEmbalagem={horarioEmbalagemParaCard(embalagemItem)}
-            trailingSlot={deleteButton}
-          />
-
-          {photoDropdownOpen === itemKey &&
-            (embalagemItem.pacoteFotoUrl ||
-              embalagemItem.etiquetaFotoUrl ||
-              embalagemItem.palletFotoUrl) && (
-              <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 min-w-[200px]">
-                {embalagemItem.pacoteFotoUrl && (
-                  <a
-                    href={embalagemItem.pacoteFotoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                    onClick={() => setPhotoDropdownOpen(null)}
-                  >
-                    <span className="text-sm">📦</span>
-                    <span className="text-sm">Foto do Pacote</span>
-                  </a>
-                )}
-                {embalagemItem.etiquetaFotoUrl && (
-                  <a
-                    href={embalagemItem.etiquetaFotoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                    onClick={() => setPhotoDropdownOpen(null)}
-                  >
-                    <span className="text-sm">🏷️</span>
-                    <span className="text-sm">Foto da Etiqueta</span>
-                  </a>
-                )}
-                {embalagemItem.palletFotoUrl && (
-                  <a
-                    href={embalagemItem.palletFotoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                    onClick={() => setPhotoDropdownOpen(null)}
-                  >
-                    <span className="text-sm">🚛</span>
-                    <span className="text-sm">Foto do Pallet</span>
-                  </a>
-                )}
-              </div>
-            )}
-        </div>
-      );
+  const handleNovoLoteById = useCallback(
+    (pedidoEmbalagemId: string) => {
+      const pedido = pedidoLookup.get(pedidoEmbalagemId);
+      if (pedido) handleNovoLote(pedido);
     },
-    [loadingCardId, deletingLoteId, photoDropdownOpen, handlePhotoClick, handleEditProducao, handleDeleteLote],
+    [pedidoLookup, handleNovoLote],
+  );
+
+  const handleEditLoteById = useCallback(
+    (loteId: string) => {
+      const item = loteLookup.get(loteId);
+      if (item) void handleEditProducao(item);
+    },
+    [loteLookup, handleEditProducao],
+  );
+
+  const handleDeleteLoteById = useCallback(
+    (loteId: string) => {
+      const item = loteLookup.get(loteId);
+      if (item) void handleDeleteLote(item);
+    },
+    [loteLookup, handleDeleteLote],
   );
 
   const refreshPainelData = async () => {
@@ -460,8 +300,13 @@ export default function ProducaoEmbalagemPage() {
   };
 
   const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
-  const dashboardPrev = comparisonPrevItems;
-  const dashboardWeek = comparisonWeekItems;
+  const resumoCx = useMemo(() => {
+    const produzido = dashboardItems.reduce((sum, item) => sum + (item.caixas || 0), 0);
+    const meta = dashboardItems.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
+    const faltaCx = Math.max(0, meta - produzido);
+    const progressoPct = meta > 0 ? Math.min(100, (produzido / meta) * 100) : 0;
+    return { produzido, meta, faltaCx, progressoPct };
+  }, [dashboardItems]);
 
   const { gruposNaoFinalizados, gruposFinalizados } = useMemo(
     () => splitPedidosEmbalagemEmGrupos(pedidos, selectedDate),
@@ -477,142 +322,66 @@ export default function ProducaoEmbalagemPage() {
     return {
       produzido: formatQuantidade(totalCaixasProduzido, totalPacotesProduzido),
       meta: formatQuantidade(totalCaixasMeta, totalPacotesMeta),
+      faltaCx: Math.max(0, totalCaixasMeta - totalCaixasProduzido),
     };
   }, [pedidos]);
 
-  const accordionOpts = {
-    renderEmbalagemLot,
-    onNovoLote: handleNovoLote,
-  };
+  const worklist = useMemo(
+    () =>
+      buildEmbalagemWorklistData({
+        gruposNaoFinalizados,
+        gruposFinalizados,
+        pedidos,
+        selectedDate,
+        loadingCardId,
+        deletingLoteId,
+      }),
+    [
+      gruposNaoFinalizados,
+      gruposFinalizados,
+      pedidos,
+      selectedDate,
+      loadingCardId,
+      deletingLoteId,
+    ],
+  );
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <RealizadoHeader
-        title="Realizado: Embalagem"
-        icon="📦"
+    <>
+      <RealizadoEtapa
+        config={EMBALAGEM_ETAPA_CONFIG}
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
+        toolbar={{
+          produzido: resumoCx.produzido,
+          meta: resumoCx.meta,
+          falta: resumoCx.faltaCx,
+          progressoPct: resumoCx.progressoPct,
+          metaAtingida: resumoCx.faltaCx === 0,
+        }}
+        loading={loading}
+        refreshing={refreshing}
+        message={message}
+        worklist={worklist}
+        dashboardHora={{
+          items: dashboardItems,
+          comparisonPrev: dateComparisonPrev
+            ? { date: dateComparisonPrev, items: comparisonPrevItems }
+            : null,
+          comparisonWeek: { date: comparisonWeekDate, items: comparisonWeekItems },
+        }}
+        footer={{
+          grupos: gruposNaoFinalizados.length + gruposFinalizados.length,
+          pedidos: pedidos.length,
+          produzidoLabel: totais.produzido,
+          metaLabel: totais.meta,
+        }}
+        callbacks={{
+          onNovoLote: handleNovoLoteById,
+          onEditLote: handleEditLoteById,
+          onDeleteLote: handleDeleteLoteById,
+        }}
       />
-
-      <div className="p-4">
-        {message && (
-          <div
-            className={`mb-4 p-4 rounded-md border ${
-              message.includes('sucesso')
-                ? 'bg-green-800/30 border-green-600 text-green-100'
-                : 'bg-red-800/30 border-red-600 text-red-100'
-            }`}
-          >
-            {message}
-          </div>
-        )}
-
-        {loading ? (
-          <EmbalagemPageSkeleton />
-        ) : (
-          <>
-            {refreshing ? (
-              <div
-                className="mb-3 flex items-center gap-2 text-sm text-gray-400"
-                role="status"
-                aria-live="polite"
-              >
-                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-600 border-t-amber-400 animate-spin motion-reduce:animate-none" />
-                Atualizando dados…
-              </div>
-            ) : null}
-            <div
-              className={`grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start transition-opacity duration-200 motion-reduce:transition-none ${
-                refreshing ? 'opacity-70 pointer-events-none' : ''
-              }`}
-            >
-              <div className="min-w-0 space-y-8">
-                {gruposNaoFinalizados.length > 0 && (
-                  <div className="mb-8">
-                    <ThreeColumnLayout
-                      columnCount={1}
-                      groups={gruposNaoFinalizados}
-                      renderGroup={(group) => {
-                        const g = group as EmbalagemPainelGroup;
-                        return (
-                          <ClientGroup
-                            cliente={g.cliente}
-                            dataFabricacao={g.dataFabricacao}
-                            observacao={g.observacao}
-                            selectedDate={selectedDate}
-                          >
-                            {g.pedidos.map((pedido) =>
-                              renderPedidoAccordion(pedido, g.key, {
-                                ...accordionOpts,
-                                showNovoLote: true,
-                                productionStatusOverride:
-                                  pedido.produzidoScalar === 0
-                                    ? 'not-started'
-                                    : 'partial',
-                              }),
-                            )}
-                          </ClientGroup>
-                        );
-                      }}
-                    />
-                  </div>
-                )}
-
-                {gruposFinalizados.length > 0 && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
-                    <ThreeColumnLayout
-                      columnCount={1}
-                      groups={gruposFinalizados}
-                      renderGroup={(group) => {
-                        const g = group as EmbalagemPainelGroup;
-                        return (
-                          <ClientGroup
-                            cliente={g.cliente}
-                            dataFabricacao={g.dataFabricacao}
-                            observacao={g.observacao}
-                            selectedDate={selectedDate}
-                          >
-                            {g.pedidos.map((pedido) =>
-                              renderPedidoAccordion(pedido, g.key, {
-                                ...accordionOpts,
-                                showNovoLote: false,
-                              }),
-                            )}
-                          </ClientGroup>
-                        );
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <EmbalagemDashboard
-                selectedDate={selectedDate}
-                items={dashboardItems}
-                comparisonPrev={
-                  dateComparisonPrev
-                    ? { date: dateComparisonPrev, items: dashboardPrev }
-                    : null
-                }
-                comparisonWeek={{
-                  date: comparisonWeekDate,
-                  items: dashboardWeek,
-                }}
-              />
-            </div>
-
-            <footer className="mt-6 text-center text-gray-400 text-sm">
-              {gruposNaoFinalizados.length + gruposFinalizados.length} grupos • {pedidos.length}{' '}
-              pedidos • {totais.produzido} / {totais.meta}
-            </footer>
-          </>
-        )}
-      </div>
-
-      {photoDropdownOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setPhotoDropdownOpen(null)} />
-      )}
 
       <ProducaoModal
         isOpen={producaoModalOpen}
@@ -672,6 +441,6 @@ export default function ProducaoEmbalagemPage() {
         loading={producaoLoading}
         mode="embalagem"
       />
-    </div>
+    </>
   );
 }

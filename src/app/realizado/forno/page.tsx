@@ -2,29 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
+import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import {
-  EtapaAssadeirasDashboard,
-  EtapaProductAccordion,
-  ProductCompactCard,
-  RealizadoHeader,
-  ThreeColumnLayout,
-} from '@/components/Realizado';
+  buildFornoLoteLookup,
+  buildFornoOrdemLookup,
+  buildFornoWorklistData,
+  FORNO_ETAPA_CONFIG,
+} from '@/domain/producao-etapa/forno-etapa-adapter';
 import {
-  buildEtapaDetalhesQuantidade,
-  loteToPainelItemEtapa,
   splitOrdensPorFinalizacao,
   type PainelLoteItemEtapa,
 } from '@/domain/realizado/etapa-painel-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
-import type { RealizadoGroup } from '@/domain/types/realizado';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useEtapaPainelCarga } from '@/hooks/useEtapaPainelCarga';
-import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 import type { ProducaoData } from '@/domain/types';
-
-type EtapaOrdemLayoutItem = RealizadoGroup & {
-  ordem: PainelOrdemEtapa;
-};
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
   const message = error instanceof Error ? error.message : fallback;
@@ -65,6 +57,9 @@ export default function ProducaoFornoPage() {
   useEffect(() => {
     setSelectedDate(latestDate);
   }, [latestDate]);
+
+  const ordemLookup = useMemo(() => buildFornoOrdemLookup(ordens), [ordens]);
+  const loteLookup = useMemo(() => buildFornoLoteLookup(ordens), [ordens]);
 
   const handleEditProducao = useCallback(
     async (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
@@ -175,102 +170,29 @@ export default function ProducaoFornoPage() {
     [editingLote, refreshOrdensOnly, setMessage],
   );
 
-  const renderLote = useCallback(
-    (ordem: PainelOrdemEtapa, lote: PainelLoteItemEtapa) => {
-      const produzidoDetalhes = buildEtapaDetalhesQuantidade(
-        { assadeiras: lote.assadeiras || 0, unidades: lote.unidades || 0 },
-        lote.modoQuantidade,
-      );
-      const isDeleting = deletingLoteId === lote.loteId;
-      const trailingSlot = (
-        <button
-          type="button"
-          className="
-            inline-flex items-center justify-center
-            min-h-11 min-w-11 rounded-md text-red-400
-            hover:bg-gray-700/50 hover:text-red-300
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500
-            disabled:opacity-60 disabled:cursor-wait
-          "
-          aria-label={`Excluir lote de ${lote.produto}`}
-          aria-busy={isDeleting}
-          disabled={isDeleting}
-          onClick={(event) => {
-            event.stopPropagation();
-            void handleDeleteLote(lote);
-          }}
-        >
-          {isDeleting ? (
-            <span
-              className="inline-block h-5 w-5 rounded-full border-2 border-red-400/30 border-t-red-400 animate-spin motion-reduce:animate-none"
-              aria-hidden
-            />
-          ) : (
-            <span className="material-icons text-xl" aria-hidden>
-              delete_outline
-            </span>
-          )}
-        </button>
-      );
-
-      return (
-        <ProductCompactCard
-          key={lote.loteId}
-          produto={lote.produto}
-          produzido={lote.produzido}
-          aProduzir={lote.aProduzir}
-          unidade={lote.unidade}
-          hasPhoto={Boolean(lote.fotoUrl)}
-          photoColor="white"
-          onPhotoClick={() => {
-            if (lote.fotoUrl) window.open(lote.fotoUrl, '_blank', 'noopener,noreferrer');
-          }}
-          onClick={() => void handleEditProducao(ordem, lote)}
-          isLoading={loadingCardId === lote.loteId}
-          detalhesProduzido={produzidoDetalhes}
-          horarioEmbalagem={formatLocalTimeHHmm(lote.produzidoEm || '') ?? undefined}
-          trailingSlot={trailingSlot}
-        />
-      );
+  const handleNovoLoteById = useCallback(
+    (ordemProducaoId: string) => {
+      const ordem = ordemLookup.get(ordemProducaoId);
+      if (ordem) handleNovoLote(ordem);
     },
-    [deletingLoteId, handleDeleteLote, handleEditProducao, loadingCardId],
+    [ordemLookup, handleNovoLote],
   );
 
-  const renderOrdemAccordion = useCallback(
-    (ordem: PainelOrdemEtapa, allowNovoLote: boolean) => {
-      const detalhesProduzido = buildEtapaDetalhesQuantidade(
-        ordem.produzidoBreakdown,
-        ordem.modoQuantidade,
-      );
-      const detalhesMeta = buildEtapaDetalhesQuantidade(ordem.pedido, ordem.modoQuantidade);
-
-      return (
-        <EtapaProductAccordion
-          key={ordem.ordemProducaoId}
-          instanceId={`${selectedDate}|${ordem.ordemProducaoId}`}
-          produto={ordem.produto}
-          cliente={ordem.tipoEstoque}
-          assadeiraNome={ordem.assadeiraNome}
-          observacao={ordem.observacao || undefined}
-          somaProduzido={ordem.produzido}
-          somaAProduzir={ordem.aProduzir}
-          unidade={ordem.unidade}
-          detalhesProduzido={detalhesProduzido}
-          detalhesMeta={detalhesMeta}
-          horarioProducao={undefined}
-          onNovoLote={
-            allowNovoLote && ordem.produzido < ordem.aProduzir
-              ? () => handleNovoLote(ordem)
-              : undefined
-          }
-          isNovoLoteLoading={creatingLoteOrdemId === ordem.ordemProducaoId}
-          renderLots={() =>
-            ordem.lotes.map((lote) => renderLote(ordem, loteToPainelItemEtapa(ordem, lote)))
-          }
-        />
-      );
+  const handleEditLoteById = useCallback(
+    (loteId: string) => {
+      const lote = loteLookup.get(loteId);
+      const ordem = lote ? ordemLookup.get(lote.ordemProducaoId) : undefined;
+      if (lote && ordem) void handleEditProducao(ordem, lote);
     },
-    [creatingLoteOrdemId, handleNovoLote, renderLote, selectedDate],
+    [loteLookup, ordemLookup, handleEditProducao],
+  );
+
+  const handleDeleteLoteById = useCallback(
+    (loteId: string) => {
+      const lote = loteLookup.get(loteId);
+      if (lote) void handleDeleteLote(lote);
+    },
+    [loteLookup, handleDeleteLote],
   );
 
   const { naoFinalizados, finalizados } = useMemo(
@@ -278,32 +200,46 @@ export default function ProducaoFornoPage() {
     [ordens],
   );
 
-  const itensNaoFinalizados = useMemo<EtapaOrdemLayoutItem[]>(
+  const toolbarMetrics = useMemo(() => {
+    const produzido = ordens.reduce((sum, ordem) => sum + ordem.produzido, 0);
+    const meta = ordens.reduce((sum, ordem) => sum + ordem.aProduzir, 0);
+    const falta = Math.max(0, meta - produzido);
+    const progressoPct = meta > 0 ? Math.min(100, (produzido / meta) * 100) : 0;
+
+    return {
+      produzido,
+      meta,
+      falta,
+      progressoPct,
+      metaAtingida: falta === 0,
+    };
+  }, [ordens]);
+
+  const worklist = useMemo(
     () =>
-      naoFinalizados.map((ordem) => ({
-        key: ordem.ordemProducaoId,
-        items: [],
-        ordem,
-      })),
-    [naoFinalizados],
+      buildFornoWorklistData({
+        naoFinalizados,
+        finalizados,
+        ordens,
+        selectedDate,
+        loadingCardId,
+        deletingLoteId,
+        creatingLoteOrdemId,
+      }),
+    [
+      naoFinalizados,
+      finalizados,
+      ordens,
+      selectedDate,
+      loadingCardId,
+      deletingLoteId,
+      creatingLoteOrdemId,
+    ],
   );
 
-  const itensFinalizados = useMemo<EtapaOrdemLayoutItem[]>(
-    () =>
-      finalizados.map((ordem) => ({
-        key: ordem.ordemProducaoId,
-        items: [],
-        ordem,
-      })),
-    [finalizados],
-  );
-
-  const renderOrdemItem = useCallback(
-    (group: RealizadoGroup, allowNovoLote: boolean) => {
-      const { ordem } = group as EtapaOrdemLayoutItem;
-      return renderOrdemAccordion(ordem, allowNovoLote);
-    },
-    [renderOrdemAccordion],
+  const totalLotes = useMemo(
+    () => ordens.reduce((sum, ordem) => sum + ordem.lotes.length, 0),
+    [ordens],
   );
 
   const onCloseModal = useCallback(() => {
@@ -345,92 +281,37 @@ export default function ProducaoFornoPage() {
     };
   }, [selectedOrdem, isNewLoteModal, editingLote]);
 
-  const totalLotes = useMemo(
-    () => ordens.reduce((sum, ordem) => sum + ordem.lotes.length, 0),
-    [ordens],
-  );
-
   return (
-    <div className="min-h-screen text-white" style={{ backgroundColor: '#330804' }}>
-      <RealizadoHeader
-        title="Realizado: Forno"
-        icon="🔥"
+    <>
+      <RealizadoEtapa
+        config={FORNO_ETAPA_CONFIG}
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
+        toolbar={toolbarMetrics}
+        loading={loading}
+        refreshing={refreshing}
+        message={message}
+        worklist={worklist}
+        dashboardHoraLatas={{
+          items: dashboardItems,
+          comparisonPrev: dateComparisonPrev
+            ? { date: dateComparisonPrev, items: dashboardPrev }
+            : null,
+          comparisonWeek: { date: comparisonWeekDate, items: dashboardWeek },
+        }}
+        footer={{
+          grupos: naoFinalizados.length + finalizados.length,
+          pedidos: ordens.length,
+          produzidoLabel: '',
+          metaLabel: '',
+          customLine: `${naoFinalizados.length + finalizados.length} ordens • ${totalLotes} lotes`,
+        }}
+        callbacks={{
+          onNovoLote: handleNovoLoteById,
+          onEditLote: handleEditLoteById,
+          onDeleteLote: handleDeleteLoteById,
+        }}
       />
-
-      <div className="p-4">
-        {message && (
-          <div
-            className={`mb-4 p-4 rounded-md border ${
-              message.includes('sucesso')
-                ? 'bg-green-800/30 border-green-600 text-green-100'
-                : 'bg-red-800/30 border-red-600 text-red-100'
-            }`}
-          >
-            {message}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-16 text-gray-300 text-xl">Carregando...</div>
-        ) : (
-          <div
-            className={`grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start transition-opacity duration-200 motion-reduce:transition-none ${
-              refreshing ? 'opacity-70 pointer-events-none' : ''
-            }`}
-          >
-            <div className="min-w-0 space-y-8">
-              {refreshing ? (
-                <div
-                  className="mb-3 flex items-center gap-2 text-sm text-gray-300"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-gray-500 border-t-amber-300 animate-spin motion-reduce:animate-none" />
-                  Atualizando dados...
-                </div>
-              ) : null}
-
-              {itensNaoFinalizados.length > 0 && (
-                <div className="mb-8">
-                  <ThreeColumnLayout
-                    groups={itensNaoFinalizados}
-                    columnCount={1}
-                    renderGroup={(group) => renderOrdemItem(group, true)}
-                  />
-                </div>
-              )}
-
-              {itensFinalizados.length > 0 && (
-                <div className="mb-8">
-                  <h2 className="text-xl font-bold text-white mb-4">Finalizados</h2>
-                  <ThreeColumnLayout
-                    groups={itensFinalizados}
-                    columnCount={1}
-                    renderGroup={(group) => renderOrdemItem(group, false)}
-                  />
-                </div>
-              )}
-            </div>
-
-            <EtapaAssadeirasDashboard
-              selectedDate={selectedDate}
-              items={dashboardItems}
-              comparisonPrev={
-                dateComparisonPrev
-                  ? { date: dateComparisonPrev, items: dashboardPrev }
-                  : null
-              }
-              comparisonWeek={{ date: comparisonWeekDate, items: dashboardWeek }}
-            />
-          </div>
-        )}
-
-        <footer className="mt-6 text-center text-gray-300 text-sm">
-          {itensNaoFinalizados.length + itensFinalizados.length} ordens • {totalLotes} lotes
-        </footer>
-      </div>
 
       <ProducaoModal
         isOpen={producaoModalOpen}
@@ -448,6 +329,6 @@ export default function ProducaoFornoPage() {
         mode="forno"
         modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}
       />
-    </div>
+    </>
   );
 }

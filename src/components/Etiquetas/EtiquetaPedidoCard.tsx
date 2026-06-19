@@ -6,18 +6,15 @@ import {
   formatEtiquetaMeta,
   formatEtiquetaRealizado,
 } from '@/components/Etiquetas/format-etiqueta-quantidade';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 type EtiquetaPedidoCardProps = {
   item: EtiquetaFilaItem;
   variant: 'pendente' | 'gerado';
   onAction: (item: EtiquetaFilaItem) => void;
 };
-
-const cardBaseClass =
-  'bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col gap-3';
-
-const primaryButtonClass =
-  'min-h-11 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 w-full';
 
 export default function EtiquetaPedidoCard({
   item,
@@ -30,65 +27,61 @@ export default function EtiquetaPedidoCard({
       : null;
 
   return (
-    <article
-      className={`${cardBaseClass} ${
-        variant === 'pendente'
-          ? 'hover:border-gray-300 hover:shadow-md transition-shadow duration-200'
-          : ''
-      }`}
+    <Card
+      as="article"
+      padding="md"
+      interactive={variant === 'pendente'}
+      className="flex flex-col gap-3"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 truncate">{item.produto}</h3>
-          <p className="text-sm text-gray-600 truncate">{item.tipoEstoque}</p>
+          <h3 className="truncate text-base font-semibold text-text-strong">{item.produto}</h3>
+          <p className="truncate text-sm text-text-muted">{item.tipoEstoque}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {item.origem === 'pedido' ? (
             <div
-              className="text-sm tabular-nums flex items-center gap-1.5"
+              className="flex items-center gap-1.5 font-mono text-sm tabular-nums"
               aria-label={`Realizado ${formatEtiquetaRealizado(item.produzido)}, meta ${formatEtiquetaMeta(item.pedido)}`}
             >
-              <span className="font-semibold text-gray-900">
+              <span className="font-semibold text-text-strong">
                 {formatEtiquetaRealizado(item.produzido)}
               </span>
-              <span className="text-xs text-gray-400">/</span>
-              <span className="text-gray-600">{formatEtiquetaMeta(item.pedido)}</span>
+              <span className="text-xs text-stone-400">/</span>
+              <span className="text-text-muted">{formatEtiquetaMeta(item.pedido)}</span>
             </div>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-              Manual
-            </span>
+            <Badge tone="accent">Manual</Badge>
           )}
-          {item.lote != null && (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+          {item.lote != null ? (
+            <Badge tone="neutral" numeric>
               Lote {item.lote}
-            </span>
-          )}
+            </Badge>
+          ) : null}
         </div>
       </div>
 
-      {item.origem === 'pedido' && item.primeiroLoteHorario && (
-        <p className="text-xs text-gray-500">
+      {item.origem === 'pedido' && item.primeiroLoteHorario ? (
+        <p className="text-xs text-text-muted">
           Embalado às {item.primeiroLoteHorario}
         </p>
-      )}
+      ) : null}
 
-      {geradoLabel && (
-        <span className="inline-flex w-fit items-center text-xs text-emerald-700 bg-emerald-50 rounded-full px-2.5 py-0.5">
+      {geradoLabel ? (
+        <Badge tone="success" icon="check_circle">
           Gerado às {geradoLabel}
-        </span>
-      )}
+        </Badge>
+      ) : null}
 
-      <button
+      <Button
         type="button"
+        variant={variant === 'pendente' ? 'primary' : 'secondary'}
+        icon={variant === 'pendente' ? 'print' : 'replay'}
+        fullWidth
         onClick={() => onAction(item)}
-        className={primaryButtonClass}
       >
-        <span className="material-icons text-base" aria-hidden>
-          {variant === 'pendente' ? 'print' : 'replay'}
-        </span>
         {variant === 'pendente' ? 'Gerar etiqueta' : 'Reimprimir'}
-      </button>
-    </article>
+      </Button>
+    </Card>
   );
 }

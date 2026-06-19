@@ -130,12 +130,11 @@ export default function SelectRemoteAutocomplete({
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-            {label} {required && <span className="text-red-500">*</span>}
+          <label className="mb-1.5 block text-sm font-medium tracking-[-0.004em] text-stone-700">
+            {label} {required && <span className="text-danger">*</span>}
           </label>
         )}
-        <div className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl bg-gray-50 animate-pulse h-[50px]">
-        </div>
+        <div className="h-[50px] w-full animate-pulse rounded-[9px] border border-border-default bg-stone-50" />
       </div>
     );
   }
@@ -144,11 +143,11 @@ export default function SelectRemoteAutocomplete({
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-semibold text-red-700 mb-1.5">
-            {label} {required && <span className="text-red-500">*</span>}
+          <label className="mb-1.5 block text-sm font-medium text-danger">
+            {label} {required && <span className="text-danger">*</span>}
           </label>
         )}
-        <div className="w-full px-4 py-3 border-2 border-red-100 rounded-xl bg-red-50 text-red-600 text-sm">
+        <div className="w-full rounded-[9px] border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-fg">
           {error}
         </div>
       </div>

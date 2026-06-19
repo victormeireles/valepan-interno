@@ -22,8 +22,8 @@ export const StockTipoPanel: React.FC<StockTipoPanelProps> = ({
 }) => {
   if (tipo.familias.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center">
-        <p className="text-sm font-medium text-gray-800">
+      <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-6 py-10 text-center">
+        <p className="text-sm font-medium text-stone-800">
           Nenhum produto neste tipo de estoque
         </p>
       </div>
