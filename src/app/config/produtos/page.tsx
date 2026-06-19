@@ -28,7 +28,7 @@ export default async function ProdutosConfigPage() {
   }));
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <ProdutosConfigClient
         produtos={produtos}
         assadeirasAtivas={assadeirasAtivas}

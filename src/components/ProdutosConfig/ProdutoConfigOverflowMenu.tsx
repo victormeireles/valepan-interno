@@ -2,29 +2,31 @@
 
 import OverflowMenu from '@/components/OverflowMenu/OverflowMenu';
 import OverflowMenuItem from '@/components/OverflowMenu/OverflowMenuItem';
+import { configTableOverflowTriggerClass } from '@/components/Config/config-table-styles';
 
 export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas';
 
 type Props = {
   onSelect: (action: ProdutoConfigMenuAction) => void;
+  compact?: boolean;
 };
 
-export default function ProdutoConfigOverflowMenu({ onSelect }: Props) {
+export default function ProdutoConfigOverflowMenu({ onSelect, compact = false }: Props) {
   return (
     <OverflowMenu
       ariaLabel="Opções de configuração do produto"
-      menuWidth={208}
-      menuClassName="rounded-xl border border-gray-200 bg-white py-1 shadow-lg"
-      triggerClassName="min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      menuWidth={240}
+      menuClassName="rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+      triggerClassName={compact ? configTableOverflowTriggerClass : undefined}
     >
       <OverflowMenuItem
         icon="bakery_dining"
-        label="Assadeiras"
+        label="Configurar assadeiras"
         onClick={() => onSelect('assadeiras')}
       />
       <OverflowMenuItem
         icon="menu_book"
-        label="Receitas"
+        label="Configurar receitas"
         onClick={() => onSelect('receitas')}
       />
     </OverflowMenu>

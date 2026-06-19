@@ -1,47 +1,41 @@
 'use client';
 
 import type { ProdutoComAssadeirasResumo } from '@/domain/assadeiras/produto-assadeira-types';
+import { configTableDenseBadgeClass } from '@/components/Config/config-table-styles';
+import { Badge } from '@/components/ui/Badge';
 
 type Props = {
   produto: Pick<
     ProdutoComAssadeirasResumo,
     'assadeiraOrigem' | 'assadeiraResolvidaCount' | 'semAssadeira'
   >;
+  dense?: boolean;
 };
 
-export default function AssadeiraStatusBadge({ produto }: Props) {
+export default function AssadeiraStatusBadge({ produto, dense = false }: Props) {
   const count = produto.assadeiraResolvidaCount;
-  const label =
-    count === 1 ? 'assadeira' : 'assadeiras';
+  const label = count === 1 ? 'assadeira' : 'assadeiras';
+  const denseClass = dense ? configTableDenseBadgeClass : '';
 
   if (produto.assadeiraOrigem === 'pendente' || produto.semAssadeira) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-        <span className="material-icons text-sm" aria-hidden="true">
-          warning
-        </span>
+      <Badge tone="warning" icon="warning" className={denseClass}>
         Sem assadeira
-      </span>
+      </Badge>
     );
   }
 
   if (produto.assadeiraOrigem === 'excecao') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-800 tabular-nums">
-        <span className="material-icons text-sm" aria-hidden="true">
-          edit_note
-        </span>
+      <Badge tone="accent" icon="edit_note" numeric className={denseClass}>
         Exceção · {count} {label}
-      </span>
+      </Badge>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800 tabular-nums">
-      <span className="material-icons text-sm" aria-hidden="true">
-        rule
-      </span>
+    <Badge tone="outline" icon="rule" numeric className={denseClass}>
       Regra · {count} {label}
-    </span>
+    </Badge>
   );
 }

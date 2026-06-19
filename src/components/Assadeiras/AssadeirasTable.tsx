@@ -1,6 +1,15 @@
 'use client';
 
 import type { Assadeira } from '@/app/actions/assadeiras-actions';
+import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
+import {
+  configSortButtonClass,
+  configTableBodyCellClass,
+  configTableHeadCellClass,
+  configTableRowClass,
+  formatNumericZero,
+} from '@/components/Config/config-table-styles';
 
 export type AssadeiraSortKey =
   | 'nome'
@@ -53,81 +62,68 @@ export default function AssadeirasTable({
 
   const wrapperClassName = embedded
     ? 'hidden md:block overflow-x-auto'
-    : 'hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden';
+    : 'hidden md:block overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm';
 
   return (
     <div className={wrapperClassName}>
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-100">
+      <table className="w-full border-collapse text-sm">
+        <thead className="border-b border-stone-200 bg-surface-sunken">
           <tr>
             {headers.map(({ key, label, align = 'left' }) => (
               <th
                 key={label}
                 scope="col"
-                className={`px-4 py-3 font-semibold text-gray-600 ${
-                  align === 'right' ? 'text-right' : 'text-left'
-                }`}
+                className={`${configTableHeadCellClass} ${align === 'right' ? 'text-right' : 'text-left'}`}
                 aria-sort={key ? sortAriaValue(key, sortKey, sortDir) : undefined}
               >
                 {key ? (
                   <button
                     type="button"
                     onClick={() => onSort(key)}
-                    className={`inline-flex min-h-11 items-center gap-1 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg px-1 ${
-                      align === 'right' ? 'ml-auto' : ''
-                    }`}
+                    className={`${configSortButtonClass} ${align === 'right' ? 'ml-auto' : ''}`}
                   >
                     {label}
-                    {sortKey === key && (
-                      <span className="material-icons text-base" aria-hidden="true">
-                        {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
-                      </span>
-                    )}
+                    <ConfigSortIcon active={sortKey === key} dir={sortDir} />
                   </button>
                 ) : (
-                  label
+                  <span className={configSortButtonClass}>{label}</span>
                 )}
               </th>
             ))}
-            <th scope="col" className="w-10 px-2 py-3">
+            <th scope="col" className={`w-10 ${configTableHeadCellClass} px-2`}>
               <span className="sr-only">Abrir</span>
             </th>
           </tr>
         </thead>
-        <tbody>
-          {items.map((item) => (
+        <tbody className="divide-y divide-stone-100">
+          {items.map((item, index) => (
             <tr
               key={item.id}
               tabIndex={0}
               aria-label={`Editar assadeira ${item.nome}`}
-              className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer focus:outline-none focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
-                !item.ativo ? 'opacity-60' : ''
-              }`}
+              className={configTableRowClass(index, !item.ativo)}
               onClick={() => onRowClick(item)}
               onKeyDown={(event) => handleRowKeyDown(event, () => onRowClick(item))}
             >
-              <td className="px-4 py-3 font-medium text-gray-900">{item.nome}</td>
-              <td className="px-4 py-3 tabular-nums text-gray-900 text-right">
-                {item.unidades_por_assadeira ?? '—'}
+              <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
+                {item.nome}
               </td>
-              <td className="px-4 py-3 tabular-nums text-gray-900 text-right">
-                {item.quantidade}
+              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                {item.unidades_por_assadeira == null
+                  ? '—'
+                  : formatNumericZero(item.unidades_por_assadeira)}
               </td>
-              <td className="px-4 py-3">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    item.ativo
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  <span className="material-icons text-sm" aria-hidden="true">
-                    {item.ativo ? 'check_circle' : 'pause_circle'}
-                  </span>
-                  {item.ativo ? 'Ativa' : 'Inativa'}
-                </span>
+              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                {formatNumericZero(item.quantidade)}
               </td>
-              <td className="px-2 py-3 text-gray-400">
+              <td className={configTableBodyCellClass}>
+                <ConfigAtivoBadge
+                  ativo={item.ativo}
+                  ativoLabel="Ativa"
+                  inativoLabel="Inativa"
+                />
+              </td>
+              <td className={`${configTableBodyCellClass} px-2 text-stone-400`}>
                 <span className="material-icons text-base" aria-hidden="true">
                   chevron_right
                 </span>

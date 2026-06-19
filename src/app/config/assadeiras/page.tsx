@@ -8,7 +8,7 @@ export default async function AssadeirasPage() {
   const assadeiras = await getAssadeiras(true);
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <AssadeirasClient initialAssadeiras={assadeiras} />
     </Suspense>
   );

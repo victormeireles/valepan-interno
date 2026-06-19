@@ -1,6 +1,15 @@
 'use client';
 
 import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
+import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
+import {
+  configSortButtonClass,
+  configTableBodyCellClass,
+  configTableHeadCellClass,
+  configTableRowClass,
+  formatNumericZero,
+} from '@/components/Config/config-table-styles';
 
 export type ReceitaSortKey = 'nome' | 'tipo' | 'codigo' | 'ativo';
 
@@ -49,51 +58,55 @@ export default function ReceitasConfigTable({
 
   const wrapperClassName = embedded
     ? 'hidden md:block overflow-x-auto'
-    : 'hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden';
+    : 'hidden md:block overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm';
 
-  const headers: { key: ReceitaSortKey | null; label: string }[] = [
+  const headers: {
+    key: ReceitaSortKey | null;
+    label: string;
+    align?: 'left' | 'right';
+  }[] = [
     { key: 'nome', label: 'Nome' },
     { key: 'tipo', label: 'Tipo' },
     { key: 'codigo', label: 'Código' },
-    { key: null, label: 'Ingredientes' },
-    { key: null, label: 'Produtos' },
+    { key: null, label: 'Ingredientes', align: 'right' },
+    { key: null, label: 'Produtos', align: 'right' },
     { key: 'ativo', label: 'Status' },
   ];
 
   return (
     <div className={wrapperClassName}>
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-100">
+      <table className="w-full border-collapse text-sm">
+        <thead className="border-b border-stone-200 bg-surface-sunken">
           <tr>
-            {headers.map(({ key, label }) => (
+            {headers.map(({ key, label, align = 'left' }) => (
               <th
                 key={label}
                 scope="col"
-                className="px-4 py-3 font-semibold text-gray-600 text-left"
+                className={`${configTableHeadCellClass} ${align === 'right' ? 'text-right' : 'text-left'}`}
                 aria-sort={key ? sortAriaValue(key) : undefined}
               >
                 {key ? (
                   <button
                     type="button"
                     onClick={() => onSort(key)}
-                    className="inline-flex items-center gap-1 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                    className={`${configSortButtonClass} ${align === 'right' ? 'ml-auto' : ''}`}
                   >
                     {label}
-                    {sortKey === key && (
-                      <span className="material-icons text-base" aria-hidden="true">
-                        {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
-                      </span>
-                    )}
+                    <ConfigSortIcon active={sortKey === key} dir={sortDir} />
                   </button>
                 ) : (
-                  label
+                  <span
+                    className={`${configSortButtonClass} ${align === 'right' ? 'ml-auto' : ''}`}
+                  >
+                    {label}
+                  </span>
                 )}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
-          {items.map((item) => (
+        <tbody className="divide-y divide-stone-100">
+          {items.map((item, index) => (
             <tr
               key={item.id}
               tabIndex={0}
@@ -104,25 +117,29 @@ export default function ReceitasConfigTable({
                   onRowClick(item);
                 }
               }}
-              className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
-                !isAtiva(item) ? 'opacity-60' : ''
-              }`}
+              className={configTableRowClass(index, !isAtiva(item))}
             >
-              <td className="px-4 py-3 font-medium text-gray-900">{item.nome}</td>
-              <td className="px-4 py-3 text-gray-600">{TIPO_LABELS[item.tipo]}</td>
-              <td className="px-4 py-3 font-mono text-xs text-gray-500">{item.codigo || '—'}</td>
-              <td className="px-4 py-3 text-gray-600 tabular-nums">{countIngredientes(item)}</td>
-              <td className="px-4 py-3 text-gray-600 tabular-nums">{countProdutos(item)}</td>
-              <td className="px-4 py-3">
-                <span
-                  className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                    isAtiva(item)
-                      ? 'bg-emerald-50 text-emerald-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {isAtiva(item) ? 'Ativa' : 'Inativa'}
-                </span>
+              <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
+                {item.nome}
+              </td>
+              <td className={`${configTableBodyCellClass} text-stone-600`}>
+                {TIPO_LABELS[item.tipo]}
+              </td>
+              <td className={`${configTableBodyCellClass} font-mono text-xs text-stone-500`}>
+                {item.codigo || '—'}
+              </td>
+              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                {formatNumericZero(countIngredientes(item))}
+              </td>
+              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                {formatNumericZero(countProdutos(item))}
+              </td>
+              <td className={configTableBodyCellClass}>
+                <ConfigAtivoBadge
+                  ativo={isAtiva(item)}
+                  ativoLabel="Ativa"
+                  inativoLabel="Inativa"
+                />
               </td>
             </tr>
           ))}

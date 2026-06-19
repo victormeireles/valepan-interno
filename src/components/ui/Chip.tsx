@@ -32,6 +32,7 @@ export function Chip({
         'inline-flex h-[2.125rem] items-center gap-1.5 rounded-full px-3.5',
         'text-[0.8125rem] font-medium tracking-[-0.004em]',
         'transition-[background,border-color,color,box-shadow,transform] duration-[130ms] ease-out',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
         active
           ? 'border-amber-300/90 bg-amber-100 text-amber-800'
           : hover

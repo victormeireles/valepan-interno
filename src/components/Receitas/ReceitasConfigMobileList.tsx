@@ -1,6 +1,8 @@
 'use client';
 
 import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
+import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import { configMobileRowClass } from '@/components/Config/config-table-styles';
 
 const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
   massa: 'Massa',
@@ -20,41 +22,45 @@ export default function ReceitasConfigMobileList({ items, onRowClick }: Props) {
   if (items.length === 0) return null;
 
   return (
-    <div className="md:hidden p-3 pt-0 space-y-2 border-t border-gray-100">
-      {items.map((item) => {
+    <div className="divide-y divide-stone-100 md:hidden">
+      {items.map((item, index) => {
         const ativa = item.ativo !== false;
         const ingredientes = item.receita_ingredientes?.length ?? 0;
+
         return (
           <button
             key={item.id}
             type="button"
             onClick={() => onRowClick(item)}
-            className={`w-full min-h-11 rounded-2xl border bg-white p-4 shadow-sm text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-              ativa ? 'border-gray-200' : 'border-gray-200 opacity-60'
-            }`}
+            className={`${configMobileRowClass(index)} ${!ativa ? 'opacity-60' : ''}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  {TIPO_LABELS[item.tipo]}
-                </p>
-                <p className="font-semibold text-gray-900 truncate">{item.nome}</p>
-                <p className="mt-1 text-sm text-gray-600">
-                  {ingredientes} ingrediente{ingredientes === 1 ? '' : 's'}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                    ativa ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {ativa ? 'Ativa' : 'Inativa'}
-                </span>
-                <span className="material-icons text-gray-400" aria-hidden="true">
-                  chevron_right
-                </span>
-              </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                {TIPO_LABELS[item.tipo]}
+              </p>
+              <p className="truncate font-semibold text-stone-900">{item.nome}</p>
+              <p className="mt-1 text-sm text-stone-600">
+                {ingredientes === 0 ? (
+                  <span className="font-mono tabular-nums text-stone-700">—</span>
+                ) : (
+                  <>
+                    <span className="font-mono tabular-nums text-stone-700">
+                      {ingredientes}
+                    </span>
+                    {ingredientes === 1 ? ' ingrediente' : ' ingredientes'}
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <ConfigAtivoBadge
+                ativo={ativa}
+                ativoLabel="Ativa"
+                inativoLabel="Inativa"
+              />
+              <span className="material-icons text-stone-400" aria-hidden="true">
+                chevron_right
+              </span>
             </div>
           </button>
         );

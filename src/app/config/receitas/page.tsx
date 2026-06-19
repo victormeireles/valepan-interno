@@ -8,7 +8,7 @@ export default async function ReceitasConfigPage() {
   const receitas = await getReceitas(true);
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <ReceitasConfigClient initialReceitas={receitas} />
     </Suspense>
   );

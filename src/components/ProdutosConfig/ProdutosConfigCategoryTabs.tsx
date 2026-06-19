@@ -1,6 +1,7 @@
 'use client';
 
 import type { ProdutoComAssadeirasResumo } from '@/domain/assadeiras/produto-assadeira-types';
+import { Tabs, type TabItem } from '@/components/ui/Tabs';
 
 export const ALL_CATEGORIES_TAB_ID = 'all';
 
@@ -49,63 +50,25 @@ export default function ProdutosConfigCategoryTabs({
 
   const allCount = tabs.reduce((sum, tab) => sum + tab.count, 0);
 
-  return (
-    <div
-      role="tablist"
-      aria-label="Filtrar por categoria"
-      className="flex gap-2 overflow-x-auto pb-1 snap-x border-b border-gray-100 px-4 pt-3"
-    >
-      <button
-        type="button"
-        role="tab"
-        id="produto-tab-all"
-        aria-selected={activeTabId === ALL_CATEGORIES_TAB_ID}
-        aria-controls="produto-tabpanel-list"
-        onClick={() => onTabChange(ALL_CATEGORIES_TAB_ID)}
-        className={tabButtonClass(activeTabId === ALL_CATEGORIES_TAB_ID)}
-      >
-        Todos
-        <TabCount count={allCount} />
-      </button>
+  const tabItems: TabItem[] = [
+    { id: ALL_CATEGORIES_TAB_ID, label: 'Todos', count: allCount },
+    ...tabs.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      count: tab.count,
+    })),
+  ];
 
-      {tabs.map((tab) => {
-        const selected = activeTabId === tab.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`produto-tab-${tab.id}`}
-            aria-selected={selected}
-            aria-controls="produto-tabpanel-list"
-            onClick={() => onTabChange(tab.id)}
-            className={tabButtonClass(selected)}
-          >
-            {tab.label}
-            <TabCount count={tab.count} />
-          </button>
-        );
-      })}
+  return (
+    <div className="overflow-x-auto border-b border-stone-100 px-4 py-3">
+      <Tabs
+        tabs={tabItems}
+        value={activeTabId}
+        onChange={onTabChange}
+        ariaLabel="Filtrar por categoria"
+        tabIdPrefix="produto-tab"
+        panelId="produto-tabpanel-list"
+      />
     </div>
-  );
-}
-
-function tabButtonClass(selected: boolean): string {
-  const base =
-    'inline-flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
-
-  return selected
-    ? `${base} border-slate-900 bg-slate-900 text-white`
-    : `${base} border-gray-200 bg-white text-gray-700 hover:bg-gray-50`;
-}
-
-function TabCount({ count }: { count: number }) {
-  return (
-    <span
-      className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-semibold tabular-nums"
-      aria-hidden="true"
-    >
-      {count}
-    </span>
   );
 }

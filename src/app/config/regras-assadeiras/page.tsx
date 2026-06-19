@@ -16,7 +16,7 @@ export default async function RegrasAssadeirasPage() {
   ]);
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <RegrasAssadeirasClient
         initialRegras={regras}
         categorias={categorias}

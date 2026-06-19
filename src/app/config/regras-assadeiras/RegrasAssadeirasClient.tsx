@@ -13,6 +13,13 @@ import RegrasAssadeirasMobileList from '@/components/RegrasAssadeiras/RegrasAssa
 import RegrasAssadeirasTable, {
   type RegraSortKey,
 } from '@/components/RegrasAssadeiras/RegrasAssadeirasTable';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Toast } from '@/components/ui/Toast';
 
 type StatusFilter = 'todas' | 'ativas' | 'inativas';
 
@@ -32,9 +39,6 @@ function compareValues(a: unknown, b: unknown): number {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b), 'pt-BR');
 }
-
-const primaryButtonClassName =
-  'min-h-11 inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl font-semibold shadow-sm hover:bg-gray-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
 
 export default function RegrasAssadeirasClient({
   initialRegras,
@@ -119,87 +123,60 @@ export default function RegrasAssadeirasClient({
 
   const canCreate = categorias.length > 0 && assadeirasAtivas.length > 0;
 
+  const hasActiveFilters =
+    Boolean(searchTerm) || statusFilter !== 'todas' || Boolean(categoriaFilter);
+
   return (
     <div className="space-y-4">
       <ConfigPageHeader
         title="Regras de Assadeira"
         icon="rule"
+        description="Defina qual assadeira usar por categoria e peso (gramas). Produtos com exceção manual em Produtos prevalecem sobre estas regras."
         action={
-          <button
-            type="button"
+          <Button
+            icon="add"
             onClick={openCreate}
             disabled={!canCreate}
-            className={`${primaryButtonClassName} disabled:opacity-50 disabled:cursor-not-allowed`}
+            className="w-full sm:w-auto"
           >
-            <span className="material-icons text-base" aria-hidden="true">
-              add
-            </span>
             Nova regra
-          </button>
+          </Button>
         }
       />
 
-      <p className="text-sm text-gray-600 -mt-2">
-        Defina qual assadeira usar por categoria e peso (gramas). Produtos com exceção manual
-        em Produtos prevalecem sobre estas regras.
-      </p>
-
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
-        >
+      {toast ? (
+        <Toast tone="success" onClose={() => setToast(null)}>
           {toast}
-        </div>
-      )}
+        </Toast>
+      ) : null}
 
-      {!canCreate && (
-        <div
-          role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-        >
+      {!canCreate ? (
+        <Toast tone="warning" icon="info">
           Cadastre ao menos uma categoria ativa e uma assadeira ativa antes de criar regras.
-        </div>
-      )}
+        </Toast>
+      ) : null}
 
-      <section
-        aria-label="Lista de regras de assadeira"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-      >
-        <div className="border-b border-gray-100 p-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <Card padding="none" aria-label="Lista de regras de assadeira" className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-stone-100 p-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-1 flex-col gap-4 sm:flex-row sm:items-end sm:flex-wrap">
-            <div className="flex-1 min-w-[12rem]">
-              <label htmlFor="regra-search" className="sr-only">
-                Buscar regra
-              </label>
-              <div className="relative">
-                <span
-                  className="material-icons pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl"
-                  aria-hidden="true"
-                >
-                  search
-                </span>
-                <input
-                  id="regra-search"
-                  type="search"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar categoria ou assadeira..."
-                  className="w-full min-h-11 pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-base text-gray-900 placeholder:text-gray-500 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                />
-              </div>
+            <div className="min-w-[12rem] flex-1">
+              <Input
+                id="regra-search"
+                type="search"
+                icon="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar categoria ou assadeira..."
+                aria-label="Buscar regra"
+              />
             </div>
 
             <div className="min-w-[10rem]">
-              <label htmlFor="regra-categoria-filter" className="sr-only">
-                Filtrar por categoria
-              </label>
-              <select
+              <Select
                 id="regra-categoria-filter"
                 value={categoriaFilter}
                 onChange={(e) => setCategoriaFilter(e.target.value)}
-                className="w-full min-h-11 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-base text-gray-900 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                aria-label="Filtrar por categoria"
               >
                 <option value="">Todas categorias</option>
                 {categorias.map((c) => (
@@ -207,72 +184,63 @@ export default function RegrasAssadeirasClient({
                     {c.nome}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <fieldset className="min-w-0">
               <legend className="sr-only">Filtrar por status</legend>
               <div className="flex flex-wrap gap-2">
                 {statusOptions.map(({ value, label }) => (
-                  <button
+                  <Chip
                     key={value}
-                    type="button"
-                    aria-pressed={statusFilter === value}
+                    active={statusFilter === value}
                     onClick={() => setStatusFilter(value)}
-                    className={`min-h-11 px-4 rounded-xl text-sm font-medium border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                      statusFilter === value
-                        ? 'bg-gray-900 text-white border-gray-900'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                    }`}
                   >
                     {label}
-                  </button>
+                  </Chip>
                 ))}
               </div>
             </fieldset>
           </div>
 
-          <p className="text-sm text-gray-500 tabular-nums shrink-0" aria-live="polite">
+          <p
+            className="shrink-0 text-sm text-stone-500 font-mono tabular-nums"
+            aria-live="polite"
+          >
             {resultLabel}
           </p>
         </div>
 
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-6">
-            <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-              <span className="material-icons text-3xl text-gray-300" aria-hidden="true">
-                rule
-              </span>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {searchTerm || statusFilter !== 'todas' || categoriaFilter
-                ? 'Nenhuma regra encontrada'
-                : 'Nenhuma regra cadastrada'}
-            </h2>
-            <p className="text-gray-500 max-w-sm text-center mt-1 text-sm">
-              {searchTerm || statusFilter !== 'todas' || categoriaFilter
+          <EmptyState
+            icon="rule"
+            title={
+              hasActiveFilters ? 'Nenhuma regra encontrada' : 'Nenhuma regra cadastrada'
+            }
+            description={
+              hasActiveFilters
                 ? 'Tente ajustar a busca ou limpar os filtros.'
-                : 'Crie a primeira regra para mapear categoria + peso → assadeira.'}
-            </p>
-            {(searchTerm || statusFilter !== 'todas' || categoriaFilter) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setCategoriaFilter('');
-                  setStatusFilter('todas');
-                }}
-                className="mt-4 min-h-11 px-4 text-sm font-medium text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
-              >
-                Limpar filtros
-              </button>
-            )}
-            {!searchTerm && statusFilter === 'todas' && !categoriaFilter && canCreate && (
-              <button type="button" onClick={openCreate} className={`mt-4 ${primaryButtonClassName}`}>
-                Criar primeira regra
-              </button>
-            )}
-          </div>
+                : 'Crie a primeira regra para mapear categoria + peso → assadeira.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setCategoriaFilter('');
+                    setStatusFilter('todas');
+                  }}
+                >
+                  Limpar filtros
+                </Button>
+              ) : canCreate ? (
+                <Button icon="add" onClick={openCreate}>
+                  Criar primeira regra
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <>
             <RegrasAssadeirasTable
@@ -286,7 +254,7 @@ export default function RegrasAssadeirasClient({
             <RegrasAssadeirasMobileList items={filtered} onRowClick={openEdit} />
           </>
         )}
-      </section>
+      </Card>
 
       <RegraAssadeiraModal
         isOpen={modalOpen}

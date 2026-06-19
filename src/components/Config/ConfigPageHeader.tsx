@@ -20,15 +20,15 @@ export default function ConfigPageHeader({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gray-50 border border-gray-200 text-gray-700"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 text-amber-800"
             aria-hidden="true"
           >
             <span className="material-icons text-xl">{icon}</span>
           </span>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900">{title}</h1>
             {description && (
-              <p className="mt-1 text-sm text-gray-600">{description}</p>
+              <p className="mt-1 text-sm text-stone-600">{description}</p>
             )}
           </div>
         </div>

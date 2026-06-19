@@ -9,6 +9,7 @@
   /* App & surfaces */
   --bg-app: #fafaf9; /* stone-50 */
   --surface: #ffffff;
+  --surface-sunken: #f5f5f4; /* stone-100 */
 
   /* Text */
   --text-strong: #1c1917; /* stone-900 */
@@ -61,6 +62,7 @@
   /* Semantic colors */
   --color-app: var(--bg-app);
   --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
   --color-text-strong: var(--text-strong);
   --color-text-muted: var(--text-muted);
   --color-border-default: var(--border-default);

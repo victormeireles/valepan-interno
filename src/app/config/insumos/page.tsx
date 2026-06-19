@@ -8,7 +8,7 @@ export default async function InsumosConfigPage() {
   const insumos = await getInsumos(true);
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <InsumosConfigClient initialInsumos={insumos} />
     </Suspense>
   );

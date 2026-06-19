@@ -8,7 +8,7 @@ export default async function TiposEstoquePage() {
   const tipos = await listTiposEstoqueAdmin(true);
 
   return (
-    <Suspense fallback={<div className="p-8 text-gray-500">Carregando…</div>}>
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
       <TiposEstoqueClient initialTipos={tipos} />
     </Suspense>
   );

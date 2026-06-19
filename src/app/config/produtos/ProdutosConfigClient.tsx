@@ -16,6 +16,11 @@ import type { ProdutoResumoComReceitas } from '@/app/actions/produto-receitas-ac
 import type { ProdutoConfigResumo } from '@/domain/produtos/produto-config-resumo';
 import { countReceitasVinculadas } from '@/domain/produtos/produto-config-resumo';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
+import { Toast } from '@/components/ui/Toast';
 import ProdutoAssadeiraLinkModal from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal';
 import ProdutoAssadeirasConfigModal from '@/components/ProdutosConfig/ProdutoAssadeirasConfigModal';
 import ProdutoReceitasConfigModal, {
@@ -322,49 +327,35 @@ export default function ProdutosConfigClient({
 
   return (
     <div className="space-y-4">
-      <ConfigPageHeader title="Configuração de Produtos" icon="inventory_2" />
+      <ConfigPageHeader
+        title="Configuração de Produtos"
+        icon="inventory_2"
+        description="Gerencie assadeiras e receitas vinculadas a cada produto."
+      />
 
-      <p className="text-sm text-gray-600 -mt-2">
-        Gerencie assadeiras e receitas vinculadas a cada produto.
-      </p>
-
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
-        >
+      {toast ? (
+        <Toast tone="success" onClose={() => setToast(null)}>
           {toast}
-        </div>
-      )}
+        </Toast>
+      ) : null}
 
-      <section
-        aria-label="Lista de produtos"
-        className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-      >
-        <div className="border-b border-gray-100 p-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex-1 min-w-0">
-            <label htmlFor="produto-config-search" className="sr-only">
-              Buscar produto por nome
-            </label>
-            <div className="relative">
-              <span
-                className="material-icons pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl"
-                aria-hidden="true"
-              >
-                search
-              </span>
-              <input
-                id="produto-config-search"
-                type="search"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar produto..."
-                className="w-full min-h-11 pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-base text-gray-900 placeholder:text-gray-500 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-              />
-            </div>
+      <Card padding="none" aria-label="Lista de produtos" className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-stone-100 p-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <Input
+              id="produto-config-search"
+              type="search"
+              icon="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar produto..."
+              aria-label="Buscar produto por nome"
+            />
           </div>
-          <p className="text-sm text-gray-500 tabular-nums shrink-0" aria-live="polite">
+          <p
+            className="shrink-0 text-sm text-stone-500 font-mono tabular-nums"
+            aria-live="polite"
+          >
             {resultLabel}
           </p>
         </div>
@@ -384,51 +375,48 @@ export default function ProdutosConfigClient({
               : `produto-tab-${activeCategoryId}`
           }
         >
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-6">
-            <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-              <span className="material-icons text-3xl text-gray-300" aria-hidden="true">
-                inventory_2
-              </span>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {hasActiveFilters ? 'Nenhum produto encontrado' : 'Nenhum produto ativo'}
-            </h2>
-            <p className="text-gray-500 max-w-sm text-center mt-1 text-sm">
-              {hasActiveFilters
-                ? 'Tente ajustar a busca ou selecionar outra categoria.'
-                : 'Cadastre produtos ativos para configurá-los aqui.'}
-            </p>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setActiveCategoryId(ALL_CATEGORIES_TAB_ID);
-                }}
-                className="mt-4 min-h-11 px-4 text-sm font-medium text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
-              >
-                Limpar filtros
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <ProdutosConfigTable
-              items={filtered}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-              onMenuSelect={handleMenuSelect}
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="inventory_2"
+              title={
+                hasActiveFilters ? 'Nenhum produto encontrado' : 'Nenhum produto ativo'
+              }
+              description={
+                hasActiveFilters
+                  ? 'Tente ajustar a busca ou selecionar outra categoria.'
+                  : 'Cadastre produtos ativos para configurá-los aqui.'
+              }
+              action={
+                hasActiveFilters ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setActiveCategoryId(ALL_CATEGORIES_TAB_ID);
+                    }}
+                  >
+                    Limpar filtros
+                  </Button>
+                ) : undefined
+              }
             />
-            <ProdutosConfigMobileList
-              items={filtered}
-              onMenuSelect={handleMenuSelect}
-            />
-          </>
-        )}
+          ) : (
+            <>
+              <ProdutosConfigTable
+                items={filtered}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onMenuSelect={handleMenuSelect}
+              />
+              <ProdutosConfigMobileList
+                items={filtered}
+                onMenuSelect={handleMenuSelect}
+              />
+            </>
+          )}
         </div>
-      </section>
+      </Card>
 
       {activeProduto && (
         <>
