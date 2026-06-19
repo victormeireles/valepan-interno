@@ -78,6 +78,50 @@ export class OmieWebhookEventoRepository {
 
     return data;
   }
+
+  async findByMessageId(messageId: string): Promise<OmieWebhookEventoRow | null> {
+    const { data, error } = await this.supabase
+      .from('omie_webhook_eventos')
+      .select('*')
+      .eq('message_id', messageId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Erro ao buscar evento Omie por message_id: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async registrarEvento(input: {
+    empresaId: string;
+    appKeyRecebida: string;
+    topic: string;
+    messageId: string | null;
+    payloadJson: Database['public']['Tables']['omie_webhook_eventos']['Insert']['payload_json'];
+  }): Promise<OmieWebhookEventoRow> {
+    const now = new Date().toISOString();
+    const { data, error } = await this.supabase
+      .from('omie_webhook_eventos')
+      .insert({
+        empresa_id: input.empresaId,
+        app_key_recebida: input.appKeyRecebida,
+        topic: input.topic,
+        message_id: input.messageId,
+        payload_json: input.payloadJson,
+        status_processamento: 'pendente',
+        received_at: now,
+        updated_at: now,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(`Erro ao registrar evento Omie: ${error.message}`);
+    }
+
+    return data;
+  }
 }
 
 export const omieWebhookEventoRepository = new OmieWebhookEventoRepository();
