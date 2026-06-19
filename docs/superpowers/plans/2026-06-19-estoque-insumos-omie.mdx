@@ -1,0 +1,922 @@
+# Estoque e custo de insumos via Omie — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Registrar entradas automáticas de estoque de insumos a partir de webhooks Omie (`RecebimentoProduto.Concluido`), com mapeamento Omie→insumo, conversão de unidades, custo da última NF, fila de pendências e tela `/estoque-insumos`.
+
+**Architecture:** Webhook gravado em `omie_webhook_eventos` (app pedidos); cron neste app processa eventos pendentes via `InsumoRecebimentoProcessor` → `ConsultarRecebimento` → `InsumoEstoqueService`. Snapshot (`insumo_saldos`) + ledger (`insumo_movimentos`). Mapeamentos em `integracao_insumos` por `(empresa_id, omie_id_produto)`.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase Postgres, Vitest, Tailwind v4, Vercel Cron.
+
+**Spec:** `docs/superpowers/specs/2026-06-19-estoque-insumos-omie-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `CREATE_INSUMO_ESTOQUE_TABLES.sql` | DDL: enums, 4 tabelas, índices, RLS |
+| `src/domain/types/insumo-estoque.ts` | Tipos de domínio |
+| `src/domain/insumos/insumo-entrada-calculo.ts` | Funções puras: conversão e custo |
+| `src/domain/insumos/insumo-entrada-calculo.test.ts` | Testes Vitest |
+| `src/data/insumos/InsumoEstoqueRepository.ts` | Saldos + movimentos |
+| `src/data/insumos/InsumoMapeamentoRepository.ts` | CRUD `integracao_insumos` |
+| `src/data/insumos/InsumoPendenciaRepository.ts` | Fila de pendências |
+| `src/data/omie/OmieWebhookEventoRepository.ts` | Leitura/atualização de eventos |
+| `src/lib/clients/omie-recebimento-client.ts` | API `ConsultarRecebimento` |
+| `src/lib/services/insumo-estoque-service.ts` | Registrar entrada, ajuste, custo |
+| `src/lib/services/insumo-recebimento-processor.ts` | Orquestra webhook → estoque |
+| `src/lib/services/insumo-recebimento-processor.test.ts` | Testes com mock Omie |
+| `src/app/api/cron/processar-recebimentos-omie/route.ts` | Cron endpoint |
+| `src/app/actions/insumo-estoque-actions.ts` | Server actions da UI |
+| `src/app/estoque-insumos/page.tsx` | SSR da tela |
+| `src/features/insumo-estoque/` | UI: tabs, tabelas, modais |
+| `src/components/Hub/hub-nav-config.ts` | Link no hub Operação |
+| `src/components/Insumos/InsumoModal.tsx` | Seção read-only vínculos Omie |
+| `vercel.json` | Cron schedule |
+| `scripts/backfill-insumo-recebimentos-omie.ts` | Reprocessar eventos históricos |
+
+**Fora deste repo (tarefa paralela no pedidos):** `POST /api/webhooks/omie/recebimento` gravando em `omie_webhook_eventos`.
+
+---
+
+### Task 1: Migration SQL
+
+**Files:**
+- Create: `CREATE_INSUMO_ESTOQUE_TABLES.sql`
+
+- [ ] **Step 1: Criar arquivo SQL completo**
+
+```sql
+-- Enums
+DO $$ BEGIN
+  CREATE TYPE insumo_movimento_origem AS ENUM (
+    'entrada_nf',
+    'ajuste_manual',
+    'resolucao_pendencia'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE insumo_pendencia_status AS ENUM (
+    'pendente',
+    'resolvido',
+    'ignorado'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Mapeamento Omie → insumo
+CREATE TABLE IF NOT EXISTS integracao_insumos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES empresas(id),
+  omie_id_produto bigint NOT NULL,
+  omie_codigo_produto text,
+  insumo_id uuid NOT NULL REFERENCES insumos(id),
+  fator_conversao numeric(14, 6) NOT NULL DEFAULT 1 CHECK (fator_conversao > 0),
+  descricao_omie text,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, omie_id_produto)
+);
+
+CREATE INDEX IF NOT EXISTS idx_integracao_insumos_insumo
+  ON integracao_insumos(insumo_id);
+
+-- Snapshot de saldo
+CREATE TABLE IF NOT EXISTS insumo_saldos (
+  insumo_id uuid PRIMARY KEY REFERENCES insumos(id) ON DELETE CASCADE,
+  quantidade numeric(14, 3) NOT NULL DEFAULT 0 CHECK (quantidade >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Ledger
+CREATE TABLE IF NOT EXISTS insumo_movimentos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  insumo_id uuid NOT NULL REFERENCES insumos(id),
+  empresa_id uuid REFERENCES empresas(id),
+  delta_quantidade numeric(14, 3) NOT NULL,
+  saldo_resultante numeric(14, 3) NOT NULL CHECK (saldo_resultante >= 0),
+  custo_unitario numeric(14, 6) NOT NULL DEFAULT 0,
+  origem insumo_movimento_origem NOT NULL,
+  omie_n_id_receb bigint,
+  omie_n_id_item bigint,
+  omie_webhook_evento_id uuid REFERENCES omie_webhook_eventos(id),
+  pendencia_id uuid,
+  observacao text
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_insumo_mov_entrada_nf_idempotencia
+  ON insumo_movimentos (empresa_id, omie_n_id_receb, omie_n_id_item)
+  WHERE origem = 'entrada_nf'
+    AND empresa_id IS NOT NULL
+    AND omie_n_id_receb IS NOT NULL
+    AND omie_n_id_item IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_insumo_mov_insumo_data
+  ON insumo_movimentos(insumo_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_insumo_mov_origem ON insumo_movimentos(origem);
+CREATE INDEX IF NOT EXISTS idx_insumo_mov_created ON insumo_movimentos(created_at DESC);
+
+-- Pendências
+CREATE TABLE IF NOT EXISTS insumo_entrada_pendencias (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES empresas(id),
+  omie_webhook_evento_id uuid REFERENCES omie_webhook_eventos(id),
+  omie_n_id_receb bigint NOT NULL,
+  omie_n_id_item bigint NOT NULL,
+  omie_id_produto bigint NOT NULL,
+  omie_codigo_produto text,
+  descricao_produto text,
+  quantidade_nf numeric(14, 3) NOT NULL,
+  unidade_nf text,
+  preco_unit_nf numeric(14, 6),
+  valor_total_item numeric(14, 2) NOT NULL,
+  numero_nf text,
+  data_emissao_nf date,
+  status insumo_pendencia_status NOT NULL DEFAULT 'pendente',
+  integracao_insumo_id uuid REFERENCES integracao_insumos(id),
+  resolvido_em timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, omie_n_id_receb, omie_n_id_item)
+);
+
+CREATE INDEX IF NOT EXISTS idx_insumo_pend_status
+  ON insumo_entrada_pendencias(status) WHERE status = 'pendente';
+
+-- FK pendencia em movimentos (após criar pendencias)
+ALTER TABLE insumo_movimentos
+  DROP CONSTRAINT IF EXISTS insumo_movimentos_pendencia_id_fkey;
+ALTER TABLE insumo_movimentos
+  ADD CONSTRAINT insumo_movimentos_pendencia_id_fkey
+  FOREIGN KEY (pendencia_id) REFERENCES insumo_entrada_pendencias(id);
+
+-- RLS
+ALTER TABLE integracao_insumos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insumo_saldos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insumo_movimentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insumo_entrada_pendencias ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY integracao_insumos_select ON integracao_insumos
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY integracao_insumos_insert ON integracao_insumos
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY integracao_insumos_update ON integracao_insumos
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY integracao_insumos_delete ON integracao_insumos
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+CREATE POLICY insumo_saldos_select ON insumo_saldos
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_saldos_insert ON insumo_saldos
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_saldos_update ON insumo_saldos
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_saldos_delete ON insumo_saldos
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+CREATE POLICY insumo_movimentos_select ON insumo_movimentos
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_movimentos_insert ON insumo_movimentos
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_movimentos_update ON insumo_movimentos
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_movimentos_delete ON insumo_movimentos
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+CREATE POLICY insumo_entrada_pendencias_select ON insumo_entrada_pendencias
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_entrada_pendencias_insert ON insumo_entrada_pendencias
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_entrada_pendencias_update ON insumo_entrada_pendencias
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_entrada_pendencias_delete ON insumo_entrada_pendencias
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+```
+
+- [ ] **Step 2: Aplicar no Supabase SQL Editor**
+
+Executar o arquivo completo no projeto Supabase.
+
+- [ ] **Step 3: Regenerar tipos TypeScript**
+
+```powershell
+npm run gen:types
+```
+
+Expected: `src/types/database.ts` contém `integracao_insumos`, `insumo_saldos`, `insumo_movimentos`, `insumo_entrada_pendencias`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add CREATE_INSUMO_ESTOQUE_TABLES.sql src/types/database.ts types/database.ts
+git commit -m "feat(insumos): migration estoque, movimentos e integração Omie"
+```
+
+---
+
+### Task 2: Domínio — tipos e cálculos (TDD)
+
+**Files:**
+- Create: `src/domain/types/insumo-estoque.ts`
+- Create: `src/domain/insumos/insumo-entrada-calculo.ts`
+- Create: `src/domain/insumos/insumo-entrada-calculo.test.ts`
+
+- [ ] **Step 1: Criar tipos**
+
+```typescript
+// src/domain/types/insumo-estoque.ts
+export type InsumoMovimentoOrigem =
+  | 'entrada_nf'
+  | 'ajuste_manual'
+  | 'resolucao_pendencia';
+
+export type InsumoPendenciaStatus = 'pendente' | 'resolvido' | 'ignorado';
+
+export type OmieRecebimentoItem = {
+  nIdItem: number;
+  nIdProduto: number;
+  cCodigoProduto: string;
+  cDescricaoProduto: string;
+  cUnidadeNfe: string;
+  nQtdeNfe: number;
+  nPrecoUnit: number;
+  vTotalItem: number;
+  cIgnorarItem: string;
+};
+
+export type InsumoSaldoComDetalhes = {
+  insumoId: string;
+  nome: string;
+  unidadeResumida: string;
+  quantidade: number;
+  custoUnitario: number;
+  ultimaEntradaEm: string | null;
+};
+
+export type InsumoMovimentoRecord = {
+  id: string;
+  createdAt: string;
+  insumoId: string;
+  deltaQuantidade: number;
+  saldoResultante: number;
+  custoUnitario: number;
+  origem: InsumoMovimentoOrigem;
+  numeroNf: string | null;
+  observacao: string | null;
+};
+```
+
+- [ ] **Step 2: Escrever testes (devem falhar)**
+
+```typescript
+// src/domain/insumos/insumo-entrada-calculo.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  calcularCustoUnitarioEntrada,
+  calcularQuantidadeEntrada,
+} from './insumo-entrada-calculo';
+
+describe('calcularQuantidadeEntrada', () => {
+  it('multiplica qtd NF pelo fator de conversão', () => {
+    expect(calcularQuantidadeEntrada(3, 25)).toBe(75);
+  });
+
+  it('usa fator 1 por padrão', () => {
+    expect(calcularQuantidadeEntrada(1023.3, 1)).toBe(1023.3);
+  });
+});
+
+describe('calcularCustoUnitarioEntrada', () => {
+  it('divide valor total pela quantidade convertida', () => {
+    expect(calcularCustoUnitarioEntrada(28694.49, 1023.3)).toBeCloseTo(28.06, 2);
+  });
+
+  it('lança se quantidade convertida for zero', () => {
+    expect(() => calcularCustoUnitarioEntrada(100, 0)).toThrow();
+  });
+});
+```
+
+- [ ] **Step 3: Rodar testes — deve falhar**
+
+```powershell
+npm test -- src/domain/insumos/insumo-entrada-calculo.test.ts
+```
+
+Expected: FAIL — módulo não encontrado.
+
+- [ ] **Step 4: Implementar funções**
+
+```typescript
+// src/domain/insumos/insumo-entrada-calculo.ts
+export function calcularQuantidadeEntrada(
+  quantidadeNf: number,
+  fatorConversao: number,
+): number {
+  return quantidadeNf * fatorConversao;
+}
+
+export function calcularCustoUnitarioEntrada(
+  valorTotalItem: number,
+  quantidadeConvertida: number,
+): number {
+  if (quantidadeConvertida <= 0) {
+    throw new Error('Quantidade convertida deve ser maior que zero');
+  }
+  return valorTotalItem / quantidadeConvertida;
+}
+```
+
+- [ ] **Step 5: Rodar testes — deve passar**
+
+```powershell
+npm test -- src/domain/insumos/insumo-entrada-calculo.test.ts
+```
+
+Expected: PASS (2 tests).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/types/insumo-estoque.ts src/domain/insumos/
+git commit -m "feat(insumos): cálculo de conversão e custo de entrada"
+```
+
+---
+
+### Task 3: Repositórios de dados
+
+**Files:**
+- Create: `src/data/insumos/InsumoEstoqueRepository.ts`
+- Create: `src/data/insumos/InsumoMapeamentoRepository.ts`
+- Create: `src/data/insumos/InsumoPendenciaRepository.ts`
+- Create: `src/data/omie/OmieWebhookEventoRepository.ts`
+
+- [ ] **Step 1: `InsumoEstoqueRepository`**
+
+Métodos obrigatórios:
+- `findSaldo(insumoId)` → row ou null
+- `upsertSaldo(insumoId, quantidade)` 
+- `insertMovimento(input)` → row
+- `listSaldosComDetalhes()` → join `insumos` + `unidades` + último movimento
+- `listMovimentos(insumoId, limit?)` → ordenado `created_at DESC`
+- `movimentoEntradaJaExiste(empresaId, nIdReceb, nIdItem)` → boolean (query no índice parcial)
+
+Padrão: seguir `EstoqueRepository` — service role client, throw em erro Supabase.
+
+- [ ] **Step 2: `InsumoMapeamentoRepository`**
+
+Métodos:
+- `findByEmpresaProduto(empresaId, omieIdProduto)`
+- `create({ empresaId, omieIdProduto, omieCodigoProduto, insumoId, fatorConversao, descricaoOmie? })`
+- `listByInsumo(insumoId)` → para seção read-only no modal
+
+- [ ] **Step 3: `InsumoPendenciaRepository`**
+
+Métodos:
+- `findByRecebimentoItem(empresaId, nIdReceb, nIdItem)`
+- `createPendente(input)` — ignora conflito UNIQUE (retorna existente)
+- `listPendentes()` → join `empresas(nome)`
+- `marcarIgnorado(id)`
+- `marcarResolvido(id, integracaoInsumoId)`
+
+- [ ] **Step 4: `OmieWebhookEventoRepository`**
+
+Métodos:
+- `listPendentesRecebimento(limit = 20)` → `topic ILIKE 'RecebimentoProduto.Concluido'` AND `status_processamento = 'pendente'`
+- `marcarProcessado(id)`
+- `marcarErro(id, mensagem)`
+- `findEmpresaByAppKey(appKey)` → query em `empresas` where `app_key = appKey`
+
+Exportar singletons no final de cada arquivo: `export const insumoEstoqueRepository = new InsumoEstoqueRepository();`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/data/insumos/ src/data/omie/
+git commit -m "feat(insumos): repositórios de estoque, mapeamento e pendências"
+```
+
+---
+
+### Task 4: Cliente Omie
+
+**Files:**
+- Create: `src/lib/clients/omie-recebimento-client.ts`
+
+- [ ] **Step 1: Implementar client**
+
+```typescript
+// src/lib/clients/omie-recebimento-client.ts
+import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
+
+const OMIE_RECEBIMENTO_URL =
+  'https://app.omie.com.br/api/v1/produtos/recebimentonfe/';
+
+type ConsultarRecebimentoResponse = {
+  cabec?: { cNumeroNF?: string; dDataEmissao?: string };
+  itensCabec?: OmieRecebimentoItem[];
+};
+
+export class OmieRecebimentoClient {
+  async consultarRecebimento(params: {
+    appKey: string;
+    appSecret: string;
+    nIdReceb: number;
+  }): Promise<ConsultarRecebimentoResponse> {
+    const body = {
+      call: 'ConsultarRecebimento',
+      app_key: params.appKey,
+      app_secret: params.appSecret,
+      param: [{ nIdReceb: params.nIdReceb, cChaveNfe: '' }],
+    };
+
+    const response = await fetch(OMIE_RECEBIMENTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Omie HTTP ${response.status}`);
+    }
+
+    const data = (await response.json()) as ConsultarRecebimentoResponse & {
+      faultstring?: string;
+    };
+
+    if (data.faultstring) {
+      throw new Error(data.faultstring);
+    }
+
+    return data;
+  }
+}
+
+export const omieRecebimentoClient = new OmieRecebimentoClient();
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/lib/clients/omie-recebimento-client.ts
+git commit -m "feat(omie): client ConsultarRecebimento"
+```
+
+---
+
+### Task 5: InsumoEstoqueService
+
+**Files:**
+- Create: `src/lib/services/insumo-estoque-service.ts`
+
+- [ ] **Step 1: Implementar service**
+
+Métodos:
+
+```typescript
+export class InsumoEstoqueService {
+  async registrarEntrada(input: {
+    insumoId: string;
+    empresaId: string;
+    quantidadeEntrada: number;
+    custoUnitario: number;
+    origem: 'entrada_nf' | 'resolucao_pendencia';
+    omieNIdReceb: number;
+    omieNIdItem: number;
+    omieWebhookEventoId?: string;
+    pendenciaId?: string;
+  }): Promise<void> { /* ... */ }
+
+  async ajustarSaldo(input: {
+    insumoId: string;
+    novoSaldo: number;
+    observacao: string;
+  }): Promise<void> { /* ... */ }
+}
+```
+
+Lógica `registrarEntrada`:
+1. Se `movimentoEntradaJaExiste` → return (idempotência)
+2. `findSaldo` ou quantidade 0
+3. `novoSaldo = atual + quantidadeEntrada`
+4. Transaction-like: `upsertSaldo` → `insertMovimento` → `update insumos.custo_unitario`
+5. Em conflito UNIQUE no insert → swallow (idempotência)
+
+Lógica `ajustarSaldo`:
+1. `delta = novoSaldo - atual`
+2. Bloquear se `novoSaldo < 0`
+3. `insertMovimento` origem `ajuste_manual`, `custo_unitario` = custo atual do insumo (não altera custo)
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/lib/services/insumo-estoque-service.ts
+git commit -m "feat(insumos): service de estoque e custo"
+```
+
+---
+
+### Task 6: InsumoRecebimentoProcessor (TDD)
+
+**Files:**
+- Create: `src/lib/services/insumo-recebimento-processor.ts`
+- Create: `src/lib/services/insumo-recebimento-processor.test.ts`
+
+- [ ] **Step 1: Escrever teste com mocks**
+
+Cenários:
+1. Item com mapeamento → chama `registrarEntrada` uma vez
+2. Item sem mapeamento → cria pendência
+3. `cIgnorarItem = 'S'` → skip
+4. Item duplicado → não chama `registrarEntrada` de novo
+
+Injetar dependências no constructor para testabilidade (client, repos, service).
+
+- [ ] **Step 2: Implementar processor**
+
+```typescript
+export class InsumoRecebimentoProcessor {
+  async processarEvento(evento: OmieWebhookEventoRow): Promise<void> {
+    const payload = evento.payload_json as { appKey?: string; event?: { cabecalho?: { nIdReceb?: number } } };
+    const appKey = payload.appKey ?? evento.app_key_recebida;
+    const nIdReceb = payload.event?.cabecalho?.nIdReceb;
+    if (!nIdReceb) throw new Error('nIdReceb ausente');
+
+    const empresa = await omieWebhookEventoRepository.findEmpresaByAppKey(appKey);
+    if (!empresa) throw new Error(`Empresa não encontrada para app_key ${appKey}`);
+
+    const recebimento = await this.client.consultarRecebimento({
+      appKey: empresa.app_key,
+      appSecret: empresa.app_secret,
+      nIdReceb,
+    });
+
+    const numeroNf = recebimento.cabec?.cNumeroNF ?? '';
+    const itens = recebimento.itensCabec ?? [];
+
+    for (const item of itens) {
+      await this.processarItem({
+        empresaId: empresa.id,
+        eventoId: evento.id,
+        nIdReceb,
+        numeroNf,
+        item,
+      });
+    }
+  }
+
+  async processarPendentes(limit = 20): Promise<{ processados: number; erros: number }> { /* ... */ }
+}
+```
+
+`processarItem`:
+- Skip se `cIgnorarItem === 'S'`
+- Busca mapeamento → se existe: calcula qtd/custo com funções puras → `registrarEntrada`
+- Senão: `createPendente` com dados do item + cabec NF
+
+- [ ] **Step 3: Rodar testes**
+
+```powershell
+npm test -- src/lib/services/insumo-recebimento-processor.test.ts
+```
+
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/insumo-recebimento-processor.ts src/lib/services/insumo-recebimento-processor.test.ts
+git commit -m "feat(insumos): processor de recebimentos Omie"
+```
+
+---
+
+### Task 7: Cron endpoint
+
+**Files:**
+- Create: `src/app/api/cron/processar-recebimentos-omie/route.ts`
+- Modify: `vercel.json`
+
+- [ ] **Step 1: Criar route**
+
+```typescript
+// src/app/api/cron/processar-recebimentos-omie/route.ts
+import { NextResponse } from 'next/server';
+import { insumoRecebimentoProcessor } from '@/lib/services/insumo-recebimento-processor';
+
+export async function GET(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  }
+
+  const result = await insumoRecebimentoProcessor.processarPendentes(20);
+  return NextResponse.json({ success: true, ...result });
+}
+```
+
+- [ ] **Step 2: Adicionar cron no vercel.json**
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/processar-recebimentos-omie",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/upload/photo/route.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "src/app/api/cron/processar-recebimentos-omie/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
+```
+
+- [ ] **Step 3: Documentar env var**
+
+Adicionar `CRON_SECRET` no `.env.local` (valor aleatório). Configurar o mesmo na Vercel.
+
+- [ ] **Step 4: Testar localmente**
+
+```powershell
+curl -H "Authorization: Bearer SEU_CRON_SECRET" http://localhost:3001/api/cron/processar-recebimentos-omie
+```
+
+Expected: `{ "success": true, "processados": N, "erros": 0 }`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/api/cron/processar-recebimentos-omie/route.ts vercel.json
+git commit -m "feat(cron): processar recebimentos Omie de insumos"
+```
+
+---
+
+### Task 8: Server actions da UI
+
+**Files:**
+- Create: `src/app/actions/insumo-estoque-actions.ts`
+
+- [ ] **Step 1: Implementar actions**
+
+```typescript
+'use server';
+
+export async function getInsumoEstoqueDashboard() { /* listSaldosComDetalhes + count pendentes */ }
+export async function getInsumoMovimentos(insumoId: string) { /* ... */ }
+export async function getInsumoPendencias() { /* listPendentes */ }
+export async function ajustarInsumoSaldo(insumoId: string, novoSaldo: number, observacao: string) { /* ... */ }
+export async function resolverInsumoPendencia(
+  pendenciaId: string,
+  insumoId: string,
+  fatorConversao: number,
+) { /* criar mapeamento + registrarEntrada + marcarResolvido */ }
+export async function ignorarInsumoPendencia(pendenciaId: string) { /* ... */ }
+```
+
+`resolverInsumoPendencia`:
+1. Carrega pendência
+2. `integracaoInsumos.create(...)`
+3. Calcula qtd/custo
+4. `insumoEstoqueService.registrarEntrada` origem `resolucao_pendencia`
+5. `marcarResolvido`
+6. `revalidatePath('/estoque-insumos')`
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/actions/insumo-estoque-actions.ts
+git commit -m "feat(insumos): server actions de estoque"
+```
+
+---
+
+### Task 9: UI — página e aba Saldos
+
+**Files:**
+- Create: `src/app/estoque-insumos/page.tsx`
+- Create: `src/features/insumo-estoque/InsumoEstoqueClient.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoSaldoTable.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoSaldoMobileList.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoAjusteModal.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoHistoricoModal.tsx`
+- Modify: `src/components/Hub/hub-nav-config.ts`
+
+- [ ] **Step 1: Server page**
+
+```tsx
+// src/app/estoque-insumos/page.tsx
+import { getInsumoEstoqueDashboard } from '@/app/actions/insumo-estoque-actions';
+import InsumoEstoqueClient from '@/features/insumo-estoque/InsumoEstoqueClient';
+
+export default async function InsumoEstoquePage() {
+  const data = await getInsumoEstoqueDashboard();
+  return <InsumoEstoqueClient initialData={data} />;
+}
+```
+
+- [ ] **Step 2: `InsumoEstoqueClient`**
+
+- Tabs: `saldos` | `pendencias` (query param `?tab=pendencias`)
+- Toolbar: busca, filtro ativos, resumo
+- Aba saldos: tabela + mobile list
+- Modais: histórico e ajuste
+- Estilo: stone-50 bg, amber-600 primário, `font-mono tabular-nums` em quantidades (design system Valepan)
+
+- [ ] **Step 3: `InsumoAjusteModal`**
+
+- Saldo atual readonly
+- Input novo saldo (numeric, 3 decimais)
+- Observação obrigatória
+- Chama `ajustarInsumoSaldo`
+
+- [ ] **Step 4: `InsumoHistoricoModal`**
+
+- Lista movimentos com chip de origem
+- Formato pt-BR para datas e valores
+
+- [ ] **Step 5: Hub nav**
+
+```typescript
+// src/components/Hub/hub-nav-config.ts — inserir em HUB_OPERACAO_ITEMS antes de dashboard-estoque
+{
+  href: '/estoque-insumos',
+  title: 'Estoque de insumos',
+  description: 'Saldos, entradas por NF e pendências Omie',
+  icon: 'grain',
+},
+```
+
+- [ ] **Step 6: Verificar UI**
+
+Abrir `http://localhost:3001/estoque-insumos` — lista vazia ou saldos sem erro.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/app/estoque-insumos/ src/features/insumo-estoque/ src/components/Hub/hub-nav-config.ts
+git commit -m "feat(ui): tela estoque de insumos com saldos e ajuste"
+```
+
+---
+
+### Task 10: UI — aba Pendências
+
+**Files:**
+- Create: `src/features/insumo-estoque/components/InsumoPendenciaTable.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoPendenciaMobileList.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoResolverPendenciaModal.tsx`
+- Modify: `src/features/insumo-estoque/InsumoEstoqueClient.tsx`
+
+- [ ] **Step 1: Tabela/lista de pendências**
+
+Colunas: NF, produto Omie (código + descrição), qtd NF + unidade, valor, empresa.
+
+Ações: Vincular, Ignorar (com `window.confirm`).
+
+- [ ] **Step 2: `InsumoResolverPendenciaModal`**
+
+- Dados NF readonly
+- `SelectRemoteAutocomplete` para insumo (`/api/options/generic?type=insumos`)
+- Input `fatorConversao` (default 1)
+- Preview em tempo real:
+  - `{qtdNf} {unidade} × {fator} = {qtdConvertida}`
+  - `Custo: R$ {custo}/unidade`
+- Botão "Confirmar e registrar entrada" → `resolverInsumoPendencia`
+
+- [ ] **Step 3: Badge na tab Pendências**
+
+Contagem de `pendencias.length` no label da tab.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/features/insumo-estoque/
+git commit -m "feat(ui): fila de pendências Omie e resolução de vínculo"
+```
+
+---
+
+### Task 11: Vínculos Omie read-only no config
+
+**Files:**
+- Modify: `src/app/actions/insumos-actions.ts`
+- Modify: `src/components/Insumos/InsumoModal.tsx`
+
+- [ ] **Step 1: Action para listar vínculos**
+
+```typescript
+export async function getIntegracoesInsumo(insumoId: string) {
+  return insumoMapeamentoRepository.listByInsumo(insumoId);
+}
+```
+
+- [ ] **Step 2: Seção colapsável no modal (somente em edição)**
+
+Accordion "Vínculos Omie" listando: empresa, código Omie, fator de conversão.
+
+Se vazio: "Nenhum vínculo Omie cadastrado."
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/actions/insumos-actions.ts src/components/Insumos/InsumoModal.tsx
+git commit -m "feat(insumos): exibir vínculos Omie no modal de configuração"
+```
+
+---
+
+### Task 12: Script de backfill (opcional)
+
+**Files:**
+- Create: `scripts/backfill-insumo-recebimentos-omie.ts`
+
+- [ ] **Step 1: Script**
+
+```typescript
+// Processa todos omie_webhook_eventos pendentes de RecebimentoProduto.Concluido
+// Flags: --dry-run (só lista), --limit=N
+import { insumoRecebimentoProcessor } from '../src/lib/services/insumo-recebimento-processor';
+```
+
+- [ ] **Step 2: Adicionar script no package.json**
+
+```json
+"backfill:insumo-recebimentos": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts",
+"backfill:insumo-recebimentos:dry": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --dry-run"
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/backfill-insumo-recebimentos-omie.ts package.json
+git commit -m "chore(insumos): script backfill recebimentos Omie"
+```
+
+---
+
+### Task 13: Verificação final
+
+- [ ] **Step 1: Rodar suite de testes**
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
+
+Expected: todos passam.
+
+- [ ] **Step 2: Checklist manual (spec)**
+
+1. NF com mapeamento pré-cadastrado (insert manual em `integracao_insumos`) → cron → saldo atualizado
+2. NF sem mapeamento → pendência na UI
+3. Resolver pendência → saldo + mapeamento criado
+4. Reprocessar mesmo evento → sem duplicata
+5. Ignorar pendência → some da lista
+6. Ajuste manual → movimento `ajuste_manual`, custo inalterado
+
+- [ ] **Step 3: Rollout produção (checklist operacional)**
+
+| Passo | Ação |
+|-------|------|
+| 1 | Deploy deste app com cron ativo |
+| 2 | Criar endpoint webhook no **pedidos** |
+| 3 | Trocar Omie webhook #02 para `https://pedidos.valepan.com/api/webhooks/omie/recebimento` |
+| 4 | Opcional: `npm run backfill:insumo-recebimentos` para eventos históricos |
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Migration + RLS | Task 1 |
+| Mapeamento `(empresa, omie_id)` | Task 1, 3, 6, 10 |
+| Saldo único por insumo | Task 1, 5 |
+| Custo última NF | Task 2, 5, 6 |
+| Fila pendências híbrida | Task 3, 6, 10 |
+| Processor + idempotência | Task 6, 5 |
+| Cron | Task 7 |
+| UI saldos + ajuste + histórico | Task 9 |
+| UI pendências | Task 10 |
+| Hub nav | Task 9 |
+| Vínculos read-only config | Task 11 |
+| Endpoint prod pedidos | Task 13 checklist (paralelo) |
+| Backfill histórico | Task 12 |
+
+**Fora de escopo confirmado:** saída por produção, custo médio ponderado, CRUD mapeamentos.

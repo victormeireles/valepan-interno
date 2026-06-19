@@ -13,6 +13,8 @@
     "test:watch": "vitest",
     "backfill:ordens-producao": "npx tsx scripts/backfill-ordens-producao-assadeiras.ts",
     "backfill:ordens-producao:dry": "npx tsx scripts/backfill-ordens-producao-assadeiras.ts --dry-run",
+    "backfill:insumo-recebimentos": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts",
+    "backfill:insumo-recebimentos:dry": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --dry-run",
     "migrate:produto-assadeiras-excecoes": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts",
     "migrate:produto-assadeiras-excecoes:dry": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts --dry-run",
     "migrate:tipos-estoque-etiqueta-flags": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts",

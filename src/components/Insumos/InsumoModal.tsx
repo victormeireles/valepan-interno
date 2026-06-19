@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react';
 import {
   createInsumo,
+  getIntegracoesInsumo,
   updateInsumo,
   type Insumo,
 } from '@/app/actions/insumos-actions';
+import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import Accordion from '@/components/Accordion';
 
 interface InsumoModalProps {
   isOpen: boolean;
@@ -28,6 +31,8 @@ export default function InsumoModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [animating, setAnimating] = useState(false);
+  const [integracoes, setIntegracoes] = useState<IntegracaoInsumoComEmpresa[]>([]);
+  const [integracoesLoading, setIntegracoesLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -42,12 +47,26 @@ export default function InsumoModal({
         setCustoUnitario(0);
         setUnidadeId('');
         setAtivo(true);
+        setIntegracoes([]);
       }
       setError('');
     } else {
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
     }
+  }, [isOpen, insumo]);
+
+  useEffect(() => {
+    if (!isOpen || !insumo) {
+      setIntegracoes([]);
+      return;
+    }
+
+    setIntegracoesLoading(true);
+    getIntegracoesInsumo(insumo.id)
+      .then(setIntegracoes)
+      .catch(() => setIntegracoes([]))
+      .finally(() => setIntegracoesLoading(false));
   }, [isOpen, insumo]);
 
   if (!isOpen && !animating) return null;
@@ -228,6 +247,34 @@ export default function InsumoModal({
                 required
               />
             </div>
+
+            {insumo ? (
+              <Accordion title="Vínculos Omie" defaultOpen={false}>
+                {integracoesLoading ? (
+                  <p className="text-sm text-gray-500">Carregando vínculos…</p>
+                ) : integracoes.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhum vínculo Omie cadastrado.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {integracoes.map((vinculo) => (
+                      <li
+                        key={vinculo.id}
+                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
+                      >
+                        <p className="font-medium text-gray-900">{vinculo.empresaNome}</p>
+                        <p className="mt-1 font-mono text-xs text-gray-600">
+                          Código Omie: {vinculo.omie_codigo_produto || vinculo.omie_id_produto}
+                        </p>
+                        <p className="mt-1 font-mono text-xs tabular-nums text-gray-600">
+                          Fator de conversão:{' '}
+                          {Number(vinculo.fator_conversao).toLocaleString('pt-BR')}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Accordion>
+            ) : null}
 
             <div className="pt-4 flex gap-3">
               <button

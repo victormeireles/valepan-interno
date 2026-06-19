@@ -46,6 +46,12 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     icon: 'label',
   },
   {
+    href: '/estoque-insumos',
+    title: 'Estoque de insumos',
+    description: 'Saldos, entradas por NF e pendências Omie',
+    icon: 'grain',
+  },
+  {
     href: '/painel/dashboard-estoque',
     title: 'Estoque',
     description: 'Dashboards em TV e monitor',
