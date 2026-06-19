@@ -1,5 +1,6 @@
 'use server';
 
+import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 
@@ -62,6 +63,15 @@ export async function getInsumos(includeInactive = false) {
   }
 
   return (data || []) as Insumo[];
+}
+
+export async function getIntegracoesInsumo(insumoId: string) {
+  try {
+    return await insumoMapeamentoRepository.listByInsumo(insumoId);
+  } catch (error) {
+    console.error('Erro ao buscar vínculos Omie do insumo:', error);
+    return [];
+  }
 }
 
 export async function getInsumoById(id: string) {

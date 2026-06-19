@@ -185,6 +185,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "cadastro_hamburgueria_comentarios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "cadastro_hamburgueria_comentarios_usuario_id_fkey"
             columns: ["usuario_id"]
             isOneToOne: false
@@ -192,72 +199,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      caminhoes: {
-        Row: {
-          ativo: boolean
-          capacidade_caixas: number
-          created_at: string | null
-          id: string
-          nome: string
-          updated_at: string | null
-        }
-        Insert: {
-          ativo?: boolean
-          capacidade_caixas: number
-          created_at?: string | null
-          id?: string
-          nome: string
-          updated_at?: string | null
-        }
-        Update: {
-          ativo?: boolean
-          capacidade_caixas?: number
-          created_at?: string | null
-          id?: string
-          nome?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      carrinhos: {
-        Row: {
-          ativo: boolean
-          bandejas: number
-          created_at: string
-          em_uso: boolean
-          id: string
-          latas_ocupadas: number
-          numero: number
-          precisa_reparos: boolean
-          quantidade_latas: number
-          updated_at: string
-        }
-        Insert: {
-          ativo?: boolean
-          bandejas?: number
-          created_at?: string
-          em_uso?: boolean
-          id?: string
-          latas_ocupadas?: number
-          numero: number
-          precisa_reparos?: boolean
-          quantidade_latas?: number
-          updated_at?: string
-        }
-        Update: {
-          ativo?: boolean
-          bandejas?: number
-          created_at?: string
-          em_uso?: boolean
-          id?: string
-          latas_ocupadas?: number
-          numero?: number
-          precisa_reparos?: boolean
-          quantidade_latas?: number
-          updated_at?: string
-        }
-        Relationships: []
       }
       categoria_assadeira_regras: {
         Row: {
@@ -337,78 +278,6 @@ export type Database = {
         }
         Relationships: []
       }
-      cliente_assadeira_bloqueios: {
-        Row: {
-          assadeira_id: string
-          cliente_id: string
-          created_at: string
-          id: string
-        }
-        Insert: {
-          assadeira_id: string
-          cliente_id: string
-          created_at?: string
-          id?: string
-        }
-        Update: {
-          assadeira_id?: string
-          cliente_id?: string
-          created_at?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cliente_assadeira_bloqueios_assadeira_id_fkey"
-            columns: ["assadeira_id"]
-            isOneToOne: false
-            referencedRelation: "assadeiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cliente_assadeira_bloqueios_cliente_id_fkey"
-            columns: ["cliente_id"]
-            isOneToOne: false
-            referencedRelation: "clientes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      cliente_assadeiras: {
-        Row: {
-          assadeira_id: string
-          cliente_id: string
-          created_at: string
-          id: string
-        }
-        Insert: {
-          assadeira_id: string
-          cliente_id: string
-          created_at?: string
-          id?: string
-        }
-        Update: {
-          assadeira_id?: string
-          cliente_id?: string
-          created_at?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cliente_assadeiras_assadeira_id_fkey"
-            columns: ["assadeira_id"]
-            isOneToOne: false
-            referencedRelation: "assadeiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cliente_assadeiras_cliente_id_fkey"
-            columns: ["cliente_id"]
-            isOneToOne: false
-            referencedRelation: "clientes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       cliente_categorias: {
         Row: {
           categoria_id: string
@@ -446,6 +315,13 @@ export type Database = {
             referencedRelation: "clientes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "cliente_categorias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
         ]
       }
       cliente_precos: {
@@ -480,6 +356,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_precos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "cliente_precos_produto_id_fkey"
@@ -688,6 +571,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clientes_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "clientes_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
@@ -875,6 +765,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clube_pontos_transacoes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "clube_pontos_transacoes_pedido_id_fkey"
             columns: ["pedido_id"]
             isOneToOne: false
@@ -941,6 +838,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clube_resgates_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "clube_resgates_pedido_bonificado_id_fkey"
@@ -1030,6 +934,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "cobranca_whatsapp_envios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "cobranca_whatsapp_envios_triggered_by_fkey"
             columns: ["triggered_by"]
             isOneToOne: false
@@ -1076,6 +987,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "distribuidor_parcelas_permitidas_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "distribuidor_parcelas_permitidas_parcela_id_fkey"
             columns: ["parcela_id"]
             isOneToOne: false
@@ -1116,6 +1034,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribuidor_precos_revenda_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "distribuidor_precos_revenda_produto_id_fkey"
@@ -1377,6 +1302,13 @@ export type Database = {
             referencedRelation: "clientes"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "enderecos_entrega_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
         ]
       }
       estoque_consignado_movimentos: {
@@ -1427,6 +1359,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "estoque_consignado_movimentos_pedido_id_fkey"
@@ -1714,6 +1653,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "fechamentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "fechamentos_criado_por_fkey"
             columns: ["criado_por"]
             isOneToOne: false
@@ -1822,6 +1768,194 @@ export type Database = {
           },
         ]
       }
+      insumo_entrada_pendencias: {
+        Row: {
+          created_at: string
+          data_emissao_nf: string | null
+          descricao_produto: string | null
+          empresa_id: string
+          id: string
+          integracao_insumo_id: string | null
+          numero_nf: string | null
+          omie_codigo_produto: string | null
+          omie_id_produto: number
+          omie_n_id_item: number
+          omie_n_id_receb: number
+          omie_webhook_evento_id: string | null
+          preco_unit_nf: number | null
+          quantidade_nf: number
+          resolvido_em: string | null
+          status: Database["public"]["Enums"]["insumo_pendencia_status"]
+          unidade_nf: string | null
+          valor_total_item: number
+        }
+        Insert: {
+          created_at?: string
+          data_emissao_nf?: string | null
+          descricao_produto?: string | null
+          empresa_id: string
+          id?: string
+          integracao_insumo_id?: string | null
+          numero_nf?: string | null
+          omie_codigo_produto?: string | null
+          omie_id_produto: number
+          omie_n_id_item: number
+          omie_n_id_receb: number
+          omie_webhook_evento_id?: string | null
+          preco_unit_nf?: number | null
+          quantidade_nf: number
+          resolvido_em?: string | null
+          status?: Database["public"]["Enums"]["insumo_pendencia_status"]
+          unidade_nf?: string | null
+          valor_total_item: number
+        }
+        Update: {
+          created_at?: string
+          data_emissao_nf?: string | null
+          descricao_produto?: string | null
+          empresa_id?: string
+          id?: string
+          integracao_insumo_id?: string | null
+          numero_nf?: string | null
+          omie_codigo_produto?: string | null
+          omie_id_produto?: number
+          omie_n_id_item?: number
+          omie_n_id_receb?: number
+          omie_webhook_evento_id?: string | null
+          preco_unit_nf?: number | null
+          quantidade_nf?: number
+          resolvido_em?: string | null
+          status?: Database["public"]["Enums"]["insumo_pendencia_status"]
+          unidade_nf?: string | null
+          valor_total_item?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_entrada_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_entrada_pendencias_integracao_insumo_id_fkey"
+            columns: ["integracao_insumo_id"]
+            isOneToOne: false
+            referencedRelation: "integracao_insumos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_entrada_pendencias_omie_webhook_evento_id_fkey"
+            columns: ["omie_webhook_evento_id"]
+            isOneToOne: false
+            referencedRelation: "omie_webhook_eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insumo_movimentos: {
+        Row: {
+          created_at: string
+          custo_unitario: number
+          delta_quantidade: number
+          empresa_id: string | null
+          id: string
+          insumo_id: string
+          observacao: string | null
+          omie_n_id_item: number | null
+          omie_n_id_receb: number | null
+          omie_webhook_evento_id: string | null
+          origem: Database["public"]["Enums"]["insumo_movimento_origem"]
+          pendencia_id: string | null
+          saldo_resultante: number
+        }
+        Insert: {
+          created_at?: string
+          custo_unitario?: number
+          delta_quantidade: number
+          empresa_id?: string | null
+          id?: string
+          insumo_id: string
+          observacao?: string | null
+          omie_n_id_item?: number | null
+          omie_n_id_receb?: number | null
+          omie_webhook_evento_id?: string | null
+          origem: Database["public"]["Enums"]["insumo_movimento_origem"]
+          pendencia_id?: string | null
+          saldo_resultante: number
+        }
+        Update: {
+          created_at?: string
+          custo_unitario?: number
+          delta_quantidade?: number
+          empresa_id?: string | null
+          id?: string
+          insumo_id?: string
+          observacao?: string | null
+          omie_n_id_item?: number | null
+          omie_n_id_receb?: number | null
+          omie_webhook_evento_id?: string | null
+          origem?: Database["public"]["Enums"]["insumo_movimento_origem"]
+          pendencia_id?: string | null
+          saldo_resultante?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_movimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_movimentos_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_movimentos_omie_webhook_evento_id_fkey"
+            columns: ["omie_webhook_evento_id"]
+            isOneToOne: false
+            referencedRelation: "omie_webhook_eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_movimentos_pendencia_id_fkey"
+            columns: ["pendencia_id"]
+            isOneToOne: false
+            referencedRelation: "insumo_entrada_pendencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insumo_saldos: {
+        Row: {
+          insumo_id: string
+          quantidade: number
+          updated_at: string
+        }
+        Insert: {
+          insumo_id: string
+          quantidade?: number
+          updated_at?: string
+        }
+        Update: {
+          insumo_id?: string
+          quantidade?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_saldos_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: true
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insumos: {
         Row: {
           ativo: boolean | null
@@ -1856,6 +1990,60 @@ export type Database = {
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integracao_insumos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao_omie: string | null
+          empresa_id: string
+          fator_conversao: number
+          id: string
+          insumo_id: string
+          omie_codigo_produto: string | null
+          omie_id_produto: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao_omie?: string | null
+          empresa_id: string
+          fator_conversao?: number
+          id?: string
+          insumo_id: string
+          omie_codigo_produto?: string | null
+          omie_id_produto: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao_omie?: string | null
+          empresa_id?: string
+          fator_conversao?: number
+          id?: string
+          insumo_id?: string
+          omie_codigo_produto?: string | null
+          omie_id_produto?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_insumos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "integracao_insumos_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
             referencedColumns: ["id"]
           },
         ]
@@ -1911,33 +2099,6 @@ export type Database = {
             referencedColumns: ["produto_id"]
           },
         ]
-      }
-      masseiras: {
-        Row: {
-          ativo: boolean | null
-          created_at: string | null
-          id: string
-          nome: string
-          tempo_mistura_lenta_padrao: number | null
-          tempo_mistura_rapida_padrao: number | null
-        }
-        Insert: {
-          ativo?: boolean | null
-          created_at?: string | null
-          id?: string
-          nome: string
-          tempo_mistura_lenta_padrao?: number | null
-          tempo_mistura_rapida_padrao?: number | null
-        }
-        Update: {
-          ativo?: boolean | null
-          created_at?: string | null
-          id?: string
-          nome?: string
-          tempo_mistura_lenta_padrao?: number | null
-          tempo_mistura_rapida_padrao?: number | null
-        }
-        Relationships: []
       }
       nota_fiscal_fechamento: {
         Row: {
@@ -2556,6 +2717,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "pedidos_criado_por_fkey"
             columns: ["criado_por"]
             isOneToOne: false
@@ -2570,6 +2738,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pedidos_distribuidor_entrega_id_fkey"
+            columns: ["distribuidor_entrega_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "pedidos_endereco_entrega_id_fkey"
             columns: ["endereco_entrega_id"]
             isOneToOne: false
@@ -2581,146 +2756,6 @@ export type Database = {
             columns: ["fechamento_id"]
             isOneToOne: false
             referencedRelation: "fechamentos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      producao_etapas_log: {
-        Row: {
-          dados_qualidade: Json | null
-          etapa: string
-          fim: string | null
-          fotos: string[] | null
-          id: string
-          inicio: string | null
-          masseira_id: string | null
-          ordem_producao_id: string
-          perda_qtd: number | null
-          ph_massa: number | null
-          qtd_entrada: number | null
-          qtd_saida: number | null
-          receita_id: string | null
-          receitas_batidas: number | null
-          temperatura_final: number | null
-          tempo_lenta: number | null
-          tempo_rapida: number | null
-          textura: string | null
-          usuario_id: string | null
-        }
-        Insert: {
-          dados_qualidade?: Json | null
-          etapa: string
-          fim?: string | null
-          fotos?: string[] | null
-          id?: string
-          inicio?: string | null
-          masseira_id?: string | null
-          ordem_producao_id: string
-          perda_qtd?: number | null
-          ph_massa?: number | null
-          qtd_entrada?: number | null
-          qtd_saida?: number | null
-          receita_id?: string | null
-          receitas_batidas?: number | null
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
-          usuario_id?: string | null
-        }
-        Update: {
-          dados_qualidade?: Json | null
-          etapa?: string
-          fim?: string | null
-          fotos?: string[] | null
-          id?: string
-          inicio?: string | null
-          masseira_id?: string | null
-          ordem_producao_id?: string
-          perda_qtd?: number | null
-          ph_massa?: number | null
-          qtd_entrada?: number | null
-          qtd_saida?: number | null
-          receita_id?: string | null
-          receitas_batidas?: number | null
-          temperatura_final?: number | null
-          tempo_lenta?: number | null
-          tempo_rapida?: number | null
-          textura?: string | null
-          usuario_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "producao_etapas_log_masseira_id_fkey"
-            columns: ["masseira_id"]
-            isOneToOne: false
-            referencedRelation: "masseiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_etapas_log_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "receitas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_etapas_log_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["receita_id"]
-          },
-          {
-            foreignKeyName: "producao_etapas_log_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      producao_massa_ingredientes: {
-        Row: {
-          created_at: string | null
-          id: string
-          insumo_id: string | null
-          producao_etapas_log_id: string
-          quantidade_padrao: number
-          quantidade_usada: number
-          unidade: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          insumo_id?: string | null
-          producao_etapas_log_id: string
-          quantidade_padrao: number
-          quantidade_usada: number
-          unidade: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          insumo_id?: string | null
-          producao_etapas_log_id?: string
-          quantidade_padrao?: number
-          quantidade_usada?: number
-          unidade?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "producao_massa_ingredientes_insumo_id_fkey"
-            columns: ["insumo_id"]
-            isOneToOne: false
-            referencedRelation: "insumos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "producao_massa_ingredientes_producao_etapas_log_id_fkey"
-            columns: ["producao_etapas_log_id"]
-            isOneToOne: false
-            referencedRelation: "producao_etapas_log"
             referencedColumns: ["id"]
           },
         ]
@@ -3142,52 +3177,6 @@ export type Database = {
           },
         ]
       }
-      receita_masseira_parametros: {
-        Row: {
-          id: string
-          masseira_id: string | null
-          receita_id: string | null
-          tempo_mistura_lenta: number | null
-          tempo_mistura_rapida: number | null
-        }
-        Insert: {
-          id?: string
-          masseira_id?: string | null
-          receita_id?: string | null
-          tempo_mistura_lenta?: number | null
-          tempo_mistura_rapida?: number | null
-        }
-        Update: {
-          id?: string
-          masseira_id?: string | null
-          receita_id?: string | null
-          tempo_mistura_lenta?: number | null
-          tempo_mistura_rapida?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "receita_masseira_parametros_masseira_id_fkey"
-            columns: ["masseira_id"]
-            isOneToOne: false
-            referencedRelation: "masseiras"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receita_masseira_parametros_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "receitas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receita_masseira_parametros_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "vw_produtos_com_receitas"
-            referencedColumns: ["receita_id"]
-          },
-        ]
-      }
       receitas: {
         Row: {
           ativo: boolean | null
@@ -3422,6 +3411,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sugestoes_envio_logs_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "sugestoes_envio_logs_pedido_origem_id_fkey"
             columns: ["pedido_origem_id"]
             isOneToOne: false
@@ -3545,6 +3541,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "usuario_clientes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
             foreignKeyName: "usuario_clientes_usuario_id_fkey"
             columns: ["usuario_id"]
             isOneToOne: false
@@ -3641,6 +3644,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuarios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "usuarios_inativado_por_fkey"
@@ -3969,6 +3979,20 @@ export type Database = {
         }
         Relationships: []
       }
+      relatorio_script_consignados_v: {
+        Row: {
+          d14: number | null
+          d21: number | null
+          d7: number | null
+          distribuidor: string | null
+          distribuidor_id: string | null
+          estoque_atual: number | null
+          media_quantidade: number | null
+          min_quantidade: number | null
+          produto: string | null
+        }
+        Relationships: []
+      }
       vw_estoque_consignado_saldo: {
         Row: {
           distribuidor_id: string | null
@@ -3982,6 +4006,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estoque_consignado_movimentos_distribuidor_id_fkey"
+            columns: ["distribuidor_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
           },
           {
             foreignKeyName: "estoque_consignado_movimentos_produto_id_fkey"
@@ -4092,6 +4123,11 @@ export type Database = {
         | "ajuste_saida"
       estoque_movimento_origem: "embalagem" | "saida" | "ajuste_manual"
       frequencia_pedido_enum: "semanal" | "quinzenal" | "esporadico"
+      insumo_movimento_origem:
+        | "entrada_nf"
+        | "ajuste_manual"
+        | "resolucao_pendencia"
+      insumo_pendencia_status: "pendente" | "resolvido" | "ignorado"
       producao_lote_modo: "parcial" | "substituicao"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
       tipo_pedido_enum: "valepan" | "hamburgueria"
@@ -4268,6 +4304,12 @@ export const Constants = {
       ],
       estoque_movimento_origem: ["embalagem", "saida", "ajuste_manual"],
       frequencia_pedido_enum: ["semanal", "quinzenal", "esporadico"],
+      insumo_movimento_origem: [
+        "entrada_nf",
+        "ajuste_manual",
+        "resolucao_pendencia",
+      ],
+      insumo_pendencia_status: ["pendente", "resolvido", "ignorado"],
       producao_lote_modo: ["parcial", "substituicao"],
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
       tipo_pedido_enum: ["valepan", "hamburgueria"],
