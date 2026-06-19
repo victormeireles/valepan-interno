@@ -26,6 +26,12 @@ export type CriarLotePorPedidoInput = {
   fotos?: EmbalagemLoteFotos;
 };
 
+function validarQuantidadePositiva(q: Quantidade): void {
+  if (q.caixas + q.pacotes + q.unidades + Number(q.kg) <= 0) {
+    throw new Error('Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).');
+  }
+}
+
 export class EmbalagemLoteService {
   async criarLote(input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord> {
     return embalagemLoteRepository.insert(input);
@@ -46,9 +52,7 @@ export class EmbalagemLoteService {
       kg: input.quantidade.kg,
     };
 
-    if (q.caixas + q.pacotes + q.unidades + q.kg <= 0) {
-      throw new Error('Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).');
-    }
+    validarQuantidadePositiva(q);
 
     const produzidoEm = input.produzidoEm ?? new Date().toISOString();
 
@@ -82,6 +86,8 @@ export class EmbalagemLoteService {
     }
 
     const productService = new SupabaseProductService();
+    validarQuantidadePositiva(input.quantidade);
+
     const [tipo, produto] = await Promise.all([
       tiposEstoqueService.findById(existing.tipoEstoqueId),
       productService.findById(existing.produtoId),

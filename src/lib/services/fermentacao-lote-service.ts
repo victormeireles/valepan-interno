@@ -1,10 +1,7 @@
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
 import {
-  calcularSaldoEtapa,
-  derivarEscalarEtapa,
   resolveModoQuantidadeEtapa,
-  somarLotesEtapa,
   validarQuantidadeLote,
   type EtapaQuantidade,
   type ModoQuantidadeEtapa,
@@ -26,43 +23,15 @@ export type AtualizarLoteInput = {
   fotos?: EtapaLoteFotos;
 };
 
-function getPedidoQuantidade(ordem: OrdemProducaoRecord): EtapaQuantidade {
-  return {
-    assadeiras: ordem.assadeiras,
-    unidades: ordem.quantidade.unidades,
-  };
-}
-
 function getModo(ordem: OrdemProducaoRecord): ModoQuantidadeEtapa {
   return resolveModoQuantidadeEtapa(ordem.assadeiraId);
 }
 
-function validarQuantidadeDentroDoSaldo(
-  pedido: EtapaQuantidade,
-  produzido: EtapaQuantidade,
+function validarQuantidadeRealizada(
   quantidade: EtapaQuantidade,
   modo: ModoQuantidadeEtapa,
 ): void {
   validarQuantidadeLote(quantidade, modo);
-  const saldo = calcularSaldoEtapa(pedido, produzido, modo);
-  const qty = modo === 'assadeiras' ? quantidade.assadeiras : quantidade.unidades;
-  if (qty > saldo) {
-    throw new Error(`Quantidade excede o saldo disponível (${saldo}).`);
-  }
-}
-
-function validarTotalNaoExcedeMeta(
-  pedido: EtapaQuantidade,
-  produzido: EtapaQuantidade,
-  quantidade: EtapaQuantidade,
-  modo: ModoQuantidadeEtapa,
-): void {
-  validarQuantidadeLote(quantidade, modo);
-  const total = somarLotesEtapa([produzido, quantidade]);
-  const { aProduzir, produzido: totalProduzido } = derivarEscalarEtapa(pedido, total, modo);
-  if (totalProduzido > aProduzir) {
-    throw new Error('Quantidade excede o saldo disponível.');
-  }
 }
 
 function mergeFotos(
@@ -80,12 +49,9 @@ export class FermentacaoLoteService {
       throw new Error('Ordem de produção não encontrada');
     }
 
-    const pedido = getPedidoQuantidade(ordem);
     const modo = getModo(ordem);
-    const lotesMap = await fermentacaoLoteRepository.listByOrdemProducaoIds([ordem.id]);
-    const produzido = somarLotesEtapa(lotesMap.get(ordem.id) ?? []);
 
-    validarQuantidadeDentroDoSaldo(pedido, produzido, input.quantidade, modo);
+    validarQuantidadeRealizada(input.quantidade, modo);
 
     return fermentacaoLoteRepository.insert({
       modo: 'parcial',
@@ -111,14 +77,9 @@ export class FermentacaoLoteService {
       throw new Error('Ordem de produção não encontrada');
     }
 
-    const pedido = getPedidoQuantidade(ordem);
     const modo = getModo(ordem);
-    const lotesMap = await fermentacaoLoteRepository.listByOrdemProducaoIds([ordem.id]);
-    const produzidoOutros = somarLotesEtapa(
-      (lotesMap.get(ordem.id) ?? []).filter((l) => l.id !== loteId),
-    );
 
-    validarTotalNaoExcedeMeta(pedido, produzidoOutros, input.quantidade, modo);
+    validarQuantidadeRealizada(input.quantidade, modo);
 
     return fermentacaoLoteRepository.updateById(loteId, {
       assadeiras: input.quantidade.assadeiras,
