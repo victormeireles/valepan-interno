@@ -20,6 +20,7 @@ import {
   loteToPainelItem,
 } from '@/domain/realizado/painel-pedido-adapter';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
+import type { ProductionStatus } from '@/domain/types/realizado';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 
 export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
@@ -35,6 +36,7 @@ export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
   pageBackground: '#F6F4F1',
   dashboard: 'hora',
   toolbarMetricLabel: 'Embalado',
+  alwaysShowAddLote: true,
 };
 
 function horarioEmbalagemParaCard(
@@ -71,9 +73,17 @@ type BuildEmbalagemWorklistInput = {
   deletingLoteId: string | null;
 };
 
+function resolveEmbalagemCardStatusOverride(
+  produzido: number,
+  meta: number,
+): ProductionStatus | undefined {
+  if (produzido === 0) return 'not-started';
+  if (produzido < meta) return 'partial';
+  return undefined;
+}
+
 function mapPedidoToProduct(
   pedido: PainelPedidoEmbalagem,
-  showNovoLote: boolean,
   loadingCardId: string | null,
   deletingLoteId: string | null,
 ): EtapaProductItem {
@@ -85,11 +95,10 @@ function mapPedidoToProduct(
     aProduzir: pedido.aProduzir,
   });
 
-  const productionStatusOverride = showNovoLote
-    ? pedido.produzidoScalar === 0
-      ? 'not-started'
-      : 'partial'
-    : 'complete';
+  const productionStatusOverride = resolveEmbalagemCardStatusOverride(
+    pedido.produzidoScalar,
+    pedido.aProduzir,
+  );
 
   const lotes: EtapaLoteItem[] = pedido.lotes.map((lote, loteIndex) => {
     const embalagemItem = loteToPainelItem(pedido, lote);
@@ -127,9 +136,6 @@ function mapPedidoToProduct(
     id: pedido.pedidoEmbalagemId,
     produto: pedido.produto,
     congelado: pedido.congelado === 'Sim',
-    horario: pedido.producaoUpdatedAt
-      ? formatLocalTimeHHmm(pedido.producaoUpdatedAt) ?? undefined
-      : undefined,
     somaProduzido: exibicao.produzido,
     somaAProduzir: exibicao.meta,
     unidade: exibicao.unidade,
@@ -137,14 +143,13 @@ function mapPedidoToProduct(
     detalhesMeta: exibicao.detalhesMeta,
     filterStatus: getPedidoEmbalagemFilterStatus(pedido),
     productionStatusOverride,
-    showAddLote: showNovoLote,
+    showAddLote: true,
     lotes,
   };
 }
 
 function mapGroup(
   group: EmbalagemPainelGroup,
-  showNovoLote: boolean,
   loadingCardId: string | null,
   deletingLoteId: string | null,
 ): EtapaClientGroupData {
@@ -154,7 +159,7 @@ function mapGroup(
     dataFabricacao: group.dataFabricacao,
     observacao: group.observacao,
     products: group.pedidos.map((pedido) =>
-      mapPedidoToProduct(pedido, showNovoLote, loadingCardId, deletingLoteId),
+      mapPedidoToProduct(pedido, loadingCardId, deletingLoteId),
     ),
   };
 }
@@ -177,10 +182,10 @@ export function buildEmbalagemWorklistData(
     selectedDate: input.selectedDate,
     filterCounts,
     gruposAtivos: input.gruposNaoFinalizados.map((g) =>
-      mapGroup(g, true, input.loadingCardId, input.deletingLoteId),
+      mapGroup(g, input.loadingCardId, input.deletingLoteId),
     ),
     gruposFinalizados: input.gruposFinalizados.map((g) =>
-      mapGroup(g, false, input.loadingCardId, input.deletingLoteId),
+      mapGroup(g, input.loadingCardId, input.deletingLoteId),
     ),
   };
 }

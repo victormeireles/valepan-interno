@@ -12,6 +12,7 @@ import {
   loteToPainelItemEtapa,
 } from '@/domain/realizado/etapa-painel-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import type { ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 
@@ -20,9 +21,17 @@ function buildLotePhotoLinks(fotoUrl?: string): EtapaLotePhotoLink[] {
   return [{ label: 'Foto do lote', url: fotoUrl }];
 }
 
+function resolveOrdemCardStatusOverride(
+  produzido: number,
+  meta: number,
+): ProductionStatus | undefined {
+  if (produzido === 0) return 'not-started';
+  if (produzido < meta) return 'partial';
+  return undefined;
+}
+
 function mapOrdemToProduct(
   ordem: PainelOrdemEtapa,
-  showNovoLote: boolean,
   loadingCardId: string | null,
   deletingLoteId: string | null,
   creatingLoteOrdemId: string | null,
@@ -33,11 +42,10 @@ function mapOrdemToProduct(
   );
   const detalhesMeta = buildEtapaDetalhesQuantidade(ordem.pedido, ordem.modoQuantidade);
 
-  const productionStatusOverride = showNovoLote
-    ? ordem.produzido === 0
-      ? 'not-started'
-      : 'partial'
-    : 'complete';
+  const productionStatusOverride = resolveOrdemCardStatusOverride(
+    ordem.produzido,
+    ordem.aProduzir,
+  );
 
   const lotes: EtapaLoteItem[] = ordem.lotes.map((lote, loteIndex) => {
     const item = loteToPainelItemEtapa(ordem, lote);
@@ -78,7 +86,7 @@ function mapOrdemToProduct(
     detalhesMeta,
     filterStatus: getOrdemEtapaFilterStatus(ordem),
     productionStatusOverride,
-    showAddLote: showNovoLote && ordem.produzido < ordem.aProduzir,
+    showAddLote: true,
     isNovoLoteLoading: creatingLoteOrdemId === ordem.ordemProducaoId,
     lotes,
   };
@@ -87,7 +95,6 @@ function mapOrdemToProduct(
 function mapOrdensToFlatGroup(
   ordens: PainelOrdemEtapa[],
   groupKey: string,
-  showNovoLote: boolean,
   loadingCardId: string | null,
   deletingLoteId: string | null,
   creatingLoteOrdemId: string | null,
@@ -98,13 +105,7 @@ function mapOrdensToFlatGroup(
     key: groupKey,
     hideHeader: true,
     products: ordens.map((ordem) =>
-      mapOrdemToProduct(
-        ordem,
-        showNovoLote,
-        loadingCardId,
-        deletingLoteId,
-        creatingLoteOrdemId,
-      ),
+      mapOrdemToProduct(ordem, loadingCardId, deletingLoteId, creatingLoteOrdemId),
     ),
   };
 }
@@ -136,7 +137,6 @@ export function buildEtapaOrdemWorklistData(
   const gruposAtivos = mapOrdensToFlatGroup(
     input.naoFinalizados,
     'ordens-ativas',
-    true,
     input.loadingCardId,
     input.deletingLoteId,
     input.creatingLoteOrdemId,
@@ -145,7 +145,6 @@ export function buildEtapaOrdemWorklistData(
   const gruposFinalizados = mapOrdensToFlatGroup(
     input.finalizados,
     'ordens-finalizadas',
-    false,
     input.loadingCardId,
     input.deletingLoteId,
     input.creatingLoteOrdemId,

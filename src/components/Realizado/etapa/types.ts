@@ -34,6 +34,8 @@ export type RealizadoEtapaConfig = {
   toolbarMetricLabel: string;
   /** Exibe meta, barra de progresso e comparação produzido/meta (padrão: true) */
   hasMeta?: boolean;
+  /** Mantém o botão de novo lote mesmo em itens/grupos finalizados */
+  alwaysShowAddLote?: boolean;
   /** Botão secundário opcional na toolbar — ex.: "Nova saída" */
   extraActionLabel?: string;
 };

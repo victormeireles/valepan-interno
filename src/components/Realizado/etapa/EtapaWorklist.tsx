@@ -66,8 +66,12 @@ export default function EtapaWorklist({
     setOpenPhotoLoteId((prev) => (prev === loteId ? null : loteId));
   }, []);
 
-  const renderProduct = (product: EtapaProductItem, groupKey: string, showAddLote: boolean) => {
-    const instanceId = `${groupKey}|${product.id}`;
+  const renderProduct = (
+    product: EtapaProductItem,
+    group: EtapaClientGroupData,
+    showAddLote: boolean,
+  ) => {
+    const instanceId = `${group.key}|${product.id}`;
 
     return (
       <EtapaProductAccordion
@@ -79,6 +83,8 @@ export default function EtapaWorklist({
         unidade={product.unidade}
         congelado={product.congelado}
         assadeira={product.assadeira}
+        cliente={group.hideHeader ? group.cliente : undefined}
+        observacao={group.hideHeader ? group.observacao : undefined}
         hasPhoto={product.hasPhoto}
         horario={product.horario}
         detalhesProduzido={product.detalhesProduzido}
@@ -93,7 +99,7 @@ export default function EtapaWorklist({
             : undefined
         }
         onNovoLote={
-          showAddLote && product.showAddLote
+          (showAddLote || config.alwaysShowAddLote) && product.showAddLote
             ? () => callbacks.onNovoLote(product.id)
             : undefined
         }
@@ -160,7 +166,7 @@ export default function EtapaWorklist({
       products={group.products}
       hideHeader={group.hideHeader}
     >
-      {group.products.map((product) => renderProduct(product, group.key, showAddLote))}
+      {group.products.map((product) => renderProduct(product, group, showAddLote))}
     </EtapaClientGroup>
   );
 
@@ -191,7 +197,9 @@ export default function EtapaWorklist({
                   Finalizados
                 </h2>
               ) : null}
-              {gruposFinalizadosVisiveis.map((g) => renderGroup(g, false))}
+              {gruposFinalizadosVisiveis.map((g) =>
+                renderGroup(g, config.alwaysShowAddLote ?? false),
+              )}
             </div>
           ) : null}
         </div>

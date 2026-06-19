@@ -16,6 +16,8 @@ export type EtapaProductAccordionProps = {
   unidade: string;
   congelado?: boolean;
   assadeira?: string;
+  cliente?: string;
+  observacao?: string;
   hasPhoto?: boolean;
   detalhesProduzido: QuantityBreakdownEntry[];
   detalhesMeta: QuantityBreakdownEntry[];
@@ -42,6 +44,8 @@ export default function EtapaProductAccordion({
   unidade,
   congelado,
   assadeira,
+  cliente,
+  observacao,
   hasPhoto,
   detalhesProduzido,
   detalhesMeta,
@@ -74,16 +78,11 @@ export default function EtapaProductAccordion({
   const producedLabel = producedBreakdown.format(somaProduzido, fallbackUnit);
   const targetLabel = targetBreakdown.format(somaAProduzir, fallbackUnit);
 
-  const subParts = [horario, assadeira ? `Assadeira ${assadeira}` : null].filter(Boolean);
-  const subtitle =
-    subParts.length > 0 ? (
-      <div className="mt-0.5 flex items-start gap-2 text-text-muted">
-        <span className="material-icons mt-px text-[13px] text-stone-400" aria-hidden="true">
-          schedule
-        </span>
-        <span className="font-mono text-xs leading-snug tabular-nums">{subParts.join('  ·  ')}</span>
-      </div>
-    ) : null;
+  const metaItems = [
+    cliente,
+    observacao ? `Obs: ${observacao}` : null,
+    assadeira ? `Assadeira ${assadeira}` : null,
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <Card padding="none" className="overflow-hidden shadow-control">
@@ -93,7 +92,8 @@ export default function EtapaProductAccordion({
         congelado={congelado}
         hasPhoto={hasPhoto}
         onProductPhotoClick={onProductPhotoClick}
-        subtitle={subtitle}
+        metaItems={metaItems}
+        horario={horario}
         producedLabel={producedLabel}
         targetLabel={targetLabel}
         hasMeta={hasMeta}

@@ -65,22 +65,13 @@ export default function EmbalagemProductAccordion({
   const producedLabel = producedBreakdown.format(somaProduzido, fallbackUnit);
   const targetLabel = targetBreakdown.format(somaAProduzir, fallbackUnit);
 
-  const subtitle = horarioEmbalagem ? (
-    <div className="mt-0.5 flex items-start gap-2 text-text-muted">
-      <span className="material-icons mt-px text-[13px] text-stone-400" aria-hidden="true">
-        schedule
-      </span>
-      <span className="font-mono text-xs leading-snug tabular-nums">{horarioEmbalagem}</span>
-    </div>
-  ) : null;
-
   return (
     <Card padding="none" className="overflow-hidden shadow-control">
       <EtapaProductCardHeader
         produto={produto}
         styles={styles}
         congelado={congelado}
-        subtitle={subtitle}
+        horario={horarioEmbalagem}
         producedLabel={producedLabel}
         targetLabel={targetLabel}
         hasMeta
