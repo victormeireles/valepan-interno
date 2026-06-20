@@ -173,4 +173,6 @@ export type RealizadoEtapaProps = {
   onExtraAction?: () => void;
   /** Slot opcional após o conteúdo principal (ex.: modal backdrop) */
   overlaySlot?: ReactNode;
+  /** Funde os cards de ritmo e previsão em um único card compacto (embalagem) */
+  ritmoCompacto?: boolean;
 };

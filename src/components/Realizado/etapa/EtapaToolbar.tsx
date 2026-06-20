@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/Button';
 import { controlInputClassName } from '@/components/ui/Input';
+import { MetaGapPill } from '@/components/ui/MetaGapPill';
 import {
   belowAppNavStickyTop,
   pageShellBreakoutX,
@@ -132,14 +133,11 @@ export default function EtapaToolbar({
                 style={{ width: `${Math.min(100, metrics.progressoPct)}%` }}
               />
             </div>
-            <span
-              className={[
-                'shrink-0 text-xs font-semibold tabular-nums',
-                metrics.metaAtingida ? 'text-success' : accent.progressText,
-              ].join(' ')}
-            >
-              {metrics.metaAtingida ? 'Meta ok' : `Falta ${fmt(metrics.falta)}`}
-            </span>
+            <MetaGapPill
+              falta={metrics.falta}
+              unit={unitSuffix}
+              metaAtingida={metrics.metaAtingida}
+            />
           </div>
         ) : (
           <div
@@ -183,14 +181,11 @@ export default function EtapaToolbar({
                     style={{ width: `${Math.min(100, metrics.progressoPct)}%` }}
                   />
                 </div>
-                <span
-                  className={[
-                    'text-xs font-semibold tabular-nums',
-                    metrics.metaAtingida ? 'text-success' : accent.progressText,
-                  ].join(' ')}
-                >
-                  {metrics.metaAtingida ? 'Meta ok' : `Falta ${fmt(metrics.falta)}`}
-                </span>
+                <MetaGapPill
+                  falta={metrics.falta}
+                  unit={unitSuffix}
+                  metaAtingida={metrics.metaAtingida}
+                />
               </div>
             </div>
           ) : (

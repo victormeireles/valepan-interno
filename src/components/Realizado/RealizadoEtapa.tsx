@@ -29,6 +29,7 @@ export default function RealizadoEtapa({
   hasMeta: hasMetaProp,
   onExtraAction,
   overlaySlot,
+  ritmoCompacto = false,
 }: RealizadoEtapaProps) {
   const hasMeta = hasMetaProp ?? config.hasMeta ?? true;
   const messageTone = message?.includes('sucesso') ? 'success' : 'error';
@@ -91,6 +92,7 @@ export default function RealizadoEtapa({
                     items={dashboardHora.items}
                     comparisonPrev={dashboardHora.comparisonPrev}
                     comparisonWeek={dashboardHora.comparisonWeek}
+                    ritmoCompacto={ritmoCompacto}
                   />
                 ) : null}
 

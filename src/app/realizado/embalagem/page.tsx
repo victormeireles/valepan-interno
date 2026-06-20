@@ -350,6 +350,7 @@ export default function ProducaoEmbalagemPage() {
     <>
       <RealizadoEtapa
         config={EMBALAGEM_ETAPA_CONFIG}
+        ritmoCompacto
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
         toolbar={{

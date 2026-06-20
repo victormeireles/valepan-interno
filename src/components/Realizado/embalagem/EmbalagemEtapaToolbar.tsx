@@ -1,6 +1,7 @@
 'use client';
 
 import { controlInputClassName } from '@/components/ui/Input';
+import { MetaGapPill } from '@/components/ui/MetaGapPill';
 import {
   belowAppNavStickyTop,
   pageShellBreakoutX,
@@ -96,14 +97,7 @@ export default function EmbalagemEtapaToolbar({
               style={{ width: `${Math.min(100, progressoPct)}%` }}
             />
           </div>
-          <span
-            className={[
-              'shrink-0 text-xs font-semibold tabular-nums',
-              metaAtingida ? 'text-success' : 'text-accent',
-            ].join(' ')}
-          >
-            {metaAtingida ? 'Meta ok' : `Falta ${fmt(faltaCx)}`}
-          </span>
+          <MetaGapPill falta={faltaCx} unit="cx" metaAtingida={metaAtingida} />
         </div>
 
         <div className="ml-auto hidden min-w-0 items-center gap-2.5 sm:flex sm:gap-3">
@@ -132,14 +126,7 @@ export default function EmbalagemEtapaToolbar({
                   style={{ width: `${Math.min(100, progressoPct)}%` }}
                 />
               </div>
-              <span
-                className={[
-                  'text-xs font-semibold tabular-nums',
-                  metaAtingida ? 'text-success' : 'text-accent',
-                ].join(' ')}
-              >
-                {metaAtingida ? 'Meta ok' : `Falta ${fmt(faltaCx)}`}
-              </span>
+              <MetaGapPill falta={faltaCx} unit="cx" metaAtingida={metaAtingida} />
             </div>
           </div>
 

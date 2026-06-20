@@ -1,6 +1,9 @@
 'use client';
 
 import { useMemo, type ReactNode } from 'react';
+import RitmoCompactCard, {
+  type RitmoCompactCardProps,
+} from '@/components/Realizado/embalagem/RitmoCompactCard';
 import {
   belowEtapaToolbarStickyTop,
 } from '@/components/ui/page-shell';
@@ -604,13 +607,69 @@ type EmbalagemDashboardProps = {
   items: EmbalagemDashboardItem[];
   comparisonPrev: { date: string; items: EmbalagemDashboardItem[] } | null;
   comparisonWeek: { date: string; items: EmbalagemDashboardItem[] };
+  /** Funde ritmo médio e previsão de término num único card */
+  ritmoCompacto?: boolean;
 };
+
+function buildTerminoCompacto(ritmo: RitmoKind): RitmoCompactCardProps['termino'] {
+  if (ritmo.kind === 'termina') {
+    return {
+      kind: 'hora',
+      label: `~${ritmo.hour}h${String(ritmo.minute).padStart(2, '0')}`,
+    };
+  }
+  if (ritmo.kind === 'passa_22') {
+    return { kind: 'amanha', resto: ritmo.resto };
+  }
+  if (ritmo.kind === 'no_prev') {
+    return { kind: 'indisponivel', message: 'Sem dia anterior p/ estimar' };
+  }
+  return { kind: 'indisponivel', message: 'Sem média ontem p/ estimar' };
+}
+
+type MediaComparacaoData = {
+  mediaDia: number;
+  mediaOntem: number | null;
+  mediaSemana: number | null;
+  ultimoRegistroLabel: string;
+};
+
+function buildRitmoCompactoProps(
+  mediaComparacao: MediaComparacaoData,
+  ritmo: RitmoKind | null,
+  comparisonPrev: EmbalagemDashboardProps['comparisonPrev'],
+): RitmoCompactCardProps {
+  const deltaOntem =
+    mediaComparacao.mediaOntem !== null
+      ? Math.round((mediaComparacao.mediaDia / mediaComparacao.mediaOntem - 1) * 100)
+      : null;
+
+  const deltaSemana =
+    mediaComparacao.mediaSemana !== null
+      ? Math.round((mediaComparacao.mediaDia / mediaComparacao.mediaSemana - 1) * 100)
+      : null;
+
+  return {
+    horaFimLabel: mediaComparacao.ultimoRegistroLabel,
+    ritmoValor: mediaComparacao.mediaDia,
+    comparacaoOntem:
+      comparisonPrev && mediaComparacao.mediaOntem !== null
+        ? { label: 'Ontem', valor: mediaComparacao.mediaOntem, delta: deltaOntem }
+        : null,
+    comparacaoSemana:
+      mediaComparacao.mediaSemana !== null
+        ? { label: 'Semana passada', valor: mediaComparacao.mediaSemana, delta: deltaSemana }
+        : null,
+    termino: ritmo ? buildTerminoCompacto(ritmo) : null,
+  };
+}
 
 export default function EmbalagemDashboard({
   selectedDate,
   items,
   comparisonPrev,
   comparisonWeek,
+  ritmoCompacto = false,
 }: EmbalagemDashboardProps) {
   const totais = useMemo(() => {
     const totalCaixasProduzido = items.reduce((sum, item) => sum + (item.caixas || 0), 0);
@@ -806,85 +865,99 @@ export default function EmbalagemDashboard({
             </p>
           )}
           <div className="flex flex-col gap-2">
-            {mediaComparacao !== null && (
-              <PrevisaoMetricCard
-                dense
-                icon={<IconBars className="h-4 w-4" />}
-                title={`Média 7h → ${mediaComparacao.ultimoRegistroLabel}`}
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <p className="shrink-0 font-mono text-[15px] font-bold leading-none tabular-nums text-text-strong">
-                    {formatCxPorHora(mediaComparacao.mediaDia)}
-                  </p>
-                  <div className="min-w-0 flex-1 space-y-px border-l border-stone-100 pl-2.5">
-                    {comparisonPrev ? (
-                      <StatCompare
-                        compact
-                        label="Ontem"
-                        title="Ontem (mesma hora)"
-                        value={mediaComparacao.mediaOntem}
-                        unit="cx"
-                        delta={
-                          mediaComparacao.mediaOntem
-                            ? Math.round(
-                                (mediaComparacao.mediaDia / mediaComparacao.mediaOntem - 1) * 100,
-                              )
-                            : null
-                        }
-                      />
-                    ) : null}
-                    <StatCompare
-                      compact
-                      label="Sem. passada"
-                      title="Semana passada"
-                      value={mediaComparacao.mediaSemana}
-                      unit="cx"
-                      delta={
-                        mediaComparacao.mediaSemana
-                          ? Math.round(
-                              (mediaComparacao.mediaDia / mediaComparacao.mediaSemana - 1) * 100,
-                            )
-                          : null
-                      }
-                    />
-                  </div>
-                </div>
-              </PrevisaoMetricCard>
-            )}
+            {ritmoCompacto && mediaComparacao !== null ? (
+              <RitmoCompactCard
+                {...buildRitmoCompactoProps(
+                  mediaComparacao,
+                  showPrevisaoRulerCard ? previsaoFinalizacao.ritmo : null,
+                  comparisonPrev,
+                )}
+              />
+            ) : (
+              <>
+                {mediaComparacao !== null && (
+                  <PrevisaoMetricCard
+                    dense
+                    icon={<IconBars className="h-4 w-4" />}
+                    title={`Média 7h → ${mediaComparacao.ultimoRegistroLabel}`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <p className="shrink-0 font-mono text-[15px] font-bold leading-none tabular-nums text-text-strong">
+                        {formatCxPorHora(mediaComparacao.mediaDia)}
+                      </p>
+                      <div className="min-w-0 flex-1 space-y-px border-l border-stone-100 pl-2.5">
+                        {comparisonPrev ? (
+                          <StatCompare
+                            compact
+                            label="Ontem"
+                            title="Ontem (mesma hora)"
+                            value={mediaComparacao.mediaOntem}
+                            unit="cx"
+                            delta={
+                              mediaComparacao.mediaOntem
+                                ? Math.round(
+                                    (mediaComparacao.mediaDia / mediaComparacao.mediaOntem - 1) *
+                                      100,
+                                  )
+                                : null
+                            }
+                          />
+                        ) : null}
+                        <StatCompare
+                          compact
+                          label="Sem. passada"
+                          title="Semana passada"
+                          value={mediaComparacao.mediaSemana}
+                          unit="cx"
+                          delta={
+                            mediaComparacao.mediaSemana
+                              ? Math.round(
+                                  (mediaComparacao.mediaDia / mediaComparacao.mediaSemana - 1) *
+                                    100,
+                                )
+                              : null
+                          }
+                        />
+                      </div>
+                    </div>
+                  </PrevisaoMetricCard>
+                )}
 
-            {showPrevisaoRulerCard ? (
-              <PrevisaoMetricCard
-                dense
-                icon={<IconTimelineRuler className="h-4 w-4" />}
-                title="Previsão até fechar"
-                className="min-h-0"
-                headerAside={
-                  previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
-                    <span
-                      className="inline-block text-xs font-semibold tabular-nums leading-tight text-danger"
-                      title={`${formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)} caixas para o dia seguinte`}
-                    >
-                      {formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)}{' '}
-                      <span className="font-medium text-danger/80">cx p/ amanhã</span>
-                    </span>
-                  ) : undefined
-                }
-              >
-                <PrevisaoAte22Ruler
-                  previsao={{
-                    falta: previsaoFinalizacao.falta,
-                    taxa20: previsaoFinalizacao.taxa20,
-                    taxa21: previsaoFinalizacao.taxa21,
-                    taxa22: previsaoFinalizacao.taxa22,
-                    passouLimite20: previsaoFinalizacao.passouLimite20,
-                    passouLimite21: previsaoFinalizacao.passouLimite21,
-                    passouLimite22: previsaoFinalizacao.passouLimite22,
-                    ritmoAnterior: previsaoFinalizacao.ritmoAnterior,
-                    ritmo: previsaoFinalizacao.ritmo,
-                  }}
-                />
-              </PrevisaoMetricCard>
-            ) : null}
+                {showPrevisaoRulerCard ? (
+                  <PrevisaoMetricCard
+                    dense
+                    icon={<IconTimelineRuler className="h-4 w-4" />}
+                    title="Previsão até fechar"
+                    className="min-h-0"
+                    headerAside={
+                      previsaoFinalizacao.ritmo.kind === 'passa_22' ? (
+                        <span
+                          className="inline-block text-xs font-semibold tabular-nums leading-tight text-danger"
+                          title={`${formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)} caixas para o dia seguinte`}
+                        >
+                          {formatIntPtBrOrDash(previsaoFinalizacao.ritmo.resto)}{' '}
+                          <span className="font-medium text-danger/80">cx p/ amanhã</span>
+                        </span>
+                      ) : undefined
+                    }
+                  >
+                    <PrevisaoAte22Ruler
+                      previsao={{
+                        falta: previsaoFinalizacao.falta,
+                        taxa20: previsaoFinalizacao.taxa20,
+                        taxa21: previsaoFinalizacao.taxa21,
+                        taxa22: previsaoFinalizacao.taxa22,
+                        passouLimite20: previsaoFinalizacao.passouLimite20,
+                        passouLimite21: previsaoFinalizacao.passouLimite21,
+                        passouLimite22: previsaoFinalizacao.passouLimite22,
+                        ritmoAnterior: previsaoFinalizacao.ritmoAnterior,
+                        ritmo: previsaoFinalizacao.ritmo,
+                      }}
+                    />
+                  </PrevisaoMetricCard>
+                ) : null}
+              </>
+            )}
           </div>
         </section>
       )}
