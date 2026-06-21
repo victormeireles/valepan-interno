@@ -10,6 +10,8 @@ type OrdemProducaoRowMenuProps = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onMoveToTop: () => void;
+  onMoveToBottom: () => void;
 };
 
 export default function OrdemProducaoRowMenu({
@@ -19,10 +21,12 @@ export default function OrdemProducaoRowMenu({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onMoveToTop,
+  onMoveToBottom,
 }: OrdemProducaoRowMenuProps) {
   return (
     <div className="flex justify-end">
-      <OverflowMenu ariaLabel="Ações da ordem" menuWidth={180}>
+      <OverflowMenu ariaLabel="Ações da ordem" menuWidth={196}>
         <OverflowMenuItem icon="edit" label="Editar" onClick={onEdit} />
         <OverflowMenuItem
           icon="keyboard_arrow_up"
@@ -35,6 +39,18 @@ export default function OrdemProducaoRowMenu({
           label="Mover para baixo"
           disabled={isLast}
           onClick={onMoveDown}
+        />
+        <OverflowMenuItem
+          icon="vertical_align_top"
+          label="Mover para o topo"
+          disabled={isFirst}
+          onClick={onMoveToTop}
+        />
+        <OverflowMenuItem
+          icon="vertical_align_bottom"
+          label="Mover para o fundo"
+          disabled={isLast}
+          onClick={onMoveToBottom}
         />
         <OverflowMenuItem
           icon="delete"

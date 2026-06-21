@@ -2,19 +2,26 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
+import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
 import OrdemProducaoRowMenu from '@/components/OrdensProducao/OrdemProducaoRowMenu';
-import { buildOrdemProdutoMeta } from '@/components/OrdensProducao/ordem-producao-meta';
+import { buildOrdemMobileDetails } from '@/components/OrdensProducao/ordem-producao-meta';
 import type { OrdemProducaoRowBaseProps } from '@/components/OrdensProducao/ordem-producao-row-types';
-import { ordensProducaoRowClass } from '@/components/OrdensProducao/ordens-producao-theme';
+import { ordensProducaoEtiquetaBadgeClass, ordensProducaoRowClass } from '@/components/OrdensProducao/ordens-producao-theme';
 
 export default function OrdemProducaoMobileRow({
   ordem,
+  filterDate,
   isFirst,
   isLast,
+  selected,
+  onToggleSelect,
   onEdit,
   onDelete,
   onMoveUp,
   onMoveDown,
+  onMoveToTop,
+  onMoveToBottom,
 }: OrdemProducaoRowBaseProps) {
   const {
     attributes,
@@ -33,31 +40,35 @@ export default function OrdemProducaoMobileRow({
   const latasValue =
     ordem.modoQuantidade === 'latas' && ordem.assadeiras > 0 ? ordem.assadeiras : null;
   const caixasValue = ordem.caixas > 0 ? ordem.caixas : null;
+  const etiquetaDiffers = ordem.dataEtiqueta !== filterDate;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`${ordensProducaoRowClass} grid grid-cols-[auto_1fr_auto] gap-x-2 gap-y-1 px-3 ${
+      className={`${ordensProducaoRowClass} grid grid-cols-[auto_auto_1fr_auto] gap-x-2 gap-y-1 px-3 ${
         isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
-      }`}
+      } ${selected ? 'bg-amber-50/80 odd:bg-amber-50/80 even:bg-amber-50/80' : ''}`}
     >
-      <button
-        type="button"
-        className="row-span-2 flex h-11 w-8 shrink-0 cursor-grab items-center justify-center self-center rounded-[9px] text-stone-400 hover:bg-stone-100 hover:text-stone-600 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Reordenar ordem ${ordem.ordemPlanejamento}`}
-        {...attributes}
-        {...listeners}
-      >
-        <span className="material-icons text-xl" aria-hidden="true">
-          drag_indicator
-        </span>
-      </button>
+      <div className="row-span-2 flex items-center self-center">
+        <OrdemProducaoRowCheckbox
+          checked={selected}
+          onChange={() => onToggleSelect(ordem)}
+          ariaLabel={`Selecionar ordem ${ordem.ordemPlanejamento}`}
+        />
+      </div>
+
+      <OrdemProducaoDragHandle
+        ordemPlanejamento={ordem.ordemPlanejamento}
+        attributes={attributes}
+        listeners={listeners}
+        className="row-span-2 h-11 w-10 shrink-0 self-center"
+      />
 
       <button
         type="button"
         onClick={() => onEdit(ordem)}
-        className="col-start-2 min-w-0 self-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-[9px]"
+        className="col-start-3 min-w-0 self-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-[9px]"
       >
         <span className="flex items-baseline gap-2">
           <span className="font-mono text-xs font-semibold tabular-nums text-stone-400">
@@ -68,8 +79,21 @@ export default function OrdemProducaoMobileRow({
           </span>
         </span>
         <span className="mt-0.5 block truncate text-xs text-text-muted">
-          {buildOrdemProdutoMeta(ordem)}
+          {buildOrdemMobileDetails(ordem)}
+          {etiquetaDiffers ? (
+            <>
+              {' '}
+              <span className={ordensProducaoEtiquetaBadgeClass} title="Data etiqueta diferente da produção">
+                ≠
+              </span>
+            </>
+          ) : null}
         </span>
+        {ordem.observacao.trim() ? (
+          <span className="mt-0.5 block truncate text-xs italic text-stone-500" title={ordem.observacao}>
+            {ordem.observacao}
+          </span>
+        ) : null}
         <span className="mt-1 block font-mono text-xs tabular-nums text-stone-600">
           {latasValue != null ? `${latasValue.toLocaleString('pt-BR')} LT` : '— LT'}
           {' • '}
@@ -81,7 +105,7 @@ export default function OrdemProducaoMobileRow({
         </span>
       </button>
 
-      <div className="col-start-3 row-span-2 self-center">
+      <div className="col-start-4 row-span-2 self-center">
         <OrdemProducaoRowMenu
           isFirst={isFirst}
           isLast={isLast}
@@ -89,6 +113,8 @@ export default function OrdemProducaoMobileRow({
           onDelete={() => onDelete(ordem)}
           onMoveUp={() => onMoveUp(ordem)}
           onMoveDown={() => onMoveDown(ordem)}
+          onMoveToTop={() => onMoveToTop(ordem)}
+          onMoveToBottom={() => onMoveToBottom(ordem)}
         />
       </div>
     </div>

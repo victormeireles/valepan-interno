@@ -25,18 +25,32 @@ export default function OrdensProducaoPageClient() {
     editingOrder,
     batchOpen,
     deleteTarget,
+    bulkDeleteOpen,
+    bulkBusy,
+    selectedCount,
+    allSelected,
+    isSelected,
     setBatchOpen,
     setDeleteTarget,
+    setBulkDeleteOpen,
     fetchList,
     openCreate,
     openEdit,
     closeForm,
     handleReorder,
     moveOrder,
+    moveOrderToTop,
+    moveOrderToBottom,
     handleSave,
     handleDeleteFromForm,
     requestDelete,
     confirmDelete,
+    requestBulkDelete,
+    confirmBulkDelete,
+    toggleSelectOrder,
+    toggleSelectAll,
+    clearSelection,
+    moveSelectedToTop,
     handleBatchSuccess,
   } = useOrdensProducaoPage();
 
@@ -90,11 +104,22 @@ export default function OrdensProducaoPageClient() {
           <OrdensProducaoList
             ordens={ordens}
             filterDate={filterDate}
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            isSelected={isSelected}
+            onToggleSelect={toggleSelectOrder}
+            onToggleSelectAll={toggleSelectAll}
+            onMoveSelectedToTop={moveSelectedToTop}
+            onDeleteSelected={requestBulkDelete}
+            onClearSelection={clearSelection}
+            bulkBusy={bulkBusy}
             onReorder={handleReorder}
             onEdit={openEdit}
             onDelete={requestDelete}
             onMoveUp={(ordem) => moveOrder(ordem, 'up')}
             onMoveDown={(ordem) => moveOrder(ordem, 'down')}
+            onMoveToTop={moveOrderToTop}
+            onMoveToBottom={moveOrderToBottom}
           />
         )}
       </Card>
@@ -141,6 +166,51 @@ export default function OrdensProducaoPageClient() {
               </Button>
               <Button type="button" variant="danger" icon="delete" onClick={() => void confirmDelete()}>
                 Excluir
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkDeleteOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4"
+          role="presentation"
+          onClick={() => !bulkBusy && setBulkDeleteOpen(false)}
+        >
+          <div
+            role="alertdialog"
+            aria-labelledby="bulk-delete-dialog-title"
+            aria-describedby="bulk-delete-dialog-desc"
+            className="w-full max-w-md rounded-xl border border-border-default bg-surface p-6 shadow-control"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="bulk-delete-dialog-title" className="text-lg font-semibold text-text-strong">
+              Excluir ordens selecionadas?
+            </h2>
+            <p id="bulk-delete-dialog-desc" className="mt-2 text-sm text-text-muted">
+              {selectedCount === 1
+                ? '1 ordem será removida permanentemente.'
+                : `${selectedCount} ordens serão removidas permanentemente.`}{' '}
+              Não é possível excluir ordens com produção já registrada.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={bulkBusy}
+                onClick={() => setBulkDeleteOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                icon="delete"
+                disabled={bulkBusy}
+                onClick={() => void confirmBulkDelete()}
+              >
+                Excluir selecionadas
               </Button>
             </div>
           </div>

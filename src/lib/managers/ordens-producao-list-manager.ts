@@ -75,6 +75,28 @@ export class OrdensProducaoListManager {
       throw new Error(data.error || 'Falha ao excluir ordem');
     }
   }
+
+  async removeMany(ids: string[]): Promise<{
+    deleted: string[];
+    failed: { id: string; error: string }[];
+  }> {
+    const deleted: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        await this.remove(id);
+        deleted.push(id);
+      } catch (err) {
+        failed.push({
+          id,
+          error: err instanceof Error ? err.message : 'Falha ao excluir ordem',
+        });
+      }
+    }
+
+    return { deleted, failed };
+  }
 }
 
 export const ordensProducaoListManager = new OrdensProducaoListManager();

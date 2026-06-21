@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { arrayMove } from '@dnd-kit/sortable';
 import type { OrdemProducaoPainelItem } from '@/domain/types/ordens-producao-painel';
+import { moveIdsToBottom, moveIdsToTop } from '@/domain/ordens-producao/ordem-selection';
+import type { OrdemProducaoFormMode } from '@/components/OrdensProducao/useOrdemProducaoForm';
+import { useOrdensProducaoSelection } from '@/components/OrdensProducao/useOrdensProducaoSelection';
 import {
   ordensProducaoListManager,
   type OrdemProducaoCreateBody,
 } from '@/lib/managers/ordens-producao-list-manager';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
-import type { OrdemProducaoFormMode } from '@/components/OrdensProducao/useOrdemProducaoForm';
 
 type ToastState = { type: 'success' | 'error'; text: string } | null;
 
@@ -45,6 +47,19 @@ export function useOrdensProducaoPage() {
   const [editingOrder, setEditingOrder] = useState<OrdemProducaoPainelItem | undefined>();
   const [batchOpen, setBatchOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OrdemProducaoPainelItem | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const ordemIds = useMemo(() => ordens.map((ordem) => ordem.id), [ordens]);
+  const {
+    selectedIds,
+    selectedCount,
+    allSelected,
+    isSelected,
+    toggle: toggleSelect,
+    toggleAll: toggleSelectAll,
+    clear: clearSelection,
+  } = useOrdensProducaoSelection(ordemIds, filterDate);
 
   const showToast = useCallback((next: ToastState) => {
     setToast(next);
@@ -108,6 +123,26 @@ export function useOrdensProducaoPage() {
         index,
         targetIndex,
       );
+      handleReorder(orderedIds);
+    },
+    [ordens, handleReorder],
+  );
+
+  const moveOrderToTop = useCallback(
+    (ordem: OrdemProducaoPainelItem) => {
+      const allIds = ordens.map((item) => item.id);
+      const orderedIds = moveIdsToTop(allIds, [ordem.id]);
+      if (orderedIds.join(',') === allIds.join(',')) return;
+      handleReorder(orderedIds);
+    },
+    [ordens, handleReorder],
+  );
+
+  const moveOrderToBottom = useCallback(
+    (ordem: OrdemProducaoPainelItem) => {
+      const allIds = ordens.map((item) => item.id);
+      const orderedIds = moveIdsToBottom(allIds, [ordem.id]);
+      if (orderedIds.join(',') === allIds.join(',')) return;
       handleReorder(orderedIds);
     },
     [ordens, handleReorder],
@@ -182,6 +217,69 @@ export function useOrdensProducaoPage() {
     await fetchList(filterDate);
   };
 
+  const toggleSelectOrder = useCallback(
+    (ordem: OrdemProducaoPainelItem) => {
+      toggleSelect(ordem.id);
+    },
+    [toggleSelect],
+  );
+
+  const moveSelectedToTop = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const orderedIds = moveIdsToTop(
+      ordens.map((ordem) => ordem.id),
+      [...selectedIds],
+    );
+    handleReorder(orderedIds);
+    showToast({
+      type: 'success',
+      text:
+        selectedIds.size === 1
+          ? '1 ordem movida para o topo'
+          : `${selectedIds.size} ordens movidas para o topo`,
+    });
+  }, [selectedIds, ordens, handleReorder, showToast]);
+
+  const requestBulkDelete = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleteOpen(true);
+  }, [selectedIds]);
+
+  const confirmBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = [...selectedIds];
+      const { deleted, failed } = await ordensProducaoListManager.removeMany(ids);
+      setBulkDeleteOpen(false);
+      clearSelection();
+
+      if (failed.length === 0) {
+        showToast({
+          type: 'success',
+          text:
+            deleted.length === 1
+              ? '1 ordem excluída'
+              : `${deleted.length} ordens excluídas`,
+        });
+      } else if (deleted.length > 0) {
+        showToast({
+          type: 'error',
+          text: `${deleted.length} excluídas, ${failed.length} não puderam ser excluídas`,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          text: failed[0]?.error || 'Não foi possível excluir as ordens selecionadas',
+        });
+      }
+
+      await fetchList(filterDate);
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [selectedIds, clearSelection, showToast, fetchList, filterDate]);
+
   return {
     filterDate,
     setFilterDate,
@@ -195,18 +293,32 @@ export function useOrdensProducaoPage() {
     editingOrder,
     batchOpen,
     deleteTarget,
+    bulkDeleteOpen,
+    bulkBusy,
+    selectedCount,
+    allSelected,
+    isSelected,
     setBatchOpen,
     setDeleteTarget,
+    setBulkDeleteOpen,
     fetchList,
     openCreate,
     openEdit,
     closeForm,
     handleReorder,
     moveOrder,
+    moveOrderToTop,
+    moveOrderToBottom,
     handleSave,
     handleDeleteFromForm,
     requestDelete,
     confirmDelete,
+    requestBulkDelete,
+    confirmBulkDelete,
+    toggleSelectOrder,
+    toggleSelectAll,
+    clearSelection,
+    moveSelectedToTop,
     handleBatchSuccess,
   };
 }

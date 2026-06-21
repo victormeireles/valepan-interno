@@ -2,27 +2,38 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
+import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
 import OrdemProducaoQtyValue from '@/components/OrdensProducao/OrdemProducaoQtyValue';
+import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
 import OrdemProducaoRowMenu from '@/components/OrdensProducao/OrdemProducaoRowMenu';
-import { buildOrdemProdutoMeta } from '@/components/OrdensProducao/ordem-producao-meta';
 import type { OrdemProducaoRowBaseProps } from '@/components/OrdensProducao/ordem-producao-row-types';
 import {
+  ordensProducaoTableObsClass,
   ordensProducaoTableProdutoClass,
   ordensProducaoTableQtyCellClass,
   ordensProducaoTableRowClass,
+  ordensProducaoTableCheckboxCellClass,
+  ordensProducaoTableControlCellClass,
+  ordensProducaoTableTextCellClass,
   ordensProducaoTableTextTruncateClass,
 } from '@/components/OrdensProducao/ordens-producao-table-layout';
 import { ordensProducaoEtiquetaBadgeClass } from '@/components/OrdensProducao/ordens-producao-theme';
+import { formatISODateBrNoYear } from '@/lib/utils/date-utils';
 
 export default function OrdemProducaoTableRow({
   ordem,
   filterDate,
   isFirst,
   isLast,
+  selected,
+  onToggleSelect,
   onEdit,
   onDelete,
   onMoveUp,
   onMoveDown,
+  onMoveToTop,
+  onMoveToBottom,
 }: OrdemProducaoRowBaseProps) {
   const {
     attributes,
@@ -42,7 +53,6 @@ export default function OrdemProducaoTableRow({
   const latasValue =
     ordem.modoQuantidade === 'latas' && ordem.assadeiras > 0 ? ordem.assadeiras : null;
   const caixasValue = ordem.caixas > 0 ? ordem.caixas : null;
-  const meta = buildOrdemProdutoMeta(ordem);
 
   return (
     <tr
@@ -50,24 +60,27 @@ export default function OrdemProducaoTableRow({
       style={style}
       className={`${ordensProducaoTableRowClass} ${
         isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
-      }`}
+      } ${selected ? 'bg-amber-50/80 odd:bg-amber-50/80 even:bg-amber-50/80' : ''}`}
     >
-      <td className="w-9 px-1 py-2 align-middle">
-        <button
-          type="button"
-          className="flex h-11 w-9 cursor-grab items-center justify-center rounded-[9px] text-stone-400 hover:bg-stone-100 hover:text-stone-600 active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Reordenar ordem ${ordem.ordemPlanejamento}`}
-          {...attributes}
-          {...listeners}
-        >
-          <span className="material-icons text-xl" aria-hidden="true">
-            drag_indicator
-          </span>
-        </button>
+      <td className={ordensProducaoTableCheckboxCellClass}>
+        <OrdemProducaoRowCheckbox
+          checked={selected}
+          onChange={() => onToggleSelect(ordem)}
+          ariaLabel={`Selecionar ordem ${ordem.ordemPlanejamento}`}
+        />
       </td>
 
-      <td className="w-8 px-1 py-2 text-center align-middle">
-        <span className="font-mono text-xs font-semibold tabular-nums text-stone-400">
+      <td className={ordensProducaoTableControlCellClass}>
+        <OrdemProducaoDragHandle
+          ordemPlanejamento={ordem.ordemPlanejamento}
+          attributes={attributes}
+          listeners={listeners}
+          className="h-8 w-7"
+        />
+      </td>
+
+      <td className={`${ordensProducaoTableControlCellClass} text-center`}>
+        <span className="font-mono text-[11px] font-semibold tabular-nums text-stone-400">
           {ordem.ordemPlanejamento}
         </span>
       </td>
@@ -80,24 +93,57 @@ export default function OrdemProducaoTableRow({
           title={ordem.produto}
         >
           <span
-            className={`font-semibold tracking-[-0.004em] text-text-strong ${ordensProducaoTableTextTruncateClass}`}
+            className={`text-[13px] font-semibold tracking-[-0.004em] text-text-strong ${ordensProducaoTableTextTruncateClass}`}
           >
             {ordem.produto}
           </span>
-          <span
-            className={`mt-0.5 text-xs text-text-muted ${ordensProducaoTableTextTruncateClass}`}
-          >
-            {meta}
-            {etiquetaDiffers ? (
-              <>
-                {' '}
-                <span className={ordensProducaoEtiquetaBadgeClass} title="Data etiqueta diferente da produção">
-                  ≠
-                </span>
-              </>
-            ) : null}
-          </span>
         </button>
+      </td>
+
+      <td className={ordensProducaoTableTextCellClass}>
+        <OrdemProducaoAssadeiraCell
+          variant={ordem.assadeiraVariant}
+          nome={ordem.assadeiraNome}
+        />
+      </td>
+
+      <td className={ordensProducaoTableTextCellClass}>
+        <span className={ordensProducaoTableTextTruncateClass} title={ordem.tipoEstoque}>
+          {ordem.tipoEstoque}
+        </span>
+      </td>
+
+      <td className={ordensProducaoTableTextCellClass}>
+        <span
+          className={`inline-flex min-w-0 max-w-full items-center gap-1 font-mono tabular-nums text-stone-600 ${ordensProducaoTableTextTruncateClass}`}
+          title={
+            etiquetaDiffers
+              ? `Etiqueta ${formatISODateBrNoYear(ordem.dataEtiqueta)} (diferente da produção)`
+              : formatISODateBrNoYear(ordem.dataEtiqueta)
+          }
+        >
+          <span className="truncate">{formatISODateBrNoYear(ordem.dataEtiqueta)}</span>
+          {etiquetaDiffers ? (
+            <span className={ordensProducaoEtiquetaBadgeClass} title="Data etiqueta diferente da produção">
+              ≠
+            </span>
+          ) : null}
+        </span>
+      </td>
+
+      <td className={ordensProducaoTableObsClass}>
+        {ordem.observacao.trim() ? (
+          <span
+            className={`italic ${ordensProducaoTableTextTruncateClass}`}
+            title={ordem.observacao}
+          >
+            {ordem.observacao}
+          </span>
+        ) : (
+          <span className="text-stone-300" aria-hidden="true">
+            —
+          </span>
+        )}
       </td>
 
       <td className={ordensProducaoTableQtyCellClass}>
@@ -112,7 +158,7 @@ export default function OrdemProducaoTableRow({
         <OrdemProducaoQtyValue value={ordem.unidades} emphasize />
       </td>
 
-      <td className="px-1 py-2 align-middle">
+      <td className={ordensProducaoTableControlCellClass}>
         <OrdemProducaoRowMenu
           isFirst={isFirst}
           isLast={isLast}
@@ -120,6 +166,8 @@ export default function OrdemProducaoTableRow({
           onDelete={() => onDelete(ordem)}
           onMoveUp={() => onMoveUp(ordem)}
           onMoveDown={() => onMoveDown(ordem)}
+          onMoveToTop={() => onMoveToTop(ordem)}
+          onMoveToBottom={() => onMoveToBottom(ordem)}
         />
       </td>
     </tr>

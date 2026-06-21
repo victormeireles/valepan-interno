@@ -1,25 +1,15 @@
 'use client';
 
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { OrdemProducaoPainelItem } from '@/domain/types/ordens-producao-painel';
 import OrdemProducaoMobileRow from '@/components/OrdensProducao/OrdemProducaoMobileRow';
+import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
 import OrdemProducaoTableRow from '@/components/OrdensProducao/OrdemProducaoTableRow';
+import OrdensProducaoBulkBar from '@/components/OrdensProducao/OrdensProducaoBulkBar';
 import OrdensProducaoTableColGroup from '@/components/OrdensProducao/OrdensProducaoTableColGroup';
 import { useMdViewport } from '@/components/OrdensProducao/use-md-viewport';
+import { useOrdensProducaoDndSensors } from '@/components/OrdensProducao/useOrdensProducaoDndSensors';
 import {
   ordensProducaoListFooterClass,
   ordensProducaoListScrollClass,
@@ -27,34 +17,57 @@ import {
   ordensProducaoTableBodyClass,
   ordensProducaoTableClass,
   ordensProducaoTableHeadClass,
+  ordensProducaoTableHeadObsClass,
   ordensProducaoTableHeadProdutoClass,
   ordensProducaoTableHeadQtyClass,
+  ordensProducaoTableHeadTextClass,
+  ordensProducaoTableControlCellClass,
+  ordensProducaoTableCheckboxCellClass,
 } from '@/components/OrdensProducao/ordens-producao-table-layout';
 
 type OrdensProducaoListProps = {
   ordens: OrdemProducaoPainelItem[];
   filterDate: string;
+  selectedCount: number;
+  allSelected: boolean;
+  isSelected: (id: string) => boolean;
+  onToggleSelect: (ordem: OrdemProducaoPainelItem) => void;
+  onToggleSelectAll: () => void;
+  onMoveSelectedToTop: () => void;
+  onDeleteSelected: () => void;
+  onClearSelection: () => void;
+  bulkBusy?: boolean;
   onReorder: (orderedIds: string[]) => void;
   onEdit: (ordem: OrdemProducaoPainelItem) => void;
   onDelete: (ordem: OrdemProducaoPainelItem) => void;
   onMoveUp: (ordem: OrdemProducaoPainelItem) => void;
   onMoveDown: (ordem: OrdemProducaoPainelItem) => void;
+  onMoveToTop: (ordem: OrdemProducaoPainelItem) => void;
+  onMoveToBottom: (ordem: OrdemProducaoPainelItem) => void;
 };
 
 export default function OrdensProducaoList({
   ordens,
   filterDate,
+  selectedCount,
+  allSelected,
+  isSelected,
+  onToggleSelect,
+  onToggleSelectAll,
+  onMoveSelectedToTop,
+  onDeleteSelected,
+  onClearSelection,
+  bulkBusy = false,
   onReorder,
   onEdit,
   onDelete,
   onMoveUp,
   onMoveDown,
+  onMoveToTop,
+  onMoveToBottom,
 }: OrdensProducaoListProps) {
   const isMdViewport = useMdViewport();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useOrdensProducaoDndSensors();
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -77,14 +90,29 @@ export default function OrdensProducaoList({
     filterDate,
     isFirst: index === 0,
     isLast: index === ordens.length - 1,
+    selected: isSelected(ordem.id),
+    onToggleSelect,
     onEdit,
     onDelete,
     onMoveUp,
     onMoveDown,
+    onMoveToTop,
+    onMoveToBottom,
   });
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <OrdensProducaoBulkBar
+        selectedCount={selectedCount}
+        totalCount={ordens.length}
+        allSelected={allSelected}
+        onToggleAll={onToggleSelectAll}
+        onMoveToTop={onMoveSelectedToTop}
+        onDelete={onDeleteSelected}
+        onClear={onClearSelection}
+        busy={bulkBusy}
+        showSelectAll={!isMdViewport}
+      />
       <div className={ordensProducaoListScrollClass}>
         <SortableContext items={ordens.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {isMdViewport ? (
@@ -92,14 +120,33 @@ export default function OrdensProducaoList({
               <OrdensProducaoTableColGroup />
               <thead className={ordensProducaoTableHeadClass}>
                 <tr>
-                  <th scope="col" className="w-9 px-1 py-2.5">
+                  <th scope="col" className={ordensProducaoTableCheckboxCellClass}>
+                    <OrdemProducaoRowCheckbox
+                      checked={allSelected}
+                      onChange={onToggleSelectAll}
+                      ariaLabel="Selecionar todas as ordens"
+                    />
+                  </th>
+                  <th scope="col" className={ordensProducaoTableControlCellClass}>
                     <span className="sr-only">Reordenar</span>
                   </th>
-                  <th scope="col" className="w-8 px-1 py-2.5">
+                  <th scope="col" className={`${ordensProducaoTableControlCellClass} text-center`}>
                     <span className="sr-only">Prioridade</span>
                   </th>
                   <th scope="col" className={ordensProducaoTableHeadProdutoClass}>
                     Produto
+                  </th>
+                  <th scope="col" className={ordensProducaoTableHeadTextClass}>
+                    Assadeira
+                  </th>
+                  <th scope="col" className={ordensProducaoTableHeadTextClass}>
+                    Cliente
+                  </th>
+                  <th scope="col" className={ordensProducaoTableHeadTextClass}>
+                    Data
+                  </th>
+                  <th scope="col" className={ordensProducaoTableHeadObsClass}>
+                    Obs
                   </th>
                   <th scope="col" className={ordensProducaoTableHeadQtyClass}>
                     Latas
@@ -110,7 +157,7 @@ export default function OrdensProducaoList({
                   <th scope="col" className={ordensProducaoTableHeadQtyClass}>
                     Unidades
                   </th>
-                  <th scope="col" className="w-11 px-1 py-2.5">
+                  <th scope="col" className={ordensProducaoTableControlCellClass}>
                     <span className="sr-only">Ações</span>
                   </th>
                 </tr>

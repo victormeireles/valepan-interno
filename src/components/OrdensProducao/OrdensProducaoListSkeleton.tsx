@@ -15,6 +15,7 @@ export default function OrdensProducaoListSkeleton() {
           <Skeleton width="3rem" height="0.75rem" style={{ marginLeft: 'auto' }} />
           <Skeleton width="3rem" height="0.75rem" />
           <Skeleton width="3.5rem" height="0.75rem" />
+          <Skeleton width="4rem" height="0.75rem" />
         </div>
         {Array.from({ length: 5 }).map((_, index) => (
           <SkeletonRow key={index} />

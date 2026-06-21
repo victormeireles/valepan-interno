@@ -9,7 +9,7 @@ export default function OrdemProducaoQtyValue({
 }: OrdemProducaoQtyValueProps) {
   if (value === null || value <= 0) {
     return (
-      <span className="text-sm tabular-nums text-stone-300" aria-hidden="true">
+      <span className="text-[13px] tabular-nums text-stone-300" aria-hidden="true">
         —
       </span>
     );
@@ -17,7 +17,7 @@ export default function OrdemProducaoQtyValue({
 
   return (
     <span
-      className={`text-sm tabular-nums text-stone-800 ${
+      className={`text-[13px] tabular-nums text-stone-800 ${
         emphasize ? 'font-semibold' : 'font-medium'
       }`}
     >
