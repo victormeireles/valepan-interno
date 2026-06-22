@@ -1,0 +1,258 @@
+# Design: Meta em cascata entre etapas — finalização por lote e barras de progresso
+
+**Data:** 2026-06-22  
+**Status:** Aprovado pelo stakeholder  
+**Depende de:** `2026-06-09-ordens-producao-design.mdx`, `2026-06-17-fermentacao-forno-desligar-planilha-design.mdx`, `2026-06-03-embalagem-lotes-realizado-design.mdx`
+
+## Contexto
+
+Hoje cada etapa (fermentação, forno, embalagem) compara o produzido contra a **meta da OP** (`ordens_producao.assadeiras` / `caixas`). Não há cascata: se fermentação fecha com 680 LT de 700 LT planejados, forno e embalagem continuam mostrando 700 LT / 350 CX.
+
+A finalização em fermentação/forno é automática aos **90%** da meta planejada (`getOrdemEtapaFilterStatus`), sem ação do operador e sem distinção entre parcial e perda.
+
+**Objetivo:** propagar quantidades reais entre etapas mantendo a OP como referência informativa; permitir ao operador declarar, a cada lote salvo, se ainda vai produzir mais ou se encerrou a etapa; exibir barras de progresso da cadeia nas telas de forno e embalagem.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Meta planejada (OP) | Permanece inalterada — exibida como informativa |
+| Meta efetiva | Travada ao escolher "não vai produzir mais"; propagada para a próxima etapa |
+| Estimativa ao vivo | Etapa anterior aberta → painel mostra soma dos lotes em tempo real, sem travar downstream |
+| Finalização | No **salvar lote**, não em ação separada |
+| Botões no modal | Sempre dois: "Salvar e vai produzir mais" / "Salvar e não vai produzir mais" |
+| Ação usual | Abaixo da meta de referência → usual = vai produzir mais; igual ou acima → usual = não vai produzir mais |
+| Ação não usual | Exige confirmação com texto explícito (perda ou "ainda tem mais pão") |
+| Parcial (vai produzir mais) | Mesma OP aberta; meta efetiva **não** trava |
+| Perda (não vai produzir mais abaixo da meta) | Fecha etapa; trava produzido como meta efetiva; perda = meta_referência − meta_confirmada |
+| Meta de referência | Meta confirmada da etapa **imediatamente anterior**, se existir; senão meta da OP |
+| OP nunca alterada | Perda calculável por `OP − finalizado` em relatórios |
+| Corte 90% automático | **Removido** — seções em andamento/finalizados usam flag `finalizada` |
+| Schema | Colunas em `ordens_producao` (abordagem 1) |
+| UI barras | Cadeia empilhada: etapa atual em destaque, anteriores suaves |
+| Reabrir etapa finalizada | Fora de escopo v1 |
+
+## Fora de escopo v1
+
+- Reabrir etapa finalizada ou editar lotes após fechar
+- Alterar OP automaticamente ao fechar com perda
+- Resfriamento e saídas
+- Limiar fixo de 10% (substituído por lógica usual/não usual)
+- Backfill de `meta_confirmada` em ordens históricas
+- Painel TV e daily summary (Fase 3)
+
+---
+
+## Fluxo ao salvar lote
+
+Aplica a **fermentação, forno e embalagem** (unidades: LT ou CX conforme a etapa).
+
+### Preview no modal
+
+```
+Total após este lote: 680 LT / 700 LT (meta de referência)
+OP planejada: 700 LT
+```
+
+### Dois botões (sempre)
+
+1. **Salvar e vai produzir mais**
+2. **Salvar e não vai produzir mais**
+
+### Qual é usual?
+
+Comparar **total projetado após este lote** vs **meta de referência**:
+
+| Total projetado | Usual | Não usual → confirmação |
+|-----------------|-------|-------------------------|
+| **Abaixo** | Vai produzir mais | Não vai produzir mais → *"Sim, confirmo perda de X [unidade]"* |
+| **Igual ou acima** | Não vai produzir mais | Vai produzir mais → *"Sim, confirmo que ainda tem mais pão"* |
+
+Modal de confirmação: primário **Voltar e editar**; secundário **Confirmar** com texto explícito.
+
+### Efeitos
+
+| Escolha | Lote | Etapa atual | Próxima etapa |
+|---------|------|-------------|---------------|
+| **Vai produzir mais** | Salva | `finalizada = false` | Sem meta confirmada nova; estimativa ao vivo na UI |
+| **Não vai produzir mais** | Salva | `finalizada = true`, `meta_confirmada = total produzido` | Recebe meta confirmada (LT → CX na embalagem) |
+
+### Meta de referência por etapa
+
+| Etapa | Referência |
+|-------|------------|
+| Fermentação | `ordem.assadeiras` (OP) |
+| Forno | `fermentacao_meta_confirmada` ?? `ordem.assadeiras` |
+| Embalagem | `converterParaCaixas(forno_meta_confirmada)` ?? `ordem.caixas` |
+
+---
+
+## Painéis e barras de progresso
+
+### Três conceitos por ordem
+
+| Conceito | Origem | Uso na UI |
+|----------|--------|-----------|
+| **Meta planejada (OP)** | `ordens_producao` | Informativo |
+| **Meta efetiva** | Etapa anterior confirmada ou OP | Barra de progresso e decisão usual/não usual |
+| **Produzido** | Soma dos lotes da etapa atual | Número principal |
+
+Quando a etapa anterior não fechou: texto auxiliar com estimativa ao vivo (ex.: *"~680 LT fermentados"*).
+
+### Componente `EtapaCadeiaProgresso`
+
+Barras empilhadas verticalmente:
+
+| Tela | Barras | Destaque |
+|------|--------|----------|
+| Fermentação | Só fermentação | Única barra |
+| Forno | Fermentação (suave) + Forno | Forno por cima |
+| Embalagem | Fermentação + Forno (suaves) + Embalagem | Embalagem por cima |
+
+**Estilo (design system Valepan):**
+- Destaque: `amber-600`, ~8px, ícone Material da etapa
+- Suaves: `stone-300` / `stone-100`, ~4px, opacidade reduzida
+- Números: Geist Mono (`680 LT`, `340 CX`)
+- OP diferente da efetiva: subtítulo *"OP: 350 CX"* em `stone-500 text-xs`
+- Etapa fechada: `check_circle` emerald
+- Etapa anterior aberta: `schedule` amber + estimativa
+- Overflow (>100%): barra em 100% + badge `+20 LT`
+
+### Card compacto (acordeão)
+
+Linha resumida: `produzido / meta_efetiva` (não OP). Tooltip ou subtítulo *"OP: …"* quando diferir.
+
+Ao expandir: `EtapaCadeiaProgresso` + lista de lotes.
+
+### Toolbar do dia
+
+Métrica principal: produzido / soma das metas efetivas (fallback OP onde não houver confirmação). Secundária: total OP planejado.
+
+### Worklist
+
+| Seção | Critério |
+|-------|----------|
+| Em andamento | `finalizada = false` |
+| Finalizados | `finalizada = true` |
+
+Farol vermelho/amarelo/verde: produzido vs meta efetiva.
+
+---
+
+## Schema
+
+### Colunas em `ordens_producao`
+
+| Coluna | Tipo | Default |
+|--------|------|---------|
+| `fermentacao_finalizada` | `boolean` | `false` |
+| `fermentacao_meta_confirmada` | `numeric(12,3)` | `null` |
+| `fermentacao_finalizada_em` | `timestamptz` | `null` |
+| `forno_finalizada` | `boolean` | `false` |
+| `forno_meta_confirmada` | `numeric(12,3)` | `null` |
+| `forno_finalizada_em` | `timestamptz` | `null` |
+| `embalagem_finalizada` | `boolean` | `false` |
+| `embalagem_meta_confirmada` | `integer` | `null` |
+| `embalagem_finalizada_em` | `timestamptz` | `null` |
+
+Script: `ALTER_ORDENS_PRODUCAO_ETAPA_META.sql`
+
+**Integridade:**
+- `meta_confirmada` preenchida somente com `finalizada = true`
+- Ao fechar: `meta_confirmada = SUM(lotes)` no momento do save
+- Etapa finalizada → bloquear novo lote e edição/exclusão de lotes
+
+---
+
+## Arquitetura
+
+### Domínio (novos módulos)
+
+| Classe / módulo | Responsabilidade |
+|-----------------|------------------|
+| `EtapaMetaReferenciaResolver` | Meta de referência por etapa |
+| `EtapaEstimativaAnteriorResolver` | Soma ao vivo da etapa anterior |
+| `EtapaContinuidadePolicy` | Usual vs não usual + texto de confirmação |
+| `EtapaFinalizacaoService` | Persiste flags após salvar lote |
+| `PainelEtapaMetaBuilder` | Enriquece payload do painel |
+
+### APIs
+
+Estender body de create/update de lote:
+
+```typescript
+type SalvarLoteBody = {
+  quantidade: EtapaQuantidade;
+  continuaProduzindo: boolean;
+  fotos?: EtapaLoteFotos;
+};
+```
+
+Rotas:
+- `POST/PUT` fermentação lote
+- `POST/PUT` forno lote
+- `POST/PUT` embalagem lote
+
+Validações:
+- Rejeitar se etapa `finalizada`
+- Rejeitar `nao_vai_produzir_mais` com total zero
+- Recalcular usual/não usual no servidor
+
+Painéis: incluir `metaPlanejada`, `metaEfetiva`, `metaEstimativaAnterior`, `finalizada` por ordem.
+
+### UI (novos / alterados)
+
+| Componente | Mudança |
+|------------|---------|
+| `EtapaLoteModalFooter` | Dois botões + lógica usual |
+| `EtapaContinuidadeConfirmDialog` | Confirmação ação não usual |
+| `EtapaCadeiaProgresso` | Barras empilhadas (Fase 2) |
+| `ProductCompactCard` | Denominador = meta efetiva |
+| `etapa-painel-adapter` | `finalizada` em vez de 90% |
+| Modais de lote | Footer + preview |
+
+---
+
+## Testes
+
+| Arquivo | Casos |
+|---------|-------|
+| `etapa-continuidade-policy.test.ts` | 600/700, 680/700, 700/700, 720/700 |
+| `etapa-meta-referencia-resolver.test.ts` | Com/sem meta anterior; LT→CX |
+| `etapa-finalizacao-service.test.ts` | Cascata e manter aberto |
+| `painel-ordem-builder.test.ts` | metaEfetiva ≠ metaPlanejada |
+| `etapa-painel-adapter.test.ts` | finalizada substitui 90% |
+
+---
+
+## Fases de implementação
+
+| Fase | Entrega |
+|------|---------|
+| **1** | Migration + domínio + APIs + modal footer + remover 90% |
+| **2** | `EtapaCadeiaProgresso` + cards/toolbar forno e embalagem |
+| **3** | Fermentação barra única + painel TV + daily summary com perda |
+
+---
+
+## Exemplos
+
+### Situação 1 — Fermentação 680/700, encerra com perda
+
+1. Operador salva lote; total projetado 680 LT; meta referência 700 LT (OP)
+2. Clica **não vai produzir mais** (não usual) → confirma perda de 20 LT
+3. `fermentacao_finalizada = true`, `fermentacao_meta_confirmada = 680`
+4. Forno: meta efetiva = 680 LT; OP informativa = 700 LT; barra forno 0/680
+
+### Situação 2 — Forno 650/680, encerra com perda
+
+1. Fermentação confirmada em 680 LT
+2. Forno salva; total 650 LT; referência 680 LT
+3. **Não vai produzir mais** → perda 30 LT vs fermentação
+4. Embalagem: meta efetiva = 325 CX (650 LT ÷ 2); OP informativa = 350 CX
+
+### Situação 3 — 700/700, encerra normal
+
+1. Total projetado 700; referência 700
+2. **Não vai produzir mais** (usual) — sem confirmação
+3. Propaga 700 LT para forno
