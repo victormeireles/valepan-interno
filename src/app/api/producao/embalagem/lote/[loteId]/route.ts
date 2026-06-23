@@ -88,6 +88,7 @@ export async function PUT(
       palletFotoUrl,
       palletFotoId,
       palletFotoUploadedAt,
+      continuaProduzindo,
     } = body;
 
     const c = Number(caixas) || 0;
@@ -122,6 +123,7 @@ export async function PUT(
         quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
         obsEmbalagem: obsEmbalagem || '',
         fotos,
+        continuaProduzindo: continuaProduzindo ?? true,
       });
     } catch (e) {
       if (e instanceof EstoqueResolverError) {

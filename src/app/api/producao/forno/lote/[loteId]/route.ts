@@ -58,7 +58,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { assadeiras, unidades, fotoUrl, fotoId, fotoUploadedAt } = body;
+    const { assadeiras, unidades, fotoUrl, fotoId, fotoUploadedAt, continuaProduzindo } = body;
     const loteAssadeiras = Number(assadeiras) || 0;
     const loteUnidades = Number(unidades) || 0;
 
@@ -78,6 +78,7 @@ export async function PUT(
         fotoId: fotoId || undefined,
         fotoUploadedAt: fotoUploadedAt || undefined,
       },
+      continuaProduzindo: continuaProduzindo ?? true,
     });
 
     try {

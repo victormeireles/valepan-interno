@@ -32,6 +32,7 @@ export async function POST(
       palletFotoUrl,
       palletFotoId,
       palletFotoUploadedAt,
+      continuaProduzindo,
     } = body;
 
     const c = Number(caixas) || 0;
@@ -83,6 +84,7 @@ export async function POST(
           palletFotoId: palletFotoId || undefined,
           palletFotoUploadedAt: palletFotoUploadedAt || undefined,
         },
+        continuaProduzindo: continuaProduzindo ?? true,
       });
       loteId = loteRecord.id;
 
