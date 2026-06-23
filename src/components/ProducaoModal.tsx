@@ -13,12 +13,19 @@ import {
 import { EmbalagemLoteModalShell } from './EmbalagemLoteModal';
 import EmbalagemDiscardSheet from './EmbalagemLoteModal/EmbalagemDiscardSheet';
 import { hasProducaoDraftChanged } from '@/domain/realizado/producao-draft-changes';
+import EtapaLoteQuantidadePreview from './Realizado/etapa/EtapaLoteQuantidadePreview';
+import EtapaLoteModalFooter from './Realizado/etapa/EtapaLoteModalFooter';
+import EtapaContinuidadeConfirmDialog from './Realizado/etapa/EtapaContinuidadeConfirmDialog';
+import { useEtapaLoteSubmit } from './Realizado/etapa/useEtapaLoteSubmit';
 
 
 interface ProducaoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: ProducaoData) => Promise<void>;
+  onSave: (
+    data: ProducaoData,
+    options?: { continuaProduzindo?: boolean },
+  ) => Promise<void>;
   onSaveSuccess?: () => Promise<void>;
   initialData?: ProducaoData;
   loading?: boolean;
@@ -47,6 +54,10 @@ interface ProducaoModalProps {
   modoQuantidade?: 'assadeiras' | 'unidades';
   /** Aberto via botão "+" (novo lote), não edição de lote existente. */
   isNewLote?: boolean;
+  metaReferencia?: number;
+  metaPlanejada?: number;
+  produzidoAtual?: number;
+  etapaUnidade?: string;
 }
 
 export default function ProducaoModal({
@@ -68,6 +79,10 @@ export default function ProducaoModal({
   mode = 'embalagem',
   modoQuantidade = 'assadeiras',
   isNewLote = false,
+  metaReferencia,
+  metaPlanejada,
+  produzidoAtual = 0,
+  etapaUnidade,
 }: ProducaoModalProps) {
   const [formData, setFormData] = useState<ProducaoData>({
     caixas: 0,
@@ -102,6 +117,14 @@ export default function ProducaoModal({
   const showAssadeirasField = !isEtapaMode || modoQuantidade === 'assadeiras';
   const showUnidadesField = !isEtapaMode || modoQuantidade === 'unidades';
   const showKgField = !isEtapaMode;
+  const etapaUnidadeNorm = (etapaUnidade || (modoQuantidade === 'unidades' ? 'UN' : 'LT')).toUpperCase();
+  const metaReferenciaEfetiva = Math.max(
+    0,
+    metaReferencia ?? (modoQuantidade === 'unidades' ? pedidoQuantidades?.unidades || 0 : pedidoQuantidades?.caixas || 0),
+  );
+  const metaPlanejadaEfetiva = Math.max(0, metaPlanejada ?? metaReferenciaEfetiva);
+  const quantidadeLoteAtual = modoQuantidade === 'unidades' ? formData.unidades || 0 : formData.caixas || 0;
+  const totalProjetadoEtapa = Math.max(0, produzidoAtual + quantidadeLoteAtual);
 
   const camposVisiveis: CamposRealizadoEmbalagem = useMemo(() => {
     if (mode !== 'embalagem' || !pedidoMetaOriginal) {
@@ -265,7 +288,7 @@ export default function ProducaoModal({
     [photoFiles, mode],
   );
 
-  const executeSaveNovoLote = useCallback(async () => {
+  const executeSaveNovoLote = useCallback(async (continuaProduzindo = true) => {
     const podeCriarLote =
       mode === 'embalagem' ? Boolean(pedidoEmbalagemId) : Boolean(ordemProducaoId);
     if (!podeCriarLote) return;
@@ -294,6 +317,7 @@ export default function ProducaoModal({
           : {
               assadeiras: payload.caixas,
               unidades: payload.unidades,
+              continuaProduzindo,
             };
 
       const res = await fetch(endpoint, {
@@ -356,17 +380,23 @@ export default function ProducaoModal({
       }
     }
     
+    // Em etapas, o submit padrão do Enter segue o fluxo "Salvar"
+    if (isEtapaMode) {
+      await handleEtapaSalvar();
+      return;
+    }
+
     // Executar o submit
     await executeSubmit();
   };
 
-  const executeSubmit = async () => {
+  const executeSubmit = async (continuaProduzindo = true) => {
     if (
       isNewLote &&
       (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
       (pedidoEmbalagemId || ordemProducaoId)
     ) {
-      await executeSaveNovoLote();
+      await executeSaveNovoLote(continuaProduzindo);
       return;
     }
 
@@ -455,7 +485,7 @@ export default function ProducaoModal({
         setPhotoLoading(false);
       }
       
-      await onSave(sanitizeQuantidades(updatedFormData));
+      await onSave(sanitizeQuantidades(updatedFormData), { continuaProduzindo });
       
       // Recarregar dados do painel se callback fornecido
       if (onSaveSuccess) {
@@ -473,6 +503,26 @@ export default function ProducaoModal({
       setIsSubmitting(false);
     }
   };
+
+  const handleEtapaSubmitAction = async (continuaProduzindo: boolean) => {
+    if (isSubmitting) return;
+    await executeSubmit(continuaProduzindo);
+  };
+
+  const {
+    continuidade,
+    confirmDialog,
+    onSalvar: handleEtapaSalvar,
+    onSalvarEFinalizar: handleEtapaSalvarEFinalizar,
+    handleDialogBack: handleEtapaConfirmBack,
+    handleDialogConfirm: handleEtapaConfirmContinue,
+  } = useEtapaLoteSubmit({
+    enabled: isEtapaMode,
+    totalProjetado: totalProjetadoEtapa,
+    metaReferencia: metaReferenciaEfetiva,
+    unidade: etapaUnidadeNorm,
+    onSubmit: handleEtapaSubmitAction,
+  });
 
   const handlePhotoSelect = (file: File, photoType: 'pacote' | 'etiqueta' | 'pallet') => {
     setPhotoFiles(prev => ({
@@ -588,79 +638,14 @@ export default function ProducaoModal({
     );
   };
 
-  // Handler para salvar produção parcial
-  const handleSavePartial = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Prevenir múltiplos cliques
-    if (isSubmitting) return;
-
-    if (
-      isNewLote &&
-      (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
-      (pedidoEmbalagemId || ordemProducaoId)
-    ) {
-      if (mode === 'embalagem') {
-        const validator = new PhotoValidator(formData, photoFiles, cliente);
-        const validationResult = validator.validate();
-        if (!validationResult.isValid && validationResult.errorMessage) {
-          setPhotoWarningMessage(validationResult.errorMessage);
-          setShowPhotoWarning(true);
-          setPendingAction('partial');
-          return;
-        }
-      }
-      await executeSaveNovoLote();
-      return;
-    }
-
-    const hasPartialTarget =
-      mode === 'embalagem'
-        ? Boolean(pedidoEmbalagemId || loteId)
-        : mode === 'forno' || mode === 'fermentacao'
-          ? Boolean(ordemProducaoId)
-          : false;
-
-    if (!hasPartialTarget) return;
-
-    if (mode === 'embalagem') {
-      const validator = new PhotoValidator(formData, photoFiles, cliente);
-      const validationResult = validator.validate();
-      if (!validationResult.isValid && validationResult.errorMessage) {
-        setPhotoWarningMessage(validationResult.errorMessage);
-        setShowPhotoWarning(true);
-        setPendingAction('partial');
-        return;
-      }
-    }
-
-    await executeSavePartial();
-  };
-
   const executeSavePartial = async () => {
-    if (
-      isNewLote &&
-      (mode === 'embalagem' || mode === 'forno' || mode === 'fermentacao') &&
-      (pedidoEmbalagemId || ordemProducaoId)
-    ) {
-      await executeSaveNovoLote();
+    if (mode !== 'embalagem') return;
+    if (isNewLote && pedidoEmbalagemId) {
+      await executeSaveNovoLote(true);
       return;
     }
 
-    const partialEndpoint =
-      mode === 'embalagem'
-        ? pedidoEmbalagemId
-          ? `/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`
-          : null
-        : mode === 'forno' || mode === 'fermentacao'
-          ? ordemProducaoId
-            ? `/api/producao/${mode}/ordem/${ordemProducaoId}/lote`
-            : null
-          : null;
-
-    if (!partialEndpoint) return;
-
-    if (totalQtyVisivel(formData) <= 0) {
+    if (!pedidoEmbalagemId || totalQtyVisivel(formData) <= 0) {
       setMessage({
         type: 'error',
         text: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).',
@@ -674,17 +659,10 @@ export default function ProducaoModal({
       setIsSubmitting(true);
       setMessage(null);
 
-      const body =
-        mode === 'embalagem'
-          ? buildLotePayload(payload)
-          : {
-              assadeiras: payload.caixas,
-              unidades: payload.unidades,
-            };
-      const res = await fetch(partialEndpoint, {
+      const res = await fetch(`/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildLotePayload(payload)),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar produção parcial');
@@ -707,6 +685,21 @@ export default function ProducaoModal({
     }
   };
 
+  const handleSavePartial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting || mode !== 'embalagem') return;
+
+    const validator = new PhotoValidator(formData, photoFiles, cliente);
+    const validationResult = validator.validate();
+    if (!validationResult.isValid && validationResult.errorMessage) {
+      setPhotoWarningMessage(validationResult.errorMessage);
+      setShowPhotoWarning(true);
+      setPendingAction('partial');
+      return;
+    }
+
+    await executeSavePartial();
+  };
 
   const handlePhotoWarningContinue = async () => {
     setShowPhotoWarning(false);
@@ -969,6 +962,17 @@ export default function ProducaoModal({
               )}
             </div>
 
+            {isEtapaMode && isNewLote && (
+              <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+                <EtapaLoteQuantidadePreview
+                  totalProjetado={totalProjetadoEtapa}
+                  metaReferencia={metaReferenciaEfetiva}
+                  metaPlanejada={metaPlanejadaEfetiva}
+                  unidade={etapaUnidadeNorm}
+                />
+              </div>
+            )}
+
             {/* Seção de Fotos */}
             <div className="border-t pt-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Fotos da Produção</h3>
@@ -1010,46 +1014,71 @@ export default function ProducaoModal({
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4 pt-6">
-              <button
-                type="button"
-                onClick={requestClose}
-                className="px-6 py-3 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium min-h-11"
-                disabled={loading || isSubmitting}
-              >
-                Cancelar
-              </button>
-              {isEtapaMode && !isNewLote && Boolean(ordemProducaoId) && isPartialProduction() && (
+            {isEtapaMode ? (
+              <EtapaLoteModalFooter
+                usualContinuaProduzindo={continuidade.usualContinuaProduzindo}
+                busy={loading || isSubmitting || photoLoading}
+                onCancel={requestClose}
+                onSalvar={() => void handleEtapaSalvar()}
+                onSalvarEFinalizar={() => void handleEtapaSalvarEFinalizar()}
+              />
+            ) : (
+              <div className="flex justify-end space-x-4 pt-6">
                 <button
                   type="button"
-                  onClick={() => {
-                    const e = { preventDefault: () => {} } as React.FormEvent;
-                    void handleSavePartial(e);
-                  }}
-                  className="px-6 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                  onClick={requestClose}
+                  className="px-6 py-3 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors font-medium min-h-11"
                   disabled={loading || isSubmitting}
                 >
-                  Salvar parcial
+                  Cancelar
                 </button>
-              )}
-              <button
-                type="submit"
-                className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
-                disabled={loading || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {photoLoading ? 'Enviando fotos...' : 'Salvando...'}
-                  </>
-                ) : (
-                  'Salvar Produção'
+                {Boolean(pedidoEmbalagemId || loteId) && isPartialProduction() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const e = { preventDefault: () => {} } as React.FormEvent;
+                      void handleSavePartial(e);
+                    }}
+                    className="px-6 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                    disabled={loading || isSubmitting}
+                  >
+                    Salvar parcial
+                  </button>
                 )}
-              </button>
-            </div>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
+                  disabled={loading || isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      {photoLoading ? 'Enviando fotos...' : 'Salvando...'}
+                    </>
+                  ) : (
+                    'Salvar Produção'
+                  )}
+                </button>
+              </div>
+            )}
           </form>
 
           <EmbalagemDiscardSheet
@@ -1057,6 +1086,16 @@ export default function ProducaoModal({
             onDiscard={handleDiscardConfirm}
             onContinue={handleDiscardCancel}
           />
+          {isEtapaMode && (
+            <EtapaContinuidadeConfirmDialog
+              open={confirmDialog.open}
+              titulo={confirmDialog.titulo}
+              mensagem={confirmDialog.mensagem}
+              textoConfirmar={confirmDialog.textoConfirmar}
+              onVoltar={handleEtapaConfirmBack}
+              onConfirmar={() => void handleEtapaConfirmContinue()}
+            />
+          )}
         </div>
       </div>
       )}

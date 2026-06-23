@@ -86,7 +86,7 @@ function mapOrdemToProduct(
     detalhesMeta,
     filterStatus: getOrdemEtapaFilterStatus(ordem),
     productionStatusOverride,
-    showAddLote: true,
+    showAddLote: !ordem.finalizada,
     isNovoLoteLoading: creatingLoteOrdemId === ordem.ordemProducaoId,
     lotes,
   };

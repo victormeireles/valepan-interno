@@ -139,7 +139,10 @@ export default function ProducaoFornoPage() {
   );
 
   const handleSaveProducao = useCallback(
-    async (producaoData: ProducaoData) => {
+    async (
+      producaoData: ProducaoData,
+      options?: { continuaProduzindo?: boolean },
+    ) => {
       if (!editingLote?.loteId) return;
 
       try {
@@ -154,6 +157,7 @@ export default function ProducaoFornoPage() {
             fotoUrl: producaoData.fornoFotoUrl,
             fotoId: producaoData.fornoFotoId,
             fotoUploadedAt: producaoData.fornoFotoUploadedAt,
+            continuaProduzindo: options?.continuaProduzindo ?? true,
           }),
         });
         const data = await res.json();
@@ -328,6 +332,10 @@ export default function ProducaoFornoPage() {
         loading={producaoLoading}
         mode="forno"
         modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}
+        metaReferencia={selectedOrdem?.metaReferencia}
+        metaPlanejada={selectedOrdem?.metaPlanejada}
+        produzidoAtual={selectedOrdem?.produzido || 0}
+        etapaUnidade={(selectedOrdem?.unidade || 'lt').toUpperCase()}
       />
     </>
   );
