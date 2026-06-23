@@ -9,6 +9,7 @@ import EtapaProductCardHeader from './EtapaProductCardHeader';
 import { etapaStatusStyles, getEtapaProductionStatus } from './etapa-status';
 import type { EtapaCadeiaBarra } from './etapa-cadeia-progresso-types';
 import EtapaCadeiaProgresso from './EtapaCadeiaProgresso';
+import { resolveTipoEstoqueMarca, shouldOmitClienteMetaEmbalagem } from '@/lib/utils/cliente-display';
 
 export type EtapaProductAccordionProps = {
   instanceId: string;
@@ -38,6 +39,8 @@ export type EtapaProductAccordionProps = {
   /** Sem meta: oculta barra e "/ meta"; farol pendente/registrado */
   hasMeta?: boolean;
   onProductPhotoClick?: () => void;
+  /** Badge D/T à direita do produto (embalagem). Valepan sem tag. */
+  showTipoEstoqueMarcaBadge?: boolean;
 };
 
 function sanitizeForHtmlId(value: string): string {
@@ -71,6 +74,7 @@ export default function EtapaProductAccordion({
   cadeiaBarras = [],
   hasMeta = true,
   onProductPhotoClick,
+  showTipoEstoqueMarcaBadge = false,
 }: EtapaProductAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const reactId = useId();
@@ -93,7 +97,10 @@ export default function EtapaProductAccordion({
   const targetLabel = targetBreakdown.format(somaAProduzir, fallbackUnit);
 
   const metaItems = [
-    cliente,
+    showTipoEstoqueMarcaBadge &&
+    (resolveTipoEstoqueMarca(cliente) || shouldOmitClienteMetaEmbalagem(cliente))
+      ? null
+      : cliente,
     dataEtiqueta,
     observacao ? `Obs: ${observacao}` : null,
     assadeira ? `Assadeira ${assadeira}` : null,
@@ -107,6 +114,8 @@ export default function EtapaProductAccordion({
         congelado={congelado}
         hasPhoto={hasPhoto}
         onProductPhotoClick={onProductPhotoClick}
+        tipoEstoqueCliente={cliente}
+        showTipoEstoqueMarcaBadge={showTipoEstoqueMarcaBadge}
         metaItems={metaItems}
         horario={horario}
         producedLabel={producedLabel}

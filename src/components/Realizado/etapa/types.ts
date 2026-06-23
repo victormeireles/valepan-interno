@@ -39,6 +39,8 @@ export type RealizadoEtapaConfig = {
   hasMeta?: boolean;
   /** Mantém o botão de novo lote mesmo em itens/grupos finalizados */
   alwaysShowAddLote?: boolean;
+  /** Exibe marca D/T à direita do produto (Damião, Top Alto). Valepan sem tag. */
+  tipoEstoqueMarcaBadge?: boolean;
   /** Botão secundário opcional na toolbar — ex.: "Nova saída" */
   extraActionLabel?: string;
 };
