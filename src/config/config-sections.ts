@@ -25,6 +25,12 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     description: 'Produtos e relação com assadeiras',
   },
   {
+    href: '/config/categorias',
+    label: 'Categorias',
+    icon: 'category',
+    description: 'Visibilidade de categorias no painel de embalagem',
+  },
+  {
     href: '/config/insumos',
     label: 'Insumos',
     icon: 'inventory',

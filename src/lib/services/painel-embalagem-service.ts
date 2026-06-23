@@ -1,6 +1,11 @@
 import { pedidosToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
 import { buildPainelPedido } from '@/domain/embalagem/painel-pedido-builder';
 import {
+  buildCategoriaPorProdutoMap,
+  filterPedidosEmbalagemPorCategoriaVisivel,
+} from '@/domain/categorias/filter-pedidos-embalagem-por-categoria';
+import { categoriaVisibilidadeManager } from '@/domain/categorias/categoria-visibilidade-manager';
+import {
   loadAssadeiraCtxByProdutoId,
   mapEtapasProduzidoPorOrdem,
   resolveEtapasLtForPedido,
@@ -44,8 +49,21 @@ export class PainelEmbalagemService {
 
     const tipoById = new Map(tipos.map((t) => [t.id, t]));
     const produtoNomeById = new Map(produtos.map((p) => [p.id, p.nome]));
+    const categoriaPorProduto = buildCategoriaPorProdutoMap(produtos);
 
-    return { tipoById, produtoNomeById };
+    return { tipoById, produtoNomeById, categoriaPorProduto };
+  }
+
+  private filterPedidosPorCategoriaVisivel(
+    pedidos: PedidoEmbalagemRecord[],
+    categoriaPorProduto: Map<string, string | null>,
+    categoriasVisiveis: Set<string>,
+  ): PedidoEmbalagemRecord[] {
+    return filterPedidosEmbalagemPorCategoriaVisivel(
+      pedidos,
+      categoriaPorProduto,
+      categoriasVisiveis,
+    );
   }
 
   private buildPedidosPainel(
@@ -89,13 +107,14 @@ export class PainelEmbalagemService {
     const pedidoIds = pedidos.map((p) => p.id);
     const produtoIds = pedidos.map((p) => p.produtoId);
 
-    const [lotesByPedido, fermentacaoLotes, fornoLotes, assadeiraByProduto, nameMaps] =
+    const [lotesByPedido, fermentacaoLotes, fornoLotes, assadeiraByProduto, nameMaps, categoriasVisiveis] =
       await Promise.all([
         embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
         fermentacaoLoteRepository.listByOrdemProducaoIds(pedidoIds),
         fornoLoteRepository.listByOrdemProducaoIds(pedidoIds),
         loadAssadeiraCtxByProdutoId(produtoIds),
         this.buildNameMaps(pedidos),
+        categoriaVisibilidadeManager.getIdsVisiveisEmbalagem(),
       ]);
 
     const etapasByOrdem = mapEtapasProduzidoPorOrdem(
@@ -104,7 +123,7 @@ export class PainelEmbalagemService {
       fornoLotes as Map<string, FermentacaoLoteRecord[]>,
     );
 
-    return { lotesByPedido, etapasByOrdem, assadeiraByProduto, ...nameMaps };
+    return { lotesByPedido, etapasByOrdem, assadeiraByProduto, categoriasVisiveis, ...nameMaps };
   }
 
   async getPainelForDate(date: string): Promise<PainelEmbalagemResponse> {
@@ -114,9 +133,14 @@ export class PainelEmbalagemService {
     }
 
     const ctx = await this.loadPainelContext(pedidos);
+    const pedidosFiltrados = this.filterPedidosPorCategoriaVisivel(
+      pedidos,
+      ctx.categoriaPorProduto,
+      ctx.categoriasVisiveis,
+    );
 
     const result = this.buildPedidosPainel(
-      pedidos,
+      pedidosFiltrados,
       ctx.lotesByPedido,
       ctx.tipoById,
       ctx.produtoNomeById,
@@ -142,7 +166,11 @@ export class PainelEmbalagemService {
     const ctx = await this.loadPainelContext(allPedidos);
 
     const pedidosMain = this.buildPedidosPainel(
-      pedidosByDate.get(date) ?? [],
+      this.filterPedidosPorCategoriaVisivel(
+        pedidosByDate.get(date) ?? [],
+        ctx.categoriaPorProduto,
+        ctx.categoriasVisiveis,
+      ),
       ctx.lotesByPedido,
       ctx.tipoById,
       ctx.produtoNomeById,
@@ -151,7 +179,11 @@ export class PainelEmbalagemService {
     );
 
     const pedidosSemana = this.buildPedidosPainel(
-      pedidosByDate.get(dateSemana) ?? [],
+      this.filterPedidosPorCategoriaVisivel(
+        pedidosByDate.get(dateSemana) ?? [],
+        ctx.categoriaPorProduto,
+        ctx.categoriasVisiveis,
+      ),
       ctx.lotesByPedido,
       ctx.tipoById,
       ctx.produtoNomeById,
@@ -162,7 +194,11 @@ export class PainelEmbalagemService {
     const pedidosAnterior =
       dateAnterior != null
         ? this.buildPedidosPainel(
-            pedidosByDate.get(dateAnterior) ?? [],
+            this.filterPedidosPorCategoriaVisivel(
+              pedidosByDate.get(dateAnterior) ?? [],
+              ctx.categoriaPorProduto,
+              ctx.categoriasVisiveis,
+            ),
             ctx.lotesByPedido,
             ctx.tipoById,
             ctx.produtoNomeById,

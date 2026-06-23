@@ -259,6 +259,7 @@ export type Database = {
           id: string
           nome: string
           updated_at: string | null
+          visivel_embalagem: boolean
         }
         Insert: {
           aparece_por_padrao?: boolean
@@ -267,6 +268,7 @@ export type Database = {
           id?: string
           nome: string
           updated_at?: string | null
+          visivel_embalagem?: boolean
         }
         Update: {
           aparece_por_padrao?: boolean
@@ -275,6 +277,7 @@ export type Database = {
           id?: string
           nome?: string
           updated_at?: string | null
+          visivel_embalagem?: boolean
         }
         Relationships: []
       }

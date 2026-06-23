@@ -7,6 +7,7 @@ export type ProductRecord = Tables<'produtos'>;
 export type ProductDTO = {
   readonly id: string;
   readonly nome: string;
+  readonly categoriaId: string | null;
   readonly unidadeNomeResumido: string | null; // nome_resumido da tabela unidades
   readonly codigo: string;
   readonly unitBarcode: string | null;
@@ -32,7 +33,7 @@ export class SupabaseProductService {
     const query = client
       .from('produtos')
       .select(
-        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+        'id, nome, categoria_id, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .order('nome', { ascending: true });
 
@@ -55,7 +56,7 @@ export class SupabaseProductService {
     const { data, error } = await client
       .from('produtos')
       .select(
-        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+        'id, nome, categoria_id, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .eq('id', id)
       .maybeSingle();
@@ -74,7 +75,7 @@ export class SupabaseProductService {
     const { data, error } = await client
       .from('produtos')
       .select(
-        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+        'id, nome, categoria_id, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .eq('ativo', true)
       .in('id', ids);
@@ -88,7 +89,7 @@ export class SupabaseProductService {
     const { data, error } = await client
       .from('produtos')
       .select(
-        'id, nome, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
+        'id, nome, categoria_id, unidade_padrao_id, codigo, unit_barcode, box_units, package_units, unit_weight, unidades_assadeira, ativo, unidades (nome_resumido)',
       )
       .eq('ativo', true)
       .ilike('nome', nome)
@@ -114,6 +115,7 @@ export class SupabaseProductService {
     id: string;
     nome: string;
     codigo: string;
+    categoria_id: string | null;
     unit_barcode: string | null;
     unidade_padrao_id: string | null;
     package_units: number | null;
@@ -129,6 +131,7 @@ export class SupabaseProductService {
     return {
       id: record.id,
       nome: record.nome,
+      categoriaId: record.categoria_id ?? null,
       unidadeNomeResumido,
       codigo: record.codigo,
       unitBarcode: record.unit_barcode,
