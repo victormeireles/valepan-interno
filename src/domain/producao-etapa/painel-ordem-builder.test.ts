@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPainelOrdem } from './painel-ordem-builder';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
+import { DEFAULT_ORDEM_ETAPA_STATUS } from './ordem-etapa-status-defaults';
 
 const ordem: OrdemProducaoRecord = {
   id: 'ordem-1',
@@ -16,6 +17,7 @@ const ordem: OrdemProducaoRecord = {
   quantidade: { caixas: 0, pacotes: 0, unidades: 240, kg: 0 },
   createdAt: '',
   updatedAt: '',
+  ...DEFAULT_ORDEM_ETAPA_STATUS,
 };
 
 const lotes: FermentacaoLoteRecord[] = [

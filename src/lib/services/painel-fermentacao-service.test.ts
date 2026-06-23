@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
+import { DEFAULT_ORDEM_ETAPA_STATUS } from '@/domain/producao-etapa/ordem-etapa-status-defaults';
 
 const listByDataProducao = vi.fn();
 const listByDatasProducao = vi.fn();
@@ -68,6 +69,7 @@ function makeOrdem(id: string): OrdemProducaoRecord {
     assadeiras: 10,
     ordemPlanejamento: 1,
     quantidade: { caixas: 0, pacotes: 0, unidades: 240, kg: 0 },
+    ...DEFAULT_ORDEM_ETAPA_STATUS,
   };
 }
 
