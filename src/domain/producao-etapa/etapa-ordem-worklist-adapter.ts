@@ -15,6 +15,7 @@ import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import type { ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
+import { buildEtapaCadeiaBarras } from './build-etapa-cadeia-barras';
 
 function buildLotePhotoLinks(fotoUrl?: string): EtapaLotePhotoLink[] {
   if (!fotoUrl) return [];
@@ -32,6 +33,7 @@ function resolveOrdemCardStatusOverride(
 
 function mapOrdemToProduct(
   ordem: PainelOrdemEtapa,
+  etapa: 'fermentacao' | 'forno',
   loadingCardId: string | null,
   deletingLoteId: string | null,
   creatingLoteOrdemId: string | null,
@@ -46,6 +48,11 @@ function mapOrdemToProduct(
     ordem.produzido,
     ordem.aProduzir,
   );
+  const metaOpLabel =
+    ordem.metaPlanejada !== ordem.metaEfetiva
+      ? `OP: ${ordem.metaPlanejada} ${ordem.unidade.toUpperCase()}`
+      : undefined;
+  const cadeiaBarras = buildEtapaCadeiaBarras(ordem, { etapa });
 
   const lotes: EtapaLoteItem[] = ordem.lotes.map((lote, loteIndex) => {
     const item = loteToPainelItemEtapa(ordem, lote);
@@ -82,8 +89,10 @@ function mapOrdemToProduct(
     somaProduzido: ordem.produzido,
     somaAProduzir: ordem.aProduzir,
     unidade: ordem.unidade,
+    metaOpLabel,
     detalhesProduzido,
     detalhesMeta,
+    cadeiaBarras,
     filterStatus: getOrdemEtapaFilterStatus(ordem),
     productionStatusOverride,
     showAddLote: !ordem.finalizada,
@@ -94,6 +103,7 @@ function mapOrdemToProduct(
 
 function mapOrdensToFlatGroup(
   ordens: PainelOrdemEtapa[],
+  etapa: 'fermentacao' | 'forno',
   groupKey: string,
   loadingCardId: string | null,
   deletingLoteId: string | null,
@@ -105,12 +115,19 @@ function mapOrdensToFlatGroup(
     key: groupKey,
     hideHeader: true,
     products: ordens.map((ordem) =>
-      mapOrdemToProduct(ordem, loadingCardId, deletingLoteId, creatingLoteOrdemId),
+      mapOrdemToProduct(
+        ordem,
+        etapa,
+        loadingCardId,
+        deletingLoteId,
+        creatingLoteOrdemId,
+      ),
     ),
   };
 }
 
 export type BuildEtapaOrdemWorklistInput = {
+  etapa: 'fermentacao' | 'forno';
   naoFinalizados: PainelOrdemEtapa[];
   finalizados: PainelOrdemEtapa[];
   ordens: PainelOrdemEtapa[];
@@ -136,6 +153,7 @@ export function buildEtapaOrdemWorklistData(
 
   const gruposAtivos = mapOrdensToFlatGroup(
     input.naoFinalizados,
+    input.etapa,
     'ordens-ativas',
     input.loadingCardId,
     input.deletingLoteId,
@@ -144,6 +162,7 @@ export function buildEtapaOrdemWorklistData(
 
   const gruposFinalizados = mapOrdensToFlatGroup(
     input.finalizados,
+    input.etapa,
     'ordens-finalizadas',
     input.loadingCardId,
     input.deletingLoteId,

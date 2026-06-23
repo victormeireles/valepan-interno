@@ -7,6 +7,8 @@ import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import type { ProductionStatus } from '@/domain/types/realizado';
 import EtapaProductCardHeader from './EtapaProductCardHeader';
 import { etapaStatusStyles, getEtapaProductionStatus } from './etapa-status';
+import type { EtapaCadeiaBarra } from './etapa-cadeia-progresso-types';
+import EtapaCadeiaProgresso from './EtapaCadeiaProgresso';
 
 export type EtapaProductAccordionProps = {
   instanceId: string;
@@ -14,6 +16,7 @@ export type EtapaProductAccordionProps = {
   somaProduzido: number;
   somaAProduzir: number;
   unidade: string;
+  metaOpLabel?: string;
   congelado?: boolean;
   assadeira?: string;
   cliente?: string;
@@ -27,6 +30,7 @@ export type EtapaProductAccordionProps = {
   onNovoLote?: () => void;
   addLabel?: string;
   isNovoLoteLoading?: boolean;
+  cadeiaBarras?: EtapaCadeiaBarra[];
   /** Sem meta: oculta barra e "/ meta"; farol pendente/registrado */
   hasMeta?: boolean;
   onProductPhotoClick?: () => void;
@@ -42,6 +46,7 @@ export default function EtapaProductAccordion({
   somaProduzido,
   somaAProduzir,
   unidade,
+  metaOpLabel,
   congelado,
   assadeira,
   cliente,
@@ -55,6 +60,7 @@ export default function EtapaProductAccordion({
   onNovoLote,
   addLabel = 'Lote',
   isNovoLoteLoading = false,
+  cadeiaBarras = [],
   hasMeta = true,
   onProductPhotoClick,
 }: EtapaProductAccordionProps) {
@@ -96,6 +102,7 @@ export default function EtapaProductAccordion({
         horario={horario}
         producedLabel={producedLabel}
         targetLabel={targetLabel}
+        metaOpLabel={metaOpLabel}
         hasMeta={hasMeta}
         pct={pct}
         onNovoLote={onNovoLote}
@@ -113,7 +120,10 @@ export default function EtapaProductAccordion({
           aria-label={`Lotes de ${produto}`}
           className="border-t border-stone-100 bg-stone-50 px-3 py-2 pl-[1.625rem]"
         >
-          {renderLots()}
+          <div className="flex flex-col gap-2">
+            {cadeiaBarras.length > 0 ? <EtapaCadeiaProgresso barras={cadeiaBarras} /> : null}
+            {renderLots()}
+          </div>
         </div>
       ) : null}
     </Card>

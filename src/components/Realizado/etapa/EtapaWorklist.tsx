@@ -81,6 +81,7 @@ export default function EtapaWorklist({
         somaProduzido={product.somaProduzido}
         somaAProduzir={product.somaAProduzir}
         unidade={product.unidade}
+        metaOpLabel={product.metaOpLabel}
         congelado={product.congelado}
         assadeira={product.assadeira}
         cliente={group.hideHeader ? group.cliente : undefined}
@@ -89,6 +90,7 @@ export default function EtapaWorklist({
         horario={product.horario}
         detalhesProduzido={product.detalhesProduzido}
         detalhesMeta={product.detalhesMeta}
+        cadeiaBarras={product.cadeiaBarras}
         productionStatusOverride={product.productionStatusOverride}
         addLabel={config.addLabel}
         isNovoLoteLoading={product.isNovoLoteLoading}

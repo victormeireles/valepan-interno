@@ -4,6 +4,8 @@ import { ReactNode, useId, useState } from 'react';
 import type { ProductionStatus } from '@/domain/types/realizado';
 import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 import ProductCompactCard from './ProductCompactCard';
+import EtapaCadeiaProgresso from './etapa/EtapaCadeiaProgresso';
+import type { EtapaCadeiaBarra } from './etapa/etapa-cadeia-progresso-types';
 
 export interface EtapaProductAccordionProps {
   instanceId: string;
@@ -17,6 +19,8 @@ export interface EtapaProductAccordionProps {
   detalhesProduzido: QuantityBreakdownEntry[];
   detalhesMeta: QuantityBreakdownEntry[];
   horarioProducao?: string;
+  metaOpLabel?: string;
+  cadeiaBarras?: EtapaCadeiaBarra[];
   renderLots: () => ReactNode;
   productionStatusOverride?: ProductionStatus;
   onNovoLote?: () => void;
@@ -39,6 +43,8 @@ export default function EtapaProductAccordion({
   detalhesProduzido,
   detalhesMeta,
   horarioProducao,
+  metaOpLabel,
+  cadeiaBarras = [],
   renderLots,
   productionStatusOverride,
   onNovoLote,
@@ -123,6 +129,7 @@ export default function EtapaProductAccordion({
         interactive={false}
         detalhesProduzido={detalhesProduzido}
         detalhesMeta={detalhesMeta}
+        metaOpLabel={metaOpLabel}
         horarioEmbalagem={horarioProducao}
         trailingSlot={trailingActions}
         productionStatusOverride={productionStatusOverride}
@@ -134,7 +141,12 @@ export default function EtapaProductAccordion({
         className="border-l border-gray-700 pl-3 ml-1 flex flex-col gap-1"
         hidden={!expanded}
       >
-        {expanded ? renderLots() : null}
+        {expanded ? (
+          <div className="flex flex-col gap-2">
+            {cadeiaBarras.length > 0 ? <EtapaCadeiaProgresso barras={cadeiaBarras} /> : null}
+            {renderLots()}
+          </div>
+        ) : null}
       </div>
     </div>
   );

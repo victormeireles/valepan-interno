@@ -2,6 +2,7 @@ import type { RealizadoEtapaConfig } from '@/components/Realizado/etapa/types';
 import {
   buildEtapaOrdemLookup,
   buildEtapaOrdemLoteLookup,
+  type BuildEtapaOrdemWorklistInput,
   buildEtapaOrdemWorklistData,
 } from './etapa-ordem-worklist-adapter';
 
@@ -21,6 +22,13 @@ export const FERMENTACAO_ETAPA_CONFIG: RealizadoEtapaConfig = {
   alwaysShowAddLote: true,
 };
 
-export const buildFermentacaoWorklistData = buildEtapaOrdemWorklistData;
+export function buildFermentacaoWorklistData(
+  input: Omit<BuildEtapaOrdemWorklistInput, 'etapa'>,
+) {
+  return buildEtapaOrdemWorklistData({
+    ...input,
+    etapa: 'fermentacao',
+  });
+}
 export const buildFermentacaoOrdemLookup = buildEtapaOrdemLookup;
 export const buildFermentacaoLoteLookup = buildEtapaOrdemLoteLookup;

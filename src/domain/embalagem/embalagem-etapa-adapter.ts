@@ -22,6 +22,7 @@ import {
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { ProductionStatus } from '@/domain/types/realizado';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
+import type { EtapaCadeiaBarra } from '@/components/Realizado/etapa/etapa-cadeia-progresso-types';
 
 export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
   title: 'Realizado',
@@ -82,6 +83,49 @@ function resolveEmbalagemCardStatusOverride(
   return undefined;
 }
 
+function buildEmbalagemCadeiaBarras(
+  pedido: PainelPedidoEmbalagem,
+  unidade: string,
+): EtapaCadeiaBarra[] {
+  const meta = pedido.aProduzir;
+
+  return [
+    {
+      slug: 'fermentacao',
+      label: 'Fermentação',
+      icon: 'bakery_dining',
+      produzido: meta,
+      meta,
+      unidade,
+      finalizada: true,
+      destaque: false,
+      metaOp: pedido.metaPlanejada,
+    },
+    {
+      slug: 'forno',
+      label: 'Forno',
+      icon: 'local_fire_department',
+      produzido: meta,
+      meta,
+      unidade,
+      finalizada: true,
+      destaque: false,
+      metaOp: pedido.metaPlanejada,
+    },
+    {
+      slug: 'embalagem',
+      label: 'Embalagem',
+      icon: 'inventory_2',
+      produzido: pedido.produzidoScalar,
+      meta,
+      unidade,
+      finalizada: pedido.finalizada,
+      destaque: true,
+      metaOp: pedido.metaPlanejada,
+    },
+  ];
+}
+
 function mapPedidoToProduct(
   pedido: PainelPedidoEmbalagem,
   loadingCardId: string | null,
@@ -99,6 +143,13 @@ function mapPedidoToProduct(
     pedido.produzidoScalar,
     pedido.aProduzir,
   );
+  const metaOpLabel =
+    pedido.metaPlanejada !== pedido.metaEfetiva
+      ? `OP: ${pedido.metaPlanejada} ${exibicao.unidade.toUpperCase()}`
+      : undefined;
+  const detalhesMetaEfetiva = QuantityBreakdown.buildEntries([
+    { quantidade: pedido.aProduzir, unidade: exibicao.unidade },
+  ]);
 
   const lotes: EtapaLoteItem[] = pedido.lotes.map((lote, loteIndex) => {
     const embalagemItem = loteToPainelItem(pedido, lote);
@@ -137,10 +188,15 @@ function mapPedidoToProduct(
     produto: pedido.produto,
     congelado: pedido.congelado === 'Sim',
     somaProduzido: exibicao.produzido,
-    somaAProduzir: exibicao.meta,
+    somaAProduzir: pedido.aProduzir,
     unidade: exibicao.unidade,
+    metaOpLabel,
     detalhesProduzido: exibicao.detalhesProduzido,
-    detalhesMeta: exibicao.detalhesMeta,
+    detalhesMeta:
+      pedido.metaPlanejada !== pedido.metaEfetiva
+        ? detalhesMetaEfetiva
+        : exibicao.detalhesMeta,
+    cadeiaBarras: buildEmbalagemCadeiaBarras(pedido, exibicao.unidade),
     filterStatus: getPedidoEmbalagemFilterStatus(pedido),
     productionStatusOverride,
     showAddLote: true,

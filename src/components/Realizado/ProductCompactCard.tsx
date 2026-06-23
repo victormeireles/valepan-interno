@@ -29,6 +29,7 @@ interface ProductCompactCardProps {
   isLoading?: boolean;
   detalhesProduzido?: QuantityBreakdownEntry[];
   detalhesMeta?: QuantityBreakdownEntry[];
+  metaOpLabel?: string;
   observacao?: string;
   /** HH:mm (fuso local), ex.: horário da coluna Q quando há embalagem registrada */
   horarioEmbalagem?: string;
@@ -59,6 +60,7 @@ export default function ProductCompactCard({
   isLoading = false,
   detalhesProduzido = [],
   detalhesMeta = [],
+  metaOpLabel,
   observacao,
   horarioEmbalagem,
   trailingSlot,
@@ -159,8 +161,9 @@ export default function ProductCompactCard({
       <span className="text-xs text-gray-400 flex-shrink-0">/</span>
 
       {/* Meta de Produção */}
-      <div className="text-sm text-gray-300 flex-shrink-0">
-        {targetLabel}
+      <div className="flex flex-col items-end text-right flex-shrink-0">
+        <div className="text-sm text-gray-300">{targetLabel}</div>
+        {metaOpLabel ? <div className="text-[11px] text-stone-500">{metaOpLabel}</div> : null}
       </div>
 
       {trailingSlot != null && <div className="flex shrink-0 items-center pl-1">{trailingSlot}</div>}

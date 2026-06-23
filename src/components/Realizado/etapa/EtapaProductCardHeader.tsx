@@ -20,6 +20,7 @@ export type EtapaProductCardHeaderProps = {
   horario?: string;
   producedLabel: string;
   targetLabel: string;
+  metaOpLabel?: string;
   hasMeta?: boolean;
   pct: number;
   onNovoLote?: () => void;
@@ -155,6 +156,7 @@ function QuantityBlock({
   hasMeta,
   producedLabel,
   targetLabel,
+  metaOpLabel,
   pct,
   fillClass,
   align = 'left',
@@ -163,6 +165,7 @@ function QuantityBlock({
   hasMeta: boolean;
   producedLabel: string;
   targetLabel: string;
+  metaOpLabel?: string;
   pct: number;
   fillClass: string;
   align?: 'left' | 'right';
@@ -191,6 +194,11 @@ function QuantityBlock({
         <span className="mx-1 text-stone-400">/</span>
         <span className="text-text-muted">{targetLabel}</span>
       </p>
+      {metaOpLabel ? (
+        <p className={['mt-0.5 text-[11px] text-stone-500', textAlign].join(' ')}>
+          {metaOpLabel}
+        </p>
+      ) : null}
       <div className="mt-1.5 h-[5px] w-full overflow-hidden rounded-full bg-stone-100">
         <div
           className={['h-full rounded-full transition-[width] duration-[240ms]', fillClass].join(' ')}
@@ -211,6 +219,7 @@ export default function EtapaProductCardHeader({
   horario,
   producedLabel,
   targetLabel,
+  metaOpLabel,
   hasMeta = true,
   pct,
   onNovoLote,
@@ -234,6 +243,7 @@ export default function EtapaProductCardHeader({
     hasMeta,
     producedLabel,
     targetLabel,
+    metaOpLabel,
     pct,
     fillClass: styles.fill,
   };

@@ -3,6 +3,7 @@ import type { ProductionStatus } from '@/domain/types/realizado';
 import type { QuantityBreakdownEntry } from '@/domain/valueObjects/QuantityBreakdown';
 import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
 import type { EtapaDashboardItem } from '@/domain/types/painel-etapa';
+import type { EtapaCadeiaBarra } from './etapa-cadeia-progresso-types';
 
 export type RealizadoEtapaUnit = 'cx' | 'lt';
 
@@ -73,8 +74,10 @@ export type EtapaProductItem = {
   somaProduzido: number;
   somaAProduzir: number;
   unidade: string;
+  metaOpLabel?: string;
   detalhesProduzido: QuantityBreakdownEntry[];
   detalhesMeta: QuantityBreakdownEntry[];
+  cadeiaBarras?: EtapaCadeiaBarra[];
   filterStatus: Exclude<EtapaFilterStatus, 'todos'>;
   productionStatusOverride?: ProductionStatus;
   showAddLote: boolean;
