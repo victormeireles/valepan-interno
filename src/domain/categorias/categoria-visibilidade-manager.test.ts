@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const eqMock = vi.fn();
 const orderMock = vi.fn();
+const selectResolve = vi.fn();
 
 vi.mock('@/lib/clients/supabase-client-factory', () => ({
   supabaseClientFactory: {
@@ -11,19 +12,9 @@ vi.mock('@/lib/clients/supabase-client-factory', () => ({
           eq: (...eqArgs: unknown[]) => {
             eqMock(...eqArgs);
             return {
-              eq: (...eqArgs2: unknown[]) => {
-                eqMock(...eqArgs2);
-                return Promise.resolve({
-                  data: [
-                    { id: 'cat-1', visivel_embalagem: true },
-                    { id: 'cat-3', visivel_embalagem: true },
-                  ],
-                  error: null,
-                });
-              },
               order: (...orderArgs: unknown[]) => {
                 orderMock(...orderArgs);
-                return Promise.resolve({ data: [], error: null });
+                return Promise.resolve(selectResolve());
               },
             };
           },
@@ -38,12 +29,19 @@ const { CategoriaVisibilidadeManager } = await import('./categoria-visibilidade-
 describe('CategoriaVisibilidadeManager', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('getIdsVisiveisEmbalagem retorna Set de ids visíveis', async () => {
+  it('getIdsVisiveisEmbalagem inclui categorias sempre visíveis pelo nome', async () => {
+    selectResolve.mockResolvedValueOnce({
+      data: [
+        { id: 'cat-hamb', nome: 'Hambúrguer', visivel_embalagem: false },
+        { id: 'cat-forma', nome: 'Pão de Forma', visivel_embalagem: false },
+      ],
+      error: null,
+    });
+
     const manager = new CategoriaVisibilidadeManager();
     const ids = await manager.getIdsVisiveisEmbalagem();
 
-    expect(ids).toEqual(new Set(['cat-1', 'cat-3']));
+    expect(ids).toEqual(new Set(['cat-hamb']));
     expect(eqMock).toHaveBeenCalledWith('ativo', true);
-    expect(eqMock).toHaveBeenCalledWith('visivel_embalagem', true);
   });
 });

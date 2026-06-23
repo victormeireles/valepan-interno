@@ -9,4 +9,8 @@ COMMENT ON COLUMN categorias.visivel_embalagem IS
 
 UPDATE categorias
 SET visivel_embalagem = true
-WHERE lower(trim(nome)) IN ('hambúrguer', 'hamburguer', 'hot dog', 'hotdog');
+WHERE
+  lower(trim(nome)) IN ('hambúrguer', 'hamburguer', 'hamburger', 'hot dog', 'hotdog')
+  OR lower(trim(nome)) LIKE '%hamburg%'
+  OR lower(trim(nome)) LIKE '%hot dog%'
+  OR lower(trim(nome)) LIKE '%hotdog%';
