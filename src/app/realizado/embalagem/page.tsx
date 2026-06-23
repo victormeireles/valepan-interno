@@ -7,7 +7,7 @@ import {
   pedidosToDashboardItems,
   snapshotsToDashboardItems,
 } from '@/domain/embalagem/painel-dashboard-adapter';
-import { splitPedidosEmbalagemEmGrupos } from '@/domain/embalagem/embalagem-painel-adapter';
+import { splitPedidosEmbalagemPorStatus } from '@/domain/embalagem/embalagem-painel-adapter';
 import {
   buildEmbalagemLoteLookup,
   buildEmbalagemPedidoLookup,
@@ -316,9 +316,9 @@ export default function ProducaoEmbalagemPage() {
     [pedidos],
   );
 
-  const { gruposNaoFinalizados, gruposFinalizados } = useMemo(
-    () => splitPedidosEmbalagemEmGrupos(pedidos, selectedDate),
-    [pedidos, selectedDate],
+  const { naoFinalizados, finalizados } = useMemo(
+    () => splitPedidosEmbalagemPorStatus(pedidos),
+    [pedidos],
   );
 
   const totais = useMemo(() => {
@@ -337,16 +337,16 @@ export default function ProducaoEmbalagemPage() {
   const worklist = useMemo(
     () =>
       buildEmbalagemWorklistData({
-        gruposNaoFinalizados,
-        gruposFinalizados,
+        naoFinalizados,
+        finalizados,
         pedidos,
         selectedDate,
         loadingCardId,
         deletingLoteId,
       }),
     [
-      gruposNaoFinalizados,
-      gruposFinalizados,
+      naoFinalizados,
+      finalizados,
       pedidos,
       selectedDate,
       loadingCardId,
@@ -374,7 +374,8 @@ export default function ProducaoEmbalagemPage() {
           comparisonWeek: { date: comparisonWeekDate, items: comparisonWeekItems },
         }}
         footer={{
-          grupos: gruposNaoFinalizados.length + gruposFinalizados.length,
+          grupos:
+            (naoFinalizados.length > 0 ? 1 : 0) + (finalizados.length > 0 ? 1 : 0),
           pedidos: pedidos.length,
           produzidoLabel: totais.produzido,
           metaLabel: totais.meta,

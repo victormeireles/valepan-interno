@@ -1,3 +1,4 @@
+import type { EtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
 import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
 import type { ProducaoLoteModo } from '@/domain/types/fermentacao-lote';
 
@@ -26,6 +27,7 @@ export type PainelOrdemEtapa = {
   metaReferencia: number;
   estimativaAnterior?: number | null;
   finalizada: boolean;
+  cascata?: EtapaCascataDisplay;
   assadeiraNome?: string;
   lotes: PainelLoteEtapa[];
 };

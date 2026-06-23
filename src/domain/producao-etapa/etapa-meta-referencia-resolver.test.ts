@@ -98,6 +98,38 @@ describe('resolveMetaEfetiva', () => {
     expect(resolveMetaEfetiva('forno', ordem)).toBe(680);
     expect(resolveMetaEfetiva('embalagem', ordem, ASSADEIRA_CTX)).toBe(325);
   });
+
+  it('forno usa produção ao vivo de fermentação quando anterior não finalizou', () => {
+    const ordem = makeOrdem({ assadeiras: 36 });
+
+    expect(
+      resolveMetaEfetiva('forno', ordem, undefined, { fermentacaoProduzidoLt: 40 }),
+    ).toBe(40);
+  });
+
+  it('embalagem converte fermentação confirmada quando forno ainda não produziu', () => {
+    const ordem = makeOrdem({
+      assadeiras: 36,
+      quantidade: { caixas: 15, pacotes: 0, unidades: 0, kg: 0 },
+      fermentacaoMetaConfirmada: 40,
+      fermentacaoFinalizada: true,
+    });
+
+    expect(resolveMetaEfetiva('embalagem', ordem, ASSADEIRA_CTX)).toBe(20);
+  });
+
+  it('embalagem converte fermentação ao vivo quando forno ainda não produziu', () => {
+    const ordem = makeOrdem({
+      assadeiras: 36,
+      quantidade: { caixas: 15, pacotes: 0, unidades: 0, kg: 0 },
+    });
+
+    expect(
+      resolveMetaEfetiva('embalagem', ordem, ASSADEIRA_CTX, {
+        fermentacaoProduzidoLt: 40,
+      }),
+    ).toBe(20);
+  });
 });
 
 describe('resolveEstimativaAnterior', () => {

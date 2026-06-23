@@ -418,6 +418,9 @@ export type Database = {
           parcela_padrao_id: string | null
           pedido_cutoff_hora_brt: number | null
           pedido_lead_time_dias: number | null
+          permite_pedido_hb_consignada: boolean
+          permite_pedido_remessa: boolean
+          permite_pedido_venda_normal: boolean
           prazo_aprovacao: string | null
           razao_social: string
           regiao: string | null
@@ -476,6 +479,9 @@ export type Database = {
           parcela_padrao_id?: string | null
           pedido_cutoff_hora_brt?: number | null
           pedido_lead_time_dias?: number | null
+          permite_pedido_hb_consignada?: boolean
+          permite_pedido_remessa?: boolean
+          permite_pedido_venda_normal?: boolean
           prazo_aprovacao?: string | null
           razao_social: string
           regiao?: string | null
@@ -534,6 +540,9 @@ export type Database = {
           parcela_padrao_id?: string | null
           pedido_cutoff_hora_brt?: number | null
           pedido_lead_time_dias?: number | null
+          permite_pedido_hb_consignada?: boolean
+          permite_pedido_remessa?: boolean
+          permite_pedido_venda_normal?: boolean
           prazo_aprovacao?: string | null
           razao_social?: string
           regiao?: string | null
@@ -2136,6 +2145,98 @@ export type Database = {
           },
         ]
       }
+      nota_fiscal_itens: {
+        Row: {
+          cfop: string | null
+          codigo_produto: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          ncm: string | null
+          nota_fiscal_id: string
+          omie_cod_item: number | null
+          omie_cod_prod: number | null
+          quantidade: number | null
+          sequencia: number
+          unidade: string | null
+          updated_at: string
+          valor_bc: number | null
+          valor_cbs: number | null
+          valor_cofins: number | null
+          valor_ibs: number | null
+          valor_icms: number | null
+          valor_icms_st: number | null
+          valor_ipi: number | null
+          valor_iss: number | null
+          valor_pis: number | null
+          valor_produto: number | null
+          valor_total_item: number | null
+          valor_unitario: number | null
+        }
+        Insert: {
+          cfop?: string | null
+          codigo_produto?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          ncm?: string | null
+          nota_fiscal_id: string
+          omie_cod_item?: number | null
+          omie_cod_prod?: number | null
+          quantidade?: number | null
+          sequencia: number
+          unidade?: string | null
+          updated_at?: string
+          valor_bc?: number | null
+          valor_cbs?: number | null
+          valor_cofins?: number | null
+          valor_ibs?: number | null
+          valor_icms?: number | null
+          valor_icms_st?: number | null
+          valor_ipi?: number | null
+          valor_iss?: number | null
+          valor_pis?: number | null
+          valor_produto?: number | null
+          valor_total_item?: number | null
+          valor_unitario?: number | null
+        }
+        Update: {
+          cfop?: string | null
+          codigo_produto?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          ncm?: string | null
+          nota_fiscal_id?: string
+          omie_cod_item?: number | null
+          omie_cod_prod?: number | null
+          quantidade?: number | null
+          sequencia?: number
+          unidade?: string | null
+          updated_at?: string
+          valor_bc?: number | null
+          valor_cbs?: number | null
+          valor_cofins?: number | null
+          valor_ibs?: number | null
+          valor_icms?: number | null
+          valor_icms_st?: number | null
+          valor_ipi?: number | null
+          valor_iss?: number | null
+          valor_pis?: number | null
+          valor_produto?: number | null
+          valor_total_item?: number | null
+          valor_unitario?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nota_fiscal_itens_nota_fiscal_id_fkey"
+            columns: ["nota_fiscal_id"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nota_fiscal_pedido: {
         Row: {
           created_at: string
@@ -2182,6 +2283,7 @@ export type Database = {
       notas_fiscais: {
         Row: {
           chave_acesso: string | null
+          consultar_nf_raw_json: Json | null
           created_at: string
           danfe_arquivo_status: string
           danfe_storage_path: string | null
@@ -2191,6 +2293,11 @@ export type Database = {
           data_emissao: string | null
           empresa_id: string
           id: string
+          itens_enriquecimento_em: string | null
+          itens_enriquecimento_status: string
+          itens_enriquecimento_tentativas: number
+          itens_enriquecimento_ultima_tentativa_em: string | null
+          itens_enriquecimento_ultimo_erro: string | null
           modelo: string | null
           numero_nota: string | null
           omie_evento_id: string | null
@@ -2208,6 +2315,7 @@ export type Database = {
         }
         Insert: {
           chave_acesso?: string | null
+          consultar_nf_raw_json?: Json | null
           created_at?: string
           danfe_arquivo_status?: string
           danfe_storage_path?: string | null
@@ -2217,6 +2325,11 @@ export type Database = {
           data_emissao?: string | null
           empresa_id: string
           id?: string
+          itens_enriquecimento_em?: string | null
+          itens_enriquecimento_status?: string
+          itens_enriquecimento_tentativas?: number
+          itens_enriquecimento_ultima_tentativa_em?: string | null
+          itens_enriquecimento_ultimo_erro?: string | null
           modelo?: string | null
           numero_nota?: string | null
           omie_evento_id?: string | null
@@ -2234,6 +2347,7 @@ export type Database = {
         }
         Update: {
           chave_acesso?: string | null
+          consultar_nf_raw_json?: Json | null
           created_at?: string
           danfe_arquivo_status?: string
           danfe_storage_path?: string | null
@@ -2243,6 +2357,11 @@ export type Database = {
           data_emissao?: string | null
           empresa_id?: string
           id?: string
+          itens_enriquecimento_em?: string | null
+          itens_enriquecimento_status?: string
+          itens_enriquecimento_tentativas?: number
+          itens_enriquecimento_ultima_tentativa_em?: string | null
+          itens_enriquecimento_ultimo_erro?: string | null
           modelo?: string | null
           numero_nota?: string | null
           omie_evento_id?: string | null
@@ -2336,6 +2455,15 @@ export type Database = {
           created_at: string
           data_fabricacao_etiqueta: string
           data_producao: string
+          embalagem_finalizada: boolean
+          embalagem_finalizada_em: string | null
+          embalagem_meta_confirmada: number | null
+          fermentacao_finalizada: boolean
+          fermentacao_finalizada_em: string | null
+          fermentacao_meta_confirmada: number | null
+          forno_finalizada: boolean
+          forno_finalizada_em: string | null
+          forno_meta_confirmada: number | null
           id: string
           kg: number
           observacao: string
@@ -2353,6 +2481,15 @@ export type Database = {
           created_at?: string
           data_fabricacao_etiqueta: string
           data_producao: string
+          embalagem_finalizada?: boolean
+          embalagem_finalizada_em?: string | null
+          embalagem_meta_confirmada?: number | null
+          fermentacao_finalizada?: boolean
+          fermentacao_finalizada_em?: string | null
+          fermentacao_meta_confirmada?: number | null
+          forno_finalizada?: boolean
+          forno_finalizada_em?: string | null
+          forno_meta_confirmada?: number | null
           id?: string
           kg?: number
           observacao?: string
@@ -2370,6 +2507,15 @@ export type Database = {
           created_at?: string
           data_fabricacao_etiqueta?: string
           data_producao?: string
+          embalagem_finalizada?: boolean
+          embalagem_finalizada_em?: string | null
+          embalagem_meta_confirmada?: number | null
+          fermentacao_finalizada?: boolean
+          fermentacao_finalizada_em?: string | null
+          fermentacao_meta_confirmada?: number | null
+          forno_finalizada?: boolean
+          forno_finalizada_em?: string | null
+          forno_meta_confirmada?: number | null
           id?: string
           kg?: number
           observacao?: string

@@ -54,11 +54,49 @@ export function resolveMetaReferencia(
   return resolveMetaCascata(etapa, ordem, assadeiraCtx);
 }
 
+export type MetaEfetivaLiveContext = {
+  fermentacaoProduzidoLt?: number;
+  fornoProduzidoLt?: number;
+};
+
 export function resolveMetaEfetiva(
   etapa: EtapaProducaoSlug,
   ordem: OrdemProducaoRecord,
   assadeiraCtx?: AssadeiraMetaContext,
+  live?: MetaEfetivaLiveContext,
 ): number {
+  if (etapa === 'forno') {
+    if (ordem.fermentacaoMetaConfirmada != null) {
+      return ordem.fermentacaoMetaConfirmada;
+    }
+    const fermLt = live?.fermentacaoProduzidoLt ?? 0;
+    if (fermLt > 0 && !ordem.fermentacaoFinalizada) {
+      return fermLt;
+    }
+    return resolveOpMetaAssadeirasOuUnidades(ordem);
+  }
+
+  if (etapa === 'embalagem') {
+    if (ordem.fornoMetaConfirmada != null) {
+      return resolveEmbalagemMetaFromFornoLt(ordem.fornoMetaConfirmada, assadeiraCtx);
+    }
+    const fornoLt = live?.fornoProduzidoLt ?? 0;
+    if (fornoLt > 0 && assadeiraCtx) {
+      return resolveEmbalagemMetaFromFornoLt(fornoLt, assadeiraCtx);
+    }
+    if (ordem.fermentacaoMetaConfirmada != null && assadeiraCtx) {
+      return resolveEmbalagemMetaFromFornoLt(
+        ordem.fermentacaoMetaConfirmada,
+        assadeiraCtx,
+      );
+    }
+    const fermLt = live?.fermentacaoProduzidoLt ?? 0;
+    if (fermLt > 0 && !ordem.fermentacaoFinalizada && assadeiraCtx) {
+      return resolveEmbalagemMetaFromFornoLt(fermLt, assadeiraCtx);
+    }
+    return resolveMetaCascata(etapa, ordem, assadeiraCtx);
+  }
+
   return resolveMetaCascata(etapa, ordem, assadeiraCtx);
 }
 

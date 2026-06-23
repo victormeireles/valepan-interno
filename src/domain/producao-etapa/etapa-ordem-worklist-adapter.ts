@@ -7,6 +7,7 @@ import type {
   RealizadoEtapaWorklistData,
 } from '@/components/Realizado/etapa/types';
 import {
+  buildEtapaDetalhesMetaEfetiva,
   buildEtapaDetalhesQuantidade,
   getOrdemEtapaFilterStatus,
   loteToPainelItemEtapa,
@@ -42,7 +43,7 @@ function mapOrdemToProduct(
     ordem.produzidoBreakdown,
     ordem.modoQuantidade,
   );
-  const detalhesMeta = buildEtapaDetalhesQuantidade(ordem.pedido, ordem.modoQuantidade);
+  const detalhesMeta = buildEtapaDetalhesMetaEfetiva(ordem.aProduzir, ordem.modoQuantidade);
 
   const productionStatusOverride = resolveOrdemCardStatusOverride(
     ordem.produzido,

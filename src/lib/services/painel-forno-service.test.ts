@@ -7,6 +7,7 @@ const listByDatasProducao = vi.fn();
 const findUltimaDataComPedidos = vi.fn();
 const findDataAnteriorComPedidos = vi.fn();
 const listByOrdemProducaoIds = vi.fn();
+const listFermentacaoByOrdemProducaoIds = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
@@ -23,6 +24,12 @@ vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
 vi.mock('@/data/producao-etapa/FornoLoteRepository', () => ({
   fornoLoteRepository: {
     listByOrdemProducaoIds: (...args: unknown[]) => listByOrdemProducaoIds(...args),
+  },
+}));
+
+vi.mock('@/data/producao-etapa/FermentacaoLoteRepository', () => ({
+  fermentacaoLoteRepository: {
+    listByOrdemProducaoIds: (...args: unknown[]) => listFermentacaoByOrdemProducaoIds(...args),
   },
 }));
 
@@ -86,6 +93,7 @@ function makeLote(id: string, assadeiras: number): FornoLoteRecord {
 describe('PainelFornoService.getPainelForDate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listFermentacaoByOrdemProducaoIds.mockResolvedValue(new Map());
     findByIdsTipos.mockResolvedValue([
       {
         id: 'tipo-1',
@@ -153,6 +161,7 @@ describe('PainelFornoService.getPainelForDate', () => {
 describe('PainelFornoService.getCargaCompleta', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listFermentacaoByOrdemProducaoIds.mockResolvedValue(new Map());
     findByIdsTipos.mockResolvedValue([
       {
         id: 'tipo-1',

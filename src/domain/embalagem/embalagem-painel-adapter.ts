@@ -27,6 +27,20 @@ function sortGruposPorOrdemPlanejamento(
   );
 }
 
+export function splitPedidosEmbalagemPorStatus(
+  pedidos: PainelPedidoEmbalagem[],
+): {
+  naoFinalizados: PainelPedidoEmbalagem[];
+  finalizados: PainelPedidoEmbalagem[];
+} {
+  const sorted = sortPorOrdemPlanejamento(pedidos);
+
+  return {
+    naoFinalizados: sorted.filter((pedido) => !isPedidoEmbalagemFinalizado(pedido)),
+    finalizados: sorted.filter((pedido) => isPedidoEmbalagemFinalizado(pedido)),
+  };
+}
+
 export function splitPedidosEmbalagemEmGrupos(
   pedidos: PainelPedidoEmbalagem[],
   selectedDate: string,

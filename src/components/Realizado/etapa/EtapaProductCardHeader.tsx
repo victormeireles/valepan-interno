@@ -189,16 +189,29 @@ function QuantityBlock({
 
   return (
     <div className={[textAlign, className].join(' ')}>
-      <p className={['font-mono text-sm leading-snug tabular-nums', textAlign].join(' ')}>
-        <strong className="text-text-strong">{producedLabel}</strong>
-        <span className="mx-1 text-stone-400">/</span>
-        <span className="text-text-muted">{targetLabel}</span>
+      <p
+        className={[
+          'flex items-baseline gap-x-1.5 font-mono text-sm leading-snug tabular-nums',
+          'flex-wrap sm:flex-nowrap',
+          align === 'right' ? 'justify-end' : '',
+        ].join(' ')}
+      >
+        <span className="whitespace-nowrap">
+          <strong className="text-text-strong">{producedLabel}</strong>
+          <span className="mx-1 text-stone-400">/</span>
+          <span className="text-text-muted">{targetLabel}</span>
+        </span>
+        {metaOpLabel ? (
+          <>
+            <span className="text-stone-300" aria-hidden="true">
+              ·
+            </span>
+            <span className="whitespace-nowrap font-sans text-[11px] text-stone-500">
+              {metaOpLabel}
+            </span>
+          </>
+        ) : null}
       </p>
-      {metaOpLabel ? (
-        <p className={['mt-0.5 text-[11px] text-stone-500', textAlign].join(' ')}>
-          {metaOpLabel}
-        </p>
-      ) : null}
       <div className="mt-1.5 h-[5px] w-full overflow-hidden rounded-full bg-stone-100">
         <div
           className={['h-full rounded-full transition-[width] duration-[240ms]', fillClass].join(' ')}
@@ -314,14 +327,18 @@ export default function EtapaProductCardHeader({
           </div>
 
           {metaItems.length > 0 ? (
-            <div className="min-w-0 max-w-[24%] lg:max-w-[28%]">
+            <div className="min-w-0 flex-1">
               <MetaLine items={metaItems} />
             </div>
-          ) : null}
+          ) : (
+            <div className="min-w-0 flex-1" aria-hidden="true" />
+          )}
 
-          <div className="min-w-2 flex-1" aria-hidden="true" />
-
-          <QuantityBlock {...quantityProps} align="right" className="shrink-0" />
+          <QuantityBlock
+            {...quantityProps}
+            align="right"
+            className="shrink-0"
+          />
 
           {horario ? (
             <div className="w-10 shrink-0 text-right">

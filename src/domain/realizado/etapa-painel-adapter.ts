@@ -16,6 +16,18 @@ export function buildEtapaDetalhesQuantidade(
   return qty.unidades > 0 ? [{ quantidade: qty.unidades, unidade: 'un' }] : [];
 }
 
+/** Rótulo da meta efetiva no card (cascata), não da OP. */
+export function buildEtapaDetalhesMetaEfetiva(
+  metaEfetiva: number,
+  modo: ModoQuantidadeEtapa,
+): QuantityBreakdownEntry[] {
+  if (metaEfetiva <= 0) return [];
+  if (modo === 'assadeiras') {
+    return [{ quantidade: metaEfetiva, unidade: 'lt' }];
+  }
+  return [{ quantidade: metaEfetiva, unidade: 'un' }];
+}
+
 export type PainelLoteItemEtapa = {
   loteId: string;
   produto: string;

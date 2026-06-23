@@ -21,6 +21,7 @@ export type EtapaProductAccordionProps = {
   assadeira?: string;
   cliente?: string;
   observacao?: string;
+  dataEtiqueta?: string;
   hasPhoto?: boolean;
   detalhesProduzido: QuantityBreakdownEntry[];
   detalhesMeta: QuantityBreakdownEntry[];
@@ -51,6 +52,7 @@ export default function EtapaProductAccordion({
   assadeira,
   cliente,
   observacao,
+  dataEtiqueta,
   hasPhoto,
   detalhesProduzido,
   detalhesMeta,
@@ -86,6 +88,7 @@ export default function EtapaProductAccordion({
 
   const metaItems = [
     cliente,
+    dataEtiqueta,
     observacao ? `Obs: ${observacao}` : null,
     assadeira ? `Assadeira ${assadeira}` : null,
   ].filter((item): item is string => Boolean(item));

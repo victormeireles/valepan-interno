@@ -1,4 +1,7 @@
+import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
+import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
+import { somarAssadeirasLotes } from '@/domain/embalagem/painel-embalagem-enrichment';
 import { ordensToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
 import { sortOrdensPorPlanejamento } from '@/domain/realizado/etapa-painel-adapter';
 import type {
@@ -8,7 +11,6 @@ import type {
 } from '@/domain/types/painel-etapa';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
-import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
@@ -28,10 +30,16 @@ export class PainelFornoService {
       return { date, ordens: [] };
     }
 
-    const lotesByOrdem = await fornoLoteRepository.listByOrdemProducaoIds(
-      ordens.map((ordem) => ordem.id),
+    const ordemIds = ordens.map((ordem) => ordem.id);
+    const [lotesByOrdem, fermentacaoLotesByOrdem] = await Promise.all([
+      fornoLoteRepository.listByOrdemProducaoIds(ordemIds),
+      fermentacaoLoteRepository.listByOrdemProducaoIds(ordemIds),
+    ]);
+    const ordensPainel = await this.buildOrdensPainel(
+      ordens,
+      lotesByOrdem,
+      fermentacaoLotesByOrdem,
     );
-    const ordensPainel = await this.buildOrdensPainel(ordens, lotesByOrdem);
 
     return { date, ordens: ordensPainel };
   }
@@ -47,16 +55,35 @@ export class PainelFornoService {
     const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
     const ordensByDate = await ordemProducaoRepository.listByDatasProducao(datesToLoad);
     const allOrdens = [...ordensByDate.values()].flat();
-    const lotesByOrdem =
+    const allOrdemIds = allOrdens.map((ordem) => ordem.id);
+    const [lotesByOrdem, fermentacaoLotesByOrdem] =
       allOrdens.length > 0
-        ? await fornoLoteRepository.listByOrdemProducaoIds(allOrdens.map((ordem) => ordem.id))
-        : new Map<string, FermentacaoLoteRecord[]>();
+        ? await Promise.all([
+            fornoLoteRepository.listByOrdemProducaoIds(allOrdemIds),
+            fermentacaoLoteRepository.listByOrdemProducaoIds(allOrdemIds),
+          ])
+        : [
+            new Map<string, FermentacaoLoteRecord[]>(),
+            new Map<string, FermentacaoLoteRecord[]>(),
+          ];
 
     const [ordensMain, ordensSemana, ordensAnterior] = await Promise.all([
-      this.buildOrdensPainel(ordensByDate.get(date) ?? [], lotesByOrdem),
-      this.buildOrdensPainel(ordensByDate.get(dateSemana) ?? [], lotesByOrdem),
+      this.buildOrdensPainel(
+        ordensByDate.get(date) ?? [],
+        lotesByOrdem,
+        fermentacaoLotesByOrdem,
+      ),
+      this.buildOrdensPainel(
+        ordensByDate.get(dateSemana) ?? [],
+        lotesByOrdem,
+        fermentacaoLotesByOrdem,
+      ),
       dateAnterior
-        ? this.buildOrdensPainel(ordensByDate.get(dateAnterior) ?? [], lotesByOrdem)
+        ? this.buildOrdensPainel(
+            ordensByDate.get(dateAnterior) ?? [],
+            lotesByOrdem,
+            fermentacaoLotesByOrdem,
+          )
         : Promise.resolve([]),
     ]);
 
@@ -78,6 +105,7 @@ export class PainelFornoService {
   private async buildOrdensPainel(
     ordens: OrdemProducaoRecord[],
     lotesByOrdem: Map<string, FermentacaoLoteRecord[]>,
+    fermentacaoLotesByOrdem: Map<string, FermentacaoLoteRecord[]>,
   ): Promise<PainelOrdemEtapa[]> {
     if (ordens.length === 0) return [];
 
@@ -94,6 +122,9 @@ export class PainelFornoService {
           assadeiraNome: ordem.assadeiraId
             ? names.assadeiraNomeById.get(ordem.assadeiraId)
             : undefined,
+          fermentacaoProduzido: somarAssadeirasLotes(
+            fermentacaoLotesByOrdem.get(ordem.id) ?? [],
+          ),
         }),
       ),
     );

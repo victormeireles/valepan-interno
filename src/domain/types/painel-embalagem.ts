@@ -1,3 +1,5 @@
+import type { EtapaCadeiaBarra } from '@/components/Realizado/etapa/etapa-cadeia-progresso-types';
+import type { EtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
 import type { Quantidade } from '@/domain/types/inventario';
 
 export type PainelLoteEmbalagem = {
@@ -36,6 +38,8 @@ export type PainelPedidoEmbalagem = {
   metaPlanejada: number;
   metaEfetiva: number;
   finalizada: boolean;
+  cascata?: EtapaCascataDisplay;
+  cadeiaBarras?: EtapaCadeiaBarra[];
   possuiEtiqueta: boolean;
   lote?: number;
   lotes: PainelLoteEmbalagem[];

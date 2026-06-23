@@ -1,5 +1,10 @@
 import { pedidosToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
 import { buildPainelPedido } from '@/domain/embalagem/painel-pedido-builder';
+import {
+  loadAssadeiraCtxByProdutoId,
+  mapEtapasProduzidoPorOrdem,
+  resolveEtapasLtForPedido,
+} from '@/domain/embalagem/painel-embalagem-enrichment';
 import { sortPorOrdemPlanejamento } from '@/domain/realizado/ordem-planejamento-sort';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type {
@@ -8,8 +13,12 @@ import type {
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 import type { PedidoEmbalagemRecord } from '@/domain/types/pedido-embalagem';
+import type { AssadeiraMetaContext } from '@/domain/producao-etapa/etapa-meta-referencia-resolver';
+import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
+import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
+import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import {
   tiposEstoqueService,
@@ -44,6 +53,8 @@ export class PainelEmbalagemService {
     lotesByPedido: Map<string, EmbalagemLoteRecord[]>,
     tipoById: Map<string, TipoEstoqueDTO>,
     produtoNomeById: Map<string, string>,
+    etapasByOrdem: Map<string, { fermentacao: number; forno: number }>,
+    assadeiraByProduto: Map<string, AssadeiraMetaContext>,
   ): PainelPedidoEmbalagem[] {
     const result: PainelPedidoEmbalagem[] = [];
 
@@ -54,13 +65,46 @@ export class PainelEmbalagemService {
       const lotes = lotesByPedido.get(pedido.id) ?? [];
       const possuiEtiqueta = tipo?.possuiEtiqueta ?? false;
       const congeladoFromTipo = tipo?.congelado ? 'Sim' : 'Não';
+      const etapasLt = resolveEtapasLtForPedido(pedido, etapasByOrdem);
+      const assadeiraCtx = assadeiraByProduto.get(pedido.produtoId);
 
       result.push(
-        buildPainelPedido(pedido, cliente, produto, lotes, possuiEtiqueta, congeladoFromTipo),
+        buildPainelPedido(
+          pedido,
+          cliente,
+          produto,
+          lotes,
+          possuiEtiqueta,
+          congeladoFromTipo,
+          assadeiraCtx,
+          etapasLt,
+        ),
       );
     }
 
     return sortPorOrdemPlanejamento(result);
+  }
+
+  private async loadPainelContext(pedidos: PedidoEmbalagemRecord[]) {
+    const pedidoIds = pedidos.map((p) => p.id);
+    const produtoIds = pedidos.map((p) => p.produtoId);
+
+    const [lotesByPedido, fermentacaoLotes, fornoLotes, assadeiraByProduto, nameMaps] =
+      await Promise.all([
+        embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
+        fermentacaoLoteRepository.listByOrdemProducaoIds(pedidoIds),
+        fornoLoteRepository.listByOrdemProducaoIds(pedidoIds),
+        loadAssadeiraCtxByProdutoId(produtoIds),
+        this.buildNameMaps(pedidos),
+      ]);
+
+    const etapasByOrdem = mapEtapasProduzidoPorOrdem(
+      pedidoIds,
+      fermentacaoLotes as Map<string, FermentacaoLoteRecord[]>,
+      fornoLotes as Map<string, FermentacaoLoteRecord[]>,
+    );
+
+    return { lotesByPedido, etapasByOrdem, assadeiraByProduto, ...nameMaps };
   }
 
   async getPainelForDate(date: string): Promise<PainelEmbalagemResponse> {
@@ -69,17 +113,15 @@ export class PainelEmbalagemService {
       return { date, pedidos: [] };
     }
 
-    const pedidoIds = pedidos.map((p) => p.id);
-    const [lotesByPedido, { tipoById, produtoNomeById }] = await Promise.all([
-      embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
-      this.buildNameMaps(pedidos),
-    ]);
+    const ctx = await this.loadPainelContext(pedidos);
 
     const result = this.buildPedidosPainel(
       pedidos,
-      lotesByPedido,
-      tipoById,
-      produtoNomeById,
+      ctx.lotesByPedido,
+      ctx.tipoById,
+      ctx.produtoNomeById,
+      ctx.etapasByOrdem,
+      ctx.assadeiraByProduto,
     );
 
     return { date, pedidos: result };
@@ -97,34 +139,35 @@ export class PainelEmbalagemService {
     const pedidosByDate = await pedidoEmbalagemRepository.listByDatasProducao(datesToLoad);
 
     const allPedidos = [...pedidosByDate.values()].flat();
-    const pedidoIds = allPedidos.map((p) => p.id);
-
-    const [lotesByPedido, { tipoById, produtoNomeById }] = await Promise.all([
-      embalagemLoteRepository.listByPedidoEmbalagemIds(pedidoIds),
-      this.buildNameMaps(allPedidos),
-    ]);
+    const ctx = await this.loadPainelContext(allPedidos);
 
     const pedidosMain = this.buildPedidosPainel(
       pedidosByDate.get(date) ?? [],
-      lotesByPedido,
-      tipoById,
-      produtoNomeById,
+      ctx.lotesByPedido,
+      ctx.tipoById,
+      ctx.produtoNomeById,
+      ctx.etapasByOrdem,
+      ctx.assadeiraByProduto,
     );
 
     const pedidosSemana = this.buildPedidosPainel(
       pedidosByDate.get(dateSemana) ?? [],
-      lotesByPedido,
-      tipoById,
-      produtoNomeById,
+      ctx.lotesByPedido,
+      ctx.tipoById,
+      ctx.produtoNomeById,
+      ctx.etapasByOrdem,
+      ctx.assadeiraByProduto,
     );
 
     const pedidosAnterior =
       dateAnterior != null
         ? this.buildPedidosPainel(
             pedidosByDate.get(dateAnterior) ?? [],
-            lotesByPedido,
-            tipoById,
-            produtoNomeById,
+            ctx.lotesByPedido,
+            ctx.tipoById,
+            ctx.produtoNomeById,
+            ctx.etapasByOrdem,
+            ctx.assadeiraByProduto,
           )
         : [];
 

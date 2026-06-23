@@ -152,18 +152,19 @@ export default function ProductCompactCard({
         </span>
       )}
 
-      {/* Produção Realizada */}
-      <div className="text-sm font-bold text-white flex-shrink-0">
-        {producedLabel}
-      </div>
-
-      {/* Separador */}
-      <span className="text-xs text-gray-400 flex-shrink-0">/</span>
-
-      {/* Meta de Produção */}
-      <div className="flex flex-col items-end text-right flex-shrink-0">
-        <div className="text-sm text-gray-300">{targetLabel}</div>
-        {metaOpLabel ? <div className="text-[11px] text-stone-500">{metaOpLabel}</div> : null}
+      {/* Produção / meta (OP na mesma linha quando couber) */}
+      <div className="flex flex-wrap items-baseline justify-end gap-x-1.5 gap-y-0 flex-shrink-0">
+        <span className="text-sm font-bold text-white whitespace-nowrap">{producedLabel}</span>
+        <span className="text-xs text-gray-400">/</span>
+        <span className="text-sm text-gray-300 whitespace-nowrap">{targetLabel}</span>
+        {metaOpLabel ? (
+          <>
+            <span className="text-gray-600" aria-hidden="true">
+              ·
+            </span>
+            <span className="whitespace-nowrap text-[11px] text-stone-500">{metaOpLabel}</span>
+          </>
+        ) : null}
       </div>
 
       {trailingSlot != null && <div className="flex shrink-0 items-center pl-1">{trailingSlot}</div>}

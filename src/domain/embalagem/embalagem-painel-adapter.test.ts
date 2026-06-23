@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitPedidosEmbalagemEmGrupos } from './embalagem-painel-adapter';
+import {
+  splitPedidosEmbalagemEmGrupos,
+  splitPedidosEmbalagemPorStatus,
+} from './embalagem-painel-adapter';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 
 function pedidoBase(
@@ -24,6 +27,41 @@ function pedidoBase(
     ...overrides,
   };
 }
+
+describe('splitPedidosEmbalagemPorStatus', () => {
+  it('ordena pedidos pela ordem de planejamento', () => {
+    const { naoFinalizados } = splitPedidosEmbalagemPorStatus([
+      pedidoBase({ pedidoEmbalagemId: 'ped-3', ordemPlanejamento: 3 }),
+      pedidoBase({ pedidoEmbalagemId: 'ped-1', ordemPlanejamento: 1 }),
+      pedidoBase({ pedidoEmbalagemId: 'ped-2', ordemPlanejamento: 2 }),
+    ]);
+
+    expect(naoFinalizados.map((p) => p.pedidoEmbalagemId)).toEqual([
+      'ped-1',
+      'ped-2',
+      'ped-3',
+    ]);
+  });
+
+  it('separa finalizados mantendo ordem de planejamento', () => {
+    const { finalizados } = splitPedidosEmbalagemPorStatus([
+      pedidoBase({
+        pedidoEmbalagemId: 'ped-2',
+        ordemPlanejamento: 2,
+        produzido: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
+        produzidoScalar: 100,
+      }),
+      pedidoBase({
+        pedidoEmbalagemId: 'ped-1',
+        ordemPlanejamento: 1,
+        produzido: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
+        produzidoScalar: 100,
+      }),
+    ]);
+
+    expect(finalizados.map((p) => p.pedidoEmbalagemId)).toEqual(['ped-1', 'ped-2']);
+  });
+});
 
 describe('splitPedidosEmbalagemEmGrupos', () => {
   it('ordena pedidos e grupos pela ordem de planejamento', () => {
@@ -57,31 +95,5 @@ describe('splitPedidosEmbalagemEmGrupos', () => {
         grupo.pedidos.map((pedido) => pedido.pedidoEmbalagemId),
       ),
     ).toEqual(['ped-1', 'ped-2', 'ped-3']);
-  });
-
-  it('mantém ordem de planejamento na seção finalizada', () => {
-    const { gruposFinalizados } = splitPedidosEmbalagemEmGrupos(
-      [
-        pedidoBase({
-          pedidoEmbalagemId: 'ped-2',
-          ordemPlanejamento: 2,
-          produzido: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
-          produzidoScalar: 100,
-        }),
-        pedidoBase({
-          pedidoEmbalagemId: 'ped-1',
-          ordemPlanejamento: 1,
-          produzido: { caixas: 100, pacotes: 0, unidades: 0, kg: 0 },
-          produzidoScalar: 100,
-        }),
-      ],
-      '2026-06-18',
-    );
-
-    expect(
-      gruposFinalizados.flatMap((grupo) =>
-        grupo.pedidos.map((pedido) => pedido.pedidoEmbalagemId),
-      ),
-    ).toEqual(['ped-1', 'ped-2']);
   });
 });

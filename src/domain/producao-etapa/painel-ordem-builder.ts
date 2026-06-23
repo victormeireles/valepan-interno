@@ -1,3 +1,4 @@
+import { buildEtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
 import {
   resolveModoQuantidadeEtapa,
   somarLotesEtapa,
@@ -21,6 +22,7 @@ export type BuildPainelOrdemInput = {
   tipoEstoque: string;
   assadeiraNome?: string;
   fermentacaoProduzido?: number;
+  fornoProduzido?: number;
 };
 
 export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEtapa {
@@ -37,7 +39,7 @@ export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEta
 }
 
 export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa {
-  const { etapa, ordem, lotes, produto, tipoEstoque, assadeiraNome, fermentacaoProduzido } =
+  const { etapa, ordem, lotes, produto, tipoEstoque, assadeiraNome, fermentacaoProduzido, fornoProduzido } =
     input;
   const modoQuantidade = resolveModoQuantidadeEtapa(ordem.assadeiraId);
   const pedido: EtapaQuantidade = {
@@ -51,7 +53,10 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     })),
   );
   const metaPlanejada = resolveMetaPlanejada(etapa, ordem);
-  const metaEfetiva = resolveMetaEfetiva(etapa, ordem);
+  const metaEfetiva = resolveMetaEfetiva(etapa, ordem, undefined, {
+    fermentacaoProduzidoLt: fermentacaoProduzido,
+    fornoProduzidoLt: fornoProduzido,
+  });
   const metaReferencia = resolveMetaReferencia(etapa, ordem);
   const unidade = modoQuantidade === 'assadeiras' ? 'lt' : 'un';
   const produzido =
@@ -63,7 +68,14 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
   const estimativaAnterior = resolveEstimativaAnterior({
     etapa,
     fermentacaoProduzido,
+    fornoProduzido,
     fermentacaoFinalizada: ordem.fermentacaoFinalizada,
+    fornoFinalizada: ordem.fornoFinalizada,
+  });
+  const cascata = buildEtapaCascataDisplay({
+    ordem,
+    fermentacaoProduzidoLt: fermentacaoProduzido,
+    fornoProduzidoLt: fornoProduzido ?? (etapa === 'forno' ? produzido : 0),
   });
 
   return {
@@ -84,6 +96,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     metaReferencia,
     estimativaAnterior,
     finalizada,
+    cascata,
     assadeiraNome: ordem.assadeiraId ? assadeiraNome : undefined,
     lotes: lotes.map(mapLoteToPainelEtapa),
   };

@@ -3,6 +3,8 @@ import {
   derivarUnidadePrincipal,
   somarQuantidades,
 } from '@/domain/embalagem/painel-quantidade';
+import { buildEtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
+import { buildEmbalagemCadeiaBarras } from '@/domain/producao-etapa/build-etapa-cadeia-barras';
 import {
   resolveMetaEfetiva,
   resolveMetaPlanejada,
@@ -47,13 +49,23 @@ export function buildPainelPedido(
   possuiEtiqueta: boolean,
   congeladoFromTipo: 'Sim' | 'Não',
   assadeiraCtx?: AssadeiraMetaContext,
+  etapasProduzidoLt?: { fermentacao?: number; forno?: number },
 ): PainelPedidoEmbalagem {
   const painelLotes = lotes.map((l) => mapLoteToPainel(l, congeladoFromTipo));
   const produzido = somarQuantidades(painelLotes.map((l) => l.quantidade));
   const { unidade } = derivarUnidadePrincipal(pedido.quantidade);
   const { valor: produzidoScalar } = derivarUnidadePrincipal(produzido);
   const metaPlanejada = resolveMetaPlanejada('embalagem', pedido);
-  const metaEfetiva = resolveMetaEfetiva('embalagem', pedido, assadeiraCtx);
+  const fornoProduzidoLt = etapasProduzidoLt?.forno ?? 0;
+  const metaEfetiva = resolveMetaEfetiva('embalagem', pedido, assadeiraCtx, {
+    fermentacaoProduzidoLt: etapasProduzidoLt?.fermentacao ?? 0,
+    fornoProduzidoLt,
+  });
+  const cascata = buildEtapaCascataDisplay({
+    ordem: pedido,
+    fermentacaoProduzidoLt: etapasProduzidoLt?.fermentacao ?? 0,
+    fornoProduzidoLt,
+  });
 
   const producaoUpdatedAt = painelLotes
     .map((l) => l.produzidoEm)
@@ -61,7 +73,7 @@ export function buildPainelPedido(
     .sort()
     .at(-1);
 
-  return {
+  const painel: PainelPedidoEmbalagem = {
     pedidoEmbalagemId: pedido.id,
     ordemPlanejamento: pedido.ordemPlanejamento,
     cliente,
@@ -78,9 +90,16 @@ export function buildPainelPedido(
     metaPlanejada,
     metaEfetiva,
     finalizada: pedido.embalagemFinalizada,
+    cascata,
     possuiEtiqueta,
     lote: loteFromDataFabricacaoEtiqueta(pedido.dataFabricacaoEtiqueta),
     lotes: painelLotes,
     producaoUpdatedAt,
   };
+
+  if (assadeiraCtx) {
+    painel.cadeiaBarras = buildEmbalagemCadeiaBarras(painel, assadeiraCtx);
+  }
+
+  return painel;
 }

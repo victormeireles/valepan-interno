@@ -12,7 +12,6 @@ import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import {
   resolverExibicaoCardEmbalagem,
 } from '@/domain/embalagem/painel-quantidade';
-import type { EmbalagemPainelGroup } from '@/domain/embalagem/embalagem-painel-adapter';
 import { hasEmbalagemQuantity } from '@/domain/realizado/embalagem-group-by-produto';
 import { getEmbalagemPhotoStatus } from '@/domain/realizado/embalagem-photo-status';
 import {
@@ -21,8 +20,7 @@ import {
 } from '@/domain/realizado/painel-pedido-adapter';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { ProductionStatus } from '@/domain/types/realizado';
-import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
-import type { EtapaCadeiaBarra } from '@/components/Realizado/etapa/etapa-cadeia-progresso-types';
+import { formatISODateBrNoYear, formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 
 export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
   title: 'Realizado',
@@ -66,8 +64,8 @@ function buildLotePhotoLinks(
 }
 
 type BuildEmbalagemWorklistInput = {
-  gruposNaoFinalizados: EmbalagemPainelGroup[];
-  gruposFinalizados: EmbalagemPainelGroup[];
+  naoFinalizados: PainelPedidoEmbalagem[];
+  finalizados: PainelPedidoEmbalagem[];
   pedidos: PainelPedidoEmbalagem[];
   selectedDate: string;
   loadingCardId: string | null;
@@ -83,47 +81,10 @@ function resolveEmbalagemCardStatusOverride(
   return undefined;
 }
 
-function buildEmbalagemCadeiaBarras(
-  pedido: PainelPedidoEmbalagem,
-  unidade: string,
-): EtapaCadeiaBarra[] {
-  const meta = pedido.aProduzir;
-
-  return [
-    {
-      slug: 'fermentacao',
-      label: 'Fermentação',
-      icon: 'bakery_dining',
-      produzido: meta,
-      meta,
-      unidade,
-      finalizada: true,
-      destaque: false,
-      metaOp: pedido.metaPlanejada,
-    },
-    {
-      slug: 'forno',
-      label: 'Forno',
-      icon: 'local_fire_department',
-      produzido: meta,
-      meta,
-      unidade,
-      finalizada: true,
-      destaque: false,
-      metaOp: pedido.metaPlanejada,
-    },
-    {
-      slug: 'embalagem',
-      label: 'Embalagem',
-      icon: 'inventory_2',
-      produzido: pedido.produzidoScalar,
-      meta,
-      unidade,
-      finalizada: pedido.finalizada,
-      destaque: true,
-      metaOp: pedido.metaPlanejada,
-    },
-  ];
+function resolveDataEtiquetaLabel(pedido: PainelPedidoEmbalagem): string | undefined {
+  const dataFab = pedido.dataFabricacao?.trim();
+  if (!dataFab || dataFab === pedido.dataPedido) return undefined;
+  return `Etiqueta ${formatISODateBrNoYear(dataFab)}`;
 }
 
 function mapPedidoToProduct(
@@ -183,9 +144,14 @@ function mapPedidoToProduct(
     };
   });
 
+  const observacao = pedido.observacao?.trim();
+
   return {
     id: pedido.pedidoEmbalagemId,
     produto: pedido.produto,
+    cliente: pedido.cliente,
+    observacao: observacao || undefined,
+    dataEtiqueta: resolveDataEtiquetaLabel(pedido),
     congelado: pedido.congelado === 'Sim',
     somaProduzido: exibicao.produzido,
     somaAProduzir: pedido.aProduzir,
@@ -196,7 +162,7 @@ function mapPedidoToProduct(
       pedido.metaPlanejada !== pedido.metaEfetiva
         ? detalhesMetaEfetiva
         : exibicao.detalhesMeta,
-    cadeiaBarras: buildEmbalagemCadeiaBarras(pedido, exibicao.unidade),
+    cadeiaBarras: pedido.cadeiaBarras ?? [],
     filterStatus: getPedidoEmbalagemFilterStatus(pedido),
     productionStatusOverride,
     showAddLote: true,
@@ -204,17 +170,18 @@ function mapPedidoToProduct(
   };
 }
 
-function mapGroup(
-  group: EmbalagemPainelGroup,
+function mapPedidosToFlatGroup(
+  pedidos: PainelPedidoEmbalagem[],
+  groupKey: string,
   loadingCardId: string | null,
   deletingLoteId: string | null,
-): EtapaClientGroupData {
+): EtapaClientGroupData | null {
+  if (pedidos.length === 0) return null;
+
   return {
-    key: group.key,
-    cliente: group.cliente,
-    dataFabricacao: group.dataFabricacao,
-    observacao: group.observacao,
-    products: group.pedidos.map((pedido) =>
+    key: groupKey,
+    hideHeader: true,
+    products: pedidos.map((pedido) =>
       mapPedidoToProduct(pedido, loadingCardId, deletingLoteId),
     ),
   };
@@ -234,15 +201,25 @@ export function buildEmbalagemWorklistData(
     filterCounts[getPedidoEmbalagemFilterStatus(pedido)]++;
   }
 
+  const gruposAtivos = mapPedidosToFlatGroup(
+    input.naoFinalizados,
+    'embalagem-ativos',
+    input.loadingCardId,
+    input.deletingLoteId,
+  );
+
+  const gruposFinalizados = mapPedidosToFlatGroup(
+    input.finalizados,
+    'embalagem-finalizados',
+    input.loadingCardId,
+    input.deletingLoteId,
+  );
+
   return {
     selectedDate: input.selectedDate,
     filterCounts,
-    gruposAtivos: input.gruposNaoFinalizados.map((g) =>
-      mapGroup(g, input.loadingCardId, input.deletingLoteId),
-    ),
-    gruposFinalizados: input.gruposFinalizados.map((g) =>
-      mapGroup(g, input.loadingCardId, input.deletingLoteId),
-    ),
+    gruposAtivos: gruposAtivos ? [gruposAtivos] : [],
+    gruposFinalizados: gruposFinalizados ? [gruposFinalizados] : [],
   };
 }
 
