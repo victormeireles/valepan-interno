@@ -1,10 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { DEFAULT_ORDEM_ETAPA_STATUS } from '@/domain/producao-etapa/ordem-etapa-status-defaults';
 
 const mockFindById = vi.fn();
 const mockListByOrdem = vi.fn();
 const mockInsert = vi.fn();
 const mockFindLoteById = vi.fn();
 const mockUpdateById = vi.fn();
+const mockAssertEtapaNaoFinalizada = vi.fn();
+const mockAplicarAposSalvarLote = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: { findById: (...args: unknown[]) => mockFindById(...args) },
@@ -18,6 +21,12 @@ vi.mock('@/data/producao-etapa/FornoLoteRepository', () => ({
     deleteById: vi.fn(),
   },
 }));
+vi.mock('@/lib/services/etapa-finalizacao-service', () => ({
+  etapaFinalizacaoService: {
+    assertEtapaNaoFinalizada: (...args: unknown[]) => mockAssertEtapaNaoFinalizada(...args),
+    aplicarAposSalvarLote: (...args: unknown[]) => mockAplicarAposSalvarLote(...args),
+  },
+}));
 
 describe('FornoLoteService', () => {
   beforeEach(() => {
@@ -27,6 +36,7 @@ describe('FornoLoteService', () => {
       assadeiraId: 'a1',
       assadeiras: 10,
       quantidade: { unidades: 240, caixas: 0, pacotes: 0, kg: 0 },
+      ...DEFAULT_ORDEM_ETAPA_STATUS,
     });
     mockListByOrdem.mockResolvedValue(new Map([['o1', [{ id: 'l2', assadeiras: 8, unidades: 0 }]]]));
     mockInsert.mockResolvedValue({ id: 'l-new' });
@@ -38,6 +48,7 @@ describe('FornoLoteService', () => {
       fotos: {},
     });
     mockUpdateById.mockResolvedValue({ id: 'l1', assadeiras: 5, unidades: 0 });
+    mockAplicarAposSalvarLote.mockResolvedValue({ id: 'o1' });
   });
 
   it('cria lote acima do saldo da ordem', async () => {

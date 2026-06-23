@@ -1,6 +1,7 @@
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
 import { estoqueRepository } from '@/data/estoque/EstoqueRepository';
 import { loteTemQuantidadeProduzida } from '@/domain/embalagem/embalagem-lote-exclusao';
+import { derivarUnidadePrincipal } from '@/domain/embalagem/painel-quantidade';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import type {
   EmbalagemLoteFotos,
@@ -8,13 +9,17 @@ import type {
   EmbalagemLoteRecord,
 } from '@/domain/types/embalagem-lote';
 import type { Quantidade } from '@/domain/types/inventario';
+import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import { EstoqueResolverError } from '@/lib/services/estoque-resolver-service';
+import { etapaFinalizacaoService } from '@/lib/services/etapa-finalizacao-service';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
 
 export { EstoqueResolverError };
+
+const ETAPA: EtapaProducaoSlug = 'embalagem';
 
 export type CriarLotePorPedidoInput = {
   pedidoEmbalagemId: string;
@@ -24,7 +29,27 @@ export type CriarLotePorPedidoInput = {
   produzidoEm?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
+  continuaProduzindo?: boolean;
 };
+
+async function totalProduzidoScalarEmbalagem(pedidoId: string): Promise<number> {
+  const produzido = await embalagemLoteRepository.sumQuantidadeByPedidoId(pedidoId);
+  return derivarUnidadePrincipal(produzido).valor;
+}
+
+async function aplicarFinalizacaoEmbalagemAposSalvar(
+  pedidoId: string,
+  continuaProduzindo: boolean | undefined,
+): Promise<void> {
+  const totalProduzidoEtapa = await totalProduzidoScalarEmbalagem(pedidoId);
+
+  await etapaFinalizacaoService.aplicarAposSalvarLote({
+    ordemId: pedidoId,
+    etapa: ETAPA,
+    continuaProduzindo: continuaProduzindo ?? true,
+    totalProduzidoEtapa,
+  });
+}
 
 function validarQuantidadePositiva(q: Quantidade): void {
   if (q.caixas + q.pacotes + q.unidades + Number(q.kg) <= 0) {
@@ -54,9 +79,11 @@ export class EmbalagemLoteService {
 
     validarQuantidadePositiva(q);
 
+    etapaFinalizacaoService.assertEtapaNaoFinalizada(pedido, ETAPA);
+
     const produzidoEm = input.produzidoEm ?? new Date().toISOString();
 
-    return this.criarLote({
+    const lote = await this.criarLote({
       modo: 'parcial',
       pedidoEmbalagemId: pedido.id,
       dataPedido: pedido.dataProducao,
@@ -70,6 +97,10 @@ export class EmbalagemLoteService {
       obsEmbalagem: input.obsEmbalagem ?? null,
       fotos: input.fotos,
     });
+
+    await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);
+
+    return lote;
   }
 
   async atualizarLote(
@@ -78,12 +109,24 @@ export class EmbalagemLoteService {
       quantidade: Quantidade;
       obsEmbalagem?: string;
       fotos?: EmbalagemLoteFotos;
+      continuaProduzindo?: boolean;
     },
   ): Promise<EmbalagemLoteRecord> {
     const existing = await embalagemLoteRepository.findById(loteId);
     if (!existing) {
       throw new Error('Lote não encontrado');
     }
+
+    if (!existing.pedidoEmbalagemId) {
+      throw new Error('Pedido de embalagem não encontrado');
+    }
+
+    const pedido = await pedidoEmbalagemRepository.findById(existing.pedidoEmbalagemId);
+    if (!pedido) {
+      throw new Error('Pedido de embalagem não encontrado');
+    }
+
+    etapaFinalizacaoService.assertEtapaNaoFinalizada(pedido, ETAPA);
 
     const productService = new SupabaseProductService();
     validarQuantidadePositiva(input.quantidade);
@@ -133,6 +176,8 @@ export class EmbalagemLoteService {
         embalagemLoteId: loteId,
       });
     }
+
+    await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);
 
     return updated;
   }
