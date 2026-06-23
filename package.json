@@ -15,6 +15,8 @@
     "backfill:ordens-producao:dry": "npx tsx scripts/backfill-ordens-producao-assadeiras.ts --dry-run",
     "backfill:insumo-recebimentos": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts",
     "backfill:insumo-recebimentos:dry": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --dry-run",
+    "backfill:insumo-recebimentos:periodo": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --de=01/05/2026",
+    "backfill:insumo-recebimentos:periodo:dry": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --de=01/05/2026 --dry-run",
     "migrate:produto-assadeiras-excecoes": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts",
     "migrate:produto-assadeiras-excecoes:dry": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts --dry-run",
     "migrate:tipos-estoque-etiqueta-flags": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts",

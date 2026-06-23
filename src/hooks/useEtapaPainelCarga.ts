@@ -98,15 +98,18 @@ export function useEtapaPainelCarga({
     [applyCargaResponse, etapa, selectedDate],
   );
 
-  const refreshOrdensOnly = useCallback(async () => {
+  const refreshOrdensOnly = useCallback(async (): Promise<PainelOrdemEtapa[]> => {
     setRefreshing(true);
     try {
       const res = await fetch(`/api/painel/${etapa}?date=${selectedDate}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-      setOrdens((data.ordens || []) as PainelOrdemEtapa[]);
+      const nextOrdens = (data.ordens || []) as PainelOrdemEtapa[];
+      setOrdens(nextOrdens);
+      return nextOrdens;
     } catch (err) {
       console.error(`Erro ao recarregar ordens ${etapa}:`, err);
+      return [];
     } finally {
       setRefreshing(false);
     }

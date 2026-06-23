@@ -90,4 +90,15 @@ describe('EtapaFinalizacaoService', () => {
 
     expect(mockUpdateEtapaFinalizacao).not.toHaveBeenCalled();
   });
+
+  it('reabre etapa finalizada limpando meta confirmada', async () => {
+    const { etapaFinalizacaoService } = await import('./etapa-finalizacao-service');
+
+    await etapaFinalizacaoService.reabrirEtapa('ordem-1', 'embalagem');
+
+    expect(mockUpdateEtapaFinalizacao).toHaveBeenCalledWith('ordem-1', 'embalagem', {
+      finalizada: false,
+      metaConfirmada: null,
+    });
+  });
 });

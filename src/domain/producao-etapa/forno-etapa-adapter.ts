@@ -19,7 +19,7 @@ export const FORNO_ETAPA_CONFIG: RealizadoEtapaConfig = {
   pageBackground: '#F7F1ED',
   dashboard: 'hora',
   toolbarMetricLabel: 'Assado',
-  alwaysShowAddLote: true,
+  reabrirLabel: 'Reabrir OP',
 };
 
 export function buildFornoWorklistData(

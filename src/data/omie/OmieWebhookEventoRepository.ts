@@ -73,6 +73,19 @@ export class OmieWebhookEventoRepository {
     }
   }
 
+  async listEmpresas(): Promise<EmpresaCredenciaisRow[]> {
+    const { data, error } = await this.supabase
+      .from('empresas')
+      .select('id, nome, app_key, app_secret')
+      .order('nome', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar empresas: ${error.message}`);
+    }
+
+    return data ?? [];
+  }
+
   async findEmpresaByAppKey(appKey: string): Promise<EmpresaCredenciaisRow | null> {
     const { data, error } = await this.supabase
       .from('empresas')

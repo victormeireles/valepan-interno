@@ -18,6 +18,7 @@ import InsumoHistoricoModal from '@/features/insumo-estoque/components/InsumoHis
 import InsumoPendenciaMobileList from '@/features/insumo-estoque/components/InsumoPendenciaMobileList';
 import InsumoPendenciaTable from '@/features/insumo-estoque/components/InsumoPendenciaTable';
 import InsumoResolverPendenciaModal from '@/features/insumo-estoque/components/InsumoResolverPendenciaModal';
+import InsumoVinculoIaRevisaoModal from '@/features/insumo-estoque/components/InsumoVinculoIaRevisaoModal';
 import InsumoSaldoMobileList from '@/features/insumo-estoque/components/InsumoSaldoMobileList';
 import InsumoSaldoTable from '@/features/insumo-estoque/components/InsumoSaldoTable';
 
@@ -38,6 +39,7 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
   const [historicoItem, setHistoricoItem] = useState<InsumoSaldoComDetalhes | null>(null);
   const [resolverPendencia, setResolverPendencia] =
     useState<InsumoPendenciaComEmpresa | null>(null);
+  const [iaRevisaoOpen, setIaRevisaoOpen] = useState(false);
 
   useEffect(() => {
     setSaldos(initialData.saldos);
@@ -144,6 +146,21 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
       </div>
 
       <Card padding="none" aria-label="Conteúdo do estoque de insumos" className="overflow-hidden">
+        {activeTab === 'pendencias' && pendencias.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3">
+            <p className="text-sm text-stone-600">
+              Vincule produtos Omie aos insumos cadastrados ou use IA para acelerar a revisão.
+            </p>
+            <Button
+              variant="secondary"
+              icon="auto_awesome"
+              onClick={() => setIaRevisaoOpen(true)}
+            >
+              Sugerir vínculos com IA
+            </Button>
+          </div>
+        ) : null}
+
         <div className="border-b border-stone-100 p-4">
           <Input
             id="insumo-estoque-search"
@@ -249,6 +266,15 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
             );
           }
           handleSaved('Pendência resolvida e entrada registrada');
+        }}
+      />
+
+      <InsumoVinculoIaRevisaoModal
+        isOpen={iaRevisaoOpen}
+        onClose={() => setIaRevisaoOpen(false)}
+        onApplied={(message) => {
+          setIaRevisaoOpen(false);
+          handleSaved(message);
         }}
       />
     </div>

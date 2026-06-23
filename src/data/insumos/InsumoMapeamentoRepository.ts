@@ -64,6 +64,21 @@ export class InsumoMapeamentoRepository {
     return data as IntegracaoInsumoRow;
   }
 
+  async listAtivos(limit = 30): Promise<IntegracaoInsumoRow[]> {
+    const { data, error } = await this.db
+      .from('integracao_insumos')
+      .select('*')
+      .eq('ativo', true)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Erro ao listar mapeamentos ativos: ${error.message}`);
+    }
+
+    return (data as IntegracaoInsumoRow[]) ?? [];
+  }
+
   async listByInsumo(insumoId: string): Promise<IntegracaoInsumoComEmpresa[]> {
     const { data, error } = await this.db
       .from('integracao_insumos')

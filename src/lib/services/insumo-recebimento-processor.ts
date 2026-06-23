@@ -2,6 +2,7 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import { converterDataOmieParaIso } from '@/domain/insumos/omie-date';
 import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
 import type { IntegracaoInsumoRow } from '@/domain/types/insumo-estoque-db';
 import {
@@ -70,7 +71,7 @@ export class InsumoRecebimentoProcessor {
     });
 
     const numeroNf = recebimento.cabec?.cNumeroNF ?? '';
-    const dataEmissaoNf = recebimento.cabec?.dDataEmissao ?? null;
+    const dataEmissaoNf = converterDataOmieParaIso(recebimento.cabec?.dDataEmissao ?? null);
     const itens = recebimento.itensCabec ?? [];
 
     for (const item of itens) {

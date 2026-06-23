@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
+import EtapaReabrirConfirmDialog from '@/components/Realizado/etapa/EtapaReabrirConfirmDialog';
 import {
   buildFermentacaoLoteLookup,
   buildFermentacaoOrdemLookup,
@@ -17,6 +18,7 @@ import {
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useEtapaPainelCarga } from '@/hooks/useEtapaPainelCarga';
+import { useEtapaReabrirOp } from '@/hooks/useEtapaReabrirOp';
 import type { ProducaoData } from '@/domain/types';
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
@@ -183,6 +185,16 @@ export default function ProducaoFermentacaoPage() {
     [ordemLookup, handleNovoLote],
   );
 
+  const { reabrindoOpId, handleReabrirOpById, reabrirDialogProps } = useEtapaReabrirOp({
+    etapa: 'fermentacao',
+    etapaNome: 'fermentação',
+    ordemLookup,
+    refreshOrdensOnly,
+    onNovoLote: handleNovoLote,
+    setMessage,
+    getVisibleErrorMessage,
+  });
+
   const handleEditLoteById = useCallback(
     (loteId: string) => {
       const lote = loteLookup.get(loteId);
@@ -224,6 +236,7 @@ export default function ProducaoFermentacaoPage() {
         loadingCardId,
         deletingLoteId,
         creatingLoteOrdemId,
+        reabrindoOpId,
       }),
     [
       naoFinalizados,
@@ -233,6 +246,7 @@ export default function ProducaoFermentacaoPage() {
       loadingCardId,
       deletingLoteId,
       creatingLoteOrdemId,
+      reabrindoOpId,
     ],
   );
 
@@ -307,17 +321,24 @@ export default function ProducaoFermentacaoPage() {
         }}
         callbacks={{
           onNovoLote: handleNovoLoteById,
+          onReabrirOp: handleReabrirOpById,
           onEditLote: handleEditLoteById,
           onDeleteLote: handleDeleteLoteById,
         }}
       />
+
+      {reabrirDialogProps ? (
+        <EtapaReabrirConfirmDialog {...reabrirDialogProps} />
+      ) : null}
 
       <ProducaoModal
         isOpen={producaoModalOpen}
         onClose={onCloseModal}
         isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
-        onSaveSuccess={refreshOrdensOnly}
+        onSaveSuccess={async () => {
+          await refreshOrdensOnly();
+        }}
         initialData={selectedInitialData}
         produto={selectedOrdem?.produto || ''}
         cliente={selectedOrdem?.tipoEstoque || ''}

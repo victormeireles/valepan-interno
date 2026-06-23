@@ -31,6 +31,13 @@ export class EtapaFinalizacaoService {
     }
   }
 
+  async reabrirEtapa(ordemId: string, etapa: EtapaProducaoSlug): Promise<OrdemProducaoRecord> {
+    return ordemProducaoRepository.updateEtapaFinalizacao(ordemId, etapa, {
+      finalizada: false,
+      metaConfirmada: null,
+    });
+  }
+
   async aplicarAposSalvarLote(params: {
     ordemId: string;
     etapa: EtapaProducaoSlug;

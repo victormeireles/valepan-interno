@@ -19,7 +19,7 @@ export const FERMENTACAO_ETAPA_CONFIG: RealizadoEtapaConfig = {
   pageBackground: '#F8F7F1',
   dashboard: 'hora',
   toolbarMetricLabel: 'Produzido',
-  alwaysShowAddLote: true,
+  reabrirLabel: 'Reabrir OP',
 };
 
 export function buildFermentacaoWorklistData(

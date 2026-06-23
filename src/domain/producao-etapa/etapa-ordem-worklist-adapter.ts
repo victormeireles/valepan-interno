@@ -38,6 +38,7 @@ function mapOrdemToProduct(
   loadingCardId: string | null,
   deletingLoteId: string | null,
   creatingLoteOrdemId: string | null,
+  reabrindoOpId: string | null,
 ): EtapaProductItem {
   const detalhesProduzido = buildEtapaDetalhesQuantidade(
     ordem.produzidoBreakdown,
@@ -74,8 +75,8 @@ function mapOrdemToProduct(
       hasPhoto: Boolean(lote.fotoUrl),
       photoColor: 'white',
       photoLinks: buildLotePhotoLinks(lote.fotoUrl),
-      canEdit: true,
-      canDelete: true,
+      canEdit: !ordem.finalizada,
+      canDelete: !ordem.finalizada,
       isLoading: loadingCardId === lote.loteId,
       isDeleting: deletingLoteId === lote.loteId,
       isLast: loteIndex === ordem.lotes.length - 1,
@@ -97,7 +98,9 @@ function mapOrdemToProduct(
     filterStatus: getOrdemEtapaFilterStatus(ordem),
     productionStatusOverride,
     showAddLote: !ordem.finalizada,
+    showReabrirOp: ordem.finalizada,
     isNovoLoteLoading: creatingLoteOrdemId === ordem.ordemProducaoId,
+    isReabrindoOp: reabrindoOpId === ordem.ordemProducaoId,
     lotes,
   };
 }
@@ -109,6 +112,7 @@ function mapOrdensToFlatGroup(
   loadingCardId: string | null,
   deletingLoteId: string | null,
   creatingLoteOrdemId: string | null,
+  reabrindoOpId: string | null,
 ): EtapaClientGroupData | null {
   if (ordens.length === 0) return null;
 
@@ -122,6 +126,7 @@ function mapOrdensToFlatGroup(
         loadingCardId,
         deletingLoteId,
         creatingLoteOrdemId,
+        reabrindoOpId,
       ),
     ),
   };
@@ -136,6 +141,7 @@ export type BuildEtapaOrdemWorklistInput = {
   loadingCardId: string | null;
   deletingLoteId: string | null;
   creatingLoteOrdemId: string | null;
+  reabrindoOpId?: string | null;
 };
 
 export function buildEtapaOrdemWorklistData(
@@ -152,6 +158,8 @@ export function buildEtapaOrdemWorklistData(
     filterCounts[getOrdemEtapaFilterStatus(ordem)]++;
   }
 
+  const reabrindoOpId = input.reabrindoOpId ?? null;
+
   const gruposAtivos = mapOrdensToFlatGroup(
     input.naoFinalizados,
     input.etapa,
@@ -159,6 +167,7 @@ export function buildEtapaOrdemWorklistData(
     input.loadingCardId,
     input.deletingLoteId,
     input.creatingLoteOrdemId,
+    reabrindoOpId,
   );
 
   const gruposFinalizados = mapOrdensToFlatGroup(
@@ -168,6 +177,7 @@ export function buildEtapaOrdemWorklistData(
     input.loadingCardId,
     input.deletingLoteId,
     input.creatingLoteOrdemId,
+    reabrindoOpId,
   );
 
   return {

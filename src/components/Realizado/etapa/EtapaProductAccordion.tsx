@@ -30,7 +30,10 @@ export type EtapaProductAccordionProps = {
   productionStatusOverride?: ProductionStatus;
   onNovoLote?: () => void;
   addLabel?: string;
+  onReabrirOp?: () => void;
+  reabrirLabel?: string;
   isNovoLoteLoading?: boolean;
+  isReabrindoOp?: boolean;
   cadeiaBarras?: EtapaCadeiaBarra[];
   /** Sem meta: oculta barra e "/ meta"; farol pendente/registrado */
   hasMeta?: boolean;
@@ -61,7 +64,10 @@ export default function EtapaProductAccordion({
   productionStatusOverride,
   onNovoLote,
   addLabel = 'Lote',
+  onReabrirOp,
+  reabrirLabel = 'Reabrir OP',
   isNovoLoteLoading = false,
+  isReabrindoOp = false,
   cadeiaBarras = [],
   hasMeta = true,
   onProductPhotoClick,
@@ -110,7 +116,10 @@ export default function EtapaProductAccordion({
         pct={pct}
         onNovoLote={onNovoLote}
         addLabel={addLabel}
+        onReabrirOp={onReabrirOp}
+        reabrirLabel={reabrirLabel}
         isNovoLoteLoading={isNovoLoteLoading}
+        isReabrindoOp={isReabrindoOp}
         expanded={expanded}
         panelId={panelId}
         onToggleExpanded={() => setExpanded((v) => !v)}

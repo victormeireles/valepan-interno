@@ -66,11 +66,7 @@ export default function EtapaWorklist({
     setOpenPhotoLoteId((prev) => (prev === loteId ? null : loteId));
   }, []);
 
-  const renderProduct = (
-    product: EtapaProductItem,
-    group: EtapaClientGroupData,
-    showAddLote: boolean,
-  ) => {
+  const renderProduct = (product: EtapaProductItem, group: EtapaClientGroupData) => {
     const instanceId = `${group.key}|${product.id}`;
 
     return (
@@ -94,7 +90,9 @@ export default function EtapaWorklist({
         cadeiaBarras={product.cadeiaBarras}
         productionStatusOverride={product.productionStatusOverride}
         addLabel={config.addLabel}
+        reabrirLabel={config.reabrirLabel}
         isNovoLoteLoading={product.isNovoLoteLoading}
+        isReabrindoOp={product.isReabrindoOp}
         hasMeta={hasMeta}
         onProductPhotoClick={
           product.photoUrl
@@ -102,8 +100,11 @@ export default function EtapaWorklist({
             : undefined
         }
         onNovoLote={
-          (showAddLote || config.alwaysShowAddLote) && product.showAddLote
-            ? () => callbacks.onNovoLote(product.id)
+          product.showAddLote ? () => callbacks.onNovoLote(product.id) : undefined
+        }
+        onReabrirOp={
+          product.showReabrirOp && callbacks.onReabrirOp
+            ? () => callbacks.onReabrirOp!(product.id)
             : undefined
         }
         renderLots={() =>
@@ -159,7 +160,7 @@ export default function EtapaWorklist({
     );
   };
 
-  const renderGroup = (group: EtapaClientGroupData, showAddLote: boolean) => (
+  const renderGroup = (group: EtapaClientGroupData) => (
     <EtapaClientGroup
       key={group.key}
       cliente={group.cliente}
@@ -169,7 +170,7 @@ export default function EtapaWorklist({
       products={group.products}
       hideHeader={group.hideHeader}
     >
-      {group.products.map((product) => renderProduct(product, group, showAddLote))}
+      {group.products.map((product) => renderProduct(product, group))}
     </EtapaClientGroup>
   );
 
@@ -191,7 +192,7 @@ export default function EtapaWorklist({
         />
       ) : (
         <div className="space-y-6">
-          {gruposAtivosVisiveis.map((g) => renderGroup(g, true))}
+          {gruposAtivosVisiveis.map((g) => renderGroup(g))}
 
           {gruposFinalizadosVisiveis.length > 0 ? (
             <div>
@@ -200,9 +201,7 @@ export default function EtapaWorklist({
                   Finalizados
                 </h2>
               ) : null}
-              {gruposFinalizadosVisiveis.map((g) =>
-                renderGroup(g, config.alwaysShowAddLote ?? false),
-              )}
+              {gruposFinalizadosVisiveis.map((g) => renderGroup(g))}
             </div>
           ) : null}
         </div>

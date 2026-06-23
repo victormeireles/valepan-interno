@@ -35,7 +35,7 @@ export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
   pageBackground: '#F6F4F1',
   dashboard: 'hora',
   toolbarMetricLabel: 'Embalado',
-  alwaysShowAddLote: true,
+  reabrirLabel: 'Reabrir OP',
 };
 
 function horarioEmbalagemParaCard(
@@ -70,6 +70,7 @@ type BuildEmbalagemWorklistInput = {
   selectedDate: string;
   loadingCardId: string | null;
   deletingLoteId: string | null;
+  reabrindoOpId?: string | null;
 };
 
 function resolveEmbalagemCardStatusOverride(
@@ -91,6 +92,7 @@ function mapPedidoToProduct(
   pedido: PainelPedidoEmbalagem,
   loadingCardId: string | null,
   deletingLoteId: string | null,
+  reabrindoOpId: string | null,
 ): EtapaProductItem {
   const exibicao = resolverExibicaoCardEmbalagem({
     pedido: pedido.pedido,
@@ -135,8 +137,8 @@ function mapPedidoToProduct(
       hasPhoto: photoStatus.hasPhoto,
       photoColor: photoStatus.color,
       photoLinks: buildLotePhotoLinks(embalagemItem),
-      canEdit: Boolean(embalagemItem.loteId),
-      canDelete: Boolean(embalagemItem.loteId),
+      canEdit: !pedido.finalizada && Boolean(embalagemItem.loteId),
+      canDelete: !pedido.finalizada && Boolean(embalagemItem.loteId),
       isLoading: loadingCardId === itemKey,
       isDeleting: deletingLoteId === embalagemItem.loteId,
       isLast: loteIndex === pedido.lotes.length - 1,
@@ -165,7 +167,9 @@ function mapPedidoToProduct(
     cadeiaBarras: pedido.cadeiaBarras ?? [],
     filterStatus: getPedidoEmbalagemFilterStatus(pedido),
     productionStatusOverride,
-    showAddLote: true,
+    showAddLote: !pedido.finalizada,
+    showReabrirOp: pedido.finalizada,
+    isReabrindoOp: reabrindoOpId === pedido.pedidoEmbalagemId,
     lotes,
   };
 }
@@ -175,6 +179,7 @@ function mapPedidosToFlatGroup(
   groupKey: string,
   loadingCardId: string | null,
   deletingLoteId: string | null,
+  reabrindoOpId: string | null,
 ): EtapaClientGroupData | null {
   if (pedidos.length === 0) return null;
 
@@ -182,7 +187,7 @@ function mapPedidosToFlatGroup(
     key: groupKey,
     hideHeader: true,
     products: pedidos.map((pedido) =>
-      mapPedidoToProduct(pedido, loadingCardId, deletingLoteId),
+      mapPedidoToProduct(pedido, loadingCardId, deletingLoteId, reabrindoOpId),
     ),
   };
 }
@@ -201,11 +206,14 @@ export function buildEmbalagemWorklistData(
     filterCounts[getPedidoEmbalagemFilterStatus(pedido)]++;
   }
 
+  const reabrindoOpId = input.reabrindoOpId ?? null;
+
   const gruposAtivos = mapPedidosToFlatGroup(
     input.naoFinalizados,
     'embalagem-ativos',
     input.loadingCardId,
     input.deletingLoteId,
+    reabrindoOpId,
   );
 
   const gruposFinalizados = mapPedidosToFlatGroup(
@@ -213,6 +221,7 @@ export function buildEmbalagemWorklistData(
     'embalagem-finalizados',
     input.loadingCardId,
     input.deletingLoteId,
+    reabrindoOpId,
   );
 
   return {

@@ -25,7 +25,10 @@ export type EtapaProductCardHeaderProps = {
   pct: number;
   onNovoLote?: () => void;
   addLabel?: string;
+  onReabrirOp?: () => void;
+  reabrirLabel?: string;
   isNovoLoteLoading?: boolean;
+  isReabrindoOp?: boolean;
   expanded: boolean;
   panelId: string;
   onToggleExpanded: () => void;
@@ -79,7 +82,10 @@ function CardActions({
   produto,
   onNovoLote,
   addLabel,
+  onReabrirOp,
+  reabrirLabel = 'Reabrir OP',
   isNovoLoteLoading,
+  isReabrindoOp,
   expanded,
   panelId,
   onToggleExpanded,
@@ -88,13 +94,33 @@ function CardActions({
   | 'produto'
   | 'onNovoLote'
   | 'addLabel'
+  | 'onReabrirOp'
+  | 'reabrirLabel'
   | 'isNovoLoteLoading'
+  | 'isReabrindoOp'
   | 'expanded'
   | 'panelId'
   | 'onToggleExpanded'
 >) {
   return (
     <>
+      {onReabrirOp ? (
+        <Button
+          size="md"
+          variant="secondary"
+          icon="replay"
+          disabled={isReabrindoOp || isNovoLoteLoading}
+          onClick={(e) => {
+            e.stopPropagation();
+            onReabrirOp();
+          }}
+          className="shrink-0"
+          aria-label={`${reabrirLabel} — ${produto}`}
+        >
+          <span className="max-[520px]:sr-only">{reabrirLabel}</span>
+        </Button>
+      ) : null}
+
       {onNovoLote ? (
         <Button
           size="md"
@@ -237,7 +263,10 @@ export default function EtapaProductCardHeader({
   pct,
   onNovoLote,
   addLabel = 'Lote',
+  onReabrirOp,
+  reabrirLabel = 'Reabrir OP',
   isNovoLoteLoading = false,
+  isReabrindoOp = false,
   expanded,
   panelId,
   onToggleExpanded,
@@ -246,7 +275,10 @@ export default function EtapaProductCardHeader({
     produto,
     onNovoLote,
     addLabel,
+    onReabrirOp,
+    reabrirLabel,
     isNovoLoteLoading,
+    isReabrindoOp,
     expanded,
     panelId,
     onToggleExpanded,

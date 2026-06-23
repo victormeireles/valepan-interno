@@ -24,6 +24,8 @@ export type RealizadoEtapaConfig = {
   /** Nome da unidade por extenso — ex.: "caixas" */
   unitName: string;
   addLabel: string;
+  /** Rótulo do botão de reabrir OP finalizada — ex.: "Reabrir OP" */
+  reabrirLabel?: string;
   summaryLabel: string;
   remainingLabel: string;
   /** Cor de destaque da etapa */
@@ -86,7 +88,10 @@ export type EtapaProductItem = {
   filterStatus: Exclude<EtapaFilterStatus, 'todos'>;
   productionStatusOverride?: ProductionStatus;
   showAddLote: boolean;
+  /** Exibe botão de reabrir quando a etapa foi finalizada explicitamente */
+  showReabrirOp?: boolean;
   isNovoLoteLoading?: boolean;
+  isReabrindoOp?: boolean;
   lotes: EtapaLoteItem[];
 };
 
@@ -159,6 +164,7 @@ export type RealizadoEtapaFooterStats = {
 
 export type RealizadoEtapaCallbacks = {
   onNovoLote: (productId: string) => void;
+  onReabrirOp?: (productId: string) => void;
   onEditLote: (loteId: string) => void;
   onDeleteLote: (loteId: string) => void;
 };
