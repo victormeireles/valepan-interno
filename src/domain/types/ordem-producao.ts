@@ -1,4 +1,5 @@
 import type { DerivedQuantidades } from '@/domain/producao/ordem-derivados';
+import type { OrdemEtapaStatusFields } from '@/domain/types/ordem-producao-etapa';
 
 export type OrdemProducaoKey = {
   dataProducao: string;
@@ -15,8 +16,9 @@ export type OrdemProducaoUpsert = OrdemProducaoKey & {
   quantidade: DerivedQuantidades;
 };
 
-export type OrdemProducaoRecord = OrdemProducaoUpsert & {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-};
+export type OrdemProducaoRecord = OrdemProducaoUpsert &
+  OrdemEtapaStatusFields & {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+  };

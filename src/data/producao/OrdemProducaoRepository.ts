@@ -9,7 +9,20 @@ import type {
   OrdemProducaoRecord,
   OrdemProducaoUpsert,
 } from '@/domain/types/ordem-producao';
+import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import { keysEqual } from '@/domain/embalagem/pedido-key';
+
+type OrdemProducaoEtapaRowFields = {
+  fermentacao_finalizada?: boolean | null;
+  fermentacao_meta_confirmada?: number | null;
+  fermentacao_finalizada_em?: string | null;
+  forno_finalizada?: boolean | null;
+  forno_meta_confirmada?: number | null;
+  forno_finalizada_em?: string | null;
+  embalagem_finalizada?: boolean | null;
+  embalagem_meta_confirmada?: number | null;
+  embalagem_finalizada_em?: string | null;
+};
 
 type OrdemProducaoRow = {
   id: string;
@@ -27,7 +40,7 @@ type OrdemProducaoRow = {
   pacotes: number;
   unidades: number;
   kg: number;
-};
+} & OrdemProducaoEtapaRowFields;
 
 type OrdemProducaoInsertRow = Omit<OrdemProducaoRow, 'id' | 'created_at'> & {
   id?: string;
@@ -83,7 +96,60 @@ function fromDbRow(row: OrdemProducaoRow): OrdemProducaoRecord {
       unidades: row.unidades,
       kg: Number(row.kg),
     },
+    fermentacaoFinalizada: row.fermentacao_finalizada ?? false,
+    fermentacaoMetaConfirmada: row.fermentacao_meta_confirmada ?? null,
+    fermentacaoFinalizadaEm: row.fermentacao_finalizada_em ?? null,
+    fornoFinalizada: row.forno_finalizada ?? false,
+    fornoMetaConfirmada: row.forno_meta_confirmada ?? null,
+    fornoFinalizadaEm: row.forno_finalizada_em ?? null,
+    embalagemFinalizada: row.embalagem_finalizada ?? false,
+    embalagemMetaConfirmada: row.embalagem_meta_confirmada ?? null,
+    embalagemFinalizadaEm: row.embalagem_finalizada_em ?? null,
   };
+}
+
+type EtapaFinalizacaoDbUpdate = {
+  finalizada: boolean;
+  meta_confirmada: number | null;
+  finalizada_em: string | null;
+};
+
+function buildEtapaFinalizacaoUpdate(
+  etapa: EtapaProducaoSlug,
+  input: { finalizada: boolean; metaConfirmada: number | null },
+): Record<string, boolean | number | string | null> {
+  const payload: EtapaFinalizacaoDbUpdate = input.finalizada
+    ? {
+        finalizada: true,
+        meta_confirmada: input.metaConfirmada,
+        finalizada_em: new Date().toISOString(),
+      }
+    : {
+        finalizada: false,
+        meta_confirmada: null,
+        finalizada_em: null,
+      };
+
+  switch (etapa) {
+    case 'fermentacao':
+      return {
+        fermentacao_finalizada: payload.finalizada,
+        fermentacao_meta_confirmada: payload.meta_confirmada,
+        fermentacao_finalizada_em: payload.finalizada_em,
+      };
+    case 'forno':
+      return {
+        forno_finalizada: payload.finalizada,
+        forno_meta_confirmada: payload.meta_confirmada,
+        forno_finalizada_em: payload.finalizada_em,
+      };
+    case 'embalagem':
+      return {
+        embalagem_finalizada: payload.finalizada,
+        embalagem_meta_confirmada: payload.meta_confirmada,
+        embalagem_finalizada_em: payload.finalizada_em,
+      };
+  }
 }
 
 function recordToKey(row: OrdemProducaoRecord): OrdemProducaoKey {
@@ -199,6 +265,28 @@ export class OrdemProducaoRepository {
 
     if (error) {
       throw new Error(`Erro ao atualizar ordem produção: ${error.message}`);
+    }
+
+    return fromDbRow(data as unknown as OrdemProducaoRow);
+  }
+
+  async updateEtapaFinalizacao(
+    id: string,
+    etapa: EtapaProducaoSlug,
+    input: { finalizada: boolean; metaConfirmada: number | null },
+  ): Promise<OrdemProducaoRecord> {
+    const { data, error } = await this.supabase
+      .from(ORDENS_PRODUCAO_TABLE)
+      .update({
+        ...buildEtapaFinalizacaoUpdate(etapa, input),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Erro ao atualizar finalização da etapa: ${error.message}`);
     }
 
     return fromDbRow(data as unknown as OrdemProducaoRow);
