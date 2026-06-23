@@ -20,11 +20,13 @@ A finalização em fermentação/forno é automática aos **90%** da meta planej
 | Meta efetiva | Travada ao escolher "não vai produzir mais"; propagada para a próxima etapa |
 | Estimativa ao vivo | Etapa anterior aberta → painel mostra soma dos lotes em tempo real, sem travar downstream |
 | Finalização | No **salvar lote**, não em ação separada |
-| Botões no modal | Sempre dois: "Salvar e vai produzir mais" / "Salvar e não vai produzir mais" |
-| Ação usual | Abaixo da meta de referência → usual = vai produzir mais; igual ou acima → usual = não vai produzir mais |
+| Botões no modal | Sempre dois: **"Salvar"** / **"Salvar e finalizar"** |
+| Mapeamento API | `continuaProduzindo: true` = Salvar; `continuaProduzindo: false` = Salvar e finalizar |
+| Destaque visual | Botão **usual** = primário amber; o outro = secundário outline |
+| Ação usual | Abaixo da meta → usual = **Salvar**; igual ou acima → usual = **Salvar e finalizar** |
 | Ação não usual | Exige confirmação com texto explícito (perda ou "ainda tem mais pão") |
-| Parcial (vai produzir mais) | Mesma OP aberta; meta efetiva **não** trava |
-| Perda (não vai produzir mais abaixo da meta) | Fecha etapa; trava produzido como meta efetiva; perda = meta_referência − meta_confirmada |
+| Salvar (continua) | Mesma OP aberta; meta efetiva **não** trava |
+| Salvar e finalizar (abaixo da meta) | Fecha etapa; trava produzido como meta efetiva; perda = meta_referência − meta_confirmada |
 | Meta de referência | Meta confirmada da etapa **imediatamente anterior**, se existir; senão meta da OP |
 | OP nunca alterada | Perda calculável por `OP − finalizado` em relatórios |
 | Corte 90% automático | **Removido** — seções em andamento/finalizados usam flag `finalizada` |
@@ -56,17 +58,19 @@ OP planejada: 700 LT
 
 ### Dois botões (sempre)
 
-1. **Salvar e vai produzir mais**
-2. **Salvar e não vai produzir mais**
+1. **Salvar** — grava o lote; etapa continua aberta
+2. **Salvar e finalizar** — grava o lote; encerra a etapa e propaga o total
+
+O botão **usual** recebe destaque primário (amber); o outro fica secundário (outline stone).
 
 ### Qual é usual?
 
 Comparar **total projetado após este lote** vs **meta de referência**:
 
-| Total projetado | Usual | Não usual → confirmação |
-|-----------------|-------|-------------------------|
-| **Abaixo** | Vai produzir mais | Não vai produzir mais → *"Sim, confirmo perda de X [unidade]"* |
-| **Igual ou acima** | Não vai produzir mais | Vai produzir mais → *"Sim, confirmo que ainda tem mais pão"* |
+| Total projetado | Usual (primário) | Não usual → confirmação |
+|-----------------|------------------|-------------------------|
+| **Abaixo** | **Salvar** | Salvar e finalizar → *"Sim, confirmo encerrar com perda de X [unidade]"* |
+| **Igual ou acima** | **Salvar e finalizar** | Salvar → *"Sim, confirmo que ainda vou produzir mais"* |
 
 Modal de confirmação: primário **Voltar e editar**; secundário **Confirmar** com texto explícito.
 
@@ -74,8 +78,8 @@ Modal de confirmação: primário **Voltar e editar**; secundário **Confirmar**
 
 | Escolha | Lote | Etapa atual | Próxima etapa |
 |---------|------|-------------|---------------|
-| **Vai produzir mais** | Salva | `finalizada = false` | Sem meta confirmada nova; estimativa ao vivo na UI |
-| **Não vai produzir mais** | Salva | `finalizada = true`, `meta_confirmada = total produzido` | Recebe meta confirmada (LT → CX na embalagem) |
+| **Salvar** | Salva | `finalizada = false` | Sem meta confirmada nova; estimativa ao vivo na UI |
+| **Salvar e finalizar** | Salva | `finalizada = true`, `meta_confirmada = total produzido` | Recebe meta confirmada (LT → CX na embalagem) |
 
 ### Meta de referência por etapa
 
@@ -204,7 +208,7 @@ Painéis: incluir `metaPlanejada`, `metaEfetiva`, `metaEstimativaAnterior`, `fin
 
 | Componente | Mudança |
 |------------|---------|
-| `EtapaLoteModalFooter` | Dois botões + lógica usual |
+| `EtapaLoteModalFooter` | **Salvar** / **Salvar e finalizar** + destaque do usual |
 | `EtapaContinuidadeConfirmDialog` | Confirmação ação não usual |
 | `EtapaCadeiaProgresso` | Barras empilhadas (Fase 2) |
 | `ProductCompactCard` | Denominador = meta efetiva |
@@ -240,7 +244,7 @@ Painéis: incluir `metaPlanejada`, `metaEfetiva`, `metaEstimativaAnterior`, `fin
 ### Situação 1 — Fermentação 680/700, encerra com perda
 
 1. Operador salva lote; total projetado 680 LT; meta referência 700 LT (OP)
-2. Clica **não vai produzir mais** (não usual) → confirma perda de 20 LT
+2. Clica **Salvar e finalizar** (não usual) → confirma perda de 20 LT
 3. `fermentacao_finalizada = true`, `fermentacao_meta_confirmada = 680`
 4. Forno: meta efetiva = 680 LT; OP informativa = 700 LT; barra forno 0/680
 
@@ -248,11 +252,11 @@ Painéis: incluir `metaPlanejada`, `metaEfetiva`, `metaEstimativaAnterior`, `fin
 
 1. Fermentação confirmada em 680 LT
 2. Forno salva; total 650 LT; referência 680 LT
-3. **Não vai produzir mais** → perda 30 LT vs fermentação
+3. **Salvar e finalizar** → perda 30 LT vs fermentação
 4. Embalagem: meta efetiva = 325 CX (650 LT ÷ 2); OP informativa = 350 CX
 
 ### Situação 3 — 700/700, encerra normal
 
 1. Total projetado 700; referência 700
-2. **Não vai produzir mais** (usual) — sem confirmação
+2. **Salvar e finalizar** (usual) — sem confirmação
 3. Propaga 700 LT para forno
