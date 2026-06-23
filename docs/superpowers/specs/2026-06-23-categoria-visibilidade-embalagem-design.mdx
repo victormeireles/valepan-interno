@@ -1,0 +1,151 @@
+# Design: Visibilidade de categorias no Realizado / Embalagem
+
+**Data:** 2026-06-23  
+**Status:** Aprovado pelo stakeholder  
+**Tela:** `/realizado/embalagem` · Config: `/config/categorias`
+
+## Contexto
+
+A tela de embalagem (`PainelEmbalagemService`) carrega todos os pedidos do dia sem filtro por categoria de produto. Na operação atual, o time quer ver **apenas produtos das categorias Hambúrguer e Hot Dog** — demais categorias (pães de forma, doces, etc.) poluem a lista e distorcem métricas.
+
+A tabela `categorias` já possui o campo `aparece_por_padrao`, mas ele **não é usado** em nenhum lugar do app e é semântica global, não por etapa. Este design introduz visibilidade **específica para embalagem**, configurável via UI.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Escopo | **Somente** `/realizado/embalagem` |
+| Configuração | Tela em `/config/categorias` com toggle por categoria |
+| Categorias ocultas | **Somem por completo** — lista, toolbar e dashboards de comparação |
+| Estado inicial | Apenas **Hambúrguer** e **Hot Dog** com `visivel_embalagem = true` |
+| Ordens / outras etapas | **Não mudam** — pedido continua existindo; só some da embalagem |
+| Bloco "Outras categorias" | **Descartado** (simplificação acordada) |
+
+## Fora de escopo
+
+- Filtro em fermentação, forno ou saídas (extensão futura)
+- Ocultar produtos individualmente (granularidade é por categoria)
+- Impedir registro de lotes via API para categorias ocultas
+- Alterar ordens de produção ou importação CSV
+
+## Abordagem escolhida
+
+**Coluna `visivel_embalagem` em `categorias`** (YAGNI).
+
+Alternativas descartadas:
+- Tabela `categoria_etapa_visibilidade` — over-engineering para escopo atual
+- Filtro só no frontend — métricas inconsistentes, mais dados trafegados
+- Reaproveitar `aparece_por_padrao` — semântica global, sem UI por etapa
+
+Quando for necessário estender para outras etapas, avaliar migração para tabela de visibilidade por etapa ou colunas adicionais (`visivel_forno`, etc.).
+
+## Schema
+
+### Alteração em `categorias`
+
+```sql
+ALTER TABLE categorias
+  ADD COLUMN IF NOT EXISTS visivel_embalagem boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN categorias.visivel_embalagem IS
+  'Quando true, produtos desta categoria aparecem no painel Realizado / Embalagem.';
+```
+
+### Migration de dados inicial
+
+```sql
+UPDATE categorias
+SET visivel_embalagem = true
+WHERE lower(trim(nome)) IN ('hambúrguer', 'hamburguer', 'hot dog', 'hotdog');
+```
+
+### RLS
+
+Seguir padrão existente de `categorias`:
+- **SELECT:** usuários autenticados (`USING (true)`)
+- **UPDATE** de `visivel_embalagem`: admins (`USING ((SELECT is_admin()))`)
+
+## Backend
+
+### Novo manager
+
+`CategoriaVisibilidadeManager` (ou método em repositório dedicado):
+- `getIdsVisiveisEmbalagem(): Promise<Set<string>>` — categorias com `visivel_embalagem = true` e `ativo = true`
+- `listCategoriasComVisibilidadeEmbalagem()` — para a tela de config (`id`, `nome`, `visivel_embalagem`, `ativo`)
+
+### Filtro no painel
+
+Em `PainelEmbalagemService`:
+
+1. Ao carregar contexto, buscar mapa `produtoId → categoriaId` (estender `SupabaseProductService.findByIds` ou query dedicada).
+2. Carregar set de `categoriaId` visíveis.
+3. Em `buildPedidosPainel`, **descartar** pedidos cujo `produto.categoria_id` não está no set.
+4. Produto sem `categoria_id` → tratado como **oculto**.
+
+Pontos de aplicação (todos devem filtrar):
+- `getPainelForDate` — polling leve
+- `getCargaCompleta` — carga inicial (dia, semana anterior, dia anterior)
+
+Como toolbar (`buildEmbalagemToolbarMetrics`) e dashboards (`pedidosToDashboardSnapshots`) derivam de `pedidos` já filtrados, **não precisam de lógica extra**.
+
+### Server actions
+
+- `getCategoriasVisibilidadeEmbalagem()` — lista para config
+- `updateCategoriaVisivelEmbalagem(categoriaId, visivel)` — toggle; `revalidatePath` em `/realizado/embalagem` e `/api/painel/embalagem`
+
+## Config UI
+
+### Hub
+
+Nova entrada em `CONFIG_SECTIONS`:
+
+| Campo | Valor |
+|-------|-------|
+| href | `/config/categorias` |
+| label | Categorias |
+| icon | `category` |
+| description | Visibilidade de categorias no painel de embalagem |
+
+### Página `/config/categorias`
+
+- Lista categorias **ativas** ordenadas por nome.
+- Cada linha: nome da categoria + `Switch` "Visível na embalagem".
+- Resumo no topo: `N de M categorias visíveis na embalagem`.
+- Salvar por toggle (otimista com rollback em erro), alinhado a outras telas de config.
+- Apenas admins editam; demais usuários veem estado mas controles desabilitados.
+
+## UI de embalagem
+
+**Sem alteração na página** — filtro é server-side. Operador não vê produtos de categorias ocultas.
+
+## Edge cases
+
+| Situação | Comportamento |
+|----------|---------------|
+| Categoria nova (ERP/sync) | `visivel_embalagem = false` por default → não aparece até ligar na config |
+| Produto sem categoria | Oculto na embalagem |
+| Pedido com lotes de categoria oculta | Some da tela; lotes permanecem no banco |
+| Reativar categoria na config | Volta a aparecer no próximo refresh/polling |
+| Categoria inativa (`ativo = false`) | Não aparece na config nem no painel, independente do toggle |
+
+## Testes
+
+- `PainelEmbalagemService`: pedido de categoria oculta excluído do painel principal e dos snapshots de comparação
+- `PainelEmbalagemService`: pedido de categoria visível permanece
+- `PainelEmbalagemService`: produto sem categoria excluído
+- `buildEmbalagemToolbarMetrics` com lista já filtrada (regressão indireta via integração)
+- Server action de update persiste e respeita permissão admin
+
+## Arquivos previstos
+
+| Arquivo | Ação |
+|---------|------|
+| `ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql` | Migration |
+| `src/domain/categorias/categoria-visibilidade-manager.ts` | Novo |
+| `src/lib/services/painel-embalagem-service.ts` | Filtro |
+| `src/lib/services/products/supabase-product-service.ts` | `categoria_id` no DTO |
+| `src/app/config/categorias/page.tsx` | Nova página |
+| `src/app/config/categorias/CategoriasConfigClient.tsx` | Client |
+| `src/app/actions/categoria-visibilidade-actions.ts` | Actions |
+| `src/config/config-sections.ts` | Nova seção |
+| `types/database.ts` | Tipo gerado/atualizado |
