@@ -12,6 +12,7 @@ type UseEtapaLoteSubmitParams = {
   totalProjetado: number;
   metaReferencia: number;
   unidade: string;
+  contexto?: 'etapa' | 'embalagem';
   onSubmit: (continuaProduzindo: boolean) => Promise<void>;
 };
 
@@ -26,11 +27,14 @@ function resolveDialogContent(
   intent: EtapaSubmitIntent,
   unidade: string,
   continuidade: EtapaContinuidadeResult,
+  contexto: 'etapa' | 'embalagem',
 ): Omit<ConfirmDialogState, 'open'> {
+  const alvo = contexto === 'embalagem' ? 'produção' : 'etapa';
+
   if (intent === 'salvar-finalizar') {
     return {
-      titulo: 'Finalizar etapa com perda?',
-      mensagem: `Ao finalizar abaixo da meta de referência, a etapa será encerrada com perda registrada em ${unidade}.`,
+      titulo: `Finalizar ${alvo} com perda?`,
+      mensagem: `Ao finalizar abaixo da meta de referência, a ${alvo} será encerrada com perda registrada em ${unidade}.`,
       textoConfirmar: continuidade.textoConfirmacaoFinalizar,
     };
   }
@@ -48,6 +52,7 @@ export function useEtapaLoteSubmit({
   totalProjetado,
   metaReferencia,
   unidade,
+  contexto = 'etapa',
   onSubmit,
 }: UseEtapaLoteSubmitParams) {
   const [pendingIntent, setPendingIntent] = useState<EtapaSubmitIntent | null>(null);
@@ -107,12 +112,12 @@ export function useEtapaLoteSubmit({
       };
     }
 
-    const content = resolveDialogContent(pendingIntent, unidade, continuidade);
+    const content = resolveDialogContent(pendingIntent, unidade, continuidade, contexto);
     return {
       open: true,
       ...content,
     };
-  }, [pendingIntent, unidade, continuidade]);
+  }, [pendingIntent, unidade, continuidade, contexto]);
 
   return {
     continuidade,

@@ -110,20 +110,36 @@ export default function ProducaoModal({
   const [removeConfirmSlot, setRemoveConfirmSlot] = useState<
     'pacote' | 'etiqueta' | 'pallet' | null
   >(null);
-  const [pendingAction, setPendingAction] = useState<'submit' | 'partial' | null>(null);
+  const [pendingContinuaProduzindo, setPendingContinuaProduzindo] = useState<boolean | null>(null);
   const baselineRef = useRef<ProducaoData | null>(null);
 
   const isEtapaMode = mode === 'forno' || mode === 'fermentacao';
+  const isSalvarFinalizarMode = isEtapaMode || mode === 'embalagem';
   const showAssadeirasField = !isEtapaMode || modoQuantidade === 'assadeiras';
   const showUnidadesField = !isEtapaMode || modoQuantidade === 'unidades';
   const showKgField = !isEtapaMode;
-  const etapaUnidadeNorm = (etapaUnidade || (modoQuantidade === 'unidades' ? 'UN' : 'LT')).toUpperCase();
+  const etapaUnidadeNorm = (
+    etapaUnidade || (mode === 'embalagem' ? 'CX' : modoQuantidade === 'unidades' ? 'UN' : 'LT')
+  ).toUpperCase();
   const metaReferenciaEfetiva = Math.max(
     0,
-    metaReferencia ?? (modoQuantidade === 'unidades' ? pedidoQuantidades?.unidades || 0 : pedidoQuantidades?.caixas || 0),
+    metaReferencia ??
+      (mode === 'embalagem'
+        ? pedidoQuantidades?.caixas || 0
+        : modoQuantidade === 'unidades'
+          ? pedidoQuantidades?.unidades || 0
+          : pedidoQuantidades?.caixas || 0),
   );
-  const metaPlanejadaEfetiva = Math.max(0, metaPlanejada ?? metaReferenciaEfetiva);
-  const quantidadeLoteAtual = modoQuantidade === 'unidades' ? formData.unidades || 0 : formData.caixas || 0;
+  const metaPlanejadaEfetiva = Math.max(
+    0,
+    metaPlanejada ?? (mode === 'embalagem' ? pedidoQuantidades?.caixas || 0 : metaReferenciaEfetiva),
+  );
+  const quantidadeLoteAtual =
+    mode === 'embalagem'
+      ? formData.caixas || 0
+      : modoQuantidade === 'unidades'
+        ? formData.unidades || 0
+        : formData.caixas || 0;
   const totalProjetadoEtapa = Math.max(0, produzidoAtual + quantidadeLoteAtual);
 
   const camposVisiveis: CamposRealizadoEmbalagem = useMemo(() => {
@@ -313,7 +329,10 @@ export default function ProducaoModal({
           : `/api/producao/${mode}/ordem/${ordemProducaoId}/lote`;
       const body =
         mode === 'embalagem'
-          ? buildLotePayload(payload)
+          ? {
+              ...buildLotePayload(payload),
+              continuaProduzindo,
+            }
           : {
               assadeiras: payload.caixas,
               unidades: payload.unidades,
@@ -362,32 +381,8 @@ export default function ProducaoModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Prevenir múltiplos cliques
     if (isSubmitting) return;
-    
-    // Validação de fotos obrigatórias - APENAS para modo embalagem
-    if (mode === 'embalagem') {
-      const validator = new PhotoValidator(formData, photoFiles, cliente);
-      const validationResult = validator.validate();
-      
-      // Se faltam fotos, mostrar modal de confirmação
-      if (!validationResult.isValid && validationResult.errorMessage) {
-        setPhotoWarningMessage(validationResult.errorMessage);
-        setShowPhotoWarning(true);
-        setPendingAction('submit');
-        return;
-      }
-    }
-    
-    // Em etapas, o submit padrão do Enter segue o fluxo "Salvar"
-    if (isEtapaMode) {
-      await handleEtapaSalvar();
-      return;
-    }
-
-    // Executar o submit
-    await executeSubmit();
+    await handleEtapaSalvar();
   };
 
   const executeSubmit = async (continuaProduzindo = true) => {
@@ -506,6 +501,18 @@ export default function ProducaoModal({
 
   const handleEtapaSubmitAction = async (continuaProduzindo: boolean) => {
     if (isSubmitting) return;
+
+    if (mode === 'embalagem') {
+      const validator = new PhotoValidator(formData, photoFiles, cliente);
+      const validationResult = validator.validate();
+      if (!validationResult.isValid && validationResult.errorMessage) {
+        setPhotoWarningMessage(validationResult.errorMessage);
+        setShowPhotoWarning(true);
+        setPendingContinuaProduzindo(continuaProduzindo);
+        return;
+      }
+    }
+
     await executeSubmit(continuaProduzindo);
   };
 
@@ -517,10 +524,11 @@ export default function ProducaoModal({
     handleDialogBack: handleEtapaConfirmBack,
     handleDialogConfirm: handleEtapaConfirmContinue,
   } = useEtapaLoteSubmit({
-    enabled: isEtapaMode,
+    enabled: isSalvarFinalizarMode,
     totalProjetado: totalProjetadoEtapa,
     metaReferencia: metaReferenciaEfetiva,
     unidade: etapaUnidadeNorm,
+    contexto: mode === 'embalagem' ? 'embalagem' : 'etapa',
     onSubmit: handleEtapaSubmitAction,
   });
 
@@ -609,112 +617,18 @@ export default function ProducaoModal({
     }
   };
 
-  // Verificar se é produção parcial (produção < pedido)
-  const isPartialProduction = (): boolean => {
-    if (!pedidoQuantidades) return false;
-
-    if (isEtapaMode) {
-      if (modoQuantidade === 'assadeiras') {
-        return pedidoQuantidades.caixas > 0 && formData.caixas < pedidoQuantidades.caixas;
-      }
-      return pedidoQuantidades.unidades > 0 && formData.unidades < pedidoQuantidades.unidades;
-    }
-
-    if (mode !== 'embalagem') return false;
-
-    return (
-      (camposVisiveis.caixas &&
-        pedidoQuantidades.caixas > 0 &&
-        formData.caixas < pedidoQuantidades.caixas) ||
-      (camposVisiveis.pacotes &&
-        pedidoQuantidades.pacotes > 0 &&
-        formData.pacotes < pedidoQuantidades.pacotes) ||
-      (camposVisiveis.unidades &&
-        pedidoQuantidades.unidades > 0 &&
-        formData.unidades < pedidoQuantidades.unidades) ||
-      (camposVisiveis.kg &&
-        pedidoQuantidades.kg > 0 &&
-        formData.kg < pedidoQuantidades.kg)
-    );
-  };
-
-  const executeSavePartial = async () => {
-    if (mode !== 'embalagem') return;
-    if (isNewLote && pedidoEmbalagemId) {
-      await executeSaveNovoLote(true);
-      return;
-    }
-
-    if (!pedidoEmbalagemId || totalQtyVisivel(formData) <= 0) {
-      setMessage({
-        type: 'error',
-        text: 'Informe ao menos uma quantidade maior que zero (cx, pct, un ou kg).',
-      });
-      return;
-    }
-
-    const payload = sanitizeQuantidades(formData);
-
-    try {
-      setIsSubmitting(true);
-      setMessage(null);
-
-      const res = await fetch(`/api/producao/embalagem/pedido/${pedidoEmbalagemId}/lote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildLotePayload(payload)),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao salvar produção parcial');
-
-      const createdLoteId = data.loteId as string | undefined;
-      if (createdLoteId) {
-        await uploadPendingPhotos({ loteId: createdLoteId });
-      }
-
-      if (onSaveSuccess) await onSaveSuccess();
-      resetAndClose();
-    } catch (error) {
-      setPhotoLoading(false);
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'Erro ao salvar produção parcial',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleSavePartial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting || mode !== 'embalagem') return;
-
-    const validator = new PhotoValidator(formData, photoFiles, cliente);
-    const validationResult = validator.validate();
-    if (!validationResult.isValid && validationResult.errorMessage) {
-      setPhotoWarningMessage(validationResult.errorMessage);
-      setShowPhotoWarning(true);
-      setPendingAction('partial');
-      return;
-    }
-
-    await executeSavePartial();
-  };
-
   const handlePhotoWarningContinue = async () => {
     setShowPhotoWarning(false);
-    if (pendingAction === 'submit') {
-      await executeSubmit();
-    } else if (pendingAction === 'partial') {
-      await executeSavePartial();
+    if (pendingContinuaProduzindo !== null) {
+      await executeSubmit(pendingContinuaProduzindo);
     }
-    setPendingAction(null);
+    setPendingContinuaProduzindo(null);
     setPhotoWarningMessage('');
   };
 
   const handlePhotoWarningBack = () => {
     setShowPhotoWarning(false);
-    setPendingAction(null);
+    setPendingContinuaProduzindo(null);
     setPhotoWarningMessage('');
   };
 
@@ -755,7 +669,7 @@ export default function ProducaoModal({
     setShowPhotoWarning(false);
     setShowDiscardSheet(false);
     setRemoveConfirmSlot(null);
-    setPendingAction(null);
+    setPendingContinuaProduzindo(null);
     setPhotoWarningMessage('');
     baselineRef.current = null;
     onClose();
@@ -826,7 +740,6 @@ export default function ProducaoModal({
 
       {mode === 'embalagem' ? (
         <EmbalagemLoteModalShell
-          isNewLote={isNewLote}
           title={embalagemTitle}
           produto={produto}
           cliente={cliente}
@@ -840,12 +753,17 @@ export default function ProducaoModal({
           photoLoading={photoLoading}
           loading={loading}
           isSubmitting={isSubmitting}
+          usualContinuaProduzindo={continuidade.usualContinuaProduzindo}
+          showQuantidadePreview={isNewLote}
+          totalProjetado={totalProjetadoEtapa}
+          metaReferencia={metaReferenciaEfetiva}
+          metaPlanejada={metaPlanejadaEfetiva}
+          unidade={etapaUnidadeNorm}
           message={message}
           showPhotoWarning={showPhotoWarning}
           photoWarningMessage={photoWarningMessage}
           showDiscardSheet={showDiscardSheet}
           removeConfirmSlot={removeConfirmSlot}
-          showPartial={!isNewLote && isPartialProduction()}
           onRequestClose={requestClose}
           onDiscardConfirm={handleDiscardConfirm}
           onDiscardCancel={handleDiscardCancel}
@@ -858,10 +776,8 @@ export default function ProducaoModal({
           onRemovePhotoConfirm={() => void handleRemovePhotoConfirm()}
           onRemovePhotoCancel={handleRemovePhotoCancel}
           onSubmit={handleSubmit}
-          onPartial={() => {
-            const e = { preventDefault: () => {} } as React.FormEvent;
-            void handleSavePartial(e);
-          }}
+          onSalvar={() => void handleEtapaSalvar()}
+          onSalvarEFinalizar={() => void handleEtapaSalvarEFinalizar()}
         />
       ) : (
       <div
@@ -1032,19 +948,6 @@ export default function ProducaoModal({
                 >
                   Cancelar
                 </button>
-                {Boolean(pedidoEmbalagemId || loteId) && isPartialProduction() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const e = { preventDefault: () => {} } as React.FormEvent;
-                      void handleSavePartial(e);
-                    }}
-                    className="px-6 py-3 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
-                    disabled={loading || isSubmitting}
-                  >
-                    Salvar parcial
-                  </button>
-                )}
                 <button
                   type="submit"
                   className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium flex items-center justify-center min-w-[140px]"
@@ -1086,18 +989,18 @@ export default function ProducaoModal({
             onDiscard={handleDiscardConfirm}
             onContinue={handleDiscardCancel}
           />
-          {isEtapaMode && (
-            <EtapaContinuidadeConfirmDialog
-              open={confirmDialog.open}
-              titulo={confirmDialog.titulo}
-              mensagem={confirmDialog.mensagem}
-              textoConfirmar={confirmDialog.textoConfirmar}
-              onVoltar={handleEtapaConfirmBack}
-              onConfirmar={() => void handleEtapaConfirmContinue()}
-            />
-          )}
         </div>
       </div>
+      )}
+      {isSalvarFinalizarMode && (
+        <EtapaContinuidadeConfirmDialog
+          open={confirmDialog.open}
+          titulo={confirmDialog.titulo}
+          mensagem={confirmDialog.mensagem}
+          textoConfirmar={confirmDialog.textoConfirmar}
+          onVoltar={handleEtapaConfirmBack}
+          onConfirmar={() => void handleEtapaConfirmContinue()}
+        />
       )}
     </div>
   );

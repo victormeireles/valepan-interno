@@ -142,6 +142,10 @@ export default function ProducaoEmbalagemPage() {
 
   const pedidoLookup = useMemo(() => buildEmbalagemPedidoLookup(pedidos), [pedidos]);
   const loteLookup = useMemo(() => buildEmbalagemLoteLookup(pedidos), [pedidos]);
+  const pedidoSelecionado = useMemo(() => {
+    if (!editingItem?.pedidoEmbalagemId) return null;
+    return pedidoLookup.get(editingItem.pedidoEmbalagemId) ?? null;
+  }, [editingItem?.pedidoEmbalagemId, pedidoLookup]);
 
   const handleEditProducao = useCallback(async (item: PainelLoteItem) => {
     if (!item.loteId) {
@@ -273,7 +277,10 @@ export default function ProducaoEmbalagemPage() {
     await refreshPedidosOnly();
   };
 
-  const handleSaveProducao = async (producaoData: ProducaoData) => {
+  const handleSaveProducao = async (
+    producaoData: ProducaoData,
+    options?: { continuaProduzindo?: boolean },
+  ) => {
     if (!editingItem?.loteId) return;
 
     try {
@@ -283,7 +290,10 @@ export default function ProducaoEmbalagemPage() {
       const res = await fetch(`/api/producao/embalagem/lote/${editingItem.loteId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(producaoData),
+        body: JSON.stringify({
+          ...producaoData,
+          continuaProduzindo: options?.continuaProduzindo ?? true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
@@ -439,6 +449,10 @@ export default function ProducaoEmbalagemPage() {
               }
             : undefined
         }
+        metaReferencia={pedidoSelecionado?.metaEfetiva ?? editingItem?.aProduzir ?? 0}
+        metaPlanejada={pedidoSelecionado?.metaPlanejada ?? editingItem?.pedidoCaixas ?? 0}
+        produzidoAtual={pedidoSelecionado?.produzidoScalar ?? 0}
+        etapaUnidade={(pedidoSelecionado?.unidade ?? editingItem?.unidade ?? 'cx').toUpperCase()}
         loading={producaoLoading}
         mode="embalagem"
       />

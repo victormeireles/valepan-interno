@@ -3,6 +3,7 @@
 import type { CamposRealizadoEmbalagem } from '@/domain/embalagem/painel-quantidade';
 import type { ProducaoData } from '@/domain/types';
 import type { PhotoFiles } from '@/domain/validators/PhotoValidator';
+import EtapaLoteQuantidadePreview from '@/components/Realizado/etapa/EtapaLoteQuantidadePreview';
 import EmbalagemDiscardSheet from './EmbalagemDiscardSheet';
 import EmbalagemFotosGrid from './EmbalagemFotosGrid';
 import EmbalagemLoteModalFooter from './EmbalagemLoteModalFooter';
@@ -15,7 +16,6 @@ import EmbalagemRemovePhotoSheet from './EmbalagemRemovePhotoSheet';
 type SlotFoto = 'pacote' | 'etiqueta' | 'pallet';
 
 export type EmbalagemLoteModalShellProps = {
-  isNewLote: boolean;
   title: string;
   produto: string;
   cliente: string;
@@ -29,12 +29,17 @@ export type EmbalagemLoteModalShellProps = {
   photoLoading: boolean;
   loading: boolean;
   isSubmitting: boolean;
+  usualContinuaProduzindo: boolean;
+  showQuantidadePreview: boolean;
+  totalProjetado: number;
+  metaReferencia: number;
+  metaPlanejada: number;
+  unidade: string;
   message: { type: 'success' | 'error'; text: string } | null;
   showPhotoWarning: boolean;
   photoWarningMessage: string;
   showDiscardSheet: boolean;
   removeConfirmSlot: SlotFoto | null;
-  showPartial: boolean;
   onRequestClose: () => void;
   onDiscardConfirm: () => void;
   onDiscardCancel: () => void;
@@ -47,11 +52,11 @@ export type EmbalagemLoteModalShellProps = {
   onRemovePhotoConfirm: () => void;
   onRemovePhotoCancel: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  onPartial: () => void;
+  onSalvar: () => void;
+  onSalvarEFinalizar: () => void;
 };
 
 export default function EmbalagemLoteModalShell({
-  isNewLote,
   title,
   produto,
   cliente,
@@ -65,12 +70,17 @@ export default function EmbalagemLoteModalShell({
   photoLoading,
   loading,
   isSubmitting,
+  usualContinuaProduzindo,
+  showQuantidadePreview,
+  totalProjetado,
+  metaReferencia,
+  metaPlanejada,
+  unidade,
   message,
   showPhotoWarning,
   photoWarningMessage,
   showDiscardSheet,
   removeConfirmSlot,
-  showPartial,
   onRequestClose,
   onDiscardConfirm,
   onDiscardCancel,
@@ -83,7 +93,8 @@ export default function EmbalagemLoteModalShell({
   onRemovePhotoConfirm,
   onRemovePhotoCancel,
   onSubmit,
-  onPartial,
+  onSalvar,
+  onSalvarEFinalizar,
 }: EmbalagemLoteModalShellProps) {
   const closeDisabled = isSubmitting || photoLoading || loading;
 
@@ -98,7 +109,7 @@ export default function EmbalagemLoteModalShell({
         cliente={cliente}
         congelado={congelado}
         pedidoMetaOriginal={pedidoMetaOriginal}
-        pedidoQuantidades={isNewLote ? undefined : pedidoQuantidades}
+        pedidoQuantidades={pedidoQuantidades}
         onClose={onRequestClose}
         closeDisabled={closeDisabled}
       />
@@ -126,6 +137,17 @@ export default function EmbalagemLoteModalShell({
             loading={loading}
             isSubmitting={isSubmitting}
           />
+
+          {showQuantidadePreview && (
+            <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <EtapaLoteQuantidadePreview
+                totalProjetado={totalProjetado}
+                metaReferencia={metaReferencia}
+                metaPlanejada={metaPlanejada}
+                unidade={unidade}
+              />
+            </div>
+          )}
 
           <EmbalagemFotosGrid
             cliente={cliente}
@@ -156,13 +178,11 @@ export default function EmbalagemLoteModalShell({
         )}
 
         <EmbalagemLoteModalFooter
-          isNewLote={isNewLote}
-          showPartial={showPartial}
-          isSubmitting={isSubmitting}
-          photoLoading={photoLoading}
-          loading={loading}
+          usualContinuaProduzindo={usualContinuaProduzindo}
+          busy={loading || isSubmitting || photoLoading}
           onCancel={onRequestClose}
-          onPartial={onPartial}
+          onSalvar={onSalvar}
+          onSalvarEFinalizar={onSalvarEFinalizar}
         />
       </form>
 
