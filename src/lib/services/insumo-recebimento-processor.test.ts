@@ -55,7 +55,7 @@ const eventoBase: OmieWebhookEventoRow = {
   },
   processed_at: null,
   received_at: '2026-06-19T10:00:00Z',
-  status_processamento: 'pendente',
+  status_processamento: 'recebido',
   topic: 'RecebimentoProduto.Concluido',
   updated_at: '2026-06-19T10:00:00Z',
 };

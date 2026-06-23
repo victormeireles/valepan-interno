@@ -4,6 +4,14 @@ import type { Database } from '@/types/database';
 
 export type OmieWebhookEventoRow = Database['public']['Tables']['omie_webhook_eventos']['Row'];
 
+/** Valores permitidos pelo CHECK `omie_webhook_eventos_status_processamento_check` no Supabase. */
+export const OMIE_WEBHOOK_STATUS = {
+  RECEBIDO: 'recebido',
+  PROCESSADO: 'processado',
+  ERRO: 'erro',
+  IGNORADO: 'ignorado',
+} as const;
+
 export type EmpresaCredenciaisRow = {
   id: string;
   nome: string;
@@ -21,7 +29,7 @@ export class OmieWebhookEventoRepository {
       .from('omie_webhook_eventos')
       .select('*')
       .ilike('topic', 'RecebimentoProduto.Concluido')
-      .eq('status_processamento', 'pendente')
+      .eq('status_processamento', OMIE_WEBHOOK_STATUS.RECEBIDO)
       .order('received_at', { ascending: true })
       .limit(limit);
 
@@ -37,7 +45,7 @@ export class OmieWebhookEventoRepository {
     const { error } = await this.supabase
       .from('omie_webhook_eventos')
       .update({
-        status_processamento: 'processado',
+        status_processamento: OMIE_WEBHOOK_STATUS.PROCESSADO,
         processed_at: now,
         updated_at: now,
         erro: null,
@@ -54,7 +62,7 @@ export class OmieWebhookEventoRepository {
     const { error } = await this.supabase
       .from('omie_webhook_eventos')
       .update({
-        status_processamento: 'erro',
+        status_processamento: OMIE_WEBHOOK_STATUS.ERRO,
         erro: mensagem,
         updated_at: now,
       })
@@ -109,7 +117,7 @@ export class OmieWebhookEventoRepository {
         topic: input.topic,
         message_id: input.messageId,
         payload_json: input.payloadJson,
-        status_processamento: 'pendente',
+        status_processamento: OMIE_WEBHOOK_STATUS.RECEBIDO,
         received_at: now,
         updated_at: now,
       })
