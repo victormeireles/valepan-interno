@@ -112,9 +112,10 @@ export default function EtapaToolbar({
         {/* Linha 2 mobile: progresso em largura total */}
         {hasMeta ? (
           <div
-            className="flex w-full min-w-0 items-center gap-2 sm:hidden"
+            className="flex w-full min-w-0 flex-col gap-0.5 sm:hidden"
             aria-label={`${config.toolbarMetricLabel} em ${config.unitName} em relação à meta`}
           >
+            <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-text-strong">
               {fmt(metrics.produzido)}/{fmt(metrics.meta)} {unitSuffix}
             </span>
@@ -138,6 +139,12 @@ export default function EtapaToolbar({
               unit={unitSuffix}
               metaAtingida={metrics.metaAtingida}
             />
+            </div>
+            {metrics.toolbarSecondaryLabel ? (
+              <span className="text-[10px] font-medium text-text-muted">
+                {metrics.toolbarSecondaryLabel}
+              </span>
+            ) : null}
           </div>
         ) : (
           <div
@@ -187,6 +194,11 @@ export default function EtapaToolbar({
                   metaAtingida={metrics.metaAtingida}
                 />
               </div>
+              {metrics.toolbarSecondaryLabel ? (
+                <span className="text-[10px] font-medium text-text-muted">
+                  {metrics.toolbarSecondaryLabel}
+                </span>
+              ) : null}
             </div>
           ) : (
             <div

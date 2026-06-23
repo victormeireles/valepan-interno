@@ -108,6 +108,8 @@ export type RealizadoEtapaToolbarMetrics = {
   falta: number;
   progressoPct: number;
   metaAtingida: boolean;
+  /** OP planejada total quando difere da meta efetiva */
+  toolbarSecondaryLabel?: string;
 };
 
 export type RealizadoEtapaDashboardHoraData = {

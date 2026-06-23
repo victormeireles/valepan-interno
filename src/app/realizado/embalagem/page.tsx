@@ -14,6 +14,7 @@ import {
   buildEmbalagemWorklistData,
   EMBALAGEM_ETAPA_CONFIG,
 } from '@/domain/embalagem/embalagem-etapa-adapter';
+import { buildEmbalagemToolbarMetrics } from '@/domain/embalagem/build-embalagem-toolbar-metrics';
 import type { PainelLoteItem } from '@/domain/realizado/painel-pedido-adapter';
 import type {
   DashboardSnapshot,
@@ -310,13 +311,10 @@ export default function ProducaoEmbalagemPage() {
   };
 
   const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
-  const resumoCx = useMemo(() => {
-    const produzido = dashboardItems.reduce((sum, item) => sum + (item.caixas || 0), 0);
-    const meta = dashboardItems.reduce((sum, item) => sum + (item.pedidoCaixas || 0), 0);
-    const faltaCx = Math.max(0, meta - produzido);
-    const progressoPct = meta > 0 ? Math.min(100, (produzido / meta) * 100) : 0;
-    return { produzido, meta, faltaCx, progressoPct };
-  }, [dashboardItems]);
+  const toolbarMetrics = useMemo(
+    () => buildEmbalagemToolbarMetrics(pedidos),
+    [pedidos],
+  );
 
   const { gruposNaoFinalizados, gruposFinalizados } = useMemo(
     () => splitPedidosEmbalagemEmGrupos(pedidos, selectedDate),
@@ -363,13 +361,7 @@ export default function ProducaoEmbalagemPage() {
         ritmoCompacto
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
-        toolbar={{
-          produzido: resumoCx.produzido,
-          meta: resumoCx.meta,
-          falta: resumoCx.faltaCx,
-          progressoPct: resumoCx.progressoPct,
-          metaAtingida: resumoCx.faltaCx === 0,
-        }}
+        toolbar={toolbarMetrics}
         loading={loading}
         refreshing={refreshing}
         message={message}

@@ -9,6 +9,7 @@ import {
   buildFornoWorklistData,
   FORNO_ETAPA_CONFIG,
 } from '@/domain/producao-etapa/forno-etapa-adapter';
+import { buildOrdensEtapaToolbarMetrics } from '@/domain/producao-etapa/build-etapa-toolbar-metrics';
 import {
   splitOrdensPorFinalizacao,
   type PainelLoteItemEtapa,
@@ -204,20 +205,10 @@ export default function ProducaoFornoPage() {
     [ordens],
   );
 
-  const toolbarMetrics = useMemo(() => {
-    const produzido = ordens.reduce((sum, ordem) => sum + ordem.produzido, 0);
-    const meta = ordens.reduce((sum, ordem) => sum + ordem.aProduzir, 0);
-    const falta = Math.max(0, meta - produzido);
-    const progressoPct = meta > 0 ? Math.min(100, (produzido / meta) * 100) : 0;
-
-    return {
-      produzido,
-      meta,
-      falta,
-      progressoPct,
-      metaAtingida: falta === 0,
-    };
-  }, [ordens]);
+  const toolbarMetrics = useMemo(
+    () => buildOrdensEtapaToolbarMetrics(ordens, FORNO_ETAPA_CONFIG.unit.toUpperCase()),
+    [ordens],
+  );
 
   const worklist = useMemo(
     () =>
