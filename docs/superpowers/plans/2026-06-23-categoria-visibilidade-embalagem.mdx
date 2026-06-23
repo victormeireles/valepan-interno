@@ -1,0 +1,722 @@
+# Categoria visibilidade embalagem — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Filtrar o painel `/realizado/embalagem` para exibir apenas pedidos de categorias marcadas como visíveis, com tela de configuração em `/config/categorias`.
+
+**Architecture:** Coluna `visivel_embalagem` em `categorias`. Domínio puro `filterPedidosEmbalagemPorCategoriaVisivel` testado isoladamente. `CategoriaVisibilidadeManager` lê/escreve flags. `PainelEmbalagemService` aplica filtro server-side antes de montar painel e snapshots de comparação — toolbar e dashboards herdam automaticamente.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase JS, Vitest, Tailwind v4.
+
+**Spec:** `docs/superpowers/specs/2026-06-23-categoria-visibilidade-embalagem-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql` | Migration + seed Hambúrguer/Hot Dog |
+| `types/database.ts` | Tipo `visivel_embalagem` em `categorias` |
+| `src/types/database.ts` | Espelho do tipo acima |
+| `src/domain/categorias/filter-pedidos-embalagem-por-categoria.ts` | Função pura de filtro |
+| `src/domain/categorias/filter-pedidos-embalagem-por-categoria.test.ts` | Testes do filtro |
+| `src/domain/categorias/categoria-visibilidade-manager.ts` | Leitura/escrita Supabase |
+| `src/domain/categorias/categoria-visibilidade-manager.test.ts` | Testes do manager |
+| `src/lib/services/products/supabase-product-service.ts` | `categoriaId` no DTO |
+| `src/lib/services/painel-embalagem-service.ts` | Integração do filtro |
+| `src/lib/services/painel-embalagem-service.test.ts` | Testes de integração do filtro |
+| `src/app/actions/categoria-visibilidade-actions.ts` | Server actions |
+| `src/app/config/categorias/page.tsx` | Página server |
+| `src/app/config/categorias/CategoriasConfigClient.tsx` | UI com toggles |
+| `src/config/config-sections.ts` | Entrada no hub de config |
+
+---
+
+### Task 1: Migration SQL
+
+**Files:**
+- Create: `ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql`
+
+- [ ] **Step 1: Criar arquivo de migration**
+
+```sql
+-- ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql
+-- Visibilidade de categorias no painel Realizado / Embalagem
+
+ALTER TABLE categorias
+  ADD COLUMN IF NOT EXISTS visivel_embalagem boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN categorias.visivel_embalagem IS
+  'Quando true, produtos desta categoria aparecem no painel Realizado / Embalagem.';
+
+UPDATE categorias
+SET visivel_embalagem = true
+WHERE lower(trim(nome)) IN ('hambúrguer', 'hamburguer', 'hot dog', 'hotdog');
+```
+
+- [ ] **Step 2: Aplicar no Supabase**
+
+Executar o SQL no SQL Editor do projeto Supabase (produção/staging conforme ambiente).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql
+git commit -m "feat(db): coluna visivel_embalagem em categorias"
+```
+
+---
+
+### Task 2: Tipos TypeScript
+
+**Files:**
+- Modify: `types/database.ts` (Row/Insert/Update de `categorias`)
+- Modify: `src/types/database.ts` (mesmo)
+
+- [ ] **Step 1: Adicionar campo nos tipos**
+
+Em ambos os arquivos, dentro de `categorias.Row`, `Insert` e `Update`, adicionar:
+
+```typescript
+visivel_embalagem: boolean        // Row
+visivel_embalagem?: boolean        // Insert e Update
+```
+
+Posicionar após `aparece_por_padrao` para manter ordem alfabética/lógica.
+
+Alternativa: rodar `npm run gen:types` se o projeto estiver linkado ao Supabase CLI — conferir que o campo aparece.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add types/database.ts src/types/database.ts
+git commit -m "chore(types): visivel_embalagem em categorias"
+```
+
+---
+
+### Task 3: Domínio — filtro puro de pedidos
+
+**Files:**
+- Create: `src/domain/categorias/filter-pedidos-embalagem-por-categoria.ts`
+- Create: `src/domain/categorias/filter-pedidos-embalagem-por-categoria.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { filterPedidosEmbalagemPorCategoriaVisivel } from './filter-pedidos-embalagem-por-categoria';
+
+type Pedido = { id: string; produtoId: string };
+
+describe('filterPedidosEmbalagemPorCategoriaVisivel', () => {
+  const pedidos: Pedido[] = [
+    { id: 'p1', produtoId: 'prod-hamb' },
+    { id: 'p2', produtoId: 'prod-forma' },
+    { id: 'p3', produtoId: 'prod-sem-cat' },
+  ];
+
+  const categoriaPorProduto = new Map<string, string | null>([
+    ['prod-hamb', 'cat-hamb'],
+    ['prod-forma', 'cat-forma'],
+    ['prod-sem-cat', null],
+  ]);
+
+  const visiveis = new Set(['cat-hamb']);
+
+  it('mantém pedidos de categoria visível', () => {
+    const result = filterPedidosEmbalagemPorCategoriaVisivel(
+      pedidos,
+      categoriaPorProduto,
+      visiveis,
+    );
+    expect(result.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('exclui pedidos de categoria oculta', () => {
+    const result = filterPedidosEmbalagemPorCategoriaVisivel(
+      pedidos,
+      categoriaPorProduto,
+      visiveis,
+    );
+    expect(result.find((p) => p.id === 'p2')).toBeUndefined();
+  });
+
+  it('exclui produto sem categoria', () => {
+    const result = filterPedidosEmbalagemPorCategoriaVisivel(
+      pedidos,
+      categoriaPorProduto,
+      visiveis,
+    );
+    expect(result.find((p) => p.id === 'p3')).toBeUndefined();
+  });
+
+  it('retorna array vazio quando nenhuma categoria visível', () => {
+    const result = filterPedidosEmbalagemPorCategoriaVisivel(
+      pedidos,
+      categoriaPorProduto,
+      new Set(),
+    );
+    expect(result).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/domain/categorias/filter-pedidos-embalagem-por-categoria.test.ts`  
+Expected: FAIL — módulo não encontrado
+
+- [ ] **Step 3: Implementar função**
+
+```typescript
+export function filterPedidosEmbalagemPorCategoriaVisivel<T extends { produtoId: string }>(
+  pedidos: T[],
+  categoriaPorProduto: Map<string, string | null>,
+  categoriasVisiveis: Set<string>,
+): T[] {
+  return pedidos.filter((pedido) => {
+    const categoriaId = categoriaPorProduto.get(pedido.produtoId);
+    if (!categoriaId) return false;
+    return categoriasVisiveis.has(categoriaId);
+  });
+}
+
+export function buildCategoriaPorProdutoMap(
+  produtos: ReadonlyArray<{ id: string; categoriaId: string | null }>,
+): Map<string, string | null> {
+  return new Map(produtos.map((p) => [p.id, p.categoriaId]));
+}
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/domain/categorias/filter-pedidos-embalagem-por-categoria.test.ts`  
+Expected: PASS (4 testes)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/categorias/filter-pedidos-embalagem-por-categoria.ts src/domain/categorias/filter-pedidos-embalagem-por-categoria.test.ts
+git commit -m "feat(categorias): filtro puro de pedidos por categoria visível"
+```
+
+---
+
+### Task 4: CategoriaVisibilidadeManager
+
+**Files:**
+- Create: `src/domain/categorias/categoria-visibilidade-manager.ts`
+- Create: `src/domain/categorias/categoria-visibilidade-manager.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+const selectMock = vi.fn();
+const eqMock = vi.fn();
+const orderMock = vi.fn();
+const updateMock = vi.fn();
+const updateEqMock = vi.fn();
+
+vi.mock('@/lib/clients/supabase-client-factory', () => ({
+  supabaseClientFactory: {
+    createServiceRoleClient: vi.fn(() => ({
+      from: vi.fn(() => ({
+        select: (...args: unknown[]) => {
+          selectMock(...args);
+          return {
+            eq: (...eqArgs: unknown[]) => {
+              eqMock(...eqArgs);
+              return {
+                order: (...orderArgs: unknown[]) => {
+                  orderMock(...orderArgs);
+                  return Promise.resolve({ data: [], error: null });
+                },
+              };
+            },
+          };
+        },
+        update: (...args: unknown[]) => {
+          updateMock(...args);
+          return {
+            eq: (...eqArgs: unknown[]) => {
+              updateEqMock(...eqArgs);
+              return Promise.resolve({ error: null });
+            },
+          };
+        },
+      })),
+    })),
+  },
+}));
+
+const { CategoriaVisibilidadeManager } = await import('./categoria-visibilidade-manager');
+
+describe('CategoriaVisibilidadeManager', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('getIdsVisiveisEmbalagem retorna Set de ids', async () => {
+    orderMock.mockResolvedValueOnce({
+      data: [
+        { id: 'cat-1', visivel_embalagem: true },
+        { id: 'cat-2', visivel_embalagem: false },
+        { id: 'cat-3', visivel_embalagem: true },
+      ],
+      error: null,
+    });
+
+    const manager = new CategoriaVisibilidadeManager();
+    const ids = await manager.getIdsVisiveisEmbalagem();
+
+    expect(ids).toEqual(new Set(['cat-1', 'cat-3']));
+    expect(eqMock).toHaveBeenCalledWith('ativo', true);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/domain/categorias/categoria-visibilidade-manager.test.ts`  
+Expected: FAIL
+
+- [ ] **Step 3: Implementar manager**
+
+```typescript
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import type { SupabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+
+export type CategoriaVisibilidadeRow = {
+  id: string;
+  nome: string;
+  visivel_embalagem: boolean;
+  ativo: boolean;
+};
+
+export class CategoriaVisibilidadeManager {
+  constructor(
+    private readonly factory: SupabaseClientFactory = supabaseClientFactory,
+  ) {}
+
+  async getIdsVisiveisEmbalagem(): Promise<Set<string>> {
+    const client = this.factory.createServiceRoleClient();
+    const { data, error } = await client
+      .from('categorias')
+      .select('id, visivel_embalagem')
+      .eq('ativo', true)
+      .eq('visivel_embalagem', true);
+
+    if (error) {
+      throw new Error(`Erro ao buscar categorias visíveis: ${error.message}`);
+    }
+
+    return new Set((data ?? []).map((row) => row.id));
+  }
+
+  async listCategoriasAtivasComVisibilidade(): Promise<CategoriaVisibilidadeRow[]> {
+    const client = this.factory.createServiceRoleClient();
+    const { data, error } = await client
+      .from('categorias')
+      .select('id, nome, visivel_embalagem, ativo')
+      .eq('ativo', true)
+      .order('nome', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar categorias: ${error.message}`);
+    }
+
+    return (data ?? []) as CategoriaVisibilidadeRow[];
+  }
+
+  async updateVisivelEmbalagem(
+    categoriaId: string,
+    visivel: boolean,
+  ): Promise<void> {
+    const client = this.factory.createServiceRoleClient();
+    const { error } = await client
+      .from('categorias')
+      .update({ visivel_embalagem: visivel })
+      .eq('id', categoriaId);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar visibilidade: ${error.message}`);
+    }
+  }
+}
+
+export const categoriaVisibilidadeManager = new CategoriaVisibilidadeManager();
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/domain/categorias/categoria-visibilidade-manager.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/categorias/categoria-visibilidade-manager.ts src/domain/categorias/categoria-visibilidade-manager.test.ts
+git commit -m "feat(categorias): CategoriaVisibilidadeManager"
+```
+
+---
+
+### Task 5: SupabaseProductService — expor categoriaId
+
+**Files:**
+- Modify: `src/lib/services/products/supabase-product-service.ts`
+
+- [ ] **Step 1: Estender ProductDTO e queries**
+
+Adicionar ao tipo `ProductDTO`:
+
+```typescript
+readonly categoriaId: string | null;
+```
+
+Em todos os `.select(...)` de `listProducts`, `findById`, `findByIds`, `findByName`, incluir `categoria_id`.
+
+Em `mapRecord`, adicionar parâmetro `categoria_id: string | null` e mapear:
+
+```typescript
+categoriaId: record.categoria_id ?? null,
+```
+
+- [ ] **Step 2: Rodar testes existentes**
+
+Run: `npm test`  
+Expected: PASS (sem regressões)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/lib/services/products/supabase-product-service.ts
+git commit -m "feat(produtos): expor categoriaId no ProductDTO"
+```
+
+---
+
+### Task 6: PainelEmbalagemService — aplicar filtro
+
+**Files:**
+- Modify: `src/lib/services/painel-embalagem-service.ts`
+- Modify: `src/lib/services/painel-embalagem-service.test.ts`
+
+- [ ] **Step 1: Escrever testes de integração que falham**
+
+Criar novo describe no final de `painel-embalagem-service.test.ts` com mocks de repositórios (seguir padrão de `painel-fermentacao-service.test.ts`). Alternativa mais simples: testar apenas via mock do service inteiro com `getPainelForDate` — mas o padrão do repo é mock de repos.
+
+Adicionar mocks para:
+- `pedidoEmbalagemRepository`
+- `embalagemLoteRepository`, `fermentacaoLoteRepository`, `fornoLoteRepository`
+- `loadAssadeiraCtxByProdutoId` (mock do módulo enrichment)
+- `CategoriaVisibilidadeManager` / `categoriaVisibilidadeManager`
+- `SupabaseProductService.findByIds` retornando produtos com `categoriaId`
+
+Teste principal:
+
+```typescript
+it('exclui pedidos de categoria não visível na embalagem', async () => {
+  // 2 pedidos: um hamb (cat-vis), um forma (cat-oculta)
+  // getIdsVisiveisEmbalagem retorna Set(['cat-hamb'])
+  // findByIds retorna categoriaId por produto
+  const result = await painelEmbalagemService.getPainelForDate('2026-06-23');
+  expect(result.pedidos).toHaveLength(1);
+  expect(result.pedidos[0].produto).toBe('Brioche');
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npm test -- src/lib/services/painel-embalagem-service.test.ts`  
+Expected: FAIL no novo describe
+
+- [ ] **Step 3: Integrar filtro no service**
+
+Importar:
+
+```typescript
+import {
+  buildCategoriaPorProdutoMap,
+  filterPedidosEmbalagemPorCategoriaVisivel,
+} from '@/domain/categorias/filter-pedidos-embalagem-por-categoria';
+import { categoriaVisibilidadeManager } from '@/domain/categorias/categoria-visibilidade-manager';
+```
+
+Alterar `buildNameMaps` para também retornar produtos completos (ou `categoriaPorProduto`):
+
+```typescript
+private async buildNameMaps(pedidos: PedidoEmbalagemRecord[]) {
+  const tipoIds = [...new Set(pedidos.map((p) => p.tipoEstoqueId))];
+  const produtoIds = [...new Set(pedidos.map((p) => p.produtoId))];
+
+  const [tipos, produtos] = await Promise.all([
+    tiposEstoqueService.findByIds(tipoIds),
+    this.productService.findByIds(produtoIds),
+  ]);
+
+  const tipoById = new Map(tipos.map((t) => [t.id, t]));
+  const produtoNomeById = new Map(produtos.map((p) => [p.id, p.nome]));
+  const categoriaPorProduto = buildCategoriaPorProdutoMap(produtos);
+
+  return { tipoById, produtoNomeById, categoriaPorProduto };
+}
+```
+
+Adicionar método privado:
+
+```typescript
+private filterPedidosPorCategoriaVisivel(
+  pedidos: PedidoEmbalagemRecord[],
+  categoriaPorProduto: Map<string, string | null>,
+  categoriasVisiveis: Set<string>,
+): PedidoEmbalagemRecord[] {
+  return filterPedidosEmbalagemPorCategoriaVisivel(
+    pedidos,
+    categoriaPorProduto,
+    categoriasVisiveis,
+  );
+}
+```
+
+Em `loadPainelContext`, buscar categorias visíveis em paralelo:
+
+```typescript
+const [..., nameMaps, categoriasVisiveis] = await Promise.all([
+  // ... existentes
+  this.buildNameMaps(pedidos),
+  categoriaVisibilidadeManager.getIdsVisiveisEmbalagem(),
+]);
+return { ..., categoriasVisiveis, ...nameMaps };
+```
+
+Em `getPainelForDate` e `getCargaCompleta`, antes de `buildPedidosPainel`, filtrar cada lista de pedidos:
+
+```typescript
+const pedidosFiltrados = this.filterPedidosPorCategoriaVisivel(
+  pedidos,
+  ctx.categoriaPorProduto,
+  ctx.categoriasVisiveis,
+);
+```
+
+Aplicar `pedidosFiltrados` em todas as chamadas a `buildPedidosPainel` (dia principal, semana, anterior).
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/lib/services/painel-embalagem-service.test.ts`  
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/painel-embalagem-service.ts src/lib/services/painel-embalagem-service.test.ts
+git commit -m "feat(embalagem): filtrar painel por categoria visível"
+```
+
+---
+
+### Task 7: Server actions
+
+**Files:**
+- Create: `src/app/actions/categoria-visibilidade-actions.ts`
+
+- [ ] **Step 1: Implementar actions**
+
+```typescript
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import {
+  categoriaVisibilidadeManager,
+  type CategoriaVisibilidadeRow,
+} from '@/domain/categorias/categoria-visibilidade-manager';
+
+type ActionResult<T = void> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+export type CategoriaVisibilidadeConfig = CategoriaVisibilidadeRow;
+
+export async function getCategoriasVisibilidadeEmbalagem(): Promise<
+  CategoriaVisibilidadeConfig[]
+> {
+  return categoriaVisibilidadeManager.listCategoriasAtivasComVisibilidade();
+}
+
+export async function updateCategoriaVisivelEmbalagem(
+  categoriaId: string,
+  visivel: boolean,
+): Promise<ActionResult> {
+  try {
+    await categoriaVisibilidadeManager.updateVisivelEmbalagem(categoriaId, visivel);
+    revalidatePath('/realizado/embalagem');
+    revalidatePath('/api/painel/embalagem');
+    revalidatePath('/api/painel/embalagem/carga');
+    revalidatePath('/config/categorias');
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Erro ao salvar',
+    };
+  }
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/actions/categoria-visibilidade-actions.ts
+git commit -m "feat(config): actions de visibilidade de categoria na embalagem"
+```
+
+---
+
+### Task 8: Tela de configuração
+
+**Files:**
+- Create: `src/app/config/categorias/page.tsx`
+- Create: `src/app/config/categorias/CategoriasConfigClient.tsx`
+
+- [ ] **Step 1: Criar page server**
+
+```typescript
+import { Suspense } from 'react';
+import { getCategoriasVisibilidadeEmbalagem } from '@/app/actions/categoria-visibilidade-actions';
+import CategoriasConfigClient from './CategoriasConfigClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function CategoriasConfigPage() {
+  const categorias = await getCategoriasVisibilidadeEmbalagem();
+
+  return (
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
+      <CategoriasConfigClient initialCategorias={categorias} />
+    </Suspense>
+  );
+}
+```
+
+- [ ] **Step 2: Criar client com toggles**
+
+`CategoriasConfigClient.tsx` — padrão WhatsApp config + design system Valepan:
+
+- `ConfigPageHeader` com title="Categorias", icon="category"
+- Resumo: `{visiveis} de {total} categorias visíveis na embalagem`
+- Lista em `Card` com `Switch` de `@/components/ui/Switch` por linha
+- Label: nome da categoria; descrição auxiliar: "Visível na embalagem"
+- `handleToggle`: otimista — atualiza state local, chama `updateCategoriaVisivelEmbalagem`, rollback em erro
+- `Toast` de sucesso/erro
+- Estado `savingId: string | null` para desabilitar switch em salvamento
+
+Estrutura mínima do toggle handler:
+
+```typescript
+const handleToggle = async (categoriaId: string, next: boolean) => {
+  const prev = categorias;
+  setCategorias((items) =>
+    items.map((c) =>
+      c.id === categoriaId ? { ...c, visivel_embalagem: next } : c,
+    ),
+  );
+  setSavingId(categoriaId);
+  const result = await updateCategoriaVisivelEmbalagem(categoriaId, next);
+  setSavingId(null);
+  if (!result.success) {
+    setCategorias(prev);
+    setToast({ type: 'err', text: result.error });
+    return;
+  }
+  setToast({
+    type: 'ok',
+    text: next ? 'Categoria visível na embalagem' : 'Categoria oculta na embalagem',
+  });
+};
+```
+
+- [ ] **Step 3: Verificar lint**
+
+Run: `npm run lint -- --max-warnings=0` (ou lint nos arquivos novos)  
+Expected: sem erros nos arquivos criados
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/config/categorias/page.tsx src/app/config/categorias/CategoriasConfigClient.tsx
+git commit -m "feat(config): tela de visibilidade de categorias na embalagem"
+```
+
+---
+
+### Task 9: Hub de configuração
+
+**Files:**
+- Modify: `src/config/config-sections.ts`
+
+- [ ] **Step 1: Adicionar seção**
+
+Após entrada de `produtos`, inserir:
+
+```typescript
+{
+  href: '/config/categorias',
+  label: 'Categorias',
+  icon: 'category',
+  description: 'Visibilidade de categorias no painel de embalagem',
+},
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/config/config-sections.ts
+git commit -m "feat(config): link de categorias no hub"
+```
+
+---
+
+### Task 10: Verificação final
+
+- [ ] **Step 1: Rodar suite de testes**
+
+Run: `npm test`  
+Expected: PASS
+
+- [ ] **Step 2: Build**
+
+Run: `npm run build`  
+Expected: build sem erros
+
+- [ ] **Step 3: Smoke test manual**
+
+1. Abrir `/config/categorias` — confirmar só Hambúrguer e Hot Dog ligados (após migration)
+2. Abrir `/realizado/embalagem` — confirmar que só produtos dessas categorias aparecem
+3. Ligar outra categoria na config — refresh embalagem — produto aparece
+4. Desligar categoria — produto some da lista, toolbar e dashboard
+
+- [ ] **Step 4: Commit final (se houver ajustes)**
+
+```bash
+git add -A
+git commit -m "chore: verificação categoria visibilidade embalagem"
+```
+
+---
+
+## Checklist de cobertura do spec
+
+| Requisito do spec | Task |
+|-------------------|------|
+| Coluna `visivel_embalagem` + seed | Task 1 |
+| Tipos TS | Task 2 |
+| Filtro server-side no painel | Tasks 3, 6 |
+| Carga completa (comparação) filtrada | Task 6 |
+| Tela `/config/categorias` | Task 8 |
+| Hub config | Task 9 |
+| Produto sem categoria oculto | Task 3 (teste) |
+| Categoria nova default false | Task 1 (DEFAULT false) |
+| UI embalagem sem mudança | implícito — filtro server-side |
