@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildEtapaDetalhesQuantidade,
+  getOrdemEtapaFilterStatus,
   sortOrdensPorPlanejamento,
   splitOrdensPorFinalizacao,
 } from './etapa-painel-adapter';
@@ -21,6 +22,10 @@ function ordemBase(overrides: Partial<PainelOrdemEtapa> = {}): PainelOrdemEtapa 
     unidade: 'lt',
     aProduzir: 40,
     produzido: 0,
+    metaPlanejada: 40,
+    metaEfetiva: 40,
+    metaReferencia: 40,
+    finalizada: false,
     lotes: [],
     ...overrides,
   };
@@ -46,6 +51,24 @@ describe('buildEtapaDetalhesQuantidade', () => {
   });
 });
 
+describe('getOrdemEtapaFilterStatus', () => {
+  it('retorna concluido quando ordem está finalizada', () => {
+    expect(
+      getOrdemEtapaFilterStatus(
+        ordemBase({ finalizada: true, produzido: 10, aProduzir: 40 }),
+      ),
+    ).toBe('concluido');
+  });
+
+  it('não conclui automaticamente aos 90% sem flag finalizada', () => {
+    expect(
+      getOrdemEtapaFilterStatus(
+        ordemBase({ produzido: 36, aProduzir: 40, metaEfetiva: 40 }),
+      ),
+    ).toBe('andamento');
+  });
+});
+
 describe('sortOrdensPorPlanejamento', () => {
   it('ordena ordens pelo número de planejamento', () => {
     const sorted = sortOrdensPorPlanejamento([
@@ -63,10 +86,45 @@ describe('sortOrdensPorPlanejamento', () => {
 });
 
 describe('splitOrdensPorFinalizacao', () => {
+  it('separa por flag finalizada em vez de percentual', () => {
+    const { naoFinalizados, finalizados } = splitOrdensPorFinalizacao([
+      ordemBase({
+        ordemProducaoId: 'ordem-2',
+        ordemPlanejamento: 2,
+        produzido: 40,
+        aProduzir: 40,
+        finalizada: false,
+      }),
+      ordemBase({
+        ordemProducaoId: 'ordem-1',
+        ordemPlanejamento: 1,
+        produzido: 40,
+        aProduzir: 40,
+        finalizada: true,
+      }),
+      ordemBase({
+        ordemProducaoId: 'ordem-3',
+        ordemPlanejamento: 3,
+        produzido: 10,
+        aProduzir: 40,
+        finalizada: false,
+      }),
+    ]);
+
+    expect(naoFinalizados.map((ordem) => ordem.ordemProducaoId)).toEqual(['ordem-2', 'ordem-3']);
+    expect(finalizados.map((ordem) => ordem.ordemProducaoId)).toEqual(['ordem-1']);
+  });
+
   it('mantém ordem de planejamento em cada seção', () => {
     const { naoFinalizados, finalizados } = splitOrdensPorFinalizacao([
       ordemBase({ ordemProducaoId: 'ordem-2', ordemPlanejamento: 2, produzido: 0, aProduzir: 40 }),
-      ordemBase({ ordemProducaoId: 'ordem-1', ordemPlanejamento: 1, produzido: 40, aProduzir: 40 }),
+      ordemBase({
+        ordemProducaoId: 'ordem-1',
+        ordemPlanejamento: 1,
+        produzido: 40,
+        aProduzir: 40,
+        finalizada: true,
+      }),
       ordemBase({ ordemProducaoId: 'ordem-3', ordemPlanejamento: 3, produzido: 10, aProduzir: 40 }),
     ]);
 

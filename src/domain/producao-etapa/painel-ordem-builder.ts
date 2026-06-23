@@ -1,19 +1,26 @@
 import {
-  derivarEscalarEtapa,
   resolveModoQuantidadeEtapa,
   somarLotesEtapa,
   type EtapaQuantidade,
 } from '@/domain/producao-etapa/etapa-quantidade';
+import { resolveEstimativaAnterior } from '@/domain/producao-etapa/etapa-estimativa-anterior-resolver';
+import {
+  resolveMetaEfetiva,
+  resolveMetaPlanejada,
+  resolveMetaReferencia,
+} from '@/domain/producao-etapa/etapa-meta-referencia-resolver';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import type { PainelLoteEtapa, PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 
 export type BuildPainelOrdemInput = {
+  etapa: 'fermentacao' | 'forno';
   ordem: OrdemProducaoRecord;
   lotes: FermentacaoLoteRecord[];
   produto: string;
   tipoEstoque: string;
   assadeiraNome?: string;
+  fermentacaoProduzido?: number;
 };
 
 export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEtapa {
@@ -30,7 +37,8 @@ export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEta
 }
 
 export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa {
-  const { ordem, lotes, produto, tipoEstoque, assadeiraNome } = input;
+  const { etapa, ordem, lotes, produto, tipoEstoque, assadeiraNome, fermentacaoProduzido } =
+    input;
   const modoQuantidade = resolveModoQuantidadeEtapa(ordem.assadeiraId);
   const pedido: EtapaQuantidade = {
     assadeiras: ordem.assadeiras,
@@ -42,11 +50,21 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
       unidades: lote.unidades,
     })),
   );
-  const { unidade, aProduzir, produzido } = derivarEscalarEtapa(
-    pedido,
-    produzidoBreakdown,
-    modoQuantidade,
-  );
+  const metaPlanejada = resolveMetaPlanejada(etapa, ordem);
+  const metaEfetiva = resolveMetaEfetiva(etapa, ordem);
+  const metaReferencia = resolveMetaReferencia(etapa, ordem);
+  const unidade = modoQuantidade === 'assadeiras' ? 'lt' : 'un';
+  const produzido =
+    modoQuantidade === 'assadeiras'
+      ? produzidoBreakdown.assadeiras
+      : produzidoBreakdown.unidades;
+  const finalizada =
+    etapa === 'fermentacao' ? ordem.fermentacaoFinalizada : ordem.fornoFinalizada;
+  const estimativaAnterior = resolveEstimativaAnterior({
+    etapa,
+    fermentacaoProduzido,
+    fermentacaoFinalizada: ordem.fermentacaoFinalizada,
+  });
 
   return {
     ordemProducaoId: ordem.id,
@@ -59,8 +77,13 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     pedido,
     produzidoBreakdown,
     unidade,
-    aProduzir,
+    aProduzir: metaEfetiva,
     produzido,
+    metaPlanejada,
+    metaEfetiva,
+    metaReferencia,
+    estimativaAnterior,
+    finalizada,
     assadeiraNome: ordem.assadeiraId ? assadeiraNome : undefined,
     lotes: lotes.map(mapLoteToPainelEtapa),
   };

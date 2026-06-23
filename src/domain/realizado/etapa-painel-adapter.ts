@@ -58,10 +58,7 @@ export function loteToPainelItemEtapa(
 export function getOrdemEtapaFilterStatus(
   ordem: PainelOrdemEtapa,
 ): 'pendente' | 'andamento' | 'concluido' {
-  const percentual =
-    ordem.aProduzir > 0 ? (ordem.produzido / ordem.aProduzir) * 100 : 0;
-
-  if (percentual >= 90) return 'concluido';
+  if (ordem.finalizada) return 'concluido';
   if (ordem.produzido === 0) return 'pendente';
   return 'andamento';
 }
@@ -74,7 +71,7 @@ export function splitOrdensPorFinalizacao(ordens: PainelOrdemEtapa[]): {
   const finalizados: PainelOrdemEtapa[] = [];
 
   for (const ordem of ordens) {
-    if (getOrdemEtapaFilterStatus(ordem) === 'concluido') {
+    if (ordem.finalizada) {
       finalizados.push(ordem);
     } else {
       naoFinalizados.push(ordem);

@@ -3,6 +3,11 @@ import {
   derivarUnidadePrincipal,
   somarQuantidades,
 } from '@/domain/embalagem/painel-quantidade';
+import {
+  resolveMetaEfetiva,
+  resolveMetaPlanejada,
+  type AssadeiraMetaContext,
+} from '@/domain/producao-etapa/etapa-meta-referencia-resolver';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type { PedidoEmbalagemRecord } from '@/domain/types/pedido-embalagem';
 import type {
@@ -41,11 +46,14 @@ export function buildPainelPedido(
   lotes: EmbalagemLoteRecord[],
   possuiEtiqueta: boolean,
   congeladoFromTipo: 'Sim' | 'Não',
+  assadeiraCtx?: AssadeiraMetaContext,
 ): PainelPedidoEmbalagem {
   const painelLotes = lotes.map((l) => mapLoteToPainel(l, congeladoFromTipo));
   const produzido = somarQuantidades(painelLotes.map((l) => l.quantidade));
-  const { unidade, valor: aProduzir } = derivarUnidadePrincipal(pedido.quantidade);
+  const { unidade } = derivarUnidadePrincipal(pedido.quantidade);
   const { valor: produzidoScalar } = derivarUnidadePrincipal(produzido);
+  const metaPlanejada = resolveMetaPlanejada('embalagem', pedido);
+  const metaEfetiva = resolveMetaEfetiva('embalagem', pedido, assadeiraCtx);
 
   const producaoUpdatedAt = painelLotes
     .map((l) => l.produzidoEm)
@@ -65,8 +73,11 @@ export function buildPainelPedido(
     pedido: { ...pedido.quantidade },
     produzido,
     unidade,
-    aProduzir,
+    aProduzir: metaEfetiva,
     produzidoScalar,
+    metaPlanejada,
+    metaEfetiva,
+    finalizada: pedido.embalagemFinalizada,
     possuiEtiqueta,
     lote: loteFromDataFabricacaoEtiqueta(pedido.dataFabricacaoEtiqueta),
     lotes: painelLotes,

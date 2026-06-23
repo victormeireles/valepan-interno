@@ -86,6 +86,7 @@ export class PainelFermentacaoService {
     return sortOrdensPorPlanejamento(
       ordens.map((ordem) =>
         buildPainelOrdem({
+          etapa: 'fermentacao',
           ordem,
           lotes: lotesByOrdem.get(ordem.id) ?? [],
           produto: names.produtoNomeById.get(ordem.produtoId) ?? 'Desconhecido',

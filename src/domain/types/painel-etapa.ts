@@ -21,6 +21,11 @@ export type PainelOrdemEtapa = {
   unidade: 'lt' | 'un';
   aProduzir: number;
   produzido: number;
+  metaPlanejada: number;
+  metaEfetiva: number;
+  metaReferencia: number;
+  estimativaAnterior?: number | null;
+  finalizada: boolean;
   assadeiraNome?: string;
   lotes: PainelLoteEtapa[];
 };

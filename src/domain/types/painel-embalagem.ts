@@ -33,6 +33,9 @@ export type PainelPedidoEmbalagem = {
   unidade: 'cx' | 'pct' | 'un' | 'kg';
   aProduzir: number;
   produzidoScalar: number;
+  metaPlanejada: number;
+  metaEfetiva: number;
+  finalizada: boolean;
   possuiEtiqueta: boolean;
   lote?: number;
   lotes: PainelLoteEmbalagem[];

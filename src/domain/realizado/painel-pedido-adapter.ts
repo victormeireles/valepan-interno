@@ -72,11 +72,7 @@ export function loteToPainelItem(
 }
 
 export function isPedidoEmbalagemFinalizado(pedido: PainelPedidoEmbalagem): boolean {
-  if (pedidoUsaCaixasOuPacotes(pedido.pedido)) {
-    const meta = derivarUnidadeEmbalagem(pedido.pedido);
-    const produzido = derivarUnidadeEmbalagem(pedido.produzido);
-    return meta.valor > 0 && produzido.valor >= meta.valor;
-  }
+  if (pedido.finalizada) return true;
   return pedido.aProduzir > 0 && pedido.produzidoScalar >= pedido.aProduzir;
 }
 
