@@ -2,6 +2,8 @@
 
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
+import { resolveTipoEstoqueMarca } from '@/lib/utils/cliente-display';
+import TipoEstoqueMarcaBadge from './TipoEstoqueMarcaBadge';
 
 type EtapaStatusStyles = {
   border: string;
@@ -17,6 +19,9 @@ export type EtapaProductCardHeaderProps = {
   onProductPhotoClick?: () => void;
   /** Assadeira, cliente inline, observação — entre produto e progresso no desktop */
   metaItems?: string[];
+  /** Cliente / tipo de estoque — badge D/T/V à direita do produto quando aplicável. */
+  tipoEstoqueCliente?: string;
+  showTipoEstoqueMarcaBadge?: boolean;
   horario?: string;
   producedLabel: string;
   targetLabel: string;
@@ -75,6 +80,49 @@ function ProductBadges({
         )
       ) : null}
     </>
+  );
+}
+
+function ProductTitle({
+  produto,
+  tipoEstoqueCliente,
+  showTipoEstoqueMarcaBadge = false,
+  congelado,
+  hasPhoto,
+  onProductPhotoClick,
+  truncate = false,
+}: {
+  produto: string;
+  tipoEstoqueCliente?: string;
+  showTipoEstoqueMarcaBadge?: boolean;
+  congelado?: boolean;
+  hasPhoto?: boolean;
+  onProductPhotoClick?: () => void;
+  truncate?: boolean;
+}) {
+  const marca =
+    showTipoEstoqueMarcaBadge && tipoEstoqueCliente
+      ? resolveTipoEstoqueMarca(tipoEstoqueCliente)
+      : null;
+
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span
+        className={[
+          'text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong',
+          truncate ? 'truncate' : '',
+        ].join(' ')}
+        title={produto}
+      >
+        {produto}
+      </span>
+      {marca ? <TipoEstoqueMarcaBadge marca={marca} /> : null}
+      <ProductBadges
+        congelado={congelado}
+        hasPhoto={hasPhoto}
+        onProductPhotoClick={onProductPhotoClick}
+      />
+    </div>
   );
 }
 
@@ -255,6 +303,8 @@ export default function EtapaProductCardHeader({
   hasPhoto,
   onProductPhotoClick,
   metaItems = [],
+  tipoEstoqueCliente,
+  showTipoEstoqueMarcaBadge = false,
   horario,
   producedLabel,
   targetLabel,
@@ -293,6 +343,15 @@ export default function EtapaProductCardHeader({
     fillClass: styles.fill,
   };
 
+  const titleProps = {
+    produto,
+    tipoEstoqueCliente,
+    showTipoEstoqueMarcaBadge,
+    congelado,
+    hasPhoto,
+    onProductPhotoClick,
+  };
+
   return (
     <div className={['border-l-[3px] py-2.5 pr-3', styles.border].join(' ')}>
       {/* Mobile */}
@@ -307,16 +366,7 @@ export default function EtapaProductCardHeader({
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                <span className="text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong">
-                  {produto}
-                </span>
-                <ProductBadges
-                  congelado={congelado}
-                  hasPhoto={hasPhoto}
-                  onProductPhotoClick={onProductPhotoClick}
-                />
-              </div>
+              <ProductTitle {...titleProps} />
               {metaItems.length > 0 ? (
                 <div className="mt-0.5">
                   <MetaLine items={metaItems} />
@@ -344,18 +394,8 @@ export default function EtapaProductCardHeader({
         />
 
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 max-w-[32%] items-center gap-1.5 lg:max-w-[36%]">
-            <span
-              className="truncate text-base font-semibold tracking-[-0.004em] text-text-strong"
-              title={produto}
-            >
-              {produto}
-            </span>
-            <ProductBadges
-              congelado={congelado}
-              hasPhoto={hasPhoto}
-              onProductPhotoClick={onProductPhotoClick}
-            />
+          <div className="min-w-0 max-w-[32%] lg:max-w-[36%]">
+            <ProductTitle {...titleProps} truncate />
           </div>
 
           {metaItems.length > 0 ? (

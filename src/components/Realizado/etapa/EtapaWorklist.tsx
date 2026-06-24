@@ -99,6 +99,7 @@ export default function EtapaWorklist({
             ? () => window.open(product.photoUrl, '_blank', 'noopener,noreferrer')
             : undefined
         }
+        showTipoEstoqueMarcaBadge={config.tipoEstoqueMarcaBadge}
         onNovoLote={
           product.showAddLote ? () => callbacks.onNovoLote(product.id) : undefined
         }

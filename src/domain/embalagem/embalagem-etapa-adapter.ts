@@ -36,6 +36,7 @@ export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
   dashboard: 'hora',
   toolbarMetricLabel: 'Embalado',
   reabrirLabel: 'Reabrir OP',
+  tipoEstoqueMarcaBadge: true,
 };
 
 function horarioEmbalagemParaCard(
