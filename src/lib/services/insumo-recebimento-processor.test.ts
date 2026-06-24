@@ -70,6 +70,8 @@ const itemBase: OmieRecebimentoItem = {
   nPrecoUnit: 5,
   vTotalItem: 500,
   cIgnorarItem: 'N',
+  cfopEntrada: null,
+  ncm: null,
 };
 
 const mapeamentoBase: IntegracaoInsumoRow = {
@@ -140,6 +142,13 @@ describe('InsumoRecebimentoProcessor', () => {
       valorTotalItem: 500,
       numeroNf: '12345',
       dataEmissaoNf: '2026-06-18',
+      fornecedorRazaoSocial: null,
+      fornecedorNome: null,
+      fornecedorCnpj: null,
+      naturezaOperacao: null,
+      valorTotalNf: null,
+      cfopEntrada: null,
+      ncmProduto: null,
     });
     expect(registrarEntrada).not.toHaveBeenCalled();
   });

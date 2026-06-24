@@ -5,6 +5,11 @@ type IaGrupoInput = {
   descricaoOmie: string;
   unidadeNf: string | null;
   omieCodigoProduto: string | null;
+  fornecedorRazaoSocial?: string | null;
+  fornecedorNome?: string | null;
+  naturezaOperacao?: string | null;
+  cfopEntrada?: string | null;
+  ncmProduto?: string | null;
 };
 
 export type IaSugestaoItem = {
@@ -55,20 +60,30 @@ function buildPrompt(
     descricao: grupo.descricaoOmie,
     unidade_nf: grupo.unidadeNf,
     codigo: grupo.omieCodigoProduto,
+    fornecedor_razao_social: grupo.fornecedorRazaoSocial,
+    fornecedor_nome: grupo.fornecedorNome,
+    natureza_operacao: grupo.naturezaOperacao,
+    cfop_entrada: grupo.cfopEntrada,
+    ncm: grupo.ncmProduto,
   }));
 
   return [
-    'Você ajuda a vincular produtos de nota fiscal do ERP Omie a insumos de uma fábrica de pães.',
+    'Você ajuda a vincular produtos de nota fiscal do ERP Omie a insumos de uma fábrica de pães/hambúrgueres.',
+    'ESCOPO: controlar APENAS matérias-primas usadas na FABRICAÇÃO (farinha, fermento, água, sal, açúcar, óleo, margarina, melhorador, ovos, sementes, etc.).',
     'Responda APENAS JSON válido no formato:',
     '{"sugestoes":[{"omieIdProduto":123,"acao":"vincular|ignorar|revisar","insumoId":"uuid|null","fatorConversao":number|null,"confianca":0-100,"motivo":"texto curto"}]}',
-    'Regras:',
-    '- acao=vincular: escolha insumoId do catálogo e fatorConversao (qtd_nf * fator = qtd no insumo)',
-    '- SC/sacola 25KG com insumo em KG → fator 25; UN→UN = 1',
-    '- acao=ignorar: serviços, frete, manutenção, locação — não são insumos',
-    '- acao=revisar: dúvida real; confianca < 80',
+    'Regras de acao:',
+    '- vincular: somente se for claramente matéria-prima de produção E existir match no catálogo',
+    '- ignorar (confianca >= 85): limpeza/higiene, EPI, material de escritório, uniforme, ferramentas, peças de manutenção, embalagens de uso interno não produtivo, serviços, frete, locação, mão de obra, taxas',
+    '- ignorar exemplos: detergente, desinfetante, luva, máscara, papel A4, caneta, toner, uniforme, vassoura, papel higiênico',
+    '- revisar: dúvida real ou item que não se encaixa claramente em matéria-prima nem em ignorar',
+    '- fatorConversao: qtd_nf * fator = qtd no insumo; SC/sacola 25KG com insumo em KG → fator 25; UN→UN = 1',
     '- Nunca invente insumoId fora do catálogo',
+    '- Use fornecedor_razao_social e fornecedor_nome: ex. "CLEAN MIX"/"HIG E LIMP" → ignorar (limpeza)',
+    '- Use cfop_entrada e ncm como pistas adicionais, mas não ignore só por CFOP',
+    '- Na dúvida entre vincular e ignorar para item não alimentício de produção, prefira ignorar',
     '',
-    `Catálogo de insumos: ${JSON.stringify(catalogoJson)}`,
+    `Catálogo de insumos (somente estes podem receber vincular): ${JSON.stringify(catalogoJson)}`,
     `Exemplos de vínculos já feitos: ${JSON.stringify(exemplosJson)}`,
     `Produtos Omie para analisar: ${JSON.stringify(produtosJson)}`,
   ].join('\n');
@@ -134,13 +149,12 @@ export class InsumoVinculoIaClient {
       },
       body: JSON.stringify({
         model: config.model,
-        temperature: 0.1,
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
             content:
-              'Você é especialista em classificar itens de NF de insumos para panificação industrial no Brasil.',
+              'Você classifica itens de NF para estoque de matérias-primas de panificação industrial. Vincule só ingredientes de produção; sugira ignorar limpeza, EPI, escritório, manutenção e despesas.',
           },
           { role: 'user', content: prompt },
         ],

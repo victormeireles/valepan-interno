@@ -24,10 +24,10 @@ export async function GET(request: Request) {
     let selectQuery: string;
     if (table === 'insumos') {
       const baseFields = Array.from(new Set([valueField, labelField, ...extraFields])).join(', ');
-      selectQuery = `${baseFields}, unidades (nome_resumido)`;
+      selectQuery = `${baseFields}, unidades (nome_resumido, codigo)`;
     } else if (table === 'produtos' && extraFields.includes('unidade_padrao_id')) {
       const baseFields = Array.from(new Set([valueField, labelField, ...extraFields])).join(', ');
-      selectQuery = `${baseFields}, unidades (nome_resumido)`;
+      selectQuery = `${baseFields}, unidades (nome_resumido, codigo)`;
     } else {
       selectQuery = selectFields;
     }
@@ -63,9 +63,12 @@ export async function GET(request: Request) {
 
         // Se for insumos ou produtos e tiver unidades, adicionar nome_resumido ao meta
         if ((table === 'insumos' || table === 'produtos') && item.unidades) {
-          const unidades = item.unidades as { nome_resumido?: string } | null;
+          const unidades = item.unidades as { nome_resumido?: string; codigo?: string } | null;
           if (unidades?.nome_resumido) {
             meta.unidadeNomeResumido = unidades.nome_resumido;
+          }
+          if (unidades?.codigo) {
+            meta.unidadeCodigo = unidades.codigo;
           }
         }
 
@@ -90,9 +93,12 @@ export async function GET(request: Request) {
 
       // Se for insumos ou produtos e tiver unidades, adicionar nome_resumido ao meta
       if ((table === 'insumos' || table === 'produtos') && item.unidades) {
-        const unidades = item.unidades as { nome_resumido?: string } | null;
+        const unidades = item.unidades as { nome_resumido?: string; codigo?: string } | null;
         if (unidades?.nome_resumido) {
           meta.unidadeNomeResumido = unidades.nome_resumido;
+        }
+        if (unidades?.codigo) {
+          meta.unidadeCodigo = unidades.codigo;
         }
       }
 

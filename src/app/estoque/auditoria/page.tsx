@@ -39,7 +39,9 @@ export default function EstoqueAuditoriaPage() {
       if (ate) params.set('ate', `${ate}T23:59:59.999Z`);
       params.set('limit', '200');
 
-      const res = await fetch(`/api/estoque/movimentos?${params.toString()}`);
+      const res = await fetch(`/api/estoque/movimentos?${params.toString()}`, {
+        cache: 'no-store',
+      });
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json.error ?? 'Erro ao carregar movimentos');

@@ -1791,6 +1791,13 @@ export type Database = {
           status: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf: string | null
           valor_total_item: number
+          fornecedor_razao_social: string | null
+          fornecedor_nome: string | null
+          fornecedor_cnpj: string | null
+          natureza_operacao: string | null
+          valor_total_nf: number | null
+          cfop_entrada: string | null
+          ncm_produto: string | null
         }
         Insert: {
           created_at?: string
@@ -1811,6 +1818,13 @@ export type Database = {
           status?: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf?: string | null
           valor_total_item: number
+          fornecedor_razao_social?: string | null
+          fornecedor_nome?: string | null
+          fornecedor_cnpj?: string | null
+          natureza_operacao?: string | null
+          valor_total_nf?: number | null
+          cfop_entrada?: string | null
+          ncm_produto?: string | null
         }
         Update: {
           created_at?: string
@@ -1831,6 +1845,13 @@ export type Database = {
           status?: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf?: string | null
           valor_total_item?: number
+          fornecedor_razao_social?: string | null
+          fornecedor_nome?: string | null
+          fornecedor_cnpj?: string | null
+          natureza_operacao?: string | null
+          valor_total_nf?: number | null
+          cfop_entrada?: string | null
+          ncm_produto?: string | null
         }
         Relationships: [
           {

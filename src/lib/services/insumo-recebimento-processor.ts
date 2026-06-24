@@ -5,6 +5,10 @@ import {
 import { converterDataOmieParaIso } from '@/domain/insumos/omie-date';
 import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
 import type { IntegracaoInsumoRow } from '@/domain/types/insumo-estoque-db';
+import type {
+  OmieRecebimentoCabecEnriquecido,
+  OmieRecebimentoContextoNf,
+} from '@/domain/types/omie-recebimento-enriquecido';
 import {
   insumoMapeamentoRepository,
   InsumoMapeamentoRepository,
@@ -31,8 +35,7 @@ type ProcessarItemInput = {
   empresaId: string;
   eventoId: string;
   nIdReceb: number;
-  numeroNf: string;
-  dataEmissaoNf: string | null;
+  contextoNf: OmieRecebimentoContextoNf;
   item: OmieRecebimentoItem;
 };
 
@@ -43,6 +46,22 @@ export type InsumoRecebimentoProcessorDeps = {
   pendenciaRepository: InsumoPendenciaRepository;
   estoqueService: InsumoEstoqueService;
 };
+
+function montarContextoNf(
+  cabec: OmieRecebimentoCabecEnriquecido | undefined,
+  dataEmissaoIso: string | null,
+): OmieRecebimentoContextoNf {
+  return {
+    numeroNf: cabec?.cNumeroNF ?? '',
+    dataEmissaoNf: dataEmissaoIso,
+    fornecedorRazaoSocial: cabec?.fornecedorRazaoSocial ?? null,
+    fornecedorNome: cabec?.fornecedorNome ?? null,
+    fornecedorCnpj: cabec?.fornecedorCnpj ?? null,
+    naturezaOperacao: cabec?.naturezaOperacao ?? null,
+    valorTotalNf: cabec?.valorTotalNf ?? null,
+    chaveNfe: cabec?.chaveNfe ?? null,
+  };
+}
 
 export class InsumoRecebimentoProcessor {
   constructor(private readonly deps: InsumoRecebimentoProcessorDeps) {}
@@ -70,8 +89,8 @@ export class InsumoRecebimentoProcessor {
       nIdReceb,
     });
 
-    const numeroNf = recebimento.cabec?.cNumeroNF ?? '';
     const dataEmissaoNf = converterDataOmieParaIso(recebimento.cabec?.dDataEmissao ?? null);
+    const contextoNf = montarContextoNf(recebimento.cabec, dataEmissaoNf);
     const itens = recebimento.itensCabec ?? [];
 
     for (const item of itens) {
@@ -79,8 +98,7 @@ export class InsumoRecebimentoProcessor {
         empresaId: empresa.id,
         eventoId: evento.id,
         nIdReceb,
-        numeroNf,
-        dataEmissaoNf,
+        contextoNf,
         item,
       });
     }
@@ -139,8 +157,15 @@ export class InsumoRecebimentoProcessor {
       unidadeNf: input.item.cUnidadeNfe,
       precoUnitNf: input.item.nPrecoUnit,
       valorTotalItem: input.item.vTotalItem,
-      numeroNf: input.numeroNf,
-      dataEmissaoNf: input.dataEmissaoNf,
+      numeroNf: input.contextoNf.numeroNf,
+      dataEmissaoNf: input.contextoNf.dataEmissaoNf,
+      fornecedorRazaoSocial: input.contextoNf.fornecedorRazaoSocial,
+      fornecedorNome: input.contextoNf.fornecedorNome,
+      fornecedorCnpj: input.contextoNf.fornecedorCnpj,
+      naturezaOperacao: input.contextoNf.naturezaOperacao,
+      valorTotalNf: input.contextoNf.valorTotalNf,
+      cfopEntrada: input.item.cfopEntrada,
+      ncmProduto: input.item.ncm,
     });
   }
 

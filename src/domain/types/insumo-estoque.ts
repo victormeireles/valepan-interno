@@ -15,6 +15,8 @@ export type OmieRecebimentoItem = {
   nPrecoUnit: number;
   vTotalItem: number;
   cIgnorarItem: string;
+  cfopEntrada: string | null;
+  ncm: string | null;
 };
 
 export type InsumoSaldoComDetalhes = {

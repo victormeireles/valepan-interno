@@ -34,7 +34,12 @@ export default function InsumoVinculoIaRevisaoRow({ grupo, selected, onToggle }:
           {grupo.omieCodigoProduto || grupo.chave.omieIdProduto}
         </div>
         <div className="mt-0.5 font-medium">{grupo.descricaoOmie}</div>
-        <div className="mt-1 text-xs text-stone-500">{grupo.empresaNome}</div>
+        {grupo.fornecedorNome || grupo.fornecedorRazaoSocial ? (
+          <div className="mt-1 text-xs text-stone-500">
+            {grupo.fornecedorNome || grupo.fornecedorRazaoSocial}
+            {grupo.cfopEntrada ? ` • CFOP ${grupo.cfopEntrada}` : ''}
+          </div>
+        ) : null}
       </td>
       <td className="hidden px-3 py-3 font-mono text-xs uppercase text-stone-600 md:table-cell">
         {grupo.unidadeNf || '—'}

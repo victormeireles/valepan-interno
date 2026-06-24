@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { estoqueService } from '@/lib/services/estoque-service';
 
-export const revalidate = 3600; // Cache por 1 hora por padrão, invalidado sob demanda
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

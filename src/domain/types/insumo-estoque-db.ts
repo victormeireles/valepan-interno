@@ -50,6 +50,13 @@ export type InsumoEntradaPendenciaRow = {
   valor_total_item: number;
   numero_nf: string | null;
   data_emissao_nf: string | null;
+  fornecedor_razao_social: string | null;
+  fornecedor_nome: string | null;
+  fornecedor_cnpj: string | null;
+  natureza_operacao: string | null;
+  valor_total_nf: number | null;
+  cfop_entrada: string | null;
+  ncm_produto: string | null;
   status: InsumoPendenciaStatus;
   integracao_insumo_id: string | null;
   resolvido_em: string | null;
@@ -79,6 +86,23 @@ export type CriarIntegracaoInsumoInput = {
   descricaoOmie?: string | null;
 };
 
+export type AtualizarEnriquecimentoPendenciaInput = {
+  fornecedorRazaoSocial?: string | null;
+  fornecedorNome?: string | null;
+  fornecedorCnpj?: string | null;
+  naturezaOperacao?: string | null;
+  valorTotalNf?: number | null;
+  cfopEntrada?: string | null;
+  ncmProduto?: string | null;
+  numeroNf?: string | null;
+  dataEmissaoNf?: string | null;
+};
+
+export type RecebimentoPendenciaChave = {
+  empresaId: string;
+  omieNIdReceb: number;
+};
+
 export type CriarPendenciaInput = {
   empresaId: string;
   omieWebhookEventoId?: string | null;
@@ -93,6 +117,13 @@ export type CriarPendenciaInput = {
   valorTotalItem: number;
   numeroNf: string | null;
   dataEmissaoNf: string | null;
+  fornecedorRazaoSocial?: string | null;
+  fornecedorNome?: string | null;
+  fornecedorCnpj?: string | null;
+  naturezaOperacao?: string | null;
+  valorTotalNf?: number | null;
+  cfopEntrada?: string | null;
+  ncmProduto?: string | null;
 };
 
 export type InsumoPendenciaComEmpresa = InsumoEntradaPendenciaRow & {
@@ -101,4 +132,11 @@ export type InsumoPendenciaComEmpresa = InsumoEntradaPendenciaRow & {
 
 export type IntegracaoInsumoComEmpresa = IntegracaoInsumoRow & {
   empresaNome: string;
+};
+
+export type IntegracaoInsumoListItem = IntegracaoInsumoRow & {
+  empresaNome: string;
+  insumoNome: string;
+  insumoUnidadeCodigo: string | null;
+  insumoUnidadeNome: string | null;
 };

@@ -25,8 +25,23 @@ type GrupoPendencia = {
   descricaoOmie: string;
   omieCodigoProduto: string | null;
   unidadeNf: string | null;
+  fornecedorRazaoSocial: string | null;
+  fornecedorNome: string | null;
+  naturezaOperacao: string | null;
+  cfopEntrada: string | null;
+  ncmProduto: string | null;
   pendenciaIds: string[];
 };
+
+function contextoClassificacaoGrupo(grupo: GrupoPendencia) {
+  return {
+    descricao: grupo.descricaoOmie,
+    fornecedorRazaoSocial: grupo.fornecedorRazaoSocial,
+    fornecedorNome: grupo.fornecedorNome,
+    naturezaOperacao: grupo.naturezaOperacao,
+    cfopEntrada: grupo.cfopEntrada,
+  };
+}
 
 function groupPendencias(items: InsumoPendenciaComEmpresa[]): GrupoPendencia[] {
   const map = new Map<string, GrupoPendencia>();
@@ -46,6 +61,11 @@ function groupPendencias(items: InsumoPendenciaComEmpresa[]): GrupoPendencia[] {
       descricaoOmie: item.descricao_produto?.trim() || 'Sem descrição',
       omieCodigoProduto: item.omie_codigo_produto,
       unidadeNf: item.unidade_nf,
+      fornecedorRazaoSocial: item.fornecedor_razao_social,
+      fornecedorNome: item.fornecedor_nome,
+      naturezaOperacao: item.natureza_operacao,
+      cfopEntrada: item.cfop_entrada,
+      ncmProduto: item.ncm_produto,
       pendenciaIds: [item.id],
     });
   }
@@ -76,6 +96,9 @@ function toGrupo(
     descricaoOmie: grupo.descricaoOmie,
     omieCodigoProduto: grupo.omieCodigoProduto,
     unidadeNf: grupo.unidadeNf,
+    fornecedorRazaoSocial: grupo.fornecedorRazaoSocial,
+    fornecedorNome: grupo.fornecedorNome,
+    cfopEntrada: grupo.cfopEntrada,
     pendenciaIds: grupo.pendenciaIds,
     pendenciaCount: grupo.pendenciaIds.length,
     sugestao,
@@ -127,7 +150,7 @@ export class InsumoVinculoSugestaoService {
         continue;
       }
 
-      const ignorar = detectIgnorarKeyword(grupo.descricaoOmie);
+      const ignorar = detectIgnorarKeyword(contextoClassificacaoGrupo(grupo));
       if (ignorar) {
         resultado.push(
           toGrupo(grupo, {
@@ -187,6 +210,11 @@ export class InsumoVinculoSugestaoService {
             descricaoOmie: grupo.descricaoOmie,
             unidadeNf: grupo.unidadeNf,
             omieCodigoProduto: grupo.omieCodigoProduto,
+            fornecedorRazaoSocial: grupo.fornecedorRazaoSocial,
+            fornecedorNome: grupo.fornecedorNome,
+            naturezaOperacao: grupo.naturezaOperacao,
+            cfopEntrada: grupo.cfopEntrada,
+            ncmProduto: grupo.ncmProduto,
           })),
           catalogo,
           exemplos,

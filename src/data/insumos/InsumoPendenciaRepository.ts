@@ -3,6 +3,7 @@ import type {
   CriarPendenciaInput,
   InsumoEntradaPendenciaRow,
   InsumoPendenciaComEmpresa,
+  AtualizarEnriquecimentoPendenciaInput,
 } from '@/domain/types/insumo-estoque-db';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
@@ -71,6 +72,13 @@ export class InsumoPendenciaRepository {
         valor_total_item: input.valorTotalItem,
         numero_nf: input.numeroNf,
         data_emissao_nf: input.dataEmissaoNf,
+        fornecedor_razao_social: input.fornecedorRazaoSocial ?? null,
+        fornecedor_nome: input.fornecedorNome ?? null,
+        fornecedor_cnpj: input.fornecedorCnpj ?? null,
+        natureza_operacao: input.naturezaOperacao ?? null,
+        valor_total_nf: input.valorTotalNf ?? null,
+        cfop_entrada: input.cfopEntrada ?? null,
+        ncm_produto: input.ncmProduto ?? null,
         status: 'pendente',
       })
       .select()
@@ -151,6 +159,57 @@ export class InsumoPendenciaRepository {
     }
 
     return count ?? 0;
+  }
+
+  async listParaEnriquecimento(input: {
+    empresaId?: string;
+    forcar?: boolean;
+  }): Promise<InsumoEntradaPendenciaRow[]> {
+    let query = this.db
+      .from('insumo_entrada_pendencias')
+      .select('*')
+      .eq('status', 'pendente')
+      .order('created_at', { ascending: true });
+
+    if (input.empresaId) {
+      query = query.eq('empresa_id', input.empresaId);
+    }
+
+    if (!input.forcar) {
+      query = query.or('fornecedor_razao_social.is.null,cfop_entrada.is.null');
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Erro ao listar pendências para enriquecimento: ${error.message}`);
+    }
+
+    return (data as InsumoEntradaPendenciaRow[]) ?? [];
+  }
+
+  async atualizarEnriquecimentoOmie(
+    id: string,
+    input: AtualizarEnriquecimentoPendenciaInput,
+  ): Promise<void> {
+    const { error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .update({
+        fornecedor_razao_social: input.fornecedorRazaoSocial ?? null,
+        fornecedor_nome: input.fornecedorNome ?? null,
+        fornecedor_cnpj: input.fornecedorCnpj ?? null,
+        natureza_operacao: input.naturezaOperacao ?? null,
+        valor_total_nf: input.valorTotalNf ?? null,
+        cfop_entrada: input.cfopEntrada ?? null,
+        ncm_produto: input.ncmProduto ?? null,
+        numero_nf: input.numeroNf ?? undefined,
+        data_emissao_nf: input.dataEmissaoNf ?? undefined,
+      })
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar enriquecimento da pendência: ${error.message}`);
+    }
   }
 }
 

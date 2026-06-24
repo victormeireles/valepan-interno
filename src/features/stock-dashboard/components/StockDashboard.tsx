@@ -304,7 +304,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
 
   const reloadStock = useCallback(async () => {
     try {
-      const res = await fetch('/api/painel/estoque');
+      const res = await fetch('/api/painel/estoque', { cache: 'no-store' });
       const json = await res.json();
       if (res.ok && json.data) {
         setCurrentData(json.data);

@@ -43,7 +43,7 @@ export default function DashboardEstoquePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const res = await fetch('/api/painel/estoque');
+        const res = await fetch('/api/painel/estoque', { cache: 'no-store' });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Falha ao carregar estoque');
         setAllStock(json.data || []);

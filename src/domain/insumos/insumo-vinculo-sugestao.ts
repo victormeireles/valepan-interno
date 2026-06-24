@@ -28,6 +28,9 @@ export type InsumoVinculoSugestaoGrupo = {
   descricaoOmie: string;
   omieCodigoProduto: string | null;
   unidadeNf: string | null;
+  fornecedorRazaoSocial: string | null;
+  fornecedorNome: string | null;
+  cfopEntrada: string | null;
   pendenciaIds: string[];
   pendenciaCount: number;
   sugestao: InsumoVinculoSugestaoDetalhe;

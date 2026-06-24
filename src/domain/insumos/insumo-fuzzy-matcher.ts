@@ -1,20 +1,9 @@
 import type { InsumoCatalogoItem } from '@/domain/insumos/insumo-vinculo-sugestao';
-
-const IGNORAR_KEYWORDS = [
-  'SERVICO',
-  'SERVIÇO',
-  'FRETE',
-  'MANUTEN',
-  'LOCACAO',
-  'LOCAÇÃO',
-  'MAO DE OBRA',
-  'MÃO DE OBRA',
-  'HONORARIO',
-  'HONORÁRIO',
-  'TAXA',
-  'JUROS',
-  'MULTA',
-];
+import {
+  detectarItemNaoMateriaPrima,
+  normalizeInsumoDescricao,
+  type InsumoIgnorarContexto,
+} from '@/domain/insumos/insumo-ignorar-keywords';
 
 export type FuzzyMatchResult = {
   insumoId: string;
@@ -28,21 +17,13 @@ export type IgnorarKeywordResult = {
   confianca: number;
 };
 
-export function normalizeInsumoText(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+export { normalizeInsumoDescricao as normalizeInsumoText };
 
 const STOP_WORDS = new Set(['DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM', 'COM', 'PARA', 'POR']);
 
 function tokenSet(text: string): Set<string> {
   return new Set(
-    normalizeInsumoText(text)
+    normalizeInsumoDescricao(text)
       .split(' ')
       .filter((token) => token.length > 1 && !STOP_WORDS.has(token)),
   );
@@ -62,14 +43,15 @@ export function jaccardSimilarity(left: string, right: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-export function detectIgnorarKeyword(descricao: string): IgnorarKeywordResult | null {
-  const normalized = normalizeInsumoText(descricao);
-  const matched = IGNORAR_KEYWORDS.find((keyword) => normalized.includes(keyword));
-  if (!matched) return null;
+export function detectIgnorarKeyword(
+  contexto: InsumoIgnorarContexto | string,
+): IgnorarKeywordResult | null {
+  const detectado = detectarItemNaoMateriaPrima(contexto);
+  if (!detectado) return null;
 
   return {
-    motivo: `Descrição contém "${matched}" — provável serviço ou despesa, não insumo`,
-    confianca: 85,
+    motivo: detectado.motivo,
+    confianca: detectado.confianca,
   };
 }
 

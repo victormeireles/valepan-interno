@@ -84,7 +84,19 @@ export default function SelectRemoteAutocomplete({
         }
         
         const data = await response.json();
-        setOptions((data.options || []) as Option[]);
+        const rawOptions = (data.options || []) as Option[];
+        const enrichedOptions =
+          stage === 'insumos'
+            ? rawOptions.map((option) => {
+                const codigo = option.meta?.unidadeCodigo;
+                if (!codigo) return option;
+                return {
+                  ...option,
+                  label: `${option.label} (${String(codigo).toUpperCase()})`,
+                };
+              })
+            : rawOptions;
+        setOptions(enrichedOptions);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro desconhecido");
       } finally {

@@ -1,18 +1,11 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import type { InsumoPendenciaProdutoGrupo } from '@/domain/insumos/insumo-pendencia-grupo';
-import {
-  calcularCustoUnitarioEntrada,
-  calcularQuantidadeEntrada,
-} from '@/domain/insumos/insumo-entrada-calculo';
-import { resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
+import { useEffect, useId, useState } from 'react';
+import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
+import { atualizarIntegracaoInsumoVinculo } from '@/app/actions/insumo-estoque-actions';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import InsumoPendenciaGrupoNfList from '@/features/insumo-estoque/components/InsumoPendenciaGrupoNfList';
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
-import { formatInsumoQuantidade } from '@/features/insumo-estoque/utils/formatters';
 import {
   formatUnidadeLabel,
   type InsumoSelecionadoResumo,
@@ -20,7 +13,7 @@ import {
 
 type Props = {
   isOpen: boolean;
-  grupo: InsumoPendenciaProdutoGrupo | null;
+  vinculo: IntegracaoInsumoListItem | null;
   onClose: () => void;
   onSaved: (message: string) => void;
 };
@@ -30,9 +23,9 @@ type InsumoOptionMeta = {
   unidadeCodigo?: string;
 };
 
-export default function InsumoResolverPendenciaModal({
+export default function InsumoEditarVinculoModal({
   isOpen,
-  grupo,
+  vinculo,
   onClose,
   onSaved,
 }: Props) {
@@ -45,54 +38,24 @@ export default function InsumoResolverPendenciaModal({
   const [animating, setAnimating] = useState(false);
 
   useEffect(() => {
-    if (isOpen && grupo) {
+    if (isOpen && vinculo) {
       setAnimating(true);
-      setInsumoId('');
-      setInsumoSelecionado(null);
-      setFatorConversao('1');
+      setInsumoId(vinculo.insumo_id);
+      setInsumoSelecionado({
+        id: vinculo.insumo_id,
+        nome: vinculo.insumoNome,
+        unidadeCodigo: vinculo.insumoUnidadeCodigo ?? '',
+        unidadeNome: vinculo.insumoUnidadeNome ?? '',
+      });
+      setFatorConversao(String(vinculo.fator_conversao));
       setError('');
     } else if (!isOpen) {
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, grupo]);
+  }, [isOpen, vinculo]);
 
-  const preview = useMemo(() => {
-    if (!grupo) return null;
-    const fator = Number(fatorConversao.replace(',', '.'));
-    if (!Number.isFinite(fator) || fator <= 0) return null;
-
-    let qtdConvertida = 0;
-    let valorTotal = 0;
-
-    for (const pendencia of grupo.pendencias) {
-      const qtdEntrada = calcularQuantidadeEntrada(Number(pendencia.quantidade_nf), fator);
-      qtdConvertida += qtdEntrada;
-      valorTotal += Number(pendencia.valor_total_item);
-    }
-
-    let custo = 0;
-    try {
-      custo = calcularCustoUnitarioEntrada(valorTotal, qtdConvertida);
-    } catch {
-      return null;
-    }
-
-    return {
-      qtdNf: grupo.quantidadeNfTotal,
-      fator,
-      qtdConvertida,
-      custo,
-    };
-  }, [grupo, fatorConversao]);
-
-  if ((!isOpen && !animating) || !grupo) return null;
-
-  const unidadeNfLabel = formatUnidadeLabel(grupo.unidadeNf, grupo.unidadeNf);
-  const unidadeInsumoLabel = insumoSelecionado
-    ? formatUnidadeLabel(insumoSelecionado.unidadeCodigo, insumoSelecionado.unidadeNome)
-    : null;
-  const fatorNumerico = Number(fatorConversao.replace(',', '.'));
+  if ((!isOpen && !animating) || !vinculo) return null;
 
   const handleInsumoSelected = (
     option: { label: string; value: string; meta?: Record<string, unknown> } | null,
@@ -117,28 +80,21 @@ export default function InsumoResolverPendenciaModal({
     setError('');
 
     const fator = Number(fatorConversao.replace(',', '.'));
-    const pendenciaIds = grupo.pendencias.map((pendencia) => pendencia.id);
-    const result = await resolverInsumoPendenciaGrupo(pendenciaIds, insumoId, fator);
+    const result = await atualizarIntegracaoInsumoVinculo(vinculo.id, insumoId, fator);
     if (!result.success) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
-    const resolvidas = result.resolvidas ?? pendenciaIds.length;
-    onSaved(
-      resolvidas === 1
-        ? '1 pendência resolvida e entrada registrada'
-        : `${resolvidas} pendências resolvidas e entradas registradas`,
-    );
+    onSaved('Vínculo atualizado');
     onClose();
     setLoading(false);
   };
 
-  const submitLabel =
-    grupo.pendenciaCount === 1
-      ? 'Confirmar e registrar entrada'
-      : `Confirmar e registrar ${grupo.pendenciaCount} entradas`;
+  const unidadeInsumoLabel = insumoSelecionado
+    ? formatUnidadeLabel(insumoSelecionado.unidadeCodigo, insumoSelecionado.unidadeNome)
+    : null;
 
   return (
     <div
@@ -163,12 +119,9 @@ export default function InsumoResolverPendenciaModal({
         <div className="flex items-start justify-between border-b border-stone-100 px-6 py-5">
           <div>
             <h2 id={titleId} className="text-xl font-bold tracking-tight text-stone-900">
-              Vincular produto Omie
+              Editar vínculo
             </h2>
-            <p className="mt-1 text-sm text-stone-600">
-              {grupo.pendenciaCount} pendência{grupo.pendenciaCount === 1 ? '' : 's'} em{' '}
-              {grupo.nfsDistintas} NF{grupo.nfsDistintas === 1 ? '' : 's'} • {grupo.empresaNome}
-            </p>
+            <p className="mt-1 text-sm text-stone-600">{vinculo.empresaNome}</p>
           </div>
           <button
             type="button"
@@ -201,45 +154,16 @@ export default function InsumoResolverPendenciaModal({
                 Produto Omie
               </p>
               <p className="mt-2 font-mono text-xs text-stone-500">
-                {grupo.omieCodigoProduto || grupo.omieIdProduto}
+                {vinculo.omie_codigo_produto || vinculo.omie_id_produto}
               </p>
               <p className="mt-1 font-medium text-stone-900">
-                {grupo.descricaoProduto || 'Produto sem descrição'}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="font-mono text-base tabular-nums text-stone-900">
-                  {formatInsumoQuantidade(grupo.quantidadeNfTotal, unidadeNfLabel)} no total
-                </span>
-                <Badge tone="neutral" numeric>
-                  {unidadeNfLabel}
-                </Badge>
-              </div>
-              {grupo.contexto.fornecedoresDistintos > 0 ? (
-                <p className="mt-2 text-xs text-stone-600">
-                  <span className="font-medium text-stone-800">{grupo.contexto.fornecedorTitulo}</span>
-                  {grupo.contexto.fornecedorSubtitulo ? (
-                    <span className="text-stone-500"> • {grupo.contexto.fornecedorSubtitulo}</span>
-                  ) : null}
-                </p>
-              ) : null}
-              {(grupo.contexto.cfop || grupo.contexto.ncm) && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {grupo.contexto.cfop ? (
-                    <Badge tone="outline" pill={false}>
-                      CFOP {grupo.contexto.cfop}
-                    </Badge>
-                  ) : null}
-                  {grupo.contexto.ncm ? (
-                    <Badge tone="outline" pill={false}>
-                      NCM {grupo.contexto.ncm}
-                    </Badge>
-                  ) : null}
-                </div>
-              )}
-              <p className="mt-2 text-xs text-stone-500">
-                O mesmo vínculo e fator serão aplicados a todas as NFs deste produto.
+                {vinculo.descricao_omie || 'Produto sem descrição'}
               </p>
             </div>
+
+            <p className="text-xs text-stone-500">
+              Alteração vale para próximos recebimentos. Entradas já registradas não mudam.
+            </p>
 
             <SelectRemoteAutocomplete
               value={insumoId}
@@ -252,20 +176,20 @@ export default function InsumoResolverPendenciaModal({
             />
 
             <InsumoResolverConversaoSection
-              unidadeNf={grupo.unidadeNf}
-              descricaoOmie={grupo.descricaoProduto ?? ''}
+              unidadeNf={null}
+              descricaoOmie={vinculo.descricao_omie ?? ''}
               insumo={insumoSelecionado}
               fatorConversao={fatorConversao}
               onFatorChange={setFatorConversao}
-              preview={preview}
-              previewLabel="Total no estoque"
+              preview={null}
+              previewLabel="Conversão"
             />
 
-            <InsumoPendenciaGrupoNfList
-              grupo={grupo}
-              fator={Number.isFinite(fatorNumerico) ? fatorNumerico : 0}
-              unidadeInsumoLabel={unidadeInsumoLabel}
-            />
+            {unidadeInsumoLabel ? (
+              <p className="text-xs text-stone-500">
+                Unidade do insumo: <span className="font-mono">{unidadeInsumoLabel}</span>
+              </p>
+            ) : null}
           </div>
 
           <div className="flex gap-3 border-t border-stone-100 px-6 py-4">
@@ -273,7 +197,7 @@ export default function InsumoResolverPendenciaModal({
               Cancelar
             </Button>
             <Button type="submit" className="flex-1" disabled={loading || !insumoId}>
-              {loading ? 'Registrando…' : submitLabel}
+              {loading ? 'Salvando…' : 'Salvar vínculo'}
             </Button>
           </div>
         </form>

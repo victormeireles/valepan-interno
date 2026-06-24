@@ -30,10 +30,38 @@ describe('insumo-fuzzy-matcher', () => {
     expect(score).toBeGreaterThan(0.4);
   });
 
-  it('detecta keyword para ignorar', () => {
+  it('detecta keyword para ignorar serviço', () => {
     const result = detectIgnorarKeyword('SERVICO DE MANUTENCAO FORNO');
     expect(result).not.toBeNull();
-    expect(result?.confianca).toBe(85);
+    expect(result?.confianca).toBeGreaterThanOrEqual(85);
+  });
+
+  it('detecta produto de limpeza', () => {
+    const result = detectIgnorarKeyword('DETERGENTE NEUTRO 5L');
+    expect(result).not.toBeNull();
+    expect(result?.motivo).toContain('limpeza');
+  });
+
+  it('detecta EPI', () => {
+    const result = detectIgnorarKeyword('LUVA NITRILICA M');
+    expect(result).not.toBeNull();
+    expect(result?.motivo).toContain('EPI');
+  });
+
+  it('detecta material de escritório', () => {
+    const result = detectIgnorarKeyword('PAPEL A4 SULFITE RESMA');
+    expect(result).not.toBeNull();
+    expect(result?.motivo).toContain('escritório');
+  });
+
+  it('detecta fornecedor de limpeza pelo contexto', () => {
+    const result = detectIgnorarKeyword({
+      descricao: 'Detergente neutro 5L',
+      fornecedorRazaoSocial: 'CLEAN MIX PROD DE HIG E LIMP LTDA',
+      fornecedorNome: 'CLEAN MIX',
+    });
+    expect(result).not.toBeNull();
+    expect(result?.confianca).toBeGreaterThanOrEqual(88);
   });
 
   it('infere fator por peso na descrição', () => {

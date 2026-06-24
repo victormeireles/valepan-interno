@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { estoqueService } from '@/lib/services/estoque-service';
 import type { EstoqueMovimentoOrigem } from '@/domain/types/estoque-db';
 
+export const dynamic = 'force-dynamic';
+
 const ORIGENS: EstoqueMovimentoOrigem[] = [
   'embalagem',
   'saida',
