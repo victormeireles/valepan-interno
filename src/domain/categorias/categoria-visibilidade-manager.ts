@@ -109,7 +109,7 @@ export class CategoriaVisibilidadeManager {
     if (error) {
       if (error.message.includes('visivel_embalagem')) {
         throw new Error(
-          'Coluna visivel_embalagem ainda não existe. Execute ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql no Supabase.',
+          'Coluna visivel_embalagem ainda não existe. Execute supabase/migrations/_archive/ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql no Supabase.',
         );
       }
       throw new Error(`Erro ao atualizar visibilidade: ${error.message}`);
@@ -136,7 +136,7 @@ export class CategoriaVisibilidadeManager {
       if (error) {
         if (error.message.includes('visivel_embalagem')) {
           throw new Error(
-            'Coluna visivel_embalagem ainda não existe. Execute ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql no Supabase.',
+            'Coluna visivel_embalagem ainda não existe. Execute supabase/migrations/_archive/ADD_CATEGORIA_VISIVEL_EMBALAGEM.sql no Supabase.',
           );
         }
         throw new Error(`Erro ao atualizar ${categoria.nome}: ${error.message}`);
