@@ -5,6 +5,11 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import {
+  isPendenciaIgnoravel,
+  isPendenciaRestauravel,
+  isPendenciaVinculavel,
+} from '@/domain/insumos/insumo-pendencia-acao';
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
@@ -14,26 +19,53 @@ import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaReposit
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
 
-const REVALIDATE_PATH = '/estoque-insumos';
+const REVALIDATE_PATHS = ['/estoque-insumos', '/mapeamento-insumos'] as const;
 
-export type InsumoEstoqueDashboardData = {
+function revalidateInsumoPages() {
+  for (const path of REVALIDATE_PATHS) {
+    revalidatePath(path);
+  }
+}
+
+export type InsumoSaldosPageData = {
   saldos: InsumoSaldoComDetalhes[];
   pendenciasCount: number;
-  pendencias: InsumoPendenciaComEmpresa[];
-  vinculos: IntegracaoInsumoListItem[];
-  vinculosCount: number;
 };
 
-export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboardData> {
-  const [saldos, pendenciasCount, pendencias, vinculos, vinculosCount] = await Promise.all([
+export type InsumoMapeamentoPageData = {
+  pendencias: InsumoPendenciaComEmpresa[];
+  ignoradas: InsumoPendenciaComEmpresa[];
+  vinculos: IntegracaoInsumoListItem[];
+};
+
+export type InsumoEstoqueDashboardData = InsumoSaldosPageData & InsumoMapeamentoPageData;
+
+export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
+  const [saldos, pendenciasCount] = await Promise.all([
     insumoEstoqueRepository.listSaldosComDetalhes(),
     insumoPendenciaRepository.countPendentes(),
-    insumoPendenciaRepository.listPendentes(),
-    insumoMapeamentoRepository.listAtivosComDetalhes(),
-    insumoMapeamentoRepository.countAtivos(),
   ]);
 
-  return { saldos, pendenciasCount, pendencias, vinculos, vinculosCount };
+  return { saldos, pendenciasCount };
+}
+
+export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
+  const [pendencias, ignoradas, vinculos] = await Promise.all([
+    insumoPendenciaRepository.listPendentes(),
+    insumoPendenciaRepository.listIgnoradas(),
+    insumoMapeamentoRepository.listAtivosComDetalhes(),
+  ]);
+
+  return { pendencias, ignoradas, vinculos };
+}
+
+export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboardData> {
+  const [saldosPage, mapeamentoPage] = await Promise.all([
+    getInsumoSaldosPageData(),
+    getInsumoMapeamentoPageData(),
+  ]);
+
+  return { ...saldosPage, ...mapeamentoPage };
 }
 
 export async function getInsumoMovimentos(insumoId: string) {
@@ -64,7 +96,7 @@ export async function ajustarInsumoSaldo(
       observacao: observacao.trim(),
     });
 
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro ao ajustar saldo';
@@ -95,7 +127,7 @@ export async function resolverInsumoPendencia(
       return { success: false as const, error: 'Pendência não encontrada' };
     }
 
-    if (pendencia.status !== 'pendente') {
+    if (!isPendenciaVinculavel(pendencia.status)) {
       return { success: false as const, error: 'Pendência já foi tratada' };
     }
 
@@ -127,10 +159,11 @@ export async function resolverInsumoPendencia(
       omieNIdItem: pendencia.omie_n_id_item,
       omieWebhookEventoId: pendencia.omie_webhook_evento_id ?? undefined,
       pendenciaId: pendencia.id,
+      numeroNf: pendencia.numero_nf,
     });
 
     await insumoPendenciaRepository.marcarResolvido(pendencia.id, integracao.id);
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const };
   } catch (error) {
     const message =
@@ -182,7 +215,7 @@ export async function resolverInsumoPendenciaGrupo(
       return { success: false as const, error: resultado.erros[0]?.mensagem ?? 'Erro ao vincular' };
     }
 
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return {
       success: true as const,
       resolvidas: resultado.pendenciasResolvidas,
@@ -198,7 +231,7 @@ export async function resolverInsumoPendenciaGrupo(
 export async function ignorarInsumoPendencia(pendenciaId: string) {
   try {
     await insumoPendenciaRepository.marcarIgnorado(pendenciaId);
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const };
   } catch (error) {
     const message =
@@ -221,7 +254,7 @@ export async function ignorarInsumoPendenciasEmLote(pendenciaIds: string[]) {
     for (const id of ids) {
       try {
         const pendencia = await insumoPendenciaRepository.findById(id);
-        if (!pendencia || pendencia.status !== 'pendente') continue;
+        if (!pendencia || !isPendenciaIgnoravel(pendencia.status)) continue;
         await insumoPendenciaRepository.marcarIgnorado(id);
         ignoradas += 1;
       } catch (error) {
@@ -237,12 +270,51 @@ export async function ignorarInsumoPendenciasEmLote(pendenciaIds: string[]) {
       };
     }
 
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const, ignoradas, erros };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Erro ao ignorar pendências';
     console.error('Erro ao ignorar pendências em lote:', error);
+    return { success: false as const, error: message };
+  }
+}
+
+export async function restaurarInsumoPendenciasEmLote(pendenciaIds: string[]) {
+  try {
+    const ids = [...new Set(pendenciaIds.filter(Boolean))];
+    if (ids.length === 0) {
+      return { success: false as const, error: 'Nenhuma pendência selecionada' };
+    }
+
+    let restauradas = 0;
+    const erros: string[] = [];
+
+    for (const id of ids) {
+      try {
+        const pendencia = await insumoPendenciaRepository.findById(id);
+        if (!pendencia || !isPendenciaRestauravel(pendencia.status)) continue;
+        await insumoPendenciaRepository.marcarPendente(id);
+        restauradas += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro ao restaurar';
+        erros.push(message);
+      }
+    }
+
+    if (restauradas === 0) {
+      return {
+        success: false as const,
+        error: erros[0] ?? 'Nenhuma pendência pôde ser restaurada',
+      };
+    }
+
+    revalidateInsumoPages();
+    return { success: true as const, restauradas, erros };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Erro ao restaurar pendências';
+    console.error('Erro ao restaurar pendências em lote:', error);
     return { success: false as const, error: message };
   }
 }
@@ -278,7 +350,7 @@ export async function atualizarIntegracaoInsumoVinculo(
       fatorConversao,
     });
 
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const };
   } catch (error) {
     const message =
@@ -300,7 +372,7 @@ export async function excluirIntegracaoInsumoVinculo(integracaoId: string) {
     }
 
     await insumoMapeamentoRepository.desativar(integracaoId);
-    revalidatePath(REVALIDATE_PATH);
+    revalidateInsumoPages();
     return { success: true as const };
   } catch (error) {
     const message =

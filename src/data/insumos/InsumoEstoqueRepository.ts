@@ -81,6 +81,7 @@ export class InsumoEstoqueRepository {
         omie_n_id_item: input.omieNIdItem ?? null,
         omie_webhook_evento_id: input.omieWebhookEventoId ?? null,
         pendencia_id: input.pendenciaId ?? null,
+        numero_nf: input.numeroNf ?? null,
         observacao: input.observacao ?? null,
       })
       .select()
@@ -140,6 +141,42 @@ export class InsumoEstoqueRepository {
     }
 
     return (data as InsumoMovimentoRow[] ?? []).map((row) => this.mapMovimento(row));
+  }
+
+  async listEntradasNfSemNumero(): Promise<
+    { id: string; empresaId: string | null; nIdReceb: number }[]
+  > {
+    const { data, error } = await this.db
+      .from('insumo_movimentos')
+      .select('id, empresa_id, omie_n_id_receb')
+      .eq('origem', 'entrada_nf')
+      .is('numero_nf', null)
+      .not('omie_n_id_receb', 'is', null);
+
+    if (error) {
+      throw new Error(`Erro ao listar entradas sem número de NF: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      empresaId: (row.empresa_id as string | null) ?? null,
+      nIdReceb: row.omie_n_id_receb as number,
+    }));
+  }
+
+  async setNumeroNfPorIds(ids: string[], numeroNf: string): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const { error } = await this.db
+      .from('insumo_movimentos')
+      .update({ numero_nf: numeroNf })
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(`Erro ao atualizar número de NF dos movimentos: ${error.message}`);
+    }
   }
 
   async movimentoEntradaJaExiste(
@@ -229,7 +266,7 @@ export class InsumoEstoqueRepository {
       saldoResultante: Number(row.saldo_resultante),
       custoUnitario: Number(row.custo_unitario),
       origem: row.origem,
-      numeroNf: null,
+      numeroNf: row.numero_nf,
       observacao: row.observacao,
     };
   }

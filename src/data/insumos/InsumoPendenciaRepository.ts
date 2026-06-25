@@ -119,6 +119,39 @@ export class InsumoPendenciaRepository {
     }));
   }
 
+  async listIgnoradas(): Promise<InsumoPendenciaComEmpresa[]> {
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select('*, empresas(nome)')
+      .eq('status', 'ignorado')
+      .order('resolvido_em', { ascending: false });
+
+    if (error) {
+      throw new Error(`Erro ao listar pendências ignoradas: ${error.message}`);
+    }
+
+    return (data as PendenciaWithEmpresa[] ?? []).map((row) => ({
+      ...(row as InsumoEntradaPendenciaRow),
+      empresaNome: row.empresas?.nome ?? '',
+    }));
+  }
+
+  async marcarPendente(id: string): Promise<void> {
+    const { error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .update({
+        status: 'pendente',
+        resolvido_em: null,
+        integracao_insumo_id: null,
+      })
+      .eq('id', id)
+      .eq('status', 'ignorado');
+
+    if (error) {
+      throw new Error(`Erro ao restaurar pendência de insumo: ${error.message}`);
+    }
+  }
+
   async marcarIgnorado(id: string): Promise<void> {
     const { error } = await this.db
       .from('insumo_entrada_pendencias')

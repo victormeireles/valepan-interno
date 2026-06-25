@@ -141,6 +141,7 @@ export class InsumoRecebimentoProcessor {
         nIdReceb: input.nIdReceb,
         item: input.item,
         mapeamento,
+        numeroNf: input.contextoNf.numeroNf || null,
       });
       return;
     }
@@ -175,6 +176,7 @@ export class InsumoRecebimentoProcessor {
     nIdReceb: number;
     item: OmieRecebimentoItem;
     mapeamento: IntegracaoInsumoRow;
+    numeroNf: string | null;
   }): Promise<void> {
     const quantidadeEntrada = calcularQuantidadeEntrada(
       params.item.nQtdeNfe,
@@ -194,6 +196,7 @@ export class InsumoRecebimentoProcessor {
       omieNIdReceb: params.nIdReceb,
       omieNIdItem: params.item.nIdItem,
       omieWebhookEventoId: params.eventoId,
+      numeroNf: params.numeroNf,
     });
   }
 }

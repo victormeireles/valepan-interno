@@ -10,6 +10,7 @@ type RegistrarEntradaInput = {
   omieNIdItem: number;
   omieWebhookEventoId?: string;
   pendenciaId?: string;
+  numeroNf?: string | null;
 };
 
 type AjustarSaldoInput = {
@@ -64,6 +65,7 @@ export class InsumoEstoqueService {
         omieNIdItem: input.omieNIdItem,
         omieWebhookEventoId: input.omieWebhookEventoId,
         pendenciaId: input.pendenciaId,
+        numeroNf: input.numeroNf ?? null,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {

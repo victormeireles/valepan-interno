@@ -48,8 +48,14 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
   {
     href: '/estoque-insumos',
     title: 'Estoque de insumos',
-    description: 'Saldos, entradas por NF e pendências Omie',
+    description: 'Saldos, histórico e ajustes manuais',
     icon: 'grain',
+  },
+  {
+    href: '/mapeamento-insumos',
+    title: 'Mapeamento de insumos',
+    description: 'Vínculos Omie, pendências de NF e sugestões com IA',
+    icon: 'link',
   },
   {
     href: '/painel/dashboard-estoque',

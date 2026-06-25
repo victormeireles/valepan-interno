@@ -118,6 +118,7 @@ describe('InsumoRecebimentoProcessor', () => {
       omieNIdReceb: 999,
       omieNIdItem: 10,
       omieWebhookEventoId: 'evt-1',
+      numeroNf: '12345',
     });
     expect(createPendente).not.toHaveBeenCalled();
   });

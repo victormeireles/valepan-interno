@@ -39,6 +39,7 @@ export async function POST(request: Request) {
 
     const resultado = await insumoVinculoLoteApplier.aplicar(itens);
     revalidatePath('/estoque-insumos');
+    revalidatePath('/mapeamento-insumos');
 
     return NextResponse.json(resultado);
   } catch (error) {

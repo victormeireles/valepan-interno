@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
-import type { InsumoEstoqueDashboardData } from '@/app/actions/insumo-estoque-actions';
+import type { InsumoMapeamentoPageData } from '@/app/actions/insumo-estoque-actions';
 import {
   excluirIntegracaoInsumoVinculo,
   ignorarInsumoPendenciasEmLote,
+  restaurarInsumoPendenciasEmLote,
 } from '@/app/actions/insumo-estoque-actions';
 import {
   collectPendenciaIdsFromGrupos,
@@ -16,6 +16,7 @@ import {
 } from '@/domain/insumos/insumo-pendencia-grupo';
 import { filterIntegracaoInsumos } from '@/domain/insumos/insumo-vinculo-filter';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
+import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,82 +24,71 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
 import { Toast } from '@/components/ui/Toast';
-import InsumoAjusteModal from '@/features/insumo-estoque/components/InsumoAjusteModal';
-import InsumoHistoricoModal from '@/features/insumo-estoque/components/InsumoHistoricoModal';
-import InsumoPendenciaMobileList from '@/features/insumo-estoque/components/InsumoPendenciaMobileList';
-import InsumoPendenciaTable from '@/features/insumo-estoque/components/InsumoPendenciaTable';
+import InsumoMapeamentoPendenciaSection from '@/features/insumo-estoque/components/InsumoMapeamentoPendenciaSection';
 import InsumoResolverPendenciaModal from '@/features/insumo-estoque/components/InsumoResolverPendenciaModal';
 import InsumoEditarVinculoModal from '@/features/insumo-estoque/components/InsumoEditarVinculoModal';
 import InsumoVinculoMobileList from '@/features/insumo-estoque/components/InsumoVinculoMobileList';
 import InsumoVinculoTable from '@/features/insumo-estoque/components/InsumoVinculoTable';
 import InsumoVinculoIaRevisaoModal from '@/features/insumo-estoque/components/InsumoVinculoIaRevisaoModal';
-import InsumoSaldoMobileList from '@/features/insumo-estoque/components/InsumoSaldoMobileList';
-import InsumoSaldoTable from '@/features/insumo-estoque/components/InsumoSaldoTable';
 import { useInsumoPendenciaGrupoSelecao } from '@/features/insumo-estoque/hooks/useInsumoPendenciaGrupoSelecao';
 
-type TabId = 'saldos' | 'pendencias' | 'vinculos';
+type TabId = 'pendencias' | 'ignorados' | 'vinculos';
 
 type Props = {
-  initialData: InsumoEstoqueDashboardData;
+  initialData: InsumoMapeamentoPageData;
 };
 
-export default function InsumoEstoqueClient({ initialData }: Props) {
+export default function InsumoMapeamentoClient({ initialData }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [saldos, setSaldos] = useState(initialData.saldos);
   const [pendencias, setPendencias] = useState(initialData.pendencias);
+  const [ignoradas, setIgnoradas] = useState(initialData.ignoradas);
   const [vinculos, setVinculos] = useState(initialData.vinculos);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState<string | null>(null);
-  const [ajusteItem, setAjusteItem] = useState<InsumoSaldoComDetalhes | null>(null);
-  const [historicoItem, setHistoricoItem] = useState<InsumoSaldoComDetalhes | null>(null);
   const [resolverGrupo, setResolverGrupo] = useState<InsumoPendenciaProdutoGrupo | null>(null);
   const [editarVinculo, setEditarVinculo] = useState<IntegracaoInsumoListItem | null>(null);
   const [iaRevisaoOpen, setIaRevisaoOpen] = useState(false);
-  const [ignorandoLote, setIgnorandoLote] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   useEffect(() => {
-    setSaldos(initialData.saldos);
     setPendencias(initialData.pendencias);
+    setIgnoradas(initialData.ignoradas);
     setVinculos(initialData.vinculos);
   }, [initialData]);
 
   const tabParam = searchParams.get('tab');
   const activeTab: TabId =
-    tabParam === 'pendencias'
-      ? 'pendencias'
-      : tabParam === 'vinculos'
-        ? 'vinculos'
-        : 'saldos';
+    tabParam === 'vinculos' ? 'vinculos' : tabParam === 'ignorados' ? 'ignorados' : 'pendencias';
 
   const setActiveTab = (tab: TabId) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'saldos') params.delete('tab');
+    if (tab === 'pendencias') params.delete('tab');
     else params.set('tab', tab);
     const query = params.toString();
-    router.replace(query ? `/estoque-insumos?${query}` : '/estoque-insumos');
+    router.replace(query ? `/mapeamento-insumos?${query}` : '/mapeamento-insumos');
   };
 
-  const filteredSaldos = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return saldos;
-    return saldos.filter((item) => item.nome.toLowerCase().includes(term));
-  }, [saldos, searchTerm]);
-
-  const pendenciaGrupos = useMemo(
-    () => groupPendenciasPorProduto(pendencias),
-    [pendencias],
-  );
+  const pendenciaGrupos = useMemo(() => groupPendenciasPorProduto(pendencias), [pendencias]);
+  const ignoradaGrupos = useMemo(() => groupPendenciasPorProduto(ignoradas), [ignoradas]);
 
   const filteredGrupos = useMemo(
     () => filterPendenciaGrupos(pendenciaGrupos, searchTerm),
     [pendenciaGrupos, searchTerm],
   );
 
+  const filteredIgnoradaGrupos = useMemo(
+    () => filterPendenciaGrupos(ignoradaGrupos, searchTerm),
+    [ignoradaGrupos, searchTerm],
+  );
+
   const filteredVinculos = useMemo(
     () => filterIntegracaoInsumos(vinculos, searchTerm),
     [vinculos, searchTerm],
   );
+
+  const selectionGrupos =
+    activeTab === 'ignorados' ? filteredIgnoradaGrupos : filteredGrupos;
 
   const {
     selectedKeys,
@@ -110,7 +100,11 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
     toggleSelectAllVisible,
     clearSelection,
     removeFromSelection,
-  } = useInsumoPendenciaGrupoSelecao(filteredGrupos);
+  } = useInsumoPendenciaGrupoSelecao(selectionGrupos);
+
+  useEffect(() => {
+    clearSelection();
+  }, [activeTab, clearSelection]);
 
   const handleRefresh = () => {
     router.refresh();
@@ -120,6 +114,18 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
   const handleSaved = (message: string) => {
     setToast(message);
     handleRefresh();
+  };
+
+  const moveToIgnoradas = (items: InsumoPendenciaComEmpresa[]) => {
+    const ids = new Set(items.map((item) => item.id));
+    setPendencias((current) => current.filter((item) => !ids.has(item.id)));
+    setIgnoradas((current) => [...items, ...current]);
+  };
+
+  const moveToPendencias = (items: InsumoPendenciaComEmpresa[]) => {
+    const ids = new Set(items.map((item) => item.id));
+    setIgnoradas((current) => current.filter((item) => !ids.has(item.id)));
+    setPendencias((current) => [...items.map((item) => ({ ...item, status: 'pendente' as const, resolvido_em: null })), ...current]);
   };
 
   const handleIgnorar = async (grupo: InsumoPendenciaProdutoGrupo) => {
@@ -138,8 +144,7 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
       return;
     }
 
-    const ignoradas = new Set(ids);
-    setPendencias((current) => current.filter((p) => !ignoradas.has(p.id)));
+    moveToIgnoradas(grupo.pendencias);
     removeFromSelection([grupo.chave]);
     handleSaved(
       grupo.pendenciaCount === 1
@@ -148,33 +153,84 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
     );
   };
 
-  const handleIgnorarSelecionadas = async () => {
-    if (selectedGrupoCount === 0) return;
-
+  const handleRestaurar = async (grupo: InsumoPendenciaProdutoGrupo) => {
     const confirmed = window.confirm(
-      `Ignorar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`,
+      grupo.pendenciaCount === 1
+        ? 'Restaurar esta pendência para a fila?'
+        : `Restaurar ${grupo.pendenciaCount} pendências deste produto Omie para a fila?`,
     );
     if (!confirmed) return;
 
-    setIgnorandoLote(true);
-    const ids = collectPendenciaIdsFromGrupos(filteredGrupos, selectedKeys);
-    const result = await ignorarInsumoPendenciasEmLote(ids);
-    setIgnorandoLote(false);
-
+    const ids = grupo.pendencias.map((pendencia) => pendencia.id);
+    const result = await restaurarInsumoPendenciasEmLote(ids);
     if (!result.success) {
       setToast(result.error);
       setTimeout(() => setToast(null), 4000);
       return;
     }
 
-    const ignoradas = new Set(ids);
-    setPendencias((current) => current.filter((p) => !ignoradas.has(p.id)));
-    clearSelection();
+    moveToPendencias(grupo.pendencias);
+    removeFromSelection([grupo.chave]);
     handleSaved(
-      (result.ignoradas ?? ids.length) === 1
-        ? '1 pendência ignorada'
-        : `${result.ignoradas ?? ids.length} pendências ignoradas`,
+      grupo.pendenciaCount === 1
+        ? 'Pendência restaurada'
+        : `${result.restauradas ?? grupo.pendenciaCount} pendências restauradas`,
     );
+  };
+
+  const handleBatchSecundario = async () => {
+    if (selectedGrupoCount === 0) return;
+
+    const isIgnorado = activeTab === 'ignorados';
+    const confirmed = window.confirm(
+      isIgnorado
+        ? `Restaurar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`
+        : `Ignorar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`,
+    );
+    if (!confirmed) return;
+
+    setBatchLoading(true);
+    const ids = collectPendenciaIdsFromGrupos(selectionGrupos, selectedKeys);
+
+    if (isIgnorado) {
+      const result = await restaurarInsumoPendenciasEmLote(ids);
+      setBatchLoading(false);
+
+      if (!result.success) {
+        setToast(result.error);
+        setTimeout(() => setToast(null), 4000);
+        return;
+      }
+
+      const afetados = new Set(ids);
+      const restauradas = ignoradas.filter((item) => afetados.has(item.id));
+      moveToPendencias(restauradas);
+      handleSaved(
+        (result.restauradas ?? ids.length) === 1
+          ? '1 pendência restaurada'
+          : `${result.restauradas ?? ids.length} pendências restauradas`,
+      );
+    } else {
+      const result = await ignorarInsumoPendenciasEmLote(ids);
+      setBatchLoading(false);
+
+      if (!result.success) {
+        setToast(result.error);
+        setTimeout(() => setToast(null), 4000);
+        return;
+      }
+
+      const afetados = new Set(ids);
+      const ignoradasLote = pendencias.filter((item) => afetados.has(item.id));
+      moveToIgnoradas(ignoradasLote);
+      handleSaved(
+        (result.ignoradas ?? ids.length) === 1
+          ? '1 pendência ignorada'
+          : `${result.ignoradas ?? ids.length} pendências ignoradas`,
+      );
+    }
+
+    clearSelection();
   };
 
   const handleExcluirVinculo = async (item: IntegracaoInsumoListItem) => {
@@ -194,29 +250,37 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
     handleSaved('Vínculo excluído');
   };
 
-  const saldosLabel =
-    filteredSaldos.length === 1 ? '1 insumo' : `${filteredSaldos.length} insumos`;
   const pendenciasLabel =
     pendenciaGrupos.length === 1
       ? `1 produto • ${pendencias.length} pendências`
       : `${pendenciaGrupos.length} produtos • ${pendencias.length} pendências`;
 
+  const ignoradasLabel =
+    ignoradaGrupos.length === 1
+      ? `1 produto • ${ignoradas.length} ignoradas`
+      : `${ignoradaGrupos.length} produtos • ${ignoradas.length} ignoradas`;
+
   const vinculosLabel =
     vinculos.length === 1 ? '1 produto vinculado' : `${vinculos.length} produtos vinculados`;
 
   const searchPlaceholder =
-    activeTab === 'saldos'
-      ? 'Buscar insumo...'
-      : activeTab === 'vinculos'
-        ? 'Buscar produto Omie, insumo ou empresa...'
-        : 'Buscar NF, produto, fornecedor ou CFOP...';
+    activeTab === 'vinculos'
+      ? 'Buscar produto Omie, insumo ou empresa...'
+      : 'Buscar NF, produto, fornecedor ou CFOP...';
+
+  const summaryLabel =
+    activeTab === 'vinculos'
+      ? vinculosLabel
+      : activeTab === 'ignorados'
+        ? ignoradasLabel
+        : pendenciasLabel;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
       <ConfigPageHeader
-        title="Estoque de insumos"
-        icon="grain"
-        description="Saldos, entradas por NF e pendências de vínculo Omie."
+        title="Mapeamento de insumos"
+        icon="link"
+        description="Vínculos Omie→insumo, pendências de NF e sugestões com IA."
       />
 
       {toast ? (
@@ -228,24 +292,20 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           tabs={[
-            { id: 'saldos', label: 'Saldos' },
             { id: 'pendencias', label: 'Pendências', count: pendencias.length },
+            { id: 'ignorados', label: 'Ignorados', count: ignoradas.length },
             { id: 'vinculos', label: 'Vínculos', count: vinculos.length },
           ]}
           value={activeTab}
           onChange={(id) => setActiveTab(id as TabId)}
-          ariaLabel="Abas do estoque de insumos"
+          ariaLabel="Abas do mapeamento de insumos"
         />
         <p className="text-sm text-stone-500 font-mono tabular-nums" aria-live="polite">
-          {activeTab === 'saldos'
-            ? `${saldosLabel} • ${pendencias.length} pendências`
-            : activeTab === 'vinculos'
-              ? vinculosLabel
-              : pendenciasLabel}
+          {summaryLabel}
         </p>
       </div>
 
-      <Card padding="none" aria-label="Conteúdo do estoque de insumos" className="overflow-hidden">
+      <Card padding="none" aria-label="Conteúdo do mapeamento de insumos" className="overflow-hidden">
         {activeTab === 'vinculos' && vinculos.length > 0 ? (
           <div className="border-b border-stone-100 px-4 py-3">
             <p className="text-sm text-stone-600">
@@ -259,19 +319,23 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
             <p className="text-sm text-stone-600">
               Uma linha por produto Omie. Clique em NFs para ver detalhes de cada nota antes de vincular.
             </p>
-            <Button
-              variant="secondary"
-              icon="auto_awesome"
-              onClick={() => setIaRevisaoOpen(true)}
-            >
+            <Button variant="secondary" icon="auto_awesome" onClick={() => setIaRevisaoOpen(true)}>
               Sugerir vínculos com IA
             </Button>
           </div>
         ) : null}
 
+        {activeTab === 'ignorados' && ignoradas.length > 0 ? (
+          <div className="border-b border-stone-100 px-4 py-3">
+            <p className="text-sm text-stone-600">
+              Itens ignorados da fila. Restaure para pendências ou vincule diretamente a um insumo.
+            </p>
+          </div>
+        ) : null}
+
         <div className="border-b border-stone-100 p-4">
           <Input
-            id="insumo-estoque-search"
+            id="insumo-mapeamento-search"
             type="search"
             icon="search"
             value={searchTerm}
@@ -281,65 +345,7 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
           />
         </div>
 
-        {activeTab === 'pendencias' && selectedGrupoCount > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-sm font-medium text-amber-900">
-              <span className="font-mono tabular-nums">{selectedGrupoCount}</span>{' '}
-              {selectedGrupoCount === 1 ? 'produto' : 'produtos'} •{' '}
-              <span className="font-mono tabular-nums">{selectedPendenciaCount}</span>{' '}
-              {selectedPendenciaCount === 1 ? 'pendência' : 'pendências'}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" size="sm" onClick={clearSelection} disabled={ignorandoLote}>
-                Limpar seleção
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon="block"
-                onClick={handleIgnorarSelecionadas}
-                disabled={ignorandoLote}
-              >
-                {ignorandoLote ? 'Ignorando…' : 'Ignorar selecionadas'}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === 'saldos' ? (
-          filteredSaldos.length === 0 ? (
-            <EmptyState
-              icon="grain"
-              title={searchTerm ? 'Nenhum saldo encontrado' : 'Nenhum saldo registrado'}
-              description={
-                searchTerm
-                  ? 'Tente ajustar a busca.'
-                  : 'Entradas por NF ou ajustes manuais aparecerão aqui.'
-              }
-              action={
-                searchTerm ? (
-                  <Button variant="ghost" onClick={() => setSearchTerm('')}>
-                    Limpar busca
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <InsumoSaldoTable
-                items={filteredSaldos}
-                onAjustar={setAjusteItem}
-                onHistorico={setHistoricoItem}
-                embedded
-              />
-              <InsumoSaldoMobileList
-                items={filteredSaldos}
-                onAjustar={setAjusteItem}
-                onHistorico={setHistoricoItem}
-              />
-            </>
-          )
-        ) : activeTab === 'vinculos' ? (
+        {activeTab === 'vinculos' ? (
           filteredVinculos.length === 0 ? (
             <EmptyState
               icon="link"
@@ -372,59 +378,28 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
               />
             </>
           )
-        ) : filteredGrupos.length === 0 ? (
-          <EmptyState
-            icon="link_off"
-            title={searchTerm ? 'Nenhuma pendência encontrada' : 'Nenhuma pendência'}
-            description={
-              searchTerm
-                ? 'Tente ajustar a busca.'
-                : 'Itens de NF sem vínculo Omie aparecerão aqui para resolução.'
-            }
-            action={
-              searchTerm ? (
-                <Button variant="ghost" onClick={() => setSearchTerm('')}>
-                  Limpar busca
-                </Button>
-              ) : undefined
-            }
-          />
         ) : (
-          <>
-            <InsumoPendenciaTable
-              grupos={filteredGrupos}
-              selectedKeys={selectedKeys}
-              onToggleSelect={toggleSelect}
-              onToggleSelectAll={toggleSelectAllVisible}
-              allVisibleSelected={allVisibleSelected}
-              someVisibleSelected={someVisibleSelected}
-              onVincular={setResolverGrupo}
-              onIgnorar={handleIgnorar}
-              embedded
-            />
-            <InsumoPendenciaMobileList
-              grupos={filteredGrupos}
-              selectedKeys={selectedKeys}
-              onToggleSelect={toggleSelect}
-              onVincular={setResolverGrupo}
-              onIgnorar={handleIgnorar}
-            />
-          </>
+          <InsumoMapeamentoPendenciaSection
+            variant={activeTab === 'ignorados' ? 'ignorado' : 'pendente'}
+            filteredGrupos={activeTab === 'ignorados' ? filteredIgnoradaGrupos : filteredGrupos}
+            searchTerm={searchTerm}
+            onClearSearch={() => setSearchTerm('')}
+            selectedKeys={selectedKeys}
+            selectedGrupoCount={selectedGrupoCount}
+            selectedPendenciaCount={selectedPendenciaCount}
+            allVisibleSelected={allVisibleSelected}
+            someVisibleSelected={someVisibleSelected}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAllVisible}
+            onClearSelection={clearSelection}
+            onVincular={setResolverGrupo}
+            onIgnorar={activeTab === 'pendencias' ? handleIgnorar : undefined}
+            onRestaurar={activeTab === 'ignorados' ? handleRestaurar : undefined}
+            onBatchSecundario={handleBatchSecundario}
+            batchLoading={batchLoading}
+          />
         )}
       </Card>
-
-      <InsumoAjusteModal
-        isOpen={Boolean(ajusteItem)}
-        item={ajusteItem}
-        onClose={() => setAjusteItem(null)}
-        onSaved={() => handleSaved('Saldo ajustado com sucesso')}
-      />
-
-      <InsumoHistoricoModal
-        isOpen={Boolean(historicoItem)}
-        item={historicoItem}
-        onClose={() => setHistoricoItem(null)}
-      />
 
       <InsumoResolverPendenciaModal
         isOpen={Boolean(resolverGrupo)}
@@ -433,7 +408,11 @@ export default function InsumoEstoqueClient({ initialData }: Props) {
         onSaved={(message) => {
           if (resolverGrupo) {
             const resolvidas = new Set(resolverGrupo.pendencias.map((p) => p.id));
-            setPendencias((current) => current.filter((p) => !resolvidas.has(p.id)));
+            if (activeTab === 'ignorados') {
+              setIgnoradas((current) => current.filter((p) => !resolvidas.has(p.id)));
+            } else {
+              setPendencias((current) => current.filter((p) => !resolvidas.has(p.id)));
+            }
             removeFromSelection([resolverGrupo.chave]);
           }
           handleSaved(message);

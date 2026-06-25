@@ -111,3 +111,12 @@ export function collectPendenciaIdsFromGrupos(
     .filter((grupo) => chaves.has(grupo.chave))
     .flatMap((grupo) => grupo.pendencias.map((p) => p.id));
 }
+
+export function getGrupoIgnoradoEm(grupo: InsumoPendenciaProdutoGrupo): string | null {
+  const datas = grupo.pendencias
+    .map((pendencia) => pendencia.resolvido_em)
+    .filter((value): value is string => Boolean(value));
+
+  if (datas.length === 0) return null;
+  return datas.sort().at(-1) ?? null;
+}

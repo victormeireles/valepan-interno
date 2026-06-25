@@ -64,6 +64,7 @@ Legenda de status: `aplicado` | `obsoleto` (superseded, não executar)
 | 044 | `DROP_INVENTARIO_TABLES.sql` | aplicado | 040 |
 | 045 | `CREATE_INSUMO_ESTOQUE_TABLES.sql` | aplicado | — (CREATE + RLS inline) |
 | 046 | `ALTER_INSUMO_PENDENCIAS_ENRIQUECIMENTO_OMIE.sql` | aplicado | 045 |
+| 047 | `ALTER_INSUMO_MOVIMENTOS_NUMERO_NF.sql` | **pendente** (aplicar) | 045 — coluna `numero_nf` + backfill resoluções |
 
 ---
 
@@ -144,5 +145,6 @@ Estes scripts complementam migrations e ficam em `scripts/`:
 - `backfill-ordens-producao-assadeiras.ts`
 - `backfill-insumo-recebimentos-omie.ts`
 - `backfill-insumo-pendencias-enriquecimento-omie.ts` (se existir)
+- `backfill-insumo-movimentos-numero-nf.ts` (entradas NF antigas → `numero_nf` via Omie; depende da migration 047)
 - `migrate-produto-assadeiras-to-excecoes.ts`
 - `migrate-tipos-estoque-etiqueta-flags.ts`

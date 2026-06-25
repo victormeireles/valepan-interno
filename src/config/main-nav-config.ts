@@ -95,6 +95,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     icon: 'grain',
     match: (pathname) =>
       pathname.startsWith('/estoque-insumos') ||
+      pathname.startsWith('/mapeamento-insumos') ||
       pathname.startsWith('/config/insumos'),
     children: [
       {
@@ -103,6 +104,13 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Estoque',
         icon: 'inventory',
         match: (pathname) => pathname.startsWith('/estoque-insumos'),
+      },
+      {
+        type: 'link',
+        href: '/mapeamento-insumos',
+        label: 'Mapeamento',
+        icon: 'link',
+        match: (pathname) => pathname.startsWith('/mapeamento-insumos'),
       },
       {
         type: 'link',

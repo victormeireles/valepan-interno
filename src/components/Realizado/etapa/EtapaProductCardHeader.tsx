@@ -387,23 +387,26 @@ export default function EtapaProductCardHeader({
       </div>
 
       {/* Desktop: produto · meta ··· progresso · hora · ações */}
-      <div className="hidden items-center gap-2.5 sm:flex">
+      <div className="hidden items-center gap-2 sm:flex">
         <span
           className={['ml-[13px] h-[9px] w-[9px] shrink-0 rounded-full', styles.dot].join(' ')}
           aria-hidden="true"
         />
 
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="min-w-0 max-w-[32%] lg:max-w-[36%]">
-            <ProductTitle {...titleProps} truncate />
-          </div>
-
           {metaItems.length > 0 ? (
-            <div className="min-w-0 flex-1">
-              <MetaLine items={metaItems} />
-            </div>
+            <>
+              <div className="min-w-0 max-w-[32%] lg:max-w-[36%]">
+                <ProductTitle {...titleProps} truncate />
+              </div>
+              <div className="min-w-0 flex-1">
+                <MetaLine items={metaItems} />
+              </div>
+            </>
           ) : (
-            <div className="min-w-0 flex-1" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <ProductTitle {...titleProps} truncate />
+            </div>
           )}
 
           <QuantityBlock
@@ -419,7 +422,7 @@ export default function EtapaProductCardHeader({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           <CardActions {...actionProps} />
         </div>
       </div>

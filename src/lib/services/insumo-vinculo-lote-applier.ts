@@ -2,6 +2,7 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import { isPendenciaIgnoravel, isPendenciaVinculavel } from '@/domain/insumos/insumo-pendencia-acao';
 import type {
   InsumoVinculoLoteItem,
   InsumoVinculoLoteResultado,
@@ -21,7 +22,7 @@ export class InsumoVinculoLoteApplier {
         if (item.acao === 'ignorar') {
           for (const pendenciaId of item.pendenciaIds) {
             const pendencia = await insumoPendenciaRepository.findById(pendenciaId);
-            if (!pendencia || pendencia.status !== 'pendente') continue;
+            if (!pendencia || !isPendenciaIgnoravel(pendencia.status)) continue;
             await insumoPendenciaRepository.marcarIgnorado(pendenciaId);
             pendenciasResolvidas += 1;
           }
@@ -52,7 +53,7 @@ export class InsumoVinculoLoteApplier {
 
         for (const pendenciaId of item.pendenciaIds) {
           const pendencia = await insumoPendenciaRepository.findById(pendenciaId);
-          if (!pendencia || pendencia.status !== 'pendente') continue;
+          if (!pendencia || !isPendenciaVinculavel(pendencia.status)) continue;
 
           const quantidadeEntrada = calcularQuantidadeEntrada(
             Number(pendencia.quantidade_nf),
@@ -73,6 +74,7 @@ export class InsumoVinculoLoteApplier {
             omieNIdItem: pendencia.omie_n_id_item,
             omieWebhookEventoId: pendencia.omie_webhook_evento_id ?? undefined,
             pendenciaId: pendencia.id,
+            numeroNf: pendencia.numero_nf,
           });
 
           await insumoPendenciaRepository.marcarResolvido(pendencia.id, integracao.id);

@@ -108,6 +108,11 @@ export default function InsumoHistoricoModal({ isOpen, item, onClose }: Props) {
                       <span className="text-xs text-stone-500">
                         {formatDateTime(mov.createdAt)}
                       </span>
+                      {mov.numeroNf ? (
+                        <span className="font-mono text-xs tabular-nums text-stone-500">
+                          NF {mov.numeroNf}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <p

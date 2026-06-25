@@ -19,6 +19,7 @@ export type InsumoMovimentoRow = {
   omie_n_id_item: number | null;
   omie_webhook_evento_id: string | null;
   pendencia_id: string | null;
+  numero_nf: string | null;
   observacao: string | null;
 };
 
@@ -74,6 +75,7 @@ export type RegistrarInsumoMovimentoInput = {
   omieNIdItem?: number | null;
   omieWebhookEventoId?: string | null;
   pendenciaId?: string | null;
+  numeroNf?: string | null;
   observacao?: string | null;
 };
 
