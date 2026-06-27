@@ -7,9 +7,11 @@ type EtapaReabrirConfirmDialogProps = {
   titulo: string;
   mensagem: string;
   textoConfirmar: string;
+  textoConfirmarComLote?: string;
   loading?: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
+  onConfirmarComLote?: () => void;
 };
 
 export default function EtapaReabrirConfirmDialog({
@@ -17,9 +19,11 @@ export default function EtapaReabrirConfirmDialog({
   titulo,
   mensagem,
   textoConfirmar,
+  textoConfirmarComLote,
   loading = false,
   onCancelar,
   onConfirmar,
+  onConfirmarComLote,
 }: EtapaReabrirConfirmDialogProps) {
   if (!open) return null;
 
@@ -54,7 +58,7 @@ export default function EtapaReabrirConfirmDialog({
           </Button>
           <Button
             type="button"
-            variant="primary"
+            variant={onConfirmarComLote ? 'secondary' : 'primary'}
             size="lg"
             icon="replay"
             disabled={loading}
@@ -62,6 +66,18 @@ export default function EtapaReabrirConfirmDialog({
           >
             {loading ? 'Reabrindo…' : textoConfirmar}
           </Button>
+          {onConfirmarComLote ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              icon="add"
+              disabled={loading}
+              onClick={onConfirmarComLote}
+            >
+              {loading ? 'Reabrindo…' : textoConfirmarComLote}
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>

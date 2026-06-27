@@ -16,6 +16,10 @@ import {
   EMBALAGEM_ETAPA_CONFIG,
 } from '@/domain/embalagem/embalagem-etapa-adapter';
 import { buildEmbalagemToolbarMetrics } from '@/domain/embalagem/build-embalagem-toolbar-metrics';
+import {
+  etapaReabrirAcaoPolicy,
+  type EtapaReabrirAcao,
+} from '@/domain/producao-etapa/etapa-reabrir-acao';
 import { buildEtapaReabrirMensagem } from '@/domain/producao-etapa/build-etapa-reabrir-mensagem';
 import type { PainelLoteItem } from '@/domain/realizado/painel-pedido-adapter';
 import type {
@@ -275,7 +279,7 @@ export default function ProducaoEmbalagemPage() {
     return pedidoLookup.get(reabrirDialogPedidoId) ?? null;
   }, [reabrirDialogPedidoId, pedidoLookup]);
 
-  const handleConfirmReabrirOp = useCallback(async () => {
+  const handleConfirmReabrirOp = useCallback(async (acao: EtapaReabrirAcao) => {
     if (!reabrirDialogPedidoId) return;
 
     const pedido = pedidoLookup.get(reabrirDialogPedidoId);
@@ -298,7 +302,9 @@ export default function ProducaoEmbalagemPage() {
       const pedidosAtualizados = await refreshPedidosOnly();
       const pedidoAtualizado =
         pedidosAtualizados.find((p) => p.pedidoEmbalagemId === reabrirDialogPedidoId) ?? pedido;
-      handleNovoLote(pedidoAtualizado);
+      if (etapaReabrirAcaoPolicy.shouldOpenNovoLote(acao)) {
+        handleNovoLote(pedidoAtualizado);
+      }
     } catch (err) {
       setMessage(getVisibleErrorMessage(err, 'Erro ao reabrir embalagem'));
     } finally {
@@ -450,10 +456,12 @@ export default function ProducaoEmbalagemPage() {
               })
             : ''
         }
-        textoConfirmar="Reabrir e adicionar lote"
+        textoConfirmar="Reabrir"
+        textoConfirmarComLote="Reabrir e adicionar lote"
         loading={reabrindoOpId !== null}
         onCancelar={() => setReabrirDialogPedidoId(null)}
-        onConfirmar={() => void handleConfirmReabrirOp()}
+        onConfirmar={() => void handleConfirmReabrirOp('somente-reabrir')}
+        onConfirmarComLote={() => void handleConfirmReabrirOp('reabrir-e-adicionar-lote')}
       />
 
       <ProducaoModal
