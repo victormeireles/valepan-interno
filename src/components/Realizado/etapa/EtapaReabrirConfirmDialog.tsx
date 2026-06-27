@@ -2,17 +2,25 @@
 
 import { Button } from '@/components/ui/Button';
 
-type EtapaReabrirConfirmDialogProps = {
+type BaseEtapaReabrirConfirmDialogProps = {
   open: boolean;
   titulo: string;
   mensagem: string;
   textoConfirmar: string;
-  textoConfirmarComLote?: string;
   loading?: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
-  onConfirmarComLote?: () => void;
 };
+
+type EtapaReabrirConfirmDialogProps =
+  | (BaseEtapaReabrirConfirmDialogProps & {
+      textoConfirmarComLote: string;
+      onConfirmarComLote: () => void;
+    })
+  | (BaseEtapaReabrirConfirmDialogProps & {
+      textoConfirmarComLote?: never;
+      onConfirmarComLote?: never;
+    });
 
 export default function EtapaReabrirConfirmDialog({
   open,
