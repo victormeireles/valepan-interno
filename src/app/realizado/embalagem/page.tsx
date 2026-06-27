@@ -16,13 +16,13 @@ import {
   EMBALAGEM_ETAPA_CONFIG,
 } from '@/domain/embalagem/embalagem-etapa-adapter';
 import { buildEmbalagemToolbarMetrics } from '@/domain/embalagem/build-embalagem-toolbar-metrics';
-import { buildEtapaReabrirMensagem } from '@/domain/producao-etapa/build-etapa-reabrir-mensagem';
 import type { PainelLoteItem } from '@/domain/realizado/painel-pedido-adapter';
 import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 import { ProducaoData } from '@/domain/types';
+import { useEmbalagemReabrirOp } from '@/hooks/useEmbalagemReabrirOp';
 import {
   addCalendarDaysISO,
   getTodayISOInBrazilTimezone,
@@ -53,8 +53,6 @@ export default function ProducaoEmbalagemPage() {
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
-  const [reabrindoOpId, setReabrindoOpId] = useState<string | null>(null);
-  const [reabrirDialogPedidoId, setReabrirDialogPedidoId] = useState<string | null>(null);
   const [comparisonWeekItems, setComparisonWeekItems] = useState(
     snapshotsToDashboardItems([]),
   );
@@ -265,46 +263,13 @@ export default function ProducaoEmbalagemPage() {
     [pedidoLookup, handleNovoLote],
   );
 
-  const handleReabrirOpById = useCallback((pedidoEmbalagemId: string) => {
-    setReabrirDialogPedidoId(pedidoEmbalagemId);
-    setMessage(null);
-  }, []);
-
-  const pedidoReabrirDialog = useMemo(() => {
-    if (!reabrirDialogPedidoId) return null;
-    return pedidoLookup.get(reabrirDialogPedidoId) ?? null;
-  }, [reabrirDialogPedidoId, pedidoLookup]);
-
-  const handleConfirmReabrirOp = useCallback(async () => {
-    if (!reabrirDialogPedidoId) return;
-
-    const pedido = pedidoLookup.get(reabrirDialogPedidoId);
-    if (!pedido) {
-      setMessage('Pedido não encontrado');
-      setReabrirDialogPedidoId(null);
-      return;
-    }
-
-    setReabrindoOpId(reabrirDialogPedidoId);
-    try {
-      const res = await fetch(
-        `/api/producao/embalagem/pedido/${reabrirDialogPedidoId}/reabrir`,
-        { method: 'POST' },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao reabrir embalagem');
-
-      setReabrirDialogPedidoId(null);
-      const pedidosAtualizados = await refreshPedidosOnly();
-      const pedidoAtualizado =
-        pedidosAtualizados.find((p) => p.pedidoEmbalagemId === reabrirDialogPedidoId) ?? pedido;
-      handleNovoLote(pedidoAtualizado);
-    } catch (err) {
-      setMessage(getVisibleErrorMessage(err, 'Erro ao reabrir embalagem'));
-    } finally {
-      setReabrindoOpId(null);
-    }
-  }, [reabrirDialogPedidoId, pedidoLookup, refreshPedidosOnly, handleNovoLote]);
+  const { reabrindoOpId, handleReabrirOpById, reabrirDialogProps } = useEmbalagemReabrirOp({
+    pedidoLookup,
+    refreshPedidosOnly,
+    onNovoLote: handleNovoLote,
+    setMessage,
+    getVisibleErrorMessage,
+  });
 
   const handleEditLoteById = useCallback(
     (loteId: string) => {
@@ -438,23 +403,9 @@ export default function ProducaoEmbalagemPage() {
         }}
       />
 
-      <EtapaReabrirConfirmDialog
-        open={Boolean(pedidoReabrirDialog)}
-        titulo="Reabrir embalagem?"
-        mensagem={
-          pedidoReabrirDialog
-            ? buildEtapaReabrirMensagem({
-                etapaNome: 'embalagem',
-                produzidoLabel: String(pedidoReabrirDialog.produzidoScalar),
-                unidade: pedidoReabrirDialog.unidade,
-              })
-            : ''
-        }
-        textoConfirmar="Reabrir e adicionar lote"
-        loading={reabrindoOpId !== null}
-        onCancelar={() => setReabrirDialogPedidoId(null)}
-        onConfirmar={() => void handleConfirmReabrirOp()}
-      />
+      {reabrirDialogProps ? (
+        <EtapaReabrirConfirmDialog {...reabrirDialogProps} />
+      ) : null}
 
       <ProducaoModal
         isOpen={producaoModalOpen}

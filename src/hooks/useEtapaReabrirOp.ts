@@ -1,6 +1,10 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import {
+  etapaReabrirAcaoPolicy,
+  type EtapaReabrirAcao,
+} from '@/domain/producao-etapa/etapa-reabrir-acao';
 import { buildEtapaReabrirMensagem } from '@/domain/producao-etapa/build-etapa-reabrir-mensagem';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 
@@ -41,7 +45,7 @@ export function useEtapaReabrirOp({
     [setMessage],
   );
 
-  const handleConfirmReabrirOp = useCallback(async () => {
+  const handleConfirmReabrirOp = useCallback(async (acao: EtapaReabrirAcao) => {
     if (!reabrirDialogOrdemId) return;
 
     const ordem = ordemLookup.get(reabrirDialogOrdemId);
@@ -63,7 +67,9 @@ export function useEtapaReabrirOp({
       const ordensAtualizadas = await refreshOrdensOnly();
       const ordemAtualizada =
         ordensAtualizadas.find((item) => item.ordemProducaoId === reabrirDialogOrdemId) ?? ordem;
-      onNovoLote(ordemAtualizada);
+      if (etapaReabrirAcaoPolicy.shouldOpenNovoLote(acao)) {
+        onNovoLote(ordemAtualizada);
+      }
     } catch (error) {
       setMessage(getVisibleErrorMessage(error, `Erro ao reabrir ${etapaNome}`));
     } finally {
@@ -91,10 +97,12 @@ export function useEtapaReabrirOp({
         produzidoLabel: String(ordemReabrirDialog.produzido),
         unidade: ordemReabrirDialog.unidade,
       }),
-      textoConfirmar: 'Reabrir e adicionar lote',
+      textoConfirmar: 'Reabrir',
+      textoConfirmarComLote: 'Reabrir e adicionar lote',
       loading: reabrindoOpId !== null,
       onCancelar: () => setReabrirDialogOrdemId(null),
-      onConfirmar: () => void handleConfirmReabrirOp(),
+      onConfirmar: () => void handleConfirmReabrirOp('somente-reabrir'),
+      onConfirmarComLote: () => void handleConfirmReabrirOp('reabrir-e-adicionar-lote'),
     };
   }, [
     ordemReabrirDialog,
