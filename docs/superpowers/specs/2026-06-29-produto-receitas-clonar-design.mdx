@@ -3,7 +3,7 @@
 **Data:** 2026-06-29  
 **Status:** Aprovado pelo stakeholder  
 **Tela:** `/config/produtos` → modal **Receitas** (`ProdutoReceitasConfigModal`)  
-**Depende de:** `2026-06-18-config-produtos-receitas-design.mdx`
+**Depende de:** `2026-06-18-config-produtos-receitas-design.mdx`, cálculo automático de quantidade em `ProdutoReceitasConfigModal` (`receita-produto-quantidade-resolver`)
 
 ## Objetivo
 
@@ -17,6 +17,7 @@ Permitir copiar a listagem de receitas vinculadas (tipo + receita + quantidade) 
 | Conflitos no destino | **Sobrescrever com aviso** — mostra resumo do que será trocado antes de preencher |
 | Lista de origem | **Só produtos com ≥ 1 receita** vinculada ativa |
 | Escopo da cópia | Copia **apenas tipos presentes na origem**; tipos só no destino permanecem intactos |
+| Modos de clone | **Só receitas** (quantidades calculadas para o produto destino) ou **Receitas + quantidades** (copia valores da origem) |
 | Produto atual | Excluído da lista de origem |
 | UI principal | Botão **Clonar de…** no header do modal + modal picker + diálogo de confirmação |
 
@@ -33,12 +34,12 @@ Permitir copiar a listagem de receitas vinculadas (tipo + receita + quantidade) 
 1. Abrir modal **Receitas** de um produto em `/config/produtos`.
 2. Clicar **Clonar de…** no header.
 3. Modal picker: buscar e selecionar produto de origem (badge `N receitas`).
-4. Diálogo de confirmação com resumo:
-   - **Será substituído** — tipos já preenchidos no destino que mudarão
-   - **Será adicionado** — tipos vazios no destino que receberão valor da origem
-5. Confirmar → formulário preenchido (selects + quantidades).
-6. Banner: *"Formulário preenchido a partir de {origem}. Revise e clique em Salvar tudo."*
-7. Usuário edita se quiser → **Salvar tudo** persiste via actions existentes.
+4. Diálogo de confirmação com resumo das receitas que mudarão (ver seção abaixo).
+5. Escolher modo:
+   - **Só receitas** — copia os selects; quantidades vêm do cálculo automático do produto **destino** (`resolverQuantidadeReceitaParaProduto`, mesmo fluxo de `handleReceitaChange`)
+   - **Receitas + quantidades** — copia selects e quantidades literais da origem
+6. Confirmar → formulário preenchido.
+7. Banner contextual (modo + origem). Usuário revisa → **Salvar tudo** persiste via actions existentes.
 
 ## UX — botão "Clonar de…"
 
@@ -64,26 +65,43 @@ Padrão visual: stone/amber, `rounded-xl`, Material Icons, alvos ≥ 44px.
 
 ## UX — diálogo de confirmação
 
-Exemplo de linha em **Será substituído**:
+Resumo focado em **receitas** (independente do modo):
 
-> Massa: *HB Brioche* (12) → *HB Brioche Duo* (15)
+Exemplo em **Será substituído**:
+
+> Massa: *HB Brioche* → *HB Brioche Duo*
 
 Exemplo em **Será adicionado**:
 
-> Brilho: *(vazio)* → *Brilho Padrão* (8)
+> Brilho: *(vazio)* → *Brilho Padrão*
+
+No modo **Receitas + quantidades**, acrescentar quantidades na mesma linha:
+
+> Massa: *HB Brioche* (12) → *HB Brioche Duo* (15)
+
+No modo **Só receitas**, nota abaixo do resumo:
+
+> *As quantidades serão calculadas automaticamente para este produto (peso/gramatura). Tipos sem cálculo ficarão em branco para preenchimento manual.*
+
+### Escolha do modo (dois botões de ação)
 
 | Botão | Papel |
 |-------|-------|
 | Cancelar | Fecha confirmação; volta ao picker |
-| Preencher formulário | Aplica ao estado local e fecha subfluxo |
+| **Só receitas** | Preenche selects; dispara cálculo automático por tipo |
+| **Receitas + quantidades** | Preenche selects e quantidades da origem |
 
-**Decisão v1:** se diff vazio após selecionar origem, exibir toast/banner *"Receitas já são iguais para os tipos da origem."* e não alterar formulário.
+Estilo: **Receitas + quantidades** = primário (ação mais completa); **Só receitas** = secundário outline. Em mobile, empilhar com `min-h-11`.
+
+**Decisão v1:** se nenhuma receita mudaria (origem idêntica nos tipos copiados), exibir banner *"Receitas já são iguais para os tipos da origem."* e não alterar formulário — em ambos os modos.
 
 ## Lógica de diff e apply
 
 Utilitário `produto-receitas-clone-utils.ts`:
 
 ```ts
+type CloneModo = 'receitas' | 'receitas-e-quantidades';
+
 type CloneDiffLinha = {
   tipo: TipoReceita;
   tipoLabel: string;
@@ -96,16 +114,31 @@ type CloneDiffLinha = {
 };
 
 buildCloneDiff(origem, destinoFormState) → CloneDiffLinha[]
-applyCloneToFormState(origem) → { selectedReceitas, quantidades }
+applyCloneToFormState(
+  origem,
+  modo,
+  { receitasCatalogo, produtoDestino },
+) → { selectedReceitas, quantidades, quantidadesManuais }
 ```
 
-Regras:
+Regras de diff:
 
 - Iterar `PRODUTO_RECEITA_TIPO_OPTIONS`; para cada tipo com vínculo ativo na origem:
   - Se destino já tem receita selecionada → `substituir`
   - Se destino vazio → `adicionar`
 - Tipos só no destino: ignorar (não entram no diff, não são limpos).
 - Receitas inativas na origem: ignorar (só vínculos `ativo === true`).
+
+Regras de apply por modo:
+
+| Modo | `selectedReceitas` | `quantidades` | `quantidadesManuais` |
+|------|-------------------|---------------|----------------------|
+| `receitas` | IDs da origem | `buildSugestao(receita, tipo, produtoDestino).quantidade` por tipo | `false` em tipos com sugestão; tipos sem sugestão ficam sem qtd |
+| `receitas-e-quantidades` | IDs da origem | `origem.quantidade` por tipo | `true` em todos os tipos copiados |
+
+Reutilizar `buildSugestao` / `resolverQuantidadeReceitaParaProduto` já usados em `ProdutoReceitasConfigModal.handleReceitaChange` — **não** recalcular com peso da origem no modo só receitas.
+
+`receitasCatalogo` já inclui `ingredientes` e `gramaturas` necessários ao resolver (carregados no SSR de `/config/produtos`).
 
 ## Dados
 
@@ -174,7 +207,9 @@ Manter cada arquivo < 500 linhas; extrair hook `useProdutoReceitasClone` se o mo
 - [ ] Lista exclui produto atual e produtos sem receitas
 - [ ] Busca filtra por nome/código
 - [ ] Confirmação lista substituições e adições corretamente
-- [ ] Confirmar preenche selects e quantidades sem persistir
+- [ ] Modo **Só receitas** preenche selects e calcula quantidades para o produto destino
+- [ ] Modo **Receitas + quantidades** copia quantidades literais da origem
+- [ ] Confirmar em qualquer modo não persiste no banco até Salvar tudo
 - [ ] **Salvar tudo** persiste vínculos clonados
 - [ ] Tipos só no destino não são apagados ao clonar
 - [ ] Cancelar em qualquer etapa não altera formulário
