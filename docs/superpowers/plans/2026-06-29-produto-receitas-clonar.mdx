@@ -1,0 +1,755 @@
+# Clonar receitas de outro produto — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Adicionar fluxo **Clonar de…** no modal de receitas do produto, com picker, confirmação com aviso de sobrescrita e dois modos: só receitas (quantidades calculadas para o destino) ou receitas + quantidades (cópia literal).
+
+**Architecture:** Lógica pura em `src/domain/produtos/produto-receitas-clone-utils.ts` (diff + apply). Sugestão de quantidade extraída para helper compartilhado com o modal. UI em `ProdutoReceitasClonePickerModal` + `ProdutoReceitasCloneConfirmDialog`, orquestrados por hook `useProdutoReceitasClone` para manter `ProdutoReceitasConfigModal` abaixo de 500 linhas. Sem nova server action — clone é estado local; persistência continua via actions existentes.
+
+**Tech Stack:** Next.js 15, React 19, TypeScript, Vitest, Tailwind, Material Icons, `resolverQuantidadeReceitaParaProduto`.
+
+**Spec:** `docs/superpowers/specs/2026-06-29-produto-receitas-clonar-design.mdx`
+
+---
+
+## File map
+
+| File | Responsibility |
+|------|----------------|
+| `src/domain/receitas/receita-produto-quantidade-sugestao.ts` | `buildSugestaoReceitaProduto` — wrapper do resolver para modal + clone |
+| `src/domain/produtos/produto-receitas-clone-types.ts` | Tipos `CloneModo`, `CloneDiffLinha`, form state |
+| `src/domain/produtos/produto-receitas-clone-utils.ts` | `buildCloneDiff`, `applyCloneToFormState`, filtros |
+| `src/domain/produtos/produto-receitas-clone-utils.test.ts` | Testes unitários |
+| `src/components/ProdutosConfig/ProdutoReceitasClonePickerModal.tsx` | Busca + lista de produtos origem |
+| `src/components/ProdutosConfig/ProdutoReceitasCloneConfirmDialog.tsx` | Resumo + dois botões de modo |
+| `src/components/ProdutosConfig/useProdutoReceitasClone.ts` | Estado do subfluxo clone |
+| `src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx` | Botão header + hook |
+| `src/app/config/produtos/ProdutosConfigClient.tsx` | Passa `produtosFonteClone` ao modal |
+
+---
+
+### Task 1: Tipos e helper de sugestão compartilhado
+
+**Files:**
+- Create: `src/domain/produtos/produto-receitas-clone-types.ts`
+- Create: `src/domain/receitas/receita-produto-quantidade-sugestao.ts`
+- Modify: `src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx` — remover `buildSugestao` local e importar helper
+
+- [ ] **Step 1: Criar tipos do clone**
+
+```typescript
+// src/domain/produtos/produto-receitas-clone-types.ts
+import type { TipoReceita } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import type { ProdutoResumoComReceitas } from '@/app/actions/produto-receitas-actions';
+
+export type CloneModo = 'receitas' | 'receitas-e-quantidades';
+
+export type ProdutoReceitasVinculadas =
+  ProdutoResumoComReceitas['receitas_vinculadas'];
+
+export type ProdutoCloneFonte = {
+  id: string;
+  nome: string;
+  codigo: string;
+  receitasVinculadas: ProdutoReceitasVinculadas;
+};
+
+export type CloneDestinoFormState = {
+  selectedReceitas: Partial<Record<TipoReceita, string>>;
+  quantidades: Partial<Record<TipoReceita, number>>;
+};
+
+export type CloneDiffLinha = {
+  tipo: TipoReceita;
+  tipoLabel: string;
+  acao: 'substituir' | 'adicionar';
+  destinoReceitaNome?: string;
+  destinoReceitaId?: string;
+  destinoQuantidade?: number;
+  origemReceitaNome: string;
+  origemReceitaId: string;
+  origemQuantidade: number;
+};
+
+export type CloneApplyResult = CloneDestinoFormState & {
+  quantidadesManuais: Partial<Record<TipoReceita, boolean>>;
+};
+```
+
+- [ ] **Step 2: Extrair helper de sugestão**
+
+```typescript
+// src/domain/receitas/receita-produto-quantidade-sugestao.ts
+import type { ProdutoPesoInput } from '@/domain/assadeiras/produto-peso';
+import { resolverQuantidadeReceitaParaProduto } from '@/domain/receitas/receita-produto-quantidade-resolver';
+import type { ReceitaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
+import type { TipoReceita } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+
+export type ReceitaSugestaoInput = {
+  id: string;
+  ingredientes?: Array<{ quantidade: number; unidade: string | null }>;
+  gramaturas?: ReceitaGramatura[];
+};
+
+export function buildSugestaoReceitaProduto(
+  receita: ReceitaSugestaoInput | undefined,
+  tipo: TipoReceita,
+  produto: ProdutoPesoInput,
+) {
+  if (!receita) {
+    return { pesoGramas: null, quantidade: null, resumo: null, aviso: null };
+  }
+
+  return resolverQuantidadeReceitaParaProduto({
+    tipo,
+    ingredientes: receita.ingredientes,
+    gramaturas: receita.gramaturas,
+    produto,
+  });
+}
+```
+
+- [ ] **Step 3: Atualizar modal para usar helper**
+
+Em `ProdutoReceitasConfigModal.tsx`, remover função `buildSugestao` local (linhas 46–61) e substituir imports/uso por:
+
+```typescript
+import { buildSugestaoReceitaProduto } from '@/domain/receitas/receita-produto-quantidade-sugestao';
+
+// substituir buildSugestao(...) por buildSugestaoReceitaProduto(...)
+```
+
+- [ ] **Step 4: Verificar build**
+
+Run: `npm run build`
+Expected: compila sem erros
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/produtos/produto-receitas-clone-types.ts src/domain/receitas/receita-produto-quantidade-sugestao.ts src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx
+git commit -m "refactor: extrair sugestao de quantidade e tipos base do clone de receitas"
+```
+
+---
+
+### Task 2: Utils de diff e apply (TDD)
+
+**Files:**
+- Create: `src/domain/produtos/produto-receitas-clone-utils.ts`
+- Create: `src/domain/produtos/produto-receitas-clone-utils.test.ts`
+
+- [ ] **Step 1: Escrever testes falhando**
+
+```typescript
+// src/domain/produtos/produto-receitas-clone-utils.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  applyCloneToFormState,
+  buildCloneDiff,
+  filterProdutosFonteClone,
+  hasCloneRecipeChanges,
+} from './produto-receitas-clone-utils';
+import type { ProdutoCloneFonte } from './produto-receitas-clone-types';
+
+const origem: ProdutoCloneFonte = {
+  id: 'origem-1',
+  nome: 'HB Origem 50g',
+  codigo: 'HB01',
+  receitasVinculadas: {
+    massa: {
+      id: 'v1',
+      receita_id: 'r-massa',
+      receita_nome: 'Massa HB',
+      quantidade: 12,
+      ativo: true,
+    },
+    brilho: {
+      id: 'v2',
+      receita_id: 'r-brilho',
+      receita_nome: 'Brilho Padrão',
+      quantidade: 8,
+      ativo: true,
+    },
+  },
+};
+
+describe('buildCloneDiff', () => {
+  it('marca adicionar quando destino vazio', () => {
+    const diff = buildCloneDiff(origem, { selectedReceitas: {}, quantidades: {} });
+    expect(diff).toHaveLength(2);
+    expect(diff.every((l) => l.acao === 'adicionar')).toBe(true);
+  });
+
+  it('marca substituir quando destino já tem receita', () => {
+    const diff = buildCloneDiff(origem, {
+      selectedReceitas: { massa: 'r-outra' },
+      quantidades: { massa: 5 },
+    });
+    const massa = diff.find((l) => l.tipo === 'massa');
+    expect(massa?.acao).toBe('substituir');
+    expect(massa?.destinoReceitaId).toBe('r-outra');
+  });
+
+  it('ignora tipos inativos na origem', () => {
+    const origemInativa: ProdutoCloneFonte = {
+      ...origem,
+      receitasVinculadas: {
+        massa: { ...origem.receitasVinculadas.massa!, ativo: false },
+      },
+    };
+    expect(buildCloneDiff(origemInativa, { selectedReceitas: {}, quantidades: {} })).toHaveLength(0);
+  });
+});
+
+describe('hasCloneRecipeChanges', () => {
+  it('retorna false quando receitas idênticas nos tipos da origem', () => {
+    expect(
+      hasCloneRecipeChanges(
+        buildCloneDiff(origem, {
+          selectedReceitas: { massa: 'r-massa', brilho: 'r-brilho' },
+          quantidades: { massa: 99, brilho: 99 },
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('applyCloneToFormState', () => {
+  const catalogo = [
+    {
+      id: 'r-massa',
+      nome: 'Massa HB',
+      tipo: 'massa' as const,
+      ativo: true,
+      ingredientes: [{ quantidade: 1, unidade: 'kg' }],
+      gramaturas: [],
+    },
+    {
+      id: 'r-brilho',
+      nome: 'Brilho Padrão',
+      tipo: 'brilho' as const,
+      ativo: true,
+      gramaturas: [{ pesoG: 50, quantidade: 8 }],
+    },
+  ];
+
+  const produtoDestino = { nome: 'HB Destino 50g', unit_weight: 50 };
+
+  it('modo receitas-e-quantidades copia quantidades literais', () => {
+    const result = applyCloneToFormState(origem, 'receitas-e-quantidades', {
+      receitasCatalogo: catalogo,
+      produtoDestino,
+    });
+    expect(result.selectedReceitas.massa).toBe('r-massa');
+    expect(result.quantidades.massa).toBe(12);
+    expect(result.quantidadesManuais.massa).toBe(true);
+  });
+
+  it('modo receitas calcula quantidade para destino', () => {
+    const result = applyCloneToFormState(origem, 'receitas', {
+      receitasCatalogo: catalogo,
+      produtoDestino,
+    });
+    expect(result.selectedReceitas.brilho).toBe('r-brilho');
+    expect(result.quantidades.brilho).toBe(8);
+    expect(result.quantidadesManuais.brilho).toBe(false);
+  });
+
+  it('não altera tipos ausentes na origem no estado parcial', () => {
+    const destinoAtual = {
+      selectedReceitas: { confeito: 'r-conf' },
+      quantidades: { confeito: 3 },
+    };
+    const result = applyCloneToFormState(origem, 'receitas-e-quantidades', {
+      receitasCatalogo: catalogo,
+      produtoDestino,
+      destinoAtual,
+    });
+    expect(result.selectedReceitas.confeito).toBe('r-conf');
+    expect(result.quantidades.confeito).toBe(3);
+  });
+});
+
+describe('filterProdutosFonteClone', () => {
+  const produtos: ProdutoCloneFonte[] = [
+    { id: 'atual', nome: 'Atual', codigo: 'A1', receitasVinculadas: { massa: origem.receitasVinculadas.massa } },
+    { id: 'vazio', nome: 'Vazio', codigo: 'V1', receitasVinculadas: {} },
+    origem,
+  ];
+
+  it('exclui produto atual e sem receitas', () => {
+    const filtered = filterProdutosFonteClone(produtos, 'atual');
+    expect(filtered.map((p) => p.id)).toEqual(['origem-1']);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes — deve falhar**
+
+Run: `npm test -- src/domain/produtos/produto-receitas-clone-utils.test.ts`
+Expected: FAIL — módulo não encontrado
+
+- [ ] **Step 3: Implementar utils**
+
+```typescript
+// src/domain/produtos/produto-receitas-clone-utils.ts
+import { PRODUTO_RECEITA_TIPO_OPTIONS, type TipoReceita } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import { countReceitasVinculadas } from '@/domain/produtos/produto-config-resumo';
+import {
+  buildSugestaoReceitaProduto,
+  type ReceitaSugestaoInput,
+} from '@/domain/receitas/receita-produto-quantidade-sugestao';
+import type { ProdutoPesoInput } from '@/domain/assadeiras/produto-peso';
+import type {
+  CloneApplyResult,
+  CloneDestinoFormState,
+  CloneDiffLinha,
+  CloneModo,
+  ProdutoCloneFonte,
+} from './produto-receitas-clone-types';
+
+type ApplyContext = {
+  receitasCatalogo: ReceitaSugestaoInput[];
+  produtoDestino: ProdutoPesoInput;
+  destinoAtual?: CloneDestinoFormState;
+};
+
+export function filterProdutosFonteClone(
+  produtos: ProdutoCloneFonte[],
+  produtoAtualId: string,
+): ProdutoCloneFonte[] {
+  return produtos.filter(
+    (item) => item.id !== produtoAtualId && countReceitasVinculadas(item.receitasVinculadas) > 0,
+  );
+}
+
+export function normalizeCloneSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+export function matchesCloneSearch(produto: ProdutoCloneFonte, term: string): boolean {
+  if (!term) return true;
+  const haystack = normalizeCloneSearch(`${produto.nome} ${produto.codigo}`);
+  return haystack.includes(normalizeCloneSearch(term));
+}
+
+export function buildCloneDiff(
+  origem: ProdutoCloneFonte,
+  destino: CloneDestinoFormState,
+  receitaNomePorId?: Map<string, string>,
+): CloneDiffLinha[] {
+  const linhas: CloneDiffLinha[] = [];
+
+  for (const option of PRODUTO_RECEITA_TIPO_OPTIONS) {
+    const vinculo = origem.receitasVinculadas[option.value];
+    if (!vinculo?.ativo) continue;
+
+    const destinoReceitaId = destino.selectedReceitas[option.value];
+    const acao: CloneDiffLinha['acao'] = destinoReceitaId ? 'substituir' : 'adicionar';
+
+    linhas.push({
+      tipo: option.value,
+      tipoLabel: option.label,
+      acao,
+      destinoReceitaNome: destinoReceitaId
+        ? receitaNomePorId?.get(destinoReceitaId)
+        : undefined,
+      destinoReceitaId: destinoReceitaId || undefined,
+      destinoQuantidade: destino.quantidades[option.value],
+      origemReceitaNome: vinculo.receita_nome,
+      origemReceitaId: vinculo.receita_id,
+      origemQuantidade: vinculo.quantidade,
+    });
+  }
+
+  return linhas;
+}
+
+export function hasCloneRecipeChanges(diff: CloneDiffLinha[]): boolean {
+  return diff.some(
+    (linha) =>
+      linha.acao === 'adicionar' || linha.destinoReceitaId !== linha.origemReceitaId,
+  );
+}
+
+export function applyCloneToFormState(
+  origem: ProdutoCloneFonte,
+  modo: CloneModo,
+  context: ApplyContext,
+): CloneApplyResult {
+  const selectedReceitas: Partial<Record<TipoReceita, string>> = {
+    ...context.destinoAtual?.selectedReceitas,
+  };
+  const quantidades: Partial<Record<TipoReceita, number>> = {
+    ...context.destinoAtual?.quantidades,
+  };
+  const quantidadesManuais: Partial<Record<TipoReceita, boolean>> = {};
+
+  for (const option of PRODUTO_RECEITA_TIPO_OPTIONS) {
+    const vinculo = origem.receitasVinculadas[option.value];
+    if (!vinculo?.ativo) continue;
+
+    selectedReceitas[option.value] = vinculo.receita_id;
+
+    if (modo === 'receitas-e-quantidades') {
+      quantidades[option.value] = vinculo.quantidade;
+      quantidadesManuais[option.value] = true;
+      continue;
+    }
+
+    const receita = context.receitasCatalogo.find((item) => item.id === vinculo.receita_id);
+    const sugestao = buildSugestaoReceitaProduto(receita, option.value, context.produtoDestino);
+    quantidades[option.value] = sugestao.quantidade ?? undefined;
+    quantidadesManuais[option.value] = false;
+  }
+
+  return { selectedReceitas, quantidades, quantidadesManuais };
+}
+```
+
+Ajustar assinatura nos testes se necessário; nomes do destino vêm de `receitaNomePorId` passado ao `buildCloneDiff`.
+
+- [ ] **Step 4: Rodar testes — deve passar**
+
+Run: `npm test -- src/domain/produtos/produto-receitas-clone-utils.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/produtos/produto-receitas-clone-utils.ts src/domain/produtos/produto-receitas-clone-utils.test.ts
+git commit -m "feat: utils de diff e apply para clonar receitas de produto"
+```
+
+---
+
+### Task 3: Modal picker de produto origem
+
+**Files:**
+- Create: `src/components/ProdutosConfig/ProdutoReceitasClonePickerModal.tsx`
+
+- [ ] **Step 1: Implementar picker**
+
+```tsx
+'use client';
+
+import { useMemo, useState } from 'react';
+import type { ProdutoCloneFonte } from '@/domain/produtos/produto-receitas-clone-types';
+import { countReceitasVinculadas } from '@/domain/produtos/produto-config-resumo';
+import { matchesCloneSearch } from '@/domain/produtos/produto-receitas-clone-utils';
+
+type Props = {
+  isOpen: boolean;
+  produtoDestinoNome: string;
+  produtos: ProdutoCloneFonte[];
+  onClose: () => void;
+  onSelect: (produto: ProdutoCloneFonte) => void;
+};
+
+export default function ProdutoReceitasClonePickerModal({
+  isOpen,
+  produtoDestinoNome,
+  produtos,
+  onClose,
+  onSelect,
+}: Props) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(
+    () => produtos.filter((p) => matchesCloneSearch(p, search)),
+    [produtos, search],
+  );
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clone-picker-title"
+        className="relative bg-white w-full md:max-w-lg md:rounded-3xl rounded-t-3xl shadow-2xl max-h-[85dvh] flex flex-col"
+      >
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p id="clone-picker-title" className="text-lg font-bold text-gray-900">
+            Clonar receitas
+          </p>
+          <p className="text-sm text-gray-500 mt-1">
+            Escolha o produto de origem para <span className="font-medium">{produtoDestinoNome}</span>.
+          </p>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou código…"
+            className="mt-3 w-full min-h-11 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+            autoFocus
+          />
+        </div>
+        <ul className="overflow-y-auto flex-1 divide-y divide-gray-100">
+          {filtered.length === 0 ? (
+            <li className="px-5 py-8 text-sm text-gray-500 text-center">
+              Nenhum produto com receitas encontrado.
+            </li>
+          ) : (
+            filtered.map((produto) => {
+              const count = countReceitasVinculadas(produto.receitasVinculadas);
+              return (
+                <li key={produto.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(produto)}
+                    className="w-full min-h-11 px-5 py-3 flex items-center justify-between gap-3 text-left hover:bg-amber-50 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900 truncate">{produto.nome}</span>
+                    <span className="shrink-0 text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">
+                      {count} {count === 1 ? 'receita' : 'receitas'}
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
+        <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutosConfig/ProdutoReceitasClonePickerModal.tsx
+git commit -m "feat: modal picker para escolher produto origem no clone de receitas"
+```
+
+---
+
+### Task 4: Diálogo de confirmação com dois modos
+
+**Files:**
+- Create: `src/components/ProdutosConfig/ProdutoReceitasCloneConfirmDialog.tsx`
+
+- [ ] **Step 1: Implementar confirmação**
+
+Props principais:
+
+```typescript
+type Props = {
+  isOpen: boolean;
+  origemNome: string;
+  diff: CloneDiffLinha[];
+  receitaNomePorId: Map<string, string>;
+  onCancel: () => void;
+  onConfirm: (modo: CloneModo) => void;
+};
+```
+
+Renderizar seções **Será substituído** / **Será adicionado** usando `diff.acao`. Para nomes do destino em substituições, resolver `receitaNomePorId.get(linha.destinoReceitaId!)`.
+
+Footer com três botões empilhados em mobile:
+
+1. Cancelar (ghost)
+2. Só receitas (outline)
+3. Receitas + quantidades (primário `bg-gray-900`)
+
+Nota em texto pequeno amber/stone abaixo do resumo:
+
+> As quantidades serão calculadas automaticamente para este produto (peso/gramatura). Tipos sem cálculo ficarão em branco para preenchimento manual.
+
+(z-index `z-[70]`)
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutosConfig/ProdutoReceitasCloneConfirmDialog.tsx
+git commit -m "feat: dialogo de confirmacao com modos no clone de receitas"
+```
+
+---
+
+### Task 5: Hook `useProdutoReceitasClone`
+
+**Files:**
+- Create: `src/components/ProdutosConfig/useProdutoReceitasClone.ts`
+
+- [ ] **Step 1: Implementar hook**
+
+Estado:
+
+```typescript
+type ClonePhase = 'idle' | 'picker' | 'confirm';
+
+// retorna:
+{
+  clonePhase,
+  origemSelecionada: ProdutoCloneFonte | null,
+  produtosFonte: ProdutoCloneFonte[],
+  diff: CloneDiffLinha[],
+  openPicker: () => void,
+  closeCloneFlow: () => void,
+  handleSelectOrigem: (produto: ProdutoCloneFonte) => void,
+  handleConfirmClone: (modo: CloneModo) => CloneApplyResult | null,
+  cancelConfirm: () => void,
+}
+```
+
+Lógica `handleSelectOrigem`:
+
+1. `buildCloneDiff(origem, destinoAtual)`
+2. Se `!hasCloneRecipeChanges(diff)` → retornar `{ kind: 'no-op', message: '...' }` sem abrir confirm
+3. Senão → `setPhase('confirm')`
+
+`handleConfirmClone(modo)` chama `applyCloneToFormState` e reseta fase para `idle`.
+
+Receber deps: `produtoAtualId`, `produtosFonteClone`, `destinoAtual`, `receitasCatalogo`, `produtoDestino`.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ProdutosConfig/useProdutoReceitasClone.ts
+git commit -m "feat: hook useProdutoReceitasClone para subfluxo de clone"
+```
+
+---
+
+### Task 6: Integrar no `ProdutoReceitasConfigModal`
+
+**Files:**
+- Modify: `src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx`
+
+- [ ] **Step 1: Adicionar prop e botão header**
+
+```typescript
+type Props = {
+  // ...existentes
+  produtosFonteClone: ProdutoCloneFonte[];
+};
+```
+
+No header, abaixo do subtítulo:
+
+```tsx
+<button
+  type="button"
+  onClick={openPicker}
+  disabled={isBusy}
+  aria-label="Clonar receitas de outro produto"
+  className="mt-2 min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 disabled:opacity-50"
+>
+  <span className="material-icons text-base" aria-hidden="true">content_copy</span>
+  Clonar de…
+</button>
+```
+
+- [ ] **Step 2: Conectar hook e submodais**
+
+Ao confirmar clone:
+
+```typescript
+const applied = handleConfirmClone(modo);
+if (!applied) return;
+setSelectedReceitas(applied.selectedReceitas);
+setQuantidades(applied.quantidades);
+setQuantidadesManuais(applied.quantidadesManuais);
+setMessage(
+  modo === 'receitas'
+    ? `Formulário preenchido a partir de ${origem.nome} (só receitas). Revise e clique em Salvar tudo.`
+    : `Formulário preenchido a partir de ${origem.nome} (receitas e quantidades). Revise e clique em Salvar tudo.`,
+);
+```
+
+Renderizar `ProdutoReceitasClonePickerModal` e `ProdutoReceitasCloneConfirmDialog` condicionalmente.
+
+- [ ] **Step 3: Verificar tamanho do arquivo**
+
+Run: `(Get-Content src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx).Count`
+Expected: < 500 linhas; se ≥ 400, manter lógica no hook (já extraído)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/ProdutosConfig/ProdutoReceitasConfigModal.tsx
+git commit -m "feat: botao clonar de e subfluxo no modal de receitas do produto"
+```
+
+---
+
+### Task 7: Passar produtos fonte no client
+
+**Files:**
+- Modify: `src/app/config/produtos/ProdutosConfigClient.tsx`
+
+- [ ] **Step 1: Mapear e passar prop**
+
+```typescript
+const produtosFonteClone = useMemo(
+  () =>
+    produtos.map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      codigo: p.codigo,
+      receitasVinculadas: p.receitasVinculadas,
+    })),
+  [produtos],
+);
+
+// em <ProdutoReceitasConfigModal ... />
+produtosFonteClone={produtosFonteClone}
+```
+
+- [ ] **Step 2: Build final**
+
+Run: `npm run build`
+Expected: PASS
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/config/produtos/ProdutosConfigClient.tsx
+git commit -m "feat: passa lista de produtos fonte para clone de receitas"
+```
+
+---
+
+### Task 8: Verificação manual
+
+- [ ] Abrir `/config/produtos` → ⋮ → Receitas em um produto
+- [ ] **Clonar de…** → lista sem produto atual e sem produtos vazios
+- [ ] Busca por nome/código funciona
+- [ ] Confirmação mostra substituir/adicionar corretamente
+- [ ] **Só receitas** → selects preenchidos + quantidades calculadas (massa/brilho conforme gramatura)
+- [ ] **Receitas + quantidades** → quantidades iguais à origem
+- [ ] **Salvar tudo** persiste; cancelar em picker/confirm não altera form
+- [ ] Mobile: botões ≥ 44px, modais scrolláveis
+
+---
+
+## Spec coverage (self-review)
+
+| Requisito spec | Task |
+|----------------|------|
+| Só preenche formulário | 2, 6 |
+| Sobrescrever com aviso | 4, 5 |
+| Lista só com receitas | 2, 3, 7 |
+| Dois modos clone | 2, 4, 5, 6 |
+| Tipos só no destino intactos | 2 (`destinoAtual` merge) |
+| Sem server action nova | — (nenhuma task) |
+| Acessibilidade básica | 3, 4 |
+| Arquivos < 500 linhas | 5, 6 |
