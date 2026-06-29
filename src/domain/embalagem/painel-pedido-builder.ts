@@ -57,10 +57,7 @@ export function buildPainelPedido(
   const { valor: produzidoScalar } = derivarUnidadePrincipal(produzido);
   const metaPlanejada = resolveMetaPlanejada('embalagem', pedido);
   const fornoProduzidoLt = etapasProduzidoLt?.forno ?? 0;
-  const metaEfetiva = resolveMetaEfetiva('embalagem', pedido, assadeiraCtx, {
-    fermentacaoProduzidoLt: etapasProduzidoLt?.fermentacao ?? 0,
-    fornoProduzidoLt,
-  });
+  const metaEfetiva = resolveMetaEfetiva('embalagem', pedido, assadeiraCtx);
   const cascata = buildEtapaCascataDisplay({
     ordem: pedido,
     fermentacaoProduzidoLt: etapasProduzidoLt?.fermentacao ?? 0,

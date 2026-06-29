@@ -26,14 +26,15 @@ function ordemBase(partial: Partial<OrdemProducaoRecord> = {}): OrdemProducaoRec
 }
 
 describe('buildEtapaCascataDisplay', () => {
-  it('forno com fermentação ao vivo acima da OP propaga meta para forno', () => {
+  it('forno mantém meta da OP enquanto fermentação não confirmou meta', () => {
     const cascata = buildEtapaCascataDisplay({
       ordem: ordemBase(),
       fermentacaoProduzidoLt: 40,
     });
 
-    expect(cascata.forno.meta).toBe(40);
+    expect(cascata.forno.meta).toBe(260);
     expect(cascata.forno.produzido).toBe(0);
+    expect(cascata.fermentacao.produzido).toBe(40);
   });
 
   it('forno com fermentação finalizada em 260 e forno 253 ao vivo', () => {

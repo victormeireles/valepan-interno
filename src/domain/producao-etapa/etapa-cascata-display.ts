@@ -39,9 +39,7 @@ export function buildEtapaCascataDisplay(params: {
       ? ordem.fornoMetaConfirmada
       : ordem.fermentacaoMetaConfirmada != null
         ? ordem.fermentacaoMetaConfirmada
-        : !ordem.fermentacaoFinalizada && fermentacaoProduzidoLt > 0
-          ? fermentacaoProduzidoLt
-          : metaOp;
+        : metaOp;
   const fornoProduzido =
     ordem.fornoFinalizada && ordem.fornoMetaConfirmada != null
       ? ordem.fornoMetaConfirmada

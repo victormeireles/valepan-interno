@@ -53,10 +53,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     })),
   );
   const metaPlanejada = resolveMetaPlanejada(etapa, ordem);
-  const metaEfetiva = resolveMetaEfetiva(etapa, ordem, undefined, {
-    fermentacaoProduzidoLt: fermentacaoProduzido,
-    fornoProduzidoLt: fornoProduzido,
-  });
+  const metaEfetiva = resolveMetaEfetiva(etapa, ordem);
   const metaReferencia = resolveMetaReferencia(etapa, ordem);
   const unidade = modoQuantidade === 'assadeiras' ? 'lt' : 'un';
   const produzido =

@@ -93,7 +93,7 @@ describe('buildPainelOrdem', () => {
     expect(item.estimativaAnterior).toBeNull();
   });
 
-  it('forno propaga fermentação ao vivo acima da OP no card', () => {
+  it('forno mantém meta da OP enquanto fermentação não confirmou meta', () => {
     const item = buildPainelOrdem({
       etapa: 'forno',
       ordem: { ...ordem, assadeiras: 36 },
@@ -105,8 +105,9 @@ describe('buildPainelOrdem', () => {
     });
 
     expect(item.metaPlanejada).toBe(36);
-    expect(item.metaEfetiva).toBe(40);
-    expect(item.aProduzir).toBe(40);
+    expect(item.metaEfetiva).toBe(36);
+    expect(item.aProduzir).toBe(36);
+    expect(item.estimativaAnterior).toBe(40);
   });
 
   it('usa unidades quando ordem não tem assadeira', () => {
