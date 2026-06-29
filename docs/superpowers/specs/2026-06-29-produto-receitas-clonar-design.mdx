@@ -1,0 +1,191 @@
+# Design: Clonar receitas de outro produto
+
+**Data:** 2026-06-29  
+**Status:** Aprovado pelo stakeholder  
+**Tela:** `/config/produtos` → modal **Receitas** (`ProdutoReceitasConfigModal`)  
+**Depende de:** `2026-06-18-config-produtos-receitas-design.mdx`
+
+## Objetivo
+
+Permitir copiar a listagem de receitas vinculadas (tipo + receita + quantidade) de outro produto para o produto em edição, preenchendo o formulário existente para revisão manual antes de salvar.
+
+## Decisões de produto (validadas)
+
+| Tema | Decisão |
+|------|---------|
+| Persistência | **Só preenche o formulário** — usuário revisa e clica **Salvar tudo** (ou salva linha a linha) |
+| Conflitos no destino | **Sobrescrever com aviso** — mostra resumo do que será trocado antes de preencher |
+| Lista de origem | **Só produtos com ≥ 1 receita** vinculada ativa |
+| Escopo da cópia | Copia **apenas tipos presentes na origem**; tipos só no destino permanecem intactos |
+| Produto atual | Excluído da lista de origem |
+| UI principal | Botão **Clonar de…** no header do modal + modal picker + diálogo de confirmação |
+
+## Fora de escopo (v1)
+
+- Salvar automaticamente no banco ao clonar
+- Clonar para vários produtos de uma vez
+- Filtrar origem por categoria
+- Apagar tipos do destino que não existem na origem
+- Nova server action dedicada (clone é estado local no client)
+
+## Fluxo do usuário
+
+1. Abrir modal **Receitas** de um produto em `/config/produtos`.
+2. Clicar **Clonar de…** no header.
+3. Modal picker: buscar e selecionar produto de origem (badge `N receitas`).
+4. Diálogo de confirmação com resumo:
+   - **Será substituído** — tipos já preenchidos no destino que mudarão
+   - **Será adicionado** — tipos vazios no destino que receberão valor da origem
+5. Confirmar → formulário preenchido (selects + quantidades).
+6. Banner: *"Formulário preenchido a partir de {origem}. Revise e clique em Salvar tudo."*
+7. Usuário edita se quiser → **Salvar tudo** persiste via actions existentes.
+
+## UX — botão "Clonar de…"
+
+- **Posição:** header do `ProdutoReceitasConfigModal`, abaixo do subtítulo ou alinhado à direita do bloco de título (desktop).
+- **Estilo:** secundário outline — `border stone-200`, `min-h-11`, ícone Material `content_copy`.
+- **Label:** "Clonar de…"
+- **aria-label:** "Clonar receitas de outro produto"
+- Desabilitado enquanto `loadingTipo !== null`.
+
+## UX — modal picker
+
+| Elemento | Conteúdo |
+|----------|----------|
+| Título | Clonar receitas |
+| Subtítulo | Escolha o produto de origem para **{nome do produto atual}**. |
+| Busca | Filtra por nome ou código (case/accent insensitive) |
+| Lista | Nome do produto + badge `N receitas` |
+| Filtros | Excluir produto atual; excluir produtos com 0 receitas ativas |
+| Empty state | "Nenhum produto com receitas encontrado." |
+| Ação | Toque/Enter na linha → abre confirmação |
+
+Padrão visual: stone/amber, `rounded-xl`, Material Icons, alvos ≥ 44px.
+
+## UX — diálogo de confirmação
+
+Exemplo de linha em **Será substituído**:
+
+> Massa: *HB Brioche* (12) → *HB Brioche Duo* (15)
+
+Exemplo em **Será adicionado**:
+
+> Brilho: *(vazio)* → *Brilho Padrão* (8)
+
+| Botão | Papel |
+|-------|-------|
+| Cancelar | Fecha confirmação; volta ao picker |
+| Preencher formulário | Aplica ao estado local e fecha subfluxo |
+
+**Decisão v1:** se diff vazio após selecionar origem, exibir toast/banner *"Receitas já são iguais para os tipos da origem."* e não alterar formulário.
+
+## Lógica de diff e apply
+
+Utilitário `produto-receitas-clone-utils.ts`:
+
+```ts
+type CloneDiffLinha = {
+  tipo: TipoReceita;
+  tipoLabel: string;
+  acao: 'substituir' | 'adicionar';
+  destinoReceitaNome?: string;
+  destinoQuantidade?: number;
+  origemReceitaNome: string;
+  origemReceitaId: string;
+  origemQuantidade: number;
+};
+
+buildCloneDiff(origem, destinoFormState) → CloneDiffLinha[]
+applyCloneToFormState(origem) → { selectedReceitas, quantidades }
+```
+
+Regras:
+
+- Iterar `PRODUTO_RECEITA_TIPO_OPTIONS`; para cada tipo com vínculo ativo na origem:
+  - Se destino já tem receita selecionada → `substituir`
+  - Se destino vazio → `adicionar`
+- Tipos só no destino: ignorar (não entram no diff, não são limpos).
+- Receitas inativas na origem: ignorar (só vínculos `ativo === true`).
+
+## Dados
+
+### Fonte
+
+`getProdutosComReceitas()` já carregado no SSR de `config/produtos/page.tsx` e fundido em `ProdutoConfigResumo`.
+
+### Props novas
+
+`ProdutoReceitasConfigModal`:
+
+```ts
+produtosComReceitas: Array<{
+  id: string;
+  nome: string;
+  codigo: string;
+  receitasVinculadas: ProdutoConfigResumo['receitasVinculadas'];
+}>;
+```
+
+Filtrar no client: `id !== produto.id` e `countReceitasVinculadas > 0`.
+
+`ProdutosConfigClient` já tem `produtos` — mapear subset e passar ao modal.
+
+### Persistência
+
+Reutilizar sem alteração:
+
+- `linkReceitaAoProduto`
+- `updateProdutoReceita`
+- `unlinkProdutoReceita`
+
+Remover vínculo de tipo sobrescrito com receita diferente continua sendo responsabilidade do **Salvar tudo** / save por linha (comportamento atual ao trocar receita no select).
+
+## Arquitetura de arquivos
+
+### Novos
+
+```
+src/components/ProdutosConfig/
+  ProdutoReceitasClonePickerModal.tsx
+  ProdutoReceitasCloneConfirmDialog.tsx
+  produto-receitas-clone-utils.ts
+```
+
+### Modificados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `ProdutoReceitasConfigModal.tsx` | Botão header, estado subfluxo clone, integração utils |
+| `ProdutosConfigClient.tsx` | Passar `produtosComReceitas` ao modal |
+
+Manter cada arquivo < 500 linhas; extrair hook `useProdutoReceitasClone` se o modal crescer.
+
+## Acessibilidade
+
+- Focus trap nos modais aninhados; retorno de foco ao **Clonar de…** ao cancelar.
+- `aria-labelledby` / `aria-describedby` nos diálogos.
+- Resumo de mudanças em texto (não só cor).
+- `aria-live="polite"` no banner pós-clone.
+- Botões ícone com `aria-label`.
+
+## Testes manuais
+
+- [ ] Botão **Clonar de…** visível no header do modal Receitas
+- [ ] Lista exclui produto atual e produtos sem receitas
+- [ ] Busca filtra por nome/código
+- [ ] Confirmação lista substituições e adições corretamente
+- [ ] Confirmar preenche selects e quantidades sem persistir
+- [ ] **Salvar tudo** persiste vínculos clonados
+- [ ] Tipos só no destino não são apagados ao clonar
+- [ ] Cancelar em qualquer etapa não altera formulário
+- [ ] Mobile: picker e confirmação usáveis (touch ≥ 44px)
+- [ ] Regressão: salvar/remover por linha continua funcionando
+
+## Riscos e mitigações
+
+| Risco | Mitigação |
+|-------|-----------|
+| Modal com 3 camadas (receitas + picker + confirm) | z-index consistente; fechar picker ao abrir confirm |
+| Lista grande de produtos | Campo de busca obrigatório na UI |
+| `ProdutoReceitasConfigModal` > 500 linhas | Extrair hook + componentes filhos |
+| Receita da origem inativada após SSR | Select pode mostrar valor órfão até refresh — aceitável v1; validação no save existente |
