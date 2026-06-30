@@ -32,7 +32,7 @@ export async function POST(
       return NextResponse.json({ error: 'Ordem de produção não encontrada' }, { status: 404 });
     }
 
-    const lote = await fermentacaoLoteService.criarLotePorOrdem({
+    const { lote, insumoConsumo } = await fermentacaoLoteService.criarLotePorOrdem({
       ordemProducaoId: ordemId,
       quantidade: { assadeiras: loteAssadeiras, unidades: loteUnidades },
       fotos: {
@@ -64,6 +64,7 @@ export async function POST(
     return NextResponse.json({
       message: 'Lote criado com sucesso',
       loteId: lote.id,
+      insumoConsumo,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

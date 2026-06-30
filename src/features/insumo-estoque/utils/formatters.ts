@@ -1,7 +1,7 @@
 export function formatInsumoQuantidade(value: number, unidade?: string): string {
   const formatted = value.toLocaleString('pt-BR', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
+    maximumFractionDigits: 6,
   });
   return unidade ? `${formatted} ${unidade}` : formatted;
 }
@@ -44,6 +44,8 @@ export function origemMovimentoLabel(origem: string): string {
       return 'Ajuste manual';
     case 'resolucao_pendencia':
       return 'Resolução pendência';
+    case 'producao_fermentacao':
+      return 'Produção fermentação';
     default:
       return origem;
   }
@@ -56,6 +58,7 @@ export function origemMovimentoTone(
     case 'entrada_nf':
       return 'success';
     case 'resolucao_pendencia':
+    case 'producao_fermentacao':
       return 'accent';
     default:
       return 'neutral';

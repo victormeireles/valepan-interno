@@ -141,6 +141,14 @@ export default function ProducaoFermentacaoPage() {
     [refreshOrdensOnly, setMessage],
   );
 
+  const handleInsumoConsumoAviso = useCallback(
+    (avisos: string[]) => {
+      setMessage(`Aviso: ${avisos.join(' ')}`);
+      setTimeout(() => setMessage(null), 6000);
+    },
+    [setMessage],
+  );
+
   const handleSaveProducao = useCallback(
     async (
       producaoData: ProducaoData,
@@ -165,9 +173,14 @@ export default function ProducaoFermentacaoPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
-        setMessage('Produção de fermentação atualizada com sucesso!');
+        if (data.insumoConsumo?.avisos?.length) {
+          setMessage(`Aviso: ${data.insumoConsumo.avisos.join(' ')}`);
+          setTimeout(() => setMessage(null), 6000);
+        } else {
+          setMessage('Produção de fermentação atualizada com sucesso!');
+          setTimeout(() => setMessage(null), 3000);
+        }
         await refreshOrdensOnly();
-        setTimeout(() => setMessage(null), 3000);
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção de fermentação'));
       } finally {
@@ -336,6 +349,7 @@ export default function ProducaoFermentacaoPage() {
         onClose={onCloseModal}
         isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
+        onInsumoConsumoAviso={handleInsumoConsumoAviso}
         onSaveSuccess={async () => {
           await refreshOrdensOnly();
         }}

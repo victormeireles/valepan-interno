@@ -1,4 +1,5 @@
 import { insumoEstoqueRepository, InsumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
+import type { InsumoMovimentoOrigem } from '@/domain/types/insumo-estoque';
 
 type RegistrarEntradaInput = {
   insumoId: string;
@@ -17,6 +18,14 @@ type AjustarSaldoInput = {
   insumoId: string;
   novoSaldo: number;
   observacao: string;
+};
+
+type AplicarDeltaInput = {
+  insumoId: string;
+  delta: number;
+  origem: InsumoMovimentoOrigem;
+  fermentacaoLoteId?: string | null;
+  observacao?: string | null;
 };
 
 function isUniqueViolation(error: unknown): boolean {
@@ -78,10 +87,6 @@ export class InsumoEstoqueService {
   }
 
   async ajustarSaldo(input: AjustarSaldoInput): Promise<void> {
-    if (input.novoSaldo < 0) {
-      throw new Error('Saldo não pode ser negativo');
-    }
-
     const saldoAtual = await this.repository.findSaldo(input.insumoId);
     const quantidadeAtual = Number(saldoAtual?.quantidade ?? 0);
     const delta = input.novoSaldo - quantidadeAtual;
@@ -100,6 +105,26 @@ export class InsumoEstoqueService {
       custoUnitario: custoAtual,
       origem: 'ajuste_manual',
       observacao: input.observacao,
+    });
+  }
+
+  async aplicarDelta(input: AplicarDeltaInput): Promise<void> {
+    if (input.delta === 0) return;
+
+    const saldoAtual = await this.repository.findSaldo(input.insumoId);
+    const quantidadeAtual = Number(saldoAtual?.quantidade ?? 0);
+    const novoSaldo = quantidadeAtual + input.delta;
+    const custoAtual = await this.repository.findInsumoCustoUnitario(input.insumoId);
+
+    await this.repository.upsertSaldo(input.insumoId, novoSaldo);
+    await this.repository.insertMovimento({
+      insumoId: input.insumoId,
+      deltaQuantidade: input.delta,
+      saldoResultante: novoSaldo,
+      custoUnitario: custoAtual,
+      origem: input.origem,
+      fermentacaoLoteId: input.fermentacaoLoteId ?? null,
+      observacao: input.observacao ?? null,
     });
   }
 }

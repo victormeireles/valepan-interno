@@ -83,6 +83,7 @@ export class InsumoEstoqueRepository {
         pendencia_id: input.pendenciaId ?? null,
         numero_nf: input.numeroNf ?? null,
         observacao: input.observacao ?? null,
+        fermentacao_lote_id: input.fermentacaoLoteId ?? null,
       })
       .select()
       .single();
@@ -199,6 +200,37 @@ export class InsumoEstoqueRepository {
     }
 
     return data !== null;
+  }
+
+  async sumDeltaByFermentacaoLoteInsumo(
+    fermentacaoLoteId: string,
+  ): Promise<Map<string, number>> {
+    const { data, error } = await this.db
+      .from('insumo_movimentos')
+      .select('insumo_id, delta_quantidade')
+      .eq('fermentacao_lote_id', fermentacaoLoteId);
+
+    if (error) {
+      throw new Error(`Erro ao agregar movimentos do lote: ${error.message}`);
+    }
+
+    const map = new Map<string, number>();
+    for (const row of data ?? []) {
+      const insumoId = row.insumo_id as string;
+      map.set(insumoId, (map.get(insumoId) ?? 0) + Number(row.delta_quantidade));
+    }
+    return map;
+  }
+
+  async clearFermentacaoLoteId(fermentacaoLoteId: string): Promise<void> {
+    const { error } = await this.db
+      .from('insumo_movimentos')
+      .update({ fermentacao_lote_id: null })
+      .eq('fermentacao_lote_id', fermentacaoLoteId);
+
+    if (error) {
+      throw new Error(`Erro ao limpar vínculo do lote: ${error.message}`);
+    }
   }
 
   async updateInsumoCustoUnitario(insumoId: string, custoUnitario: number): Promise<void> {

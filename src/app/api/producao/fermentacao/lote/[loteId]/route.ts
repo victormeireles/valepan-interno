@@ -66,12 +66,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Valores não podem ser negativos' }, { status: 400 });
     }
 
-    const lote = await fermentacaoLoteRepository.findById(loteId);
-    if (!lote) {
-      return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
-    }
-
-    await fermentacaoLoteService.atualizarLote(loteId, {
+    const { lote: loteAtualizado, insumoConsumo } = await fermentacaoLoteService.atualizarLote(loteId, {
       quantidade: { assadeiras: loteAssadeiras, unidades: loteUnidades },
       fotos: {
         fotoUrl: fotoUrl || undefined,
@@ -82,7 +77,7 @@ export async function PUT(
     });
 
     try {
-      const ordem = await ordemProducaoRepository.findById(lote.ordemProducaoId);
+      const ordem = await ordemProducaoRepository.findById(loteAtualizado.ordemProducaoId);
       if (ordem) {
         const [produto, lotesByOrdem] = await Promise.all([
           new SupabaseProductService().findById(ordem.produtoId),
@@ -102,7 +97,11 @@ export async function PUT(
 
     revalidatePath('/api/painel/fermentacao');
 
-    return NextResponse.json({ message: 'Lote atualizado com sucesso' });
+    return NextResponse.json({
+      message: 'Lote atualizado com sucesso',
+      loteId: loteAtualizado.id,
+      insumoConsumo,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -119,11 +118,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'ID do lote inválido' }, { status: 400 });
     }
 
-    await fermentacaoLoteService.excluirLote(loteId);
+    const insumoConsumo = await fermentacaoLoteService.excluirLote(loteId);
 
     revalidatePath('/api/painel/fermentacao');
 
-    return NextResponse.json({ message: 'Lote excluído com sucesso' });
+    return NextResponse.json({
+      message: 'Lote excluído com sucesso',
+      insumoConsumo,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

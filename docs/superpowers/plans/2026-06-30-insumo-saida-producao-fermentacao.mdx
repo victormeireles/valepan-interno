@@ -1,0 +1,882 @@
+# Saída de estoque de insumos — Fermentação (Fase 2a) — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Baixar estoque de insumos proporcionalmente ao lançar/editar/excluir lotes de fermentação, usando receita de massa, com saldo negativo permitido e sem bloquear o fluxo operacional.
+
+**Architecture:** `FermentacaoLoteService` chama `InsumoConsumoProducaoService` após persistir o lote. Cálculo puro em `InsumoConsumoProducaoCalculator`; dados de receita via `InsumoReceitaMassaRepository` (produto + `produto_receitas` massa + ingredientes + `assadeiraResolver` para UN/LT). Ledger append-only em `insumo_movimentos` com FK `fermentacao_lote_id`.
+
+**Tech Stack:** Next.js 15 App Router, Supabase Postgres, Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-06-30-insumo-saida-producao-fermentacao-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260701100000_insumo_producao_saida.sql` | Precisão 6 casas, saldo negativo, FK, enum |
+| `src/domain/types/insumo-estoque.ts` | Origem `producao_fermentacao` |
+| `src/domain/types/insumo-estoque-db.ts` | `fermentacao_lote_id` no row/input |
+| `src/domain/insumos/insumo-consumo-producao-types.ts` | Tipos compartilhados calculator/service |
+| `src/domain/insumos/insumo-consumo-producao-calculator.ts` | Cálculo proporcional puro |
+| `src/domain/insumos/insumo-consumo-producao-calculator.test.ts` | Testes Vitest |
+| `src/domain/insumos/insumo-consumo-observacao.ts` | Texto do motivo no movimento |
+| `src/domain/insumos/insumo-consumo-observacao.test.ts` | Testes do texto |
+| `src/data/insumos/InsumoReceitaMassaRepository.ts` | Query produto → contexto de receita massa |
+| `src/data/insumos/InsumoEstoqueRepository.ts` | FK, agregação por lote, clear FK |
+| `src/lib/services/insumo-estoque-service.ts` | `aplicarDelta`, saldo negativo em ajuste |
+| `src/lib/services/insumo-estoque-service.test.ts` | Teste saldo negativo |
+| `src/lib/services/insumo-consumo-producao-service.ts` | Orquestra create/edit/delete |
+| `src/lib/services/insumo-consumo-producao-service.test.ts` | Testes com mocks |
+| `src/lib/services/fermentacao-lote-service.ts` | Hooks pós lote |
+| `src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts` | Resposta com `insumoConsumo` |
+| `src/app/api/producao/fermentacao/lote/[loteId]/route.ts` | Resposta com `insumoConsumo` |
+| `src/features/insumo-estoque/utils/formatters.ts` | Label origem + 6 casas |
+| `src/features/insumo-estoque/components/InsumoSaldoTable.tsx` | Saldo negativo vermelho |
+| `src/features/insumo-estoque/components/InsumoSaldoMobileList.tsx` | Saldo negativo vermelho |
+| `src/app/realizado/fermentacao/page.tsx` | Toast aviso consumo |
+| `src/types/database.ts` | Tipos gerados (após migration) |
+
+---
+
+### Task 1: Migration SQL
+
+**Files:**
+- Create: `supabase/migrations/20260701100000_insumo_producao_saida.sql`
+
+- [ ] **Step 1: Criar migration**
+
+```sql
+-- Saída de insumos por produção (fermentação) — Fase 2a
+
+-- Precisão 6 casas
+ALTER TABLE public.insumo_saldos
+  ALTER COLUMN quantidade TYPE numeric(14, 6);
+
+ALTER TABLE public.insumo_movimentos
+  ALTER COLUMN delta_quantidade TYPE numeric(14, 6),
+  ALTER COLUMN saldo_resultante TYPE numeric(14, 6);
+
+-- Permitir saldo negativo
+ALTER TABLE public.insumo_saldos
+  DROP CONSTRAINT IF EXISTS insumo_saldos_quantidade_check;
+
+ALTER TABLE public.insumo_movimentos
+  DROP CONSTRAINT IF EXISTS insumo_movimentos_saldo_resultante_check;
+
+-- Nova origem
+ALTER TYPE public.insumo_movimento_origem ADD VALUE IF NOT EXISTS 'producao_fermentacao';
+
+-- Vínculo com lote de fermentação
+ALTER TABLE public.insumo_movimentos
+  ADD COLUMN IF NOT EXISTS fermentacao_lote_id uuid
+    REFERENCES public.fermentacao_lotes(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_insumo_mov_fermentacao_lote
+  ON public.insumo_movimentos(fermentacao_lote_id)
+  WHERE fermentacao_lote_id IS NOT NULL;
+```
+
+- [ ] **Step 2: Aplicar no Supabase** (projeto remoto ou `supabase db push` local)
+
+- [ ] **Step 3: Regenerar tipos**
+
+Run: `npm run gen:types`  
+Expected: `src/types/database.ts` inclui `fermentacao_lote_id` e `producao_fermentacao` no enum.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260701100000_insumo_producao_saida.sql src/types/database.ts
+git commit -m "feat(insumos): migration saida producao fermentacao e saldo negativo"
+```
+
+---
+
+### Task 2: Tipos de domínio
+
+**Files:**
+- Modify: `src/domain/types/insumo-estoque.ts`
+- Modify: `src/domain/types/insumo-estoque-db.ts`
+- Create: `src/domain/insumos/insumo-consumo-producao-types.ts`
+
+- [ ] **Step 1: Atualizar origem em `insumo-estoque.ts`**
+
+```typescript
+export type InsumoMovimentoOrigem =
+  | 'entrada_nf'
+  | 'ajuste_manual'
+  | 'resolucao_pendencia'
+  | 'producao_fermentacao';
+
+export type InsumoConsumoResultado = {
+  aplicado: boolean;
+  avisos: string[];
+};
+```
+
+- [ ] **Step 2: Atualizar `insumo-estoque-db.ts`**
+
+Em `InsumoMovimentoRow` e `RegistrarInsumoMovimentoInput`, adicionar:
+
+```typescript
+fermentacao_lote_id?: string | null;
+fermentacaoLoteId?: string | null; // apenas no input camelCase
+```
+
+- [ ] **Step 3: Criar `insumo-consumo-producao-types.ts`**
+
+```typescript
+import type { EtapaQuantidade, ModoQuantidadeEtapa } from '@/domain/producao-etapa/etapa-quantidade';
+
+export type InsumoReceitaMassaIngrediente = {
+  insumoId: string;
+  quantidadePadrao: number;
+};
+
+export type InsumoReceitaMassaContexto = {
+  produtoNome: string;
+  quantidadePorProduto: number;
+  ingredientes: InsumoReceitaMassaIngrediente[];
+  unidadesPorAssadeira: number | null;
+};
+
+export type InsumoConsumoCalculado = {
+  insumoId: string;
+  quantidade: number;
+};
+
+export type InsumoConsumoCalculoInput = {
+  lote: EtapaQuantidade;
+  modo: ModoQuantidadeEtapa;
+  contexto: InsumoReceitaMassaContexto;
+};
+
+export type InsumoConsumoCalculoResultado =
+  | { ok: true; consumos: InsumoConsumoCalculado[] }
+  | { ok: false; motivo: string };
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/types/insumo-estoque.ts src/domain/types/insumo-estoque-db.ts src/domain/insumos/insumo-consumo-producao-types.ts
+git commit -m "feat(insumos): tipos para consumo proporcional na fermentacao"
+```
+
+---
+
+### Task 3: Calculator (TDD)
+
+**Files:**
+- Create: `src/domain/insumos/insumo-consumo-producao-calculator.ts`
+- Create: `src/domain/insumos/insumo-consumo-producao-calculator.test.ts`
+
+- [ ] **Step 1: Escrever testes que falham**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { calcularConsumoInsumosProducao } from './insumo-consumo-producao-calculator';
+
+const contextoBase = {
+  produtoNome: 'HB 65g',
+  quantidadePorProduto: 100,
+  unidadesPorAssadeira: 30,
+  ingredientes: [
+    { insumoId: 'farinha-id', quantidadePadrao: 10 },
+    { insumoId: 'agua-id', quantidadePadrao: 5 },
+  ],
+};
+
+describe('calcularConsumoInsumosProducao', () => {
+  it('calcula proporcional por assadeiras sem arredondar receita', () => {
+    const result = calcularConsumoInsumosProducao({
+      lote: { assadeiras: 1, unidades: 0 },
+      modo: 'assadeiras',
+      contexto: contextoBase,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 1 LT * 30 UN = 30 UN; 30/100 = 0.3 receita
+    expect(result.consumos).toEqual([
+      { insumoId: 'farinha-id', quantidade: 3 },
+      { insumoId: 'agua-id', quantidade: 1.5 },
+    ]);
+  });
+
+  it('calcula por unidades diretas', () => {
+    const result = calcularConsumoInsumosProducao({
+      lote: { assadeiras: 0, unidades: 50 },
+      modo: 'unidades',
+      contexto: { ...contextoBase, unidadesPorAssadeira: null },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.consumos[0]?.quantidade).toBe(5);
+  });
+
+  it('falha sem quantidade_por_produto', () => {
+    const result = calcularConsumoInsumosProducao({
+      lote: { assadeiras: 1, unidades: 0 },
+      modo: 'assadeiras',
+      contexto: { ...contextoBase, quantidadePorProduto: 0 },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('falha em modo assadeiras sem unidades por assadeira', () => {
+    const result = calcularConsumoInsumosProducao({
+      lote: { assadeiras: 2, unidades: 0 },
+      modo: 'assadeiras',
+      contexto: { ...contextoBase, unidadesPorAssadeira: null },
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes — deve falhar**
+
+Run: `npm test -- src/domain/insumos/insumo-consumo-producao-calculator.test.ts`  
+Expected: FAIL — módulo não encontrado
+
+- [ ] **Step 3: Implementar calculator**
+
+```typescript
+import type {
+  InsumoConsumoCalculoInput,
+  InsumoConsumoCalculoResultado,
+  InsumoConsumoCalculado,
+} from '@/domain/insumos/insumo-consumo-producao-types';
+
+const CASAS = 6;
+
+function arredondar(value: number): number {
+  const fator = 10 ** CASAS;
+  return Math.round(value * fator) / fator;
+}
+
+function resolverUnidadesProduzidas(input: InsumoConsumoCalculoInput): number | null {
+  if (input.modo === 'assadeiras') {
+    if (!input.contexto.unidadesPorAssadeira || input.contexto.unidadesPorAssadeira <= 0) {
+      return null;
+    }
+    if (input.lote.assadeiras <= 0) return null;
+    return input.lote.assadeiras * input.contexto.unidadesPorAssadeira;
+  }
+  if (input.lote.unidades <= 0) return null;
+  return input.lote.unidades;
+}
+
+export function calcularConsumoInsumosProducao(
+  input: InsumoConsumoCalculoInput,
+): InsumoConsumoCalculoResultado {
+  const { quantidadePorProduto, ingredientes } = input.contexto;
+
+  if (!quantidadePorProduto || quantidadePorProduto <= 0) {
+    return { ok: false, motivo: 'Receita de massa sem quantidade por produto válida' };
+  }
+  if (!ingredientes.length) {
+    return { ok: false, motivo: 'Receita de massa sem ingredientes vinculados' };
+  }
+
+  const unidadesProduzidas = resolverUnidadesProduzidas(input);
+  if (unidadesProduzidas == null || unidadesProduzidas <= 0) {
+    return { ok: false, motivo: 'Quantidade produzida inválida para cálculo de consumo' };
+  }
+
+  const receitasConsumidas = unidadesProduzidas / quantidadePorProduto;
+  const consumos: InsumoConsumoCalculado[] = ingredientes
+    .filter((item) => item.insumoId && item.quantidadePadrao > 0)
+    .map((item) => ({
+      insumoId: item.insumoId,
+      quantidade: arredondar(receitasConsumidas * item.quantidadePadrao),
+    }))
+    .filter((item) => item.quantidade > 0);
+
+  if (consumos.length === 0) {
+    return { ok: false, motivo: 'Nenhum insumo com consumo calculável' };
+  }
+
+  return { ok: true, consumos };
+}
+```
+
+- [ ] **Step 4: Rodar testes — deve passar**
+
+Run: `npm test -- src/domain/insumos/insumo-consumo-producao-calculator.test.ts`  
+Expected: PASS (4 tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-consumo-producao-calculator.ts src/domain/insumos/insumo-consumo-producao-calculator.test.ts
+git commit -m "feat(insumos): calculator consumo proporcional fermentacao"
+```
+
+---
+
+### Task 4: Observação do movimento
+
+**Files:**
+- Create: `src/domain/insumos/insumo-consumo-observacao.ts`
+- Create: `src/domain/insumos/insumo-consumo-observacao.test.ts`
+
+- [ ] **Step 1: Teste**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { formatarObservacaoConsumoFermentacao } from './insumo-consumo-observacao';
+
+describe('formatarObservacaoConsumoFermentacao', () => {
+  it('formata LT e UN no modo assadeiras', () => {
+    expect(
+      formatarObservacaoConsumoFermentacao({
+        produtoNome: 'HB 65g',
+        modo: 'assadeiras',
+        lote: { assadeiras: 2, unidades: 0 },
+        unidadesPorAssadeira: 30,
+        loteId: 'abc12345-0000-0000-0000-000000000000',
+      }),
+    ).toBe('Produção fermentação • HB 65g • 2 LT (60 UN) • lote abc12345');
+  });
+});
+```
+
+- [ ] **Step 2: Implementar**
+
+```typescript
+import type { EtapaQuantidade, ModoQuantidadeEtapa } from '@/domain/producao-etapa/etapa-quantidade';
+
+type Input = {
+  produtoNome: string;
+  modo: ModoQuantidadeEtapa;
+  lote: EtapaQuantidade;
+  unidadesPorAssadeira: number | null;
+  loteId: string;
+};
+
+export function formatarObservacaoConsumoFermentacao(input: Input): string {
+  const idCurto = input.loteId.slice(0, 8);
+  if (input.modo === 'assadeiras') {
+    const un = (input.unidadesPorAssadeira ?? 0) * input.lote.assadeiras;
+    return `Produção fermentação • ${input.produtoNome} • ${input.lote.assadeiras} LT (${un} UN) • lote ${idCurto}`;
+  }
+  return `Produção fermentação • ${input.produtoNome} • ${input.lote.unidades} UN • lote ${idCurto}`;
+}
+```
+
+- [ ] **Step 3: `npm test -- src/domain/insumos/insumo-consumo-observacao.test.ts`** → PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/insumos/insumo-consumo-observacao.ts src/domain/insumos/insumo-consumo-observacao.test.ts
+git commit -m "feat(insumos): observacao de movimento por lote fermentacao"
+```
+
+---
+
+### Task 5: InsumoReceitaMassaRepository
+
+**Files:**
+- Create: `src/data/insumos/InsumoReceitaMassaRepository.ts`
+
+- [ ] **Step 1: Implementar repositório**
+
+```typescript
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
+import { resolveModoQuantidadeEtapa } from '@/domain/producao-etapa/etapa-quantidade';
+import type { InsumoReceitaMassaContexto } from '@/domain/insumos/insumo-consumo-producao-types';
+import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+
+export class InsumoReceitaMassaRepository {
+  async loadContexto(
+    ordem: OrdemProducaoRecord,
+  ): Promise<InsumoReceitaMassaContexto | null> {
+    const supabase = supabaseClientFactory.createServiceRoleClient();
+
+    const { data: produto, error: produtoError } = await supabase
+      .from('produtos')
+      .select('id, nome')
+      .eq('id', ordem.produtoId)
+      .maybeSingle();
+
+    if (produtoError || !produto) return null;
+
+    const { data: vinculo } = await supabase
+      .from('produto_receitas')
+      .select(`
+        quantidade_por_produto,
+        receitas!inner (
+          id,
+          tipo,
+          ativo,
+          receita_ingredientes (
+            insumo_id,
+            quantidade_padrao
+          )
+        )
+      `)
+      .eq('produto_id', ordem.produtoId)
+      .eq('tipo', 'massa')
+      .eq('ativo', true)
+      .eq('receitas.ativo', true)
+      .maybeSingle();
+
+    if (!vinculo?.receitas) return null;
+
+    const receita = Array.isArray(vinculo.receitas) ? vinculo.receitas[0] : vinculo.receitas;
+    const ingredientesRaw = receita.receita_ingredientes ?? [];
+    const ingredientes = (Array.isArray(ingredientesRaw) ? ingredientesRaw : [ingredientesRaw])
+      .filter((row) => row.insumo_id)
+      .map((row) => ({
+        insumoId: row.insumo_id as string,
+        quantidadePadrao: Number(row.quantidade_padrao),
+      }));
+
+    let unidadesPorAssadeira: number | null = null;
+    const modo = resolveModoQuantidadeEtapa(ordem.assadeiraId);
+    if (modo === 'assadeiras') {
+      const vinculos = await assadeiraResolver.resolveForProduto(ordem.produtoId);
+      const match = vinculos.find((v) => v.assadeira_id === ordem.assadeiraId) ?? vinculos[0];
+      unidadesPorAssadeira = match?.unidades_efetivas ?? null;
+    }
+
+    return {
+      produtoNome: produto.nome,
+      quantidadePorProduto: Number(vinculo.quantidade_por_produto),
+      ingredientes,
+      unidadesPorAssadeira,
+    };
+  }
+}
+
+export const insumoReceitaMassaRepository = new InsumoReceitaMassaRepository();
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/data/insumos/InsumoReceitaMassaRepository.ts
+git commit -m "feat(insumos): repository receita massa para consumo producao"
+```
+
+---
+
+### Task 6: InsumoEstoqueService.aplicarDelta
+
+**Files:**
+- Modify: `src/data/insumos/InsumoEstoqueRepository.ts`
+- Modify: `src/lib/services/insumo-estoque-service.ts`
+- Create: `src/lib/services/insumo-estoque-service.test.ts`
+
+- [ ] **Step 1: Estender repository**
+
+Adicionar em `insertMovimento` o campo `fermentacao_lote_id: input.fermentacaoLoteId ?? null`.
+
+Adicionar métodos:
+
+```typescript
+async sumDeltaByFermentacaoLoteInsumo(
+  fermentacaoLoteId: string,
+): Promise<Map<string, number>> {
+  const { data, error } = await this.db
+    .from('insumo_movimentos')
+    .select('insumo_id, delta_quantidade')
+    .eq('fermentacao_lote_id', fermentacaoLoteId);
+
+  if (error) {
+    throw new Error(`Erro ao agregar movimentos do lote: ${error.message}`);
+  }
+
+  const map = new Map<string, number>();
+  for (const row of data ?? []) {
+    const insumoId = row.insumo_id as string;
+    map.set(insumoId, (map.get(insumoId) ?? 0) + Number(row.delta_quantidade));
+  }
+  return map;
+}
+
+async clearFermentacaoLoteId(fermentacaoLoteId: string): Promise<void> {
+  const { error } = await this.db
+    .from('insumo_movimentos')
+    .update({ fermentacao_lote_id: null })
+    .eq('fermentacao_lote_id', fermentacaoLoteId);
+
+  if (error) {
+    throw new Error(`Erro ao limpar vínculo do lote: ${error.message}`);
+  }
+}
+```
+
+- [ ] **Step 2: Teste saldo negativo**
+
+```typescript
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+const mockRepo = {
+  findSaldo: vi.fn(),
+  upsertSaldo: vi.fn(),
+  insertMovimento: vi.fn(),
+  findInsumoCustoUnitario: vi.fn(),
+};
+
+describe('InsumoEstoqueService.aplicarDelta', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRepo.findSaldo.mockResolvedValue({ quantidade: 5 });
+    mockRepo.findInsumoCustoUnitario.mockResolvedValue(2.5);
+    mockRepo.upsertSaldo.mockResolvedValue({});
+    mockRepo.insertMovimento.mockResolvedValue({ id: 'mov-1' });
+  });
+
+  it('permite saldo negativo', async () => {
+    const { InsumoEstoqueService } = await import('./insumo-estoque-service');
+    const service = new InsumoEstoqueService(mockRepo as never);
+
+    await service.aplicarDelta({
+      insumoId: 'ins-1',
+      delta: -8,
+      origem: 'producao_fermentacao',
+      fermentacaoLoteId: 'lote-1',
+      observacao: 'teste',
+    });
+
+    expect(mockRepo.upsertSaldo).toHaveBeenCalledWith('ins-1', -3);
+  });
+});
+```
+
+- [ ] **Step 3: Implementar `aplicarDelta` e remover guard de negativo em `ajustarSaldo`**
+
+```typescript
+type AplicarDeltaInput = {
+  insumoId: string;
+  delta: number;
+  origem: InsumoMovimentoOrigem;
+  fermentacaoLoteId?: string | null;
+  observacao?: string | null;
+};
+
+async aplicarDelta(input: AplicarDeltaInput): Promise<void> {
+  if (input.delta === 0) return;
+
+  const saldoAtual = await this.repository.findSaldo(input.insumoId);
+  const quantidadeAtual = Number(saldoAtual?.quantidade ?? 0);
+  const novoSaldo = quantidadeAtual + input.delta;
+  const custoAtual = await this.repository.findInsumoCustoUnitario(input.insumoId);
+
+  await this.repository.upsertSaldo(input.insumoId, novoSaldo);
+  await this.repository.insertMovimento({
+    insumoId: input.insumoId,
+    deltaQuantidade: input.delta,
+    saldoResultante: novoSaldo,
+    custoUnitario: custoAtual,
+    origem: input.origem,
+    fermentacaoLoteId: input.fermentacaoLoteId ?? null,
+    observacao: input.observacao ?? null,
+  });
+}
+```
+
+Em `ajustarSaldo`, remover:
+
+```typescript
+if (input.novoSaldo < 0) {
+  throw new Error('Saldo não pode ser negativo');
+}
+```
+
+- [ ] **Step 4: `npm test -- src/lib/services/insumo-estoque-service.test.ts`** → PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/data/insumos/InsumoEstoqueRepository.ts src/lib/services/insumo-estoque-service.ts src/lib/services/insumo-estoque-service.test.ts
+git commit -m "feat(insumos): aplicarDelta com saldo negativo e FK fermentacao"
+```
+
+---
+
+### Task 7: InsumoConsumoProducaoService
+
+**Files:**
+- Create: `src/lib/services/insumo-consumo-producao-service.ts`
+- Create: `src/lib/services/insumo-consumo-producao-service.test.ts`
+
+- [ ] **Step 1: Testes com mocks**
+
+Cobrir:
+- `sincronizarFermentacaoLote` com contexto válido → chama `aplicarDelta` N vezes com delta negativo
+- contexto null → `{ aplicado: false, avisos: ['...'] }`
+- `ajustarFermentacaoLote` com mudança de quantidade → delta de correção
+- `estornarFermentacaoLote` → deltas positivos somando estorno
+
+- [ ] **Step 2: Implementar service**
+
+Lógica principal em `aplicarConsumos`:
+
+```typescript
+private async aplicarConsumos(
+  fermentacaoLoteId: string,
+  ordem: OrdemProducaoRecord,
+  consumosAlvo: InsumoConsumoCalculado[],
+  observacao: string,
+): Promise<void> {
+  const deltasAtuais = await this.estoqueRepo.sumDeltaByFermentacaoLoteInsumo(fermentacaoLoteId);
+  const alvoMap = new Map(consumosAlvo.map((c) => [c.insumoId, c.quantidade]));
+  const insumoIds = new Set([...deltasAtuais.keys(), ...alvoMap.keys()]);
+
+  for (const insumoId of insumoIds) {
+    const consumoAlvo = alvoMap.get(insumoId) ?? 0;
+    const deltaJaRegistrado = deltasAtuais.get(insumoId) ?? 0;
+    const deltaNecessario = -consumoAlvo - deltaJaRegistrado;
+    if (deltaNecessario === 0) continue;
+
+    await this.estoqueService.aplicarDelta({
+      insumoId,
+      delta: deltaNecessario,
+      origem: 'producao_fermentacao',
+      fermentacaoLoteId,
+      observacao,
+    });
+  }
+}
+```
+
+Métodos públicos envolvidos em `try/catch`; erros viram avisos, nunca propagam.
+
+`sincronizarFermentacaoLote`:
+1. `loadContexto(ordem)`
+2. `calcularConsumoInsumosProducao`
+3. `aplicarConsumos`
+4. retorna `{ aplicado: true, avisos: [] }`
+
+`estornarFermentacaoLote`:
+1. agrega deltas por insumo
+2. para cada insumo com delta negativo líquido, `aplicarDelta(+abs)` com observação `Estorno — ...`
+3. `clearFermentacaoLoteId`
+
+- [ ] **Step 3: Testes PASS**
+
+Run: `npm test -- src/lib/services/insumo-consumo-producao-service.test.ts`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/insumo-consumo-producao-service.ts src/lib/services/insumo-consumo-producao-service.test.ts
+git commit -m "feat(insumos): service consumo producao fermentacao"
+```
+
+---
+
+### Task 8: Integrar FermentacaoLoteService
+
+**Files:**
+- Modify: `src/lib/services/fermentacao-lote-service.ts`
+- Modify: `src/lib/services/fermentacao-lote-service.test.ts` (mock `insumoConsumoProducaoService`; assert `result.lote` / `result.insumoConsumo`)
+
+- [ ] **Step 1: Importar service e expor resultado**
+
+```typescript
+import { insumoConsumoProducaoService } from '@/lib/services/insumo-consumo-producao-service';
+import type { InsumoConsumoResultado } from '@/domain/types/insumo-estoque';
+
+export type FermentacaoLoteOperacaoResultado = {
+  lote: FermentacaoLoteRecord;
+  insumoConsumo: InsumoConsumoResultado;
+};
+```
+
+- [ ] **Step 2: Alterar `criarLotePorOrdem`**
+
+Após `insert` e `aplicarFinalizacaoAposSalvar`:
+
+```typescript
+let insumoConsumo: InsumoConsumoResultado = { aplicado: false, avisos: [] };
+try {
+  insumoConsumo = await insumoConsumoProducaoService.sincronizarFermentacaoLote(lote, ordem);
+} catch (error) {
+  insumoConsumo = {
+    aplicado: false,
+    avisos: [
+      error instanceof Error
+        ? `Estoque de insumos não atualizado: ${error.message}`
+        : 'Estoque de insumos não atualizado',
+    ],
+  };
+}
+return { lote, insumoConsumo };
+```
+
+Ajustar tipo de retorno dos três métodos (`criar`, `atualizar`, `excluir` retorna só consumo no delete).
+
+- [ ] **Step 3: `atualizarLote`**
+
+Guardar `existing` antes do update; após update chamar `ajustarFermentacaoLote(existing, lote, ordem)`.
+
+- [ ] **Step 4: `excluirLote`**
+
+Antes do delete: `estornarFermentacaoLote(existing, ordem)`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/fermentacao-lote-service.ts
+git commit -m "feat(fermentacao): sincronizar consumo insumos apos lote"
+```
+
+---
+
+### Task 9: API routes
+
+**Files:**
+- Modify: `src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts`
+- Modify: `src/app/api/producao/fermentacao/lote/[loteId]/route.ts`
+
+- [ ] **Step 1: POST ordem lote**
+
+```typescript
+const { lote, insumoConsumo } = await fermentacaoLoteService.criarLotePorOrdem({ ... });
+return NextResponse.json({
+  message: 'Lote criado com sucesso',
+  loteId: lote.id,
+  insumoConsumo,
+});
+```
+
+- [ ] **Step 2: PUT e DELETE lote**
+
+PUT: capturar retorno de `atualizarLote` e incluir `insumoConsumo`.  
+DELETE: capturar retorno de `excluirLote` e incluir `insumoConsumo`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts src/app/api/producao/fermentacao/lote/[loteId]/route.ts
+git commit -m "feat(api): expor avisos de consumo insumos na fermentacao"
+```
+
+---
+
+### Task 10: UI estoque-insumos
+
+**Files:**
+- Modify: `src/features/insumo-estoque/utils/formatters.ts`
+- Modify: `src/features/insumo-estoque/components/InsumoSaldoTable.tsx`
+- Modify: `src/features/insumo-estoque/components/InsumoSaldoMobileList.tsx`
+
+- [ ] **Step 1: Formatters**
+
+```typescript
+export function formatInsumoQuantidade(value: number, unidade?: string): string {
+  const formatted = value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  });
+  return unidade ? `${formatted} ${unidade}` : formatted;
+}
+
+// em origemMovimentoLabel:
+case 'producao_fermentacao':
+  return 'Produção fermentação';
+
+// em origemMovimentoTone:
+case 'producao_fermentacao':
+  return 'accent';
+```
+
+- [ ] **Step 2: Saldo negativo**
+
+Na célula de saldo, aplicar condicional:
+
+```tsx
+className={`... ${item.quantidade < 0 ? 'text-rose-700' : 'text-stone-800'}`}
+```
+
+Repetir em `InsumoSaldoMobileList`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/features/insumo-estoque/utils/formatters.ts src/features/insumo-estoque/components/InsumoSaldoTable.tsx src/features/insumo-estoque/components/InsumoSaldoMobileList.tsx
+git commit -m "feat(ui): historico producao fermentacao e saldo negativo insumos"
+```
+
+---
+
+### Task 11: UI fermentação — toast de aviso
+
+**Files:**
+- Modify: `src/app/realizado/fermentacao/page.tsx`
+
+- [ ] **Step 1: Após salvar lote, ler `insumoConsumo` da resposta**
+
+No handler de save (create e update), após `res.ok`:
+
+```typescript
+if (data.insumoConsumo?.avisos?.length) {
+  setMessage(data.insumoConsumo.avisos.join(' '));
+  // manter visível mais tempo ou usar variante warning se existir no hook
+} else {
+  setMessage('Produção de fermentação atualizada com sucesso!');
+}
+```
+
+Se o hook `usePainelEtapa` suportar tom, usar warning; senão prefixar com `⚠` evitado — usar copy: `Aviso: estoque de insumos não atualizado — ...`
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/realizado/fermentacao/page.tsx
+git commit -m "feat(ui): aviso quando consumo insumos nao aplicado na fermentacao"
+```
+
+---
+
+### Task 12: Verificação final
+
+- [ ] **Step 1: Rodar suite de testes**
+
+Run: `npm test`  
+Expected: all PASS
+
+- [ ] **Step 2: Lint**
+
+Run: `npm run lint`  
+Expected: sem erros novos
+
+- [ ] **Step 3: Build**
+
+Run: `npm run build`  
+Expected: compilação OK
+
+- [ ] **Step 4: Checklist manual** (spec)
+
+1. Produto com receita → 1 LT → saldos proporcionais  
+2. Editar 1→2 LT → delta adicional  
+3. Excluir → estorno  
+4. Sem receita → lote + aviso  
+5. Saldo baixo → negativo visível  
+6. Histórico com observação  
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| Baixa proporcional fermentação/massa | 3, 5, 7 |
+| FK fermentacao_lote_id | 1, 6 |
+| Saldo negativo | 1, 6 |
+| 6 casas decimais | 1, 10 |
+| Sem bloqueio fluxo | 7, 8, 11 |
+| Edit/delete correção ledger | 6, 7, 8 |
+| Observação automática | 4, 7 |
+| UI histórico + saldo negativo | 10 |
+| Forno/embalagem fora escopo | — (nota no spec) |
+| Sem backfill | — (nenhuma task) |

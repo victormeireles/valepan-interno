@@ -27,6 +27,7 @@ interface ProducaoModalProps {
     options?: { continuaProduzindo?: boolean },
   ) => Promise<void>;
   onSaveSuccess?: () => Promise<void>;
+  onInsumoConsumoAviso?: (avisos: string[]) => void;
   initialData?: ProducaoData;
   loading?: boolean;
   produto?: string;
@@ -65,6 +66,7 @@ export default function ProducaoModal({
   onClose,
   onSave,
   onSaveSuccess,
+  onInsumoConsumoAviso,
   initialData,
   loading = false,
   produto = '',
@@ -348,6 +350,9 @@ export default function ProducaoModal({
       if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
 
       const createdLoteId = data.loteId as string | undefined;
+      if (data.insumoConsumo?.avisos?.length) {
+        onInsumoConsumoAviso?.(data.insumoConsumo.avisos as string[]);
+      }
       if (createdLoteId) {
         await uploadPendingPhotos({ loteId: createdLoteId });
       }
@@ -374,6 +379,7 @@ export default function ProducaoModal({
     buildLotePayload,
     uploadPendingPhotos,
     onSaveSuccess,
+    onInsumoConsumoAviso,
     onClose,
     totalQtyVisivel,
     sanitizeQuantidades,

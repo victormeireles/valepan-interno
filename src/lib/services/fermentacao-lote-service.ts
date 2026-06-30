@@ -11,9 +11,11 @@ import type {
   EtapaLoteFotos,
   FermentacaoLoteRecord,
 } from '@/domain/types/fermentacao-lote';
+import type { InsumoConsumoResultado } from '@/domain/types/insumo-estoque';
 import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import { etapaFinalizacaoService } from '@/lib/services/etapa-finalizacao-service';
+import { insumoConsumoProducaoService } from '@/lib/services/insumo-consumo-producao-service';
 
 export type CriarLotePorOrdemInput = {
   ordemProducaoId: string;
@@ -26,6 +28,11 @@ export type AtualizarLoteInput = {
   quantidade: EtapaQuantidade;
   fotos?: EtapaLoteFotos;
   continuaProduzindo?: boolean;
+};
+
+export type FermentacaoLoteOperacaoResultado = {
+  lote: FermentacaoLoteRecord;
+  insumoConsumo: InsumoConsumoResultado;
 };
 
 const ETAPA: EtapaProducaoSlug = 'fermentacao';
@@ -74,8 +81,27 @@ async function aplicarFinalizacaoAposSalvar(
   });
 }
 
+async function sincronizarConsumoInsumos(
+  operacao: () => Promise<InsumoConsumoResultado>,
+): Promise<InsumoConsumoResultado> {
+  try {
+    return await operacao();
+  } catch (error) {
+    return {
+      aplicado: false,
+      avisos: [
+        error instanceof Error
+          ? `Estoque de insumos não atualizado: ${error.message}`
+          : 'Estoque de insumos não atualizado',
+      ],
+    };
+  }
+}
+
 export class FermentacaoLoteService {
-  async criarLotePorOrdem(input: CriarLotePorOrdemInput): Promise<FermentacaoLoteRecord> {
+  async criarLotePorOrdem(
+    input: CriarLotePorOrdemInput,
+  ): Promise<FermentacaoLoteOperacaoResultado> {
     const ordem = await ordemProducaoRepository.findById(input.ordemProducaoId);
     if (!ordem) {
       throw new Error('Ordem de produção não encontrada');
@@ -98,13 +124,17 @@ export class FermentacaoLoteService {
 
     await aplicarFinalizacaoAposSalvar(ordem, input.continuaProduzindo);
 
-    return lote;
+    const insumoConsumo = await sincronizarConsumoInsumos(() =>
+      insumoConsumoProducaoService.sincronizarFermentacaoLote(lote, ordem),
+    );
+
+    return { lote, insumoConsumo };
   }
 
   async atualizarLote(
     loteId: string,
     input: AtualizarLoteInput,
-  ): Promise<FermentacaoLoteRecord> {
+  ): Promise<FermentacaoLoteOperacaoResultado> {
     const existing = await fermentacaoLoteRepository.findById(loteId);
     if (!existing) {
       throw new Error('Lote não encontrado');
@@ -135,15 +165,31 @@ export class FermentacaoLoteService {
 
     await aplicarFinalizacaoAposSalvar(ordem, input.continuaProduzindo);
 
-    return lote;
+    const insumoConsumo = await sincronizarConsumoInsumos(() =>
+      insumoConsumoProducaoService.ajustarFermentacaoLote(existing, lote, ordem),
+    );
+
+    return { lote, insumoConsumo };
   }
 
-  async excluirLote(loteId: string): Promise<void> {
+  async excluirLote(loteId: string): Promise<InsumoConsumoResultado> {
     const existing = await fermentacaoLoteRepository.findById(loteId);
     if (!existing) {
       throw new Error('Lote não encontrado');
     }
+
+    const ordem = await ordemProducaoRepository.findById(existing.ordemProducaoId);
+    if (!ordem) {
+      throw new Error('Ordem de produção não encontrada');
+    }
+
+    const insumoConsumo = await sincronizarConsumoInsumos(() =>
+      insumoConsumoProducaoService.estornarFermentacaoLote(existing, ordem),
+    );
+
     await fermentacaoLoteRepository.deleteById(loteId);
+
+    return insumoConsumo;
   }
 }
 

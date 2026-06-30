@@ -8,6 +8,9 @@ const mockFindLoteById = vi.fn();
 const mockUpdateById = vi.fn();
 const mockAssertEtapaNaoFinalizada = vi.fn();
 const mockAplicarAposSalvarLote = vi.fn();
+const mockSincronizar = vi.fn();
+const mockAjustar = vi.fn();
+const mockEstornar = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: { findById: (...args: unknown[]) => mockFindById(...args) },
@@ -19,6 +22,13 @@ vi.mock('@/data/producao-etapa/FermentacaoLoteRepository', () => ({
     findById: (...args: unknown[]) => mockFindLoteById(...args),
     updateById: (...args: unknown[]) => mockUpdateById(...args),
     deleteById: vi.fn(),
+  },
+}));
+vi.mock('@/lib/services/insumo-consumo-producao-service', () => ({
+  insumoConsumoProducaoService: {
+    sincronizarFermentacaoLote: (...args: unknown[]) => mockSincronizar(...args),
+    ajustarFermentacaoLote: (...args: unknown[]) => mockAjustar(...args),
+    estornarFermentacaoLote: (...args: unknown[]) => mockEstornar(...args),
   },
 }));
 vi.mock('@/lib/services/etapa-finalizacao-service', () => ({
@@ -39,7 +49,14 @@ describe('FermentacaoLoteService', () => {
       ...DEFAULT_ORDEM_ETAPA_STATUS,
     });
     mockListByOrdem.mockResolvedValue(new Map([['o1', [{ id: 'l2', assadeiras: 8, unidades: 0 }]]]));
-    mockInsert.mockResolvedValue({ id: 'l-new' });
+    mockInsert.mockResolvedValue({
+      id: 'l-new',
+      ordemProducaoId: 'o1',
+      modo: 'parcial',
+      assadeiras: 5,
+      unidades: 0,
+      produzidoEm: '2026-06-30T10:00:00Z',
+    });
     mockFindLoteById.mockResolvedValue({
       id: 'l1',
       ordemProducaoId: 'o1',
@@ -47,8 +64,17 @@ describe('FermentacaoLoteService', () => {
       unidades: 0,
       fotos: {},
     });
-    mockUpdateById.mockResolvedValue({ id: 'l1', assadeiras: 5, unidades: 0 });
+    mockUpdateById.mockResolvedValue({
+      id: 'l1',
+      ordemProducaoId: 'o1',
+      assadeiras: 5,
+      unidades: 0,
+      produzidoEm: '2026-06-30T10:00:00Z',
+    });
     mockAplicarAposSalvarLote.mockResolvedValue({ id: 'o1' });
+    mockSincronizar.mockResolvedValue({ aplicado: true, avisos: [] });
+    mockAjustar.mockResolvedValue({ aplicado: true, avisos: [] });
+    mockEstornar.mockResolvedValue({ aplicado: true, avisos: [] });
   });
 
   it('cria lote acima do saldo da ordem', async () => {
@@ -58,8 +84,9 @@ describe('FermentacaoLoteService', () => {
       quantidade: { assadeiras: 5, unidades: 0 },
     });
 
-    expect(result.id).toBe('l-new');
+    expect(result.lote.id).toBe('l-new');
     expect(mockInsert).toHaveBeenCalled();
+    expect(mockSincronizar).toHaveBeenCalled();
   });
 
   it('cria lote dentro do saldo', async () => {
@@ -68,7 +95,7 @@ describe('FermentacaoLoteService', () => {
       ordemProducaoId: 'o1',
       quantidade: { assadeiras: 2, unidades: 0 },
     });
-    expect(result.id).toBe('l-new');
+    expect(result.lote.id).toBe('l-new');
     expect(mockInsert).toHaveBeenCalled();
   });
 
@@ -89,7 +116,8 @@ describe('FermentacaoLoteService', () => {
       quantidade: { assadeiras: 5, unidades: 0 },
     });
 
-    expect(result.id).toBe('l1');
+    expect(result.lote.id).toBe('l1');
     expect(mockUpdateById).toHaveBeenCalled();
+    expect(mockAjustar).toHaveBeenCalled();
   });
 });

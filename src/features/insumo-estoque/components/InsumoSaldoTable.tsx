@@ -71,7 +71,9 @@ export default function InsumoSaldoTable({
               <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
                 {item.nome}
               </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums ${
+                item.quantidade < 0 ? 'text-rose-700' : 'text-stone-800'
+              }`}>
                 {formatInsumoQuantidade(item.quantidade, item.unidadeResumida)}
               </td>
               <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>

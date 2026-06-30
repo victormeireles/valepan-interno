@@ -1,7 +1,13 @@
 export type InsumoMovimentoOrigem =
   | 'entrada_nf'
   | 'ajuste_manual'
-  | 'resolucao_pendencia';
+  | 'resolucao_pendencia'
+  | 'producao_fermentacao';
+
+export type InsumoConsumoResultado = {
+  aplicado: boolean;
+  avisos: string[];
+};
 
 export type InsumoPendenciaStatus = 'pendente' | 'resolvido' | 'ignorado';
 

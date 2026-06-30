@@ -21,6 +21,7 @@ export type InsumoMovimentoRow = {
   pendencia_id: string | null;
   numero_nf: string | null;
   observacao: string | null;
+  fermentacao_lote_id: string | null;
 };
 
 export type IntegracaoInsumoRow = {
@@ -79,6 +80,7 @@ export type RegistrarInsumoMovimentoInput = {
   pendenciaId?: string | null;
   numeroNf?: string | null;
   observacao?: string | null;
+  fermentacaoLoteId?: string | null;
 };
 
 export type CriarIntegracaoInsumoInput = {
