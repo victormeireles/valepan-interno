@@ -1785,9 +1785,9 @@ export type Database = {
       }
       insumo_entrada_pendencias: {
         Row: {
-          cfop_entrada: string | null
           categoria_compra_codigo: string | null
           categoria_compra_descricao: string | null
+          cfop_entrada: string | null
           created_at: string
           data_emissao_nf: string | null
           descricao_produto: string | null
@@ -1814,9 +1814,9 @@ export type Database = {
           valor_total_nf: number | null
         }
         Insert: {
-          cfop_entrada?: string | null
           categoria_compra_codigo?: string | null
           categoria_compra_descricao?: string | null
+          cfop_entrada?: string | null
           created_at?: string
           data_emissao_nf?: string | null
           descricao_produto?: string | null
@@ -1843,9 +1843,9 @@ export type Database = {
           valor_total_nf?: number | null
         }
         Update: {
-          cfop_entrada?: string | null
           categoria_compra_codigo?: string | null
           categoria_compra_descricao?: string | null
+          cfop_entrada?: string | null
           created_at?: string
           data_emissao_nf?: string | null
           descricao_produto?: string | null
@@ -1901,6 +1901,7 @@ export type Database = {
           custo_unitario: number
           delta_quantidade: number
           empresa_id: string | null
+          fermentacao_lote_id: string | null
           id: string
           insumo_id: string
           numero_nf: string | null
@@ -1917,6 +1918,7 @@ export type Database = {
           custo_unitario?: number
           delta_quantidade: number
           empresa_id?: string | null
+          fermentacao_lote_id?: string | null
           id?: string
           insumo_id: string
           numero_nf?: string | null
@@ -1933,6 +1935,7 @@ export type Database = {
           custo_unitario?: number
           delta_quantidade?: number
           empresa_id?: string | null
+          fermentacao_lote_id?: string | null
           id?: string
           insumo_id?: string
           numero_nf?: string | null
@@ -1950,6 +1953,13 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_movimentos_fermentacao_lote_id_fkey"
+            columns: ["fermentacao_lote_id"]
+            isOneToOne: false
+            referencedRelation: "fermentacao_lotes"
             referencedColumns: ["id"]
           },
           {
@@ -3316,6 +3326,48 @@ export type Database = {
           },
         ]
       }
+      receita_gramaturas: {
+        Row: {
+          created_at: string | null
+          id: string
+          peso_g: number
+          quantidade_padrao: number
+          receita_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          peso_g: number
+          quantidade_padrao: number
+          receita_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          peso_g?: number
+          quantidade_padrao?: number
+          receita_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receita_gramaturas_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receita_gramaturas_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["receita_id"]
+          },
+        ]
+      }
       receita_ingredientes: {
         Row: {
           id: string
@@ -3356,41 +3408,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["receita_id"]
-          },
-        ]
-      }
-      receita_gramaturas: {
-        Row: {
-          created_at: string | null
-          id: string
-          peso_g: number
-          quantidade_padrao: number
-          receita_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          peso_g: number
-          quantidade_padrao: number
-          receita_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          peso_g?: number
-          quantidade_padrao?: number
-          receita_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "receita_gramaturas_receita_id_fkey"
-            columns: ["receita_id"]
-            isOneToOne: false
-            referencedRelation: "receitas"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -4340,6 +4357,7 @@ export type Database = {
         | "entrada_nf"
         | "ajuste_manual"
         | "resolucao_pendencia"
+        | "producao_fermentacao"
       insumo_pendencia_status: "pendente" | "resolvido" | "ignorado"
       producao_lote_modo: "parcial" | "substituicao"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
@@ -4521,6 +4539,7 @@ export const Constants = {
         "entrada_nf",
         "ajuste_manual",
         "resolucao_pendencia",
+        "producao_fermentacao",
       ],
       insumo_pendencia_status: ["pendente", "resolvido", "ignorado"],
       producao_lote_modo: ["parcial", "substituicao"],
