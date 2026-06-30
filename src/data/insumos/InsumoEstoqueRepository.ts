@@ -99,8 +99,7 @@ export class InsumoEstoqueRepository {
       .from('insumo_saldos')
       .select(
         'insumo_id, quantidade, updated_at, insumos(nome, custo_unitario, unidades(nome_resumido))',
-      )
-      .order('updated_at', { ascending: false });
+      );
 
     if (error) {
       throw new Error(`Erro ao listar saldos de insumos: ${error.message}`);
@@ -111,21 +110,23 @@ export class InsumoEstoqueRepository {
       saldos.map((row) => row.insumo_id),
     );
 
-    return saldos.map((row) => {
-      const unidades = row.insumos?.unidades;
-      const unidadeResumida = Array.isArray(unidades)
-        ? unidades[0]?.nome_resumido ?? ''
-        : unidades?.nome_resumido ?? '';
+    return saldos
+      .map((row) => {
+        const unidades = row.insumos?.unidades;
+        const unidadeResumida = Array.isArray(unidades)
+          ? unidades[0]?.nome_resumido ?? ''
+          : unidades?.nome_resumido ?? '';
 
-      return {
-        insumoId: row.insumo_id,
-        nome: row.insumos?.nome ?? '',
-        unidadeResumida,
-        quantidade: Number(row.quantidade),
-        custoUnitario: Number(row.insumos?.custo_unitario ?? 0),
-        ultimaEntradaEm: ultimasEntradas.get(row.insumo_id) ?? null,
-      };
-    });
+        return {
+          insumoId: row.insumo_id,
+          nome: row.insumos?.nome ?? '',
+          unidadeResumida,
+          quantidade: Number(row.quantidade),
+          custoUnitario: Number(row.insumos?.custo_unitario ?? 0),
+          ultimaEntradaEm: ultimasEntradas.get(row.insumo_id) ?? null,
+        };
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }
 
   async listMovimentos(insumoId: string, limit = 100): Promise<InsumoMovimentoRecord[]> {

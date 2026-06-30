@@ -95,8 +95,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     icon: 'grain',
     match: (pathname) =>
       pathname.startsWith('/estoque-insumos') ||
-      pathname.startsWith('/mapeamento-insumos') ||
-      pathname.startsWith('/config/insumos'),
+      pathname.startsWith('/mapeamento-insumos'),
     children: [
       {
         type: 'link',
@@ -112,13 +111,6 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'link',
         match: (pathname) => pathname.startsWith('/mapeamento-insumos'),
       },
-      {
-        type: 'link',
-        href: '/config/insumos',
-        label: 'Cadastro',
-        icon: 'tune',
-        match: (pathname) => pathname.startsWith('/config/insumos'),
-      },
     ],
   },
   {
@@ -127,7 +119,6 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     label: 'Configurações',
     icon: 'settings',
     match: (pathname) =>
-      pathname === '/config' ||
-      (pathname.startsWith('/config/') && !pathname.startsWith('/config/insumos')),
+      pathname === '/config' || pathname.startsWith('/config/'),
   },
 ];

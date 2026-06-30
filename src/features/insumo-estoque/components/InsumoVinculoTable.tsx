@@ -7,6 +7,11 @@ import {
   configTableHeadCellClass,
 } from '@/components/Config/config-table-styles';
 import { formatUnidadeLabel } from '@/features/insumo-estoque/utils/insumo-conversao-ui';
+import { formatValorUnitarioNf } from '@/features/insumo-estoque/utils/formatters';
+import InsumoPendenciaFornecedorCell from '@/features/insumo-estoque/components/InsumoPendenciaFornecedorCell';
+import InsumoPendenciaNfsButton from '@/features/insumo-estoque/components/InsumoPendenciaNfsButton';
+import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
+import { buildNfsTargetFromVinculo } from '@/features/insumo-estoque/utils/insumo-pendencia-nfs-target';
 
 type Props = {
   items: IntegracaoInsumoListItem[];
@@ -47,6 +52,21 @@ export default function InsumoVinculoTable({
                 Insumo
               </span>
             </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-left`}>
+              <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
+                Fornecedor
+              </span>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
+                NFs
+              </span>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
+                Vl. unit.
+              </span>
+            </th>
             <th scope="col" className={`${configTableHeadCellClass} text-right`}>
               <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
                 Fator
@@ -78,9 +98,10 @@ export default function InsumoVinculoTable({
                 ].join(' ')}
               >
                 <td className={`${configTableBodyCellClass} text-stone-800`}>
-                  <div className="font-mono text-xs text-stone-500">
-                    {item.omie_codigo_produto || item.omie_id_produto}
-                  </div>
+                  <InsumoProdutoOmieHeader
+                    categoriaTitulo={item.contexto.categoriaTitulo}
+                    categoriaSubtitulo={item.contexto.categoriaSubtitulo}
+                  />
                   <div className="mt-0.5">{item.descricao_omie || '—'}</div>
                 </td>
                 <td className={`${configTableBodyCellClass} text-stone-800`}>
@@ -88,6 +109,19 @@ export default function InsumoVinculoTable({
                   {unidadeLabel ? (
                     <div className="mt-0.5 font-mono text-xs text-stone-500">{unidadeLabel}</div>
                   ) : null}
+                </td>
+                <td className={`${configTableBodyCellClass} max-w-[12rem]`}>
+                  <InsumoPendenciaFornecedorCell
+                    empresaNome={item.empresaNome}
+                    contexto={item.contexto}
+                    showEmpresa={false}
+                  />
+                </td>
+                <td className={`${configTableBodyCellClass} text-right`}>
+                  <InsumoPendenciaNfsButton target={buildNfsTargetFromVinculo(item)} />
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono text-xs tabular-nums text-stone-700`}>
+                  {formatValorUnitarioNf(item.valorUnitarioNf, item.unidadeNf)}
                 </td>
                 <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
                   {formatFator(Number(item.fator_conversao))}

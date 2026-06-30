@@ -25,6 +25,15 @@ export default async function ProdutosConfigPage() {
     nome: receita.nome,
     tipo: receita.tipo,
     ativo: receita.ativo,
+    ingredientes: (receita.receita_ingredientes || []).map((item) => ({
+      quantidade: item.quantidade_padrao,
+      unidade:
+        item.insumos?.unidades?.nome_resumido ?? item.insumos?.unidades?.nome ?? null,
+    })),
+    gramaturas: (receita.receita_gramaturas || []).map((item) => ({
+      pesoG: item.peso_g,
+      quantidade: Number(item.quantidade_padrao),
+    })),
   }));
 
   return (

@@ -49,6 +49,7 @@ function buildResumo(
   const base = {
     id: produto.id,
     nome: produto.nome,
+    unit_weight: produto.unit_weight,
     ...mapProdutoCategoria(produto),
   };
 

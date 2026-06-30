@@ -6,6 +6,10 @@ import {
   indexarItensRecebimentoPorIdItem,
   montarEnriquecimentoPendencia,
 } from '@/domain/insumos/insumo-pendencia-enriquecimento';
+import {
+  insumoRecebimentoCategoriaService,
+  type InsumoRecebimentoCategoriaService,
+} from '@/domain/insumos/insumo-recebimento-categoria-service';
 import type { EmpresaCredenciaisRow } from '@/data/omie/OmieWebhookEventoRepository';
 import {
   insumoPendenciaRepository,
@@ -22,6 +26,8 @@ export type InsumoPendenciaEnriquecimentoBackfillInput = {
   empresaId?: string;
   limitRecebimentos?: number;
   forcar?: boolean;
+  incluirIgnorados?: boolean;
+  todosStatus?: boolean;
   dryRun?: boolean;
 };
 
@@ -35,6 +41,7 @@ export type InsumoPendenciaEnriquecimentoBackfillResult = {
 type BackfillDeps = {
   pendenciaRepository: InsumoPendenciaRepository;
   client: OmieRecebimentoClient;
+  categoriaService: InsumoRecebimentoCategoriaService;
   listarEmpresas: () => Promise<EmpresaCredenciaisRow[]>;
 };
 
@@ -50,6 +57,8 @@ export class InsumoPendenciaEnriquecimentoBackfillService {
     const pendencias = await this.deps.pendenciaRepository.listParaEnriquecimento({
       empresaId: input.empresaId,
       forcar: input.forcar,
+      incluirIgnorados: input.incluirIgnorados,
+      todosStatus: input.todosStatus,
     });
 
     const chaves = this.agruparRecebimentosUnicos(pendencias);
@@ -93,6 +102,16 @@ export class InsumoPendenciaEnriquecimentoBackfillService {
         });
         result.recebimentosConsultados += 1;
 
+        const empresaCredenciais = {
+          empresaId: empresa.id,
+          appKey: empresa.app_key,
+          appSecret: empresa.app_secret,
+        };
+        const categoriaRecebimento = await this.deps.categoriaService.resolverCategoriaRecebimento({
+          empresa: empresaCredenciais,
+          infoAdicionais: recebimento.infoAdicionais,
+        });
+
         const itensPorId = indexarItensRecebimentoPorIdItem(recebimento.itensCabec ?? []);
 
         for (const pendencia of pendenciasReceb) {
@@ -105,9 +124,19 @@ export class InsumoPendenciaEnriquecimentoBackfillService {
             continue;
           }
 
+          const categoriaItem = await this.deps.categoriaService.resolverCategoriaItem({
+            empresa: empresaCredenciais,
+            infoAdicionais: recebimento.infoAdicionais,
+            item,
+            categoriaRecebimento,
+          });
+
           const enriquecimento = montarEnriquecimentoPendencia({
             cabec: recebimento.cabec,
             item,
+            infoAdicionais: recebimento.infoAdicionais,
+            categoriaCompraCodigo: categoriaItem.codigo,
+            categoriaCompraDescricao: categoriaItem.descricao,
           });
 
           await this.deps.pendenciaRepository.atualizarEnriquecimentoOmie(
@@ -158,6 +187,7 @@ export const insumoPendenciaEnriquecimentoBackfillService =
   new InsumoPendenciaEnriquecimentoBackfillService({
     pendenciaRepository: insumoPendenciaRepository,
     client: omieRecebimentoClient,
+    categoriaService: insumoRecebimentoCategoriaService,
     listarEmpresas: async () => {
       const { OmieWebhookEventoRepository } = await import(
         '@/data/omie/OmieWebhookEventoRepository'

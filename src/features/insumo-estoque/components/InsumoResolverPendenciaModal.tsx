@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import type { InsumoPendenciaProdutoGrupo } from '@/domain/insumos/insumo-pendencia-grupo';
+import { mesclarPendenciasNoGrupo, type InsumoPendenciaProdutoGrupo } from '@/domain/insumos/insumo-pendencia-grupo';
 import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
-import { resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
+import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
+import { getInsumoPendenciasPorProdutoOmie, resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import InsumoPendenciaGrupoNfList from '@/features/insumo-estoque/components/InsumoPendenciaGrupoNfList';
+import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
 import { formatInsumoQuantidade } from '@/features/insumo-estoque/utils/formatters';
 import {
@@ -21,6 +23,7 @@ import {
 type Props = {
   isOpen: boolean;
   grupo: InsumoPendenciaProdutoGrupo | null;
+  pendenciaStatuses: InsumoPendenciaStatus[];
   onClose: () => void;
   onSaved: (message: string) => void;
 };
@@ -33,6 +36,7 @@ type InsumoOptionMeta = {
 export default function InsumoResolverPendenciaModal({
   isOpen,
   grupo,
+  pendenciaStatuses,
   onClose,
   onSaved,
 }: Props) {
@@ -41,6 +45,8 @@ export default function InsumoResolverPendenciaModal({
   const [insumoSelecionado, setInsumoSelecionado] = useState<InsumoSelecionadoResumo | null>(null);
   const [fatorConversao, setFatorConversao] = useState('1');
   const [loading, setLoading] = useState(false);
+  const [detalhesLoading, setDetalhesLoading] = useState(false);
+  const [grupoDetalhado, setGrupoDetalhado] = useState<InsumoPendenciaProdutoGrupo | null>(null);
   const [error, setError] = useState('');
   const [animating, setAnimating] = useState(false);
 
@@ -51,24 +57,51 @@ export default function InsumoResolverPendenciaModal({
       setInsumoSelecionado(null);
       setFatorConversao('1');
       setError('');
+      setGrupoDetalhado(null);
+      setDetalhesLoading(true);
+
+      getInsumoPendenciasPorProdutoOmie({
+        empresaId: grupo.empresaId,
+        omieIdProduto: grupo.omieIdProduto,
+        statuses: pendenciaStatuses,
+      })
+        .then((pendencias) => {
+          setGrupoDetalhado(mesclarPendenciasNoGrupo(grupo, pendencias));
+        })
+        .catch(() => {
+          setError('Erro ao carregar notas do produto');
+        })
+        .finally(() => {
+          setDetalhesLoading(false);
+        });
     } else if (!isOpen) {
-      const timer = setTimeout(() => setAnimating(false), 200);
+      const timer = setTimeout(() => {
+        setAnimating(false);
+        setGrupoDetalhado(null);
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, grupo]);
+  }, [isOpen, grupo, pendenciaStatuses]);
+
+  const grupoExibicao = grupoDetalhado ?? grupo;
 
   const preview = useMemo(() => {
-    if (!grupo) return null;
+    if (!grupoExibicao) return null;
     const fator = Number(fatorConversao.replace(',', '.'));
     if (!Number.isFinite(fator) || fator <= 0) return null;
 
     let qtdConvertida = 0;
     let valorTotal = 0;
 
-    for (const pendencia of grupo.pendencias) {
-      const qtdEntrada = calcularQuantidadeEntrada(Number(pendencia.quantidade_nf), fator);
-      qtdConvertida += qtdEntrada;
-      valorTotal += Number(pendencia.valor_total_item);
+    if (grupoExibicao.pendencias.length > 0) {
+      for (const pendencia of grupoExibicao.pendencias) {
+        const qtdEntrada = calcularQuantidadeEntrada(Number(pendencia.quantidade_nf), fator);
+        qtdConvertida += qtdEntrada;
+        valorTotal += Number(pendencia.valor_total_item);
+      }
+    } else {
+      qtdConvertida = calcularQuantidadeEntrada(grupoExibicao.quantidadeNfTotal, fator);
+      valorTotal = grupoExibicao.valorTotal;
     }
 
     let custo = 0;
@@ -79,12 +112,12 @@ export default function InsumoResolverPendenciaModal({
     }
 
     return {
-      qtdNf: grupo.quantidadeNfTotal,
+      qtdNf: grupoExibicao.quantidadeNfTotal,
       fator,
       qtdConvertida,
       custo,
     };
-  }, [grupo, fatorConversao]);
+  }, [grupoExibicao, fatorConversao]);
 
   if ((!isOpen && !animating) || !grupo) return null;
 
@@ -117,7 +150,7 @@ export default function InsumoResolverPendenciaModal({
     setError('');
 
     const fator = Number(fatorConversao.replace(',', '.'));
-    const pendenciaIds = grupo.pendencias.map((pendencia) => pendencia.id);
+    const pendenciaIds = grupo.pendenciaIds;
     const result = await resolverInsumoPendenciaGrupo(pendenciaIds, insumoId, fator);
     if (!result.success) {
       setError(result.error);
@@ -200,9 +233,10 @@ export default function InsumoResolverPendenciaModal({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
                 Produto Omie
               </p>
-              <p className="mt-2 font-mono text-xs text-stone-500">
-                {grupo.omieCodigoProduto || grupo.omieIdProduto}
-              </p>
+              <InsumoProdutoOmieHeader
+                categoriaTitulo={grupo.contexto.categoriaTitulo}
+                categoriaSubtitulo={grupo.contexto.categoriaSubtitulo}
+              />
               <p className="mt-1 font-medium text-stone-900">
                 {grupo.descricaoProduto || 'Produto sem descrição'}
               </p>
@@ -262,9 +296,10 @@ export default function InsumoResolverPendenciaModal({
             />
 
             <InsumoPendenciaGrupoNfList
-              grupo={grupo}
+              grupo={grupoExibicao ?? grupo}
               fator={Number.isFinite(fatorNumerico) ? fatorNumerico : 0}
               unidadeInsumoLabel={unidadeInsumoLabel}
+              loading={detalhesLoading}
             />
           </div>
 

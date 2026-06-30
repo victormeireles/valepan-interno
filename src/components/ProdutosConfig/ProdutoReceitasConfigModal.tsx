@@ -9,6 +9,8 @@ import {
   type ProdutoResumoComReceitas,
 } from '@/app/actions/produto-receitas-actions';
 import type { ProdutoConfigResumo } from '@/domain/produtos/produto-config-resumo';
+import { resolverQuantidadeReceitaParaProduto } from '@/domain/receitas/receita-produto-quantidade-resolver';
+import type { ReceitaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 import ProdutoReceitaTipoRow from '@/components/ProdutosConfig/ProdutoReceitaTipoRow';
 import {
   PRODUTO_RECEITA_TIPO_OPTIONS,
@@ -20,6 +22,11 @@ export type ReceitaCatalogoItem = {
   nome: string;
   tipo: TipoReceita;
   ativo: boolean | null;
+  ingredientes?: Array<{
+    quantidade: number;
+    unidade: string | null;
+  }>;
+  gramaturas?: ReceitaGramatura[];
 };
 
 type Props = {
@@ -36,6 +43,23 @@ type Props = {
 const primaryButtonClassName =
   'min-h-11 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-semibold shadow-sm hover:bg-gray-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
+function buildSugestao(
+  receita: ReceitaCatalogoItem | undefined,
+  tipo: TipoReceita,
+  produto: ProdutoConfigResumo,
+) {
+  if (!receita) {
+    return { pesoGramas: null, quantidade: null, resumo: null, aviso: null };
+  }
+
+  return resolverQuantidadeReceitaParaProduto({
+    tipo,
+    ingredientes: receita.ingredientes,
+    gramaturas: receita.gramaturas,
+    produto,
+  });
+}
+
 export default function ProdutoReceitasConfigModal({
   isOpen,
   produto,
@@ -49,6 +73,9 @@ export default function ProdutoReceitasConfigModal({
     {},
   );
   const [quantidades, setQuantidades] = useState<Partial<Record<TipoReceita, number>>>({});
+  const [quantidadesManuais, setQuantidadesManuais] = useState<Partial<Record<TipoReceita, boolean>>>(
+    {},
+  );
   const [loadingTipo, setLoadingTipo] = useState<TipoReceita | 'all' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -58,17 +85,20 @@ export default function ProdutoReceitasConfigModal({
     setLocalVinculadas(produto.receitasVinculadas);
     const nextSelected: Partial<Record<TipoReceita, string>> = {};
     const nextQuantidades: Partial<Record<TipoReceita, number>> = {};
+    const nextManuais: Partial<Record<TipoReceita, boolean>> = {};
 
     PRODUTO_RECEITA_TIPO_OPTIONS.forEach((option) => {
       const vinculo = produto.receitasVinculadas[option.value];
       if (vinculo?.ativo) {
         nextSelected[option.value] = vinculo.receita_id;
         nextQuantidades[option.value] = vinculo.quantidade;
+        nextManuais[option.value] = true;
       }
     });
 
     setSelectedReceitas(nextSelected);
     setQuantidades(nextQuantidades);
+    setQuantidadesManuais(nextManuais);
     setMessage(null);
   }, [isOpen, produto.id, produto.receitasVinculadas]);
 
@@ -91,6 +121,39 @@ export default function ProdutoReceitasConfigModal({
 
     setLocalVinculadas(updated.receitas_vinculadas);
     onUpdated(produto.id, updated.receitas_vinculadas);
+  };
+
+  const handleReceitaChange = (tipo: TipoReceita, receitaId: string) => {
+    setSelectedReceitas((prev) => ({ ...prev, [tipo]: receitaId }));
+    setQuantidadesManuais((prev) => ({ ...prev, [tipo]: false }));
+
+    if (!receitaId) {
+      setQuantidades((prev) => ({ ...prev, [tipo]: undefined }));
+      return;
+    }
+
+    const receita = receitasCatalogo.find((item) => item.id === receitaId);
+    const sugestao = buildSugestao(receita, tipo, produto);
+
+    setQuantidades((prev) => ({
+      ...prev,
+      [tipo]: sugestao.quantidade ?? undefined,
+    }));
+  };
+
+  const handleQuantidadeChange = (tipo: TipoReceita, value: number | undefined) => {
+    setQuantidades((prev) => ({ ...prev, [tipo]: value }));
+    setQuantidadesManuais((prev) => ({ ...prev, [tipo]: true }));
+  };
+
+  const handleRecalcular = (tipo: TipoReceita) => {
+    const receitaId = selectedReceitas[tipo];
+    const receita = receitasCatalogo.find((item) => item.id === receitaId);
+    const sugestao = buildSugestao(receita, tipo, produto);
+    if (sugestao.quantidade == null) return;
+
+    setQuantidadesManuais((prev) => ({ ...prev, [tipo]: false }));
+    setQuantidades((prev) => ({ ...prev, [tipo]: sugestao.quantidade ?? undefined }));
   };
 
   const handleSaveTipo = async (tipo: TipoReceita) => {
@@ -148,6 +211,7 @@ export default function ProdutoReceitasConfigModal({
 
     setSelectedReceitas((prev) => ({ ...prev, [tipo]: '' }));
     setQuantidades((prev) => ({ ...prev, [tipo]: undefined }));
+    setQuantidadesManuais((prev) => ({ ...prev, [tipo]: false }));
     await refreshLocalProduto();
     setMessage('Vínculo removido.');
     setLoadingTipo(null);
@@ -223,7 +287,8 @@ export default function ProdutoReceitasConfigModal({
               {produto.nome}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Selecione a receita e quantidade por tipo.
+              Massa: pelo peso da receita ÷ gramatura. Brilho: volume da receita × pães/L da
+              gramatura. Demais tipos: valor fixo por gramatura cadastrada.
             </p>
           </div>
           <button
@@ -259,22 +324,35 @@ export default function ProdutoReceitasConfigModal({
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
             {PRODUTO_RECEITA_TIPO_OPTIONS.map((option) => {
               const vinculo = localVinculadas[option.value];
+              const receitaId = selectedReceitas[option.value] || '';
+              const receita = receitaId
+                ? receitasCatalogo.find((item) => item.id === receitaId)
+                : undefined;
+              const sugestao = buildSugestao(receita, option.value, produto);
+
               return (
                 <ProdutoReceitaTipoRow
                   key={option.value}
                   option={option}
                   vinculoAtivo={Boolean(vinculo?.ativo)}
                   receitasDisponiveis={receitasPorTipo[option.value] ?? []}
-                  receitaId={selectedReceitas[option.value] || ''}
+                  receitaId={receitaId}
                   quantidade={quantidades[option.value]}
                   isSaving={loadingTipo === option.value}
                   isDisabled={isBusy && loadingTipo !== option.value}
-                  onReceitaChange={(value) =>
-                    setSelectedReceitas((prev) => ({ ...prev, [option.value]: value }))
+                  calculoAutomatico={
+                    receitaId
+                      ? {
+                          resumo: sugestao.resumo,
+                          aviso: sugestao.aviso,
+                          sugestao: sugestao.quantidade,
+                          manual: Boolean(quantidadesManuais[option.value]),
+                          onRecalcular: () => handleRecalcular(option.value),
+                        }
+                      : undefined
                   }
-                  onQuantidadeChange={(value) =>
-                    setQuantidades((prev) => ({ ...prev, [option.value]: value }))
-                  }
+                  onReceitaChange={(value) => handleReceitaChange(option.value, value)}
+                  onQuantidadeChange={(value) => handleQuantidadeChange(option.value, value)}
                   onSave={() => void handleSaveTipo(option.value)}
                   onUnlink={() => void handleUnlink(option.value)}
                 />

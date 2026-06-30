@@ -6,6 +6,8 @@ export interface AccordionProps {
   title: ReactNode;
   summary?: ReactNode;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   icon?: string;
   children?: ReactNode;
   style?: CSSProperties;
@@ -15,11 +17,22 @@ export function Accordion({
   title,
   summary,
   defaultOpen = true,
+  open: openProp,
+  onOpenChange,
   icon,
   children,
   style,
 }: AccordionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = openProp ?? internalOpen;
+
+  const toggle = () => {
+    const next = !open;
+    if (openProp === undefined) {
+      setInternalOpen(next);
+    }
+    onOpenChange?.(next);
+  };
 
   return (
     <div
@@ -29,7 +42,7 @@ export function Accordion({
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className={[
           'flex min-h-11 w-full items-center gap-2 px-4 text-left',
           'transition-colors duration-[130ms]',

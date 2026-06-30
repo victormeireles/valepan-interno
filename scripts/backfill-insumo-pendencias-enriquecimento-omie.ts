@@ -5,7 +5,7 @@
  * fornecedor, CFOP, NCM etc. sem recriar pendências nem entradas.
  *
  * Uso:
- *   npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts [--dry-run] [--limit=N] [--empresa-id=UUID] [--force]
+ *   npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts [--dry-run] [--limit=N] [--empresa-id=UUID] [--force] [--incluir-ignorados] [--todos-status]
  *
  * npm:
  *   npm run backfill:insumo-pendencias-enriquecimento
@@ -27,6 +27,8 @@ function parseLimit(): number | undefined {
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const forcar = process.argv.includes('--force');
+  const incluirIgnorados = process.argv.includes('--incluir-ignorados');
+  const todosStatus = process.argv.includes('--todos-status');
   const empresaId = parseArgValor('--empresa-id');
   const limitRecebimentos = parseLimit();
 
@@ -41,7 +43,7 @@ async function main() {
   );
 
   console.log(
-    `[backfill-insumo-pendencias-enriquecimento-omie]${dryRun ? ' (dry-run)' : ''}${forcar ? ' force' : ''}`,
+    `[backfill-insumo-pendencias-enriquecimento-omie]${dryRun ? ' (dry-run)' : ''}${forcar ? ' force' : ''}${incluirIgnorados ? ' incluir-ignorados' : ''}${todosStatus ? ' todos-status' : ''}`,
   );
   if (empresaId) console.log(`  empresa-id: ${empresaId}`);
   if (limitRecebimentos) console.log(`  limit: ${limitRecebimentos}`);
@@ -49,6 +51,8 @@ async function main() {
   const result = await insumoPendenciaEnriquecimentoBackfillService.executar({
     dryRun,
     forcar,
+    incluirIgnorados,
+    todosStatus,
     empresaId,
     limitRecebimentos,
   });

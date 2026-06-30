@@ -1,6 +1,9 @@
 'use server';
 
+import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
+import { receitaIngredienteRepository } from '@/data/receitas/ReceitaIngredienteRepository';
+import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 
@@ -70,6 +73,37 @@ export async function getIntegracoesInsumo(insumoId: string) {
     return await insumoMapeamentoRepository.listByInsumo(insumoId);
   } catch (error) {
     console.error('Erro ao buscar vínculos Omie do insumo:', error);
+    return [];
+  }
+}
+
+export async function getVinculosOmieAssociadosPorInsumos(): Promise<
+  Record<string, IntegracaoInsumoComEmpresa[]>
+> {
+  try {
+    return await insumoMapeamentoRepository.listVinculosAgrupadosPorInsumo();
+  } catch (error) {
+    console.error('Erro ao buscar vínculos Omie dos insumos:', error);
+    return {};
+  }
+}
+
+export async function getReceitasAssociadasPorInsumos(): Promise<
+  Record<string, InsumoReceitaAssociacao[]>
+> {
+  try {
+    return await receitaIngredienteRepository.listAssociacoesAgrupadasPorInsumo();
+  } catch (error) {
+    console.error('Erro ao buscar receitas dos insumos:', error);
+    return {};
+  }
+}
+
+export async function getReceitasPorInsumo(insumoId: string): Promise<InsumoReceitaAssociacao[]> {
+  try {
+    return await receitaIngredienteRepository.listAssociacoesPorInsumo(insumoId);
+  } catch (error) {
+    console.error('Erro ao buscar receitas do insumo:', error);
     return [];
   }
 }

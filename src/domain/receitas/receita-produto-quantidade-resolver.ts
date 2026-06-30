@@ -1,0 +1,136 @@
+import { resolvePesoGramas, type ProdutoPesoInput } from '@/domain/assadeiras/produto-peso';
+import {
+  calcularQuantidadePorProdutoBrilho,
+  formatarResumoCalculoBrilho,
+} from '@/domain/receitas/receita-brilho-calculo';
+import {
+  calcularQuantidadePorProdutoMassa,
+  formatarResumoCalculoMassa,
+  type ReceitaMassaIngrediente,
+} from '@/domain/receitas/receita-massa-calculo';
+import {
+  receitaTipoUsaGramaturaBrilho,
+  receitaTipoUsaGramaturaDireta,
+  resolverQuantidadePorGramatura,
+  type ReceitaGramatura,
+  type TipoReceita,
+} from '@/domain/receitas/receita-gramatura-resolver';
+
+export type ReceitaProdutoQuantidadeSugestao = {
+  pesoGramas: number | null;
+  quantidade: number | null;
+  resumo: string | null;
+  aviso: string | null;
+};
+
+type ResolverInput = {
+  tipo: TipoReceita;
+  ingredientes?: ReceitaMassaIngrediente[];
+  gramaturas?: ReceitaGramatura[];
+  produto: ProdutoPesoInput;
+};
+
+export function resolverQuantidadeReceitaParaProduto(
+  input: ResolverInput,
+): ReceitaProdutoQuantidadeSugestao {
+  const pesoGramas = resolvePesoGramas({
+    unit_weight: input.produto.unit_weight,
+    nome: input.produto.nome,
+  });
+
+  if (input.tipo === 'massa') {
+    if (!input.ingredientes?.length) {
+      return { pesoGramas, quantidade: null, resumo: null, aviso: null };
+    }
+    if (!pesoGramas) {
+      return {
+        pesoGramas: null,
+        quantidade: null,
+        resumo: null,
+        aviso: 'Gramatura do produto não encontrada. Informe o peso no ERP ou no nome (ex.: 65g).',
+      };
+    }
+    const resultado = calcularQuantidadePorProdutoMassa(input.ingredientes, pesoGramas);
+    if (!resultado) {
+      return {
+        pesoGramas,
+        quantidade: null,
+        resumo: null,
+        aviso: 'Não foi possível calcular: verifique se a receita tem ingredientes em kg, L ou g.',
+      };
+    }
+    return {
+      pesoGramas,
+      quantidade: resultado.quantidade,
+      resumo: formatarResumoCalculoMassa(resultado, pesoGramas),
+      aviso: null,
+    };
+  }
+
+  if (receitaTipoUsaGramaturaBrilho(input.tipo)) {
+    if (!input.ingredientes?.length || !input.gramaturas?.length) {
+      return { pesoGramas, quantidade: null, resumo: null, aviso: null };
+    }
+    if (!pesoGramas) {
+      return {
+        pesoGramas: null,
+        quantidade: null,
+        resumo: null,
+        aviso: 'Gramatura do produto não encontrada para calcular o brilho.',
+      };
+    }
+    const resultado = calcularQuantidadePorProdutoBrilho(
+      input.ingredientes,
+      input.gramaturas,
+      pesoGramas,
+    );
+    if (!resultado) {
+      return {
+        pesoGramas,
+        quantidade: null,
+        resumo: null,
+        aviso: `Sem rendimento cadastrado para ${pesoGramas} g nesta receita de brilho.`,
+      };
+    }
+    return {
+      pesoGramas,
+      quantidade: resultado.quantidade,
+      resumo: formatarResumoCalculoBrilho(resultado, pesoGramas),
+      aviso: null,
+    };
+  }
+
+  if (!receitaTipoUsaGramaturaDireta(input.tipo)) {
+    return { pesoGramas, quantidade: null, resumo: null, aviso: null };
+  }
+
+  if (!input.gramaturas?.length) {
+    return { pesoGramas, quantidade: null, resumo: null, aviso: null };
+  }
+
+  if (!pesoGramas) {
+    return {
+      pesoGramas: null,
+      quantidade: null,
+      resumo: null,
+      aviso: 'Gramatura do produto não encontrada para pré-preencher a quantidade.',
+    };
+  }
+
+  const quantidade = resolverQuantidadePorGramatura(input.gramaturas, pesoGramas);
+  if (quantidade == null) {
+    return {
+      pesoGramas,
+      quantidade: null,
+      resumo: null,
+      aviso: `Sem quantidade cadastrada para ${pesoGramas} g nesta receita.`,
+    };
+  }
+
+  return {
+    pesoGramas,
+    quantidade,
+    resumo: `Gramatura ${pesoGramas} g → ${quantidade.toLocaleString('pt-BR')} unidades/receita`,
+    aviso: null,
+  };
+}

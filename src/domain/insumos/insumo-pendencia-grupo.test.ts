@@ -28,6 +28,9 @@ function makePendencia(
     natureza_operacao: null,
     cfop_entrada: null,
     ncm_produto: null,
+    valor_total_nf: null,
+    categoria_compra_codigo: null,
+    categoria_compra_descricao: null,
     empresaNome: 'NOVA RESENDE - RJ',
     ...partial,
   };
@@ -43,6 +46,8 @@ describe('insumo-pendencia-grupo', () => {
 
     expect(grupos).toHaveLength(1);
     expect(grupos[0]?.pendenciaCount).toBe(3);
+    expect(grupos[0]?.pendenciaIds).toEqual(['a', 'b', 'c']);
     expect(grupos[0]?.quantidadeNfTotal).toBe(900);
+    expect(grupos[0]?.valorUnitarioNf).toBeCloseTo(300 / 900);
   });
 });

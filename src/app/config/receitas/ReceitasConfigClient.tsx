@@ -108,8 +108,29 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
     setModalOpen(true);
   };
 
-  const handleSaved = () => {
-    setToast('Receita salva com sucesso');
+  const handleSaved = (info?: {
+    vinculosMassa?: { atualizados: number; ignorados: Array<{ produtoNome: string }> };
+    vinculosGramatura?: { atualizados: number; ignorados: Array<{ produtoNome: string }> };
+  }) => {
+    let message = 'Receita salva com sucesso';
+    const massaAtualizados = info?.vinculosMassa?.atualizados ?? 0;
+    const gramaturaAtualizados = info?.vinculosGramatura?.atualizados ?? 0;
+
+    if (massaAtualizados > 0) {
+      message += `. Quantidade de massa atualizada em ${massaAtualizados} produto${massaAtualizados === 1 ? '' : 's'}.`;
+    }
+    if (gramaturaAtualizados > 0) {
+      message += `. Quantidades atualizadas em ${gramaturaAtualizados} vínculo${gramaturaAtualizados === 1 ? '' : 's'}.`;
+    }
+
+    const ignorados =
+      (info?.vinculosMassa?.ignorados.length ?? 0) +
+      (info?.vinculosGramatura?.ignorados.length ?? 0);
+    if (ignorados > 0) {
+      message += ` ${ignorados} produto(s) não atualizado(s) (sem gramatura ou sem cadastro).`;
+    }
+
+    setToast(message);
     setModalOpen(false);
     setEditing(null);
     router.refresh();

@@ -3,6 +3,7 @@ export type AssadeiraOrigem = 'excecao' | 'regra' | 'pendente';
 export type ProdutoComAssadeirasResumo = {
   id: string;
   nome: string;
+  unit_weight: number | null;
   categoria_id: string;
   categoria_nome: string;
   linkCount: number;

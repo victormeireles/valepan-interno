@@ -18,6 +18,13 @@ const { InsumoPendenciaEnriquecimentoBackfillService } = await import(
 const consultarRecebimento = vi.fn();
 const listParaEnriquecimento = vi.fn();
 const atualizarEnriquecimentoOmie = vi.fn();
+const resolverCategoriaRecebimento = vi.fn();
+const resolverCategoriaItem = vi.fn();
+
+const categoriaService = {
+  resolverCategoriaRecebimento,
+  resolverCategoriaItem,
+};
 
 const empresa = {
   id: 'emp-1',
@@ -51,6 +58,8 @@ function criarPendencia(
     valor_total_nf: null,
     cfop_entrada: null,
     ncm_produto: null,
+    categoria_compra_codigo: null,
+    categoria_compra_descricao: null,
     status: 'pendente',
     integracao_insumo_id: null,
     resolvido_em: null,
@@ -81,6 +90,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
         valorTotalNf: 500,
         chaveNfe: null,
       },
+      infoAdicionais: { cCategCompra: '2.01.01' },
       itensCabec: [
         {
           nIdItem: 10,
@@ -94,6 +104,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
           cIgnorarItem: 'N',
           cfopEntrada: '1102',
           ncm: '11010010',
+          categoriaItem: null,
         },
         {
           nIdItem: 11,
@@ -107,8 +118,17 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
           cIgnorarItem: 'N',
           cfopEntrada: '1102',
           ncm: '17019900',
+          categoriaItem: null,
         },
       ],
+    });
+    resolverCategoriaRecebimento.mockResolvedValue({
+      codigo: '2.01.01',
+      descricao: 'Compras de Mercadorias para Revenda',
+    });
+    resolverCategoriaItem.mockResolvedValue({
+      codigo: '2.01.01',
+      descricao: 'Compras de Mercadorias para Revenda',
     });
 
     const service = new InsumoPendenciaEnriquecimentoBackfillService({
@@ -117,6 +137,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
         atualizarEnriquecimentoOmie,
       } as never,
       client: { consultarRecebimento } as never,
+      categoriaService: categoriaService as never,
       listarEmpresas: async () => [empresa],
     });
 
@@ -130,6 +151,8 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
         fornecedorRazaoSocial: 'Fornecedor LTDA',
         cfopEntrada: '1102',
         ncmProduto: '11010010',
+        categoriaCompraCodigo: '2.01.01',
+        categoriaCompraDescricao: 'Compras de Mercadorias para Revenda',
       }),
     );
     expect(result).toEqual({
@@ -149,6 +172,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
         atualizarEnriquecimentoOmie,
       } as never,
       client: { consultarRecebimento } as never,
+      categoriaService: categoriaService as never,
       listarEmpresas: async () => [empresa],
     });
 

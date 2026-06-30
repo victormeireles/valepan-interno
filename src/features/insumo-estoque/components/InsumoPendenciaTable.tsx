@@ -8,12 +8,15 @@ import {
   configTableHeadCellClass,
 } from '@/components/Config/config-table-styles';
 import InsumoPendenciaFornecedorCell from '@/features/insumo-estoque/components/InsumoPendenciaFornecedorCell';
-import InsumoPendenciaNfsPopover from '@/features/insumo-estoque/components/InsumoPendenciaNfsPopover';
+import InsumoPendenciaNfsButton from '@/features/insumo-estoque/components/InsumoPendenciaNfsButton';
+import { buildNfsTargetFromGrupo } from '@/features/insumo-estoque/utils/insumo-pendencia-nfs-target';
 import InsumoPendenciaProdutoMeta from '@/features/insumo-estoque/components/InsumoPendenciaProdutoMeta';
+import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
 import {
   formatCurrency,
   formatDateTime,
   formatInsumoQuantidade,
+  formatValorUnitarioNf,
 } from '@/features/insumo-estoque/utils/formatters';
 import { getGrupoIgnoradoEm } from '@/domain/insumos/insumo-pendencia-grupo';
 
@@ -86,6 +89,11 @@ export default function InsumoPendenciaTable({
                 Valor
               </span>
             </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
+                Vl. unit.
+              </span>
+            </th>
             {variant === 'ignorado' ? (
               <th scope="col" className={`${configTableHeadCellClass} text-right`}>
                 <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
@@ -118,9 +126,10 @@ export default function InsumoPendenciaTable({
                   />
                 </td>
                 <td className={`${configTableBodyCellClass} max-w-xs text-stone-800`}>
-                  <div className="font-mono text-xs text-stone-500">
-                    {grupo.omieCodigoProduto || grupo.omieIdProduto}
-                  </div>
+                  <InsumoProdutoOmieHeader
+                    categoriaTitulo={grupo.contexto.categoriaTitulo}
+                    categoriaSubtitulo={grupo.contexto.categoriaSubtitulo}
+                  />
                   <div className="mt-0.5 font-medium text-stone-900">
                     {grupo.descricaoProduto || '—'}
                   </div>
@@ -130,7 +139,12 @@ export default function InsumoPendenciaTable({
                   {formatInsumoQuantidade(grupo.quantidadeNfTotal, grupo.unidadeNf ?? undefined)}
                 </td>
                 <td className={`${configTableBodyCellClass} text-right`}>
-                  <InsumoPendenciaNfsPopover grupo={grupo} />
+                  <InsumoPendenciaNfsButton
+                    target={buildNfsTargetFromGrupo(
+                      grupo,
+                      variant === 'ignorado' ? ['ignorado'] : ['pendente'],
+                    )}
+                  />
                 </td>
                 <td className={`${configTableBodyCellClass} max-w-[12rem]`}>
                   <InsumoPendenciaFornecedorCell
@@ -140,6 +154,9 @@ export default function InsumoPendenciaTable({
                 </td>
                 <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
                   {formatCurrency(grupo.valorTotal)}
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono text-xs tabular-nums text-stone-700`}>
+                  {formatValorUnitarioNf(grupo.valorUnitarioNf, grupo.unidadeNf)}
                 </td>
                 {variant === 'ignorado' ? (
                   <td className={`${configTableBodyCellClass} text-right font-mono text-xs tabular-nums text-stone-600`}>

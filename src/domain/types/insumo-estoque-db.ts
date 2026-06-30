@@ -58,6 +58,8 @@ export type InsumoEntradaPendenciaRow = {
   valor_total_nf: number | null;
   cfop_entrada: string | null;
   ncm_produto: string | null;
+  categoria_compra_codigo: string | null;
+  categoria_compra_descricao: string | null;
   status: InsumoPendenciaStatus;
   integracao_insumo_id: string | null;
   resolvido_em: string | null;
@@ -98,6 +100,8 @@ export type AtualizarEnriquecimentoPendenciaInput = {
   ncmProduto?: string | null;
   numeroNf?: string | null;
   dataEmissaoNf?: string | null;
+  categoriaCompraCodigo?: string | null;
+  categoriaCompraDescricao?: string | null;
 };
 
 export type RecebimentoPendenciaChave = {
@@ -126,6 +130,8 @@ export type CriarPendenciaInput = {
   valorTotalNf?: number | null;
   cfopEntrada?: string | null;
   ncmProduto?: string | null;
+  categoriaCompraCodigo?: string | null;
+  categoriaCompraDescricao?: string | null;
 };
 
 export type InsumoPendenciaComEmpresa = InsumoEntradaPendenciaRow & {
@@ -136,9 +142,19 @@ export type IntegracaoInsumoComEmpresa = IntegracaoInsumoRow & {
   empresaNome: string;
 };
 
-export type IntegracaoInsumoListItem = IntegracaoInsumoRow & {
+import type { InsumoPendenciaGrupoContexto } from '@/domain/insumos/insumo-pendencia-grupo-contexto';
+
+export type IntegracaoInsumoListItemBase = IntegracaoInsumoRow & {
   empresaNome: string;
   insumoNome: string;
   insumoUnidadeCodigo: string | null;
   insumoUnidadeNome: string | null;
+};
+
+export type IntegracaoInsumoListItem = IntegracaoInsumoListItemBase & {
+  contexto: InsumoPendenciaGrupoContexto;
+  valorUnitarioNf: number | null;
+  unidadeNf: string | null;
+  nfsDistintas: number;
+  pendenciaCount: number;
 };

@@ -48,4 +48,14 @@ describe('normalizarConsultarRecebimento', () => {
       ncm: '34029039',
     });
   });
+
+  it('extrai cCategCompra de infoAdicionais', () => {
+    const result = normalizarConsultarRecebimento({
+      cabec: { cNumeroNF: '1' },
+      infoAdicionais: { cCategCompra: '2.01.01' },
+      itensCabec: [],
+    });
+
+    expect(result.infoAdicionais).toEqual({ cCategCompra: '2.01.01' });
+  });
 });

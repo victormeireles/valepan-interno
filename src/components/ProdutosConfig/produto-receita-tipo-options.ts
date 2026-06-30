@@ -11,13 +11,13 @@ export const PRODUTO_RECEITA_TIPO_OPTIONS: Array<{
   {
     value: 'massa',
     label: 'Massa',
-    helper: 'Quantidade de produtos que 1 receita de massa atende.',
+    helper: 'Pães por receita — calculado pelo peso total da massa ÷ gramatura do pão.',
     icon: 'grain',
   },
   {
     value: 'brilho',
     label: 'Brilho',
-    helper: 'Quantidade de produtos que 1 receita de brilho atende.',
+    helper: 'Volume da receita (L) × pães por litro da gramatura do produto.',
     icon: 'wb_sunny',
   },
   {

@@ -1,5 +1,8 @@
 import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
-import type { OmieRecebimentoCabecEnriquecido } from '@/domain/types/omie-recebimento-enriquecido';
+import type {
+  OmieRecebimentoCabecEnriquecido,
+  OmieRecebimentoInfoAdicionais,
+} from '@/domain/types/omie-recebimento-enriquecido';
 
 type OmieCabecRaw = {
   cNumeroNF?: string;
@@ -14,11 +17,22 @@ type OmieCabecRaw = {
   cChaveNFe?: string;
 };
 
+type OmieInfoAdicionaisRaw = {
+  cCategCompra?: string;
+};
+
+type OmieItensInfoAdicRaw = {
+  cCategoriaItem?: string;
+};
+
 type OmieItensAjustesRaw = {
   cCFOPEntrada?: string;
 };
 
-type OmieRecebimentoItemRaw = Omit<OmieRecebimentoItem, 'nQtdeNfe' | 'cfopEntrada' | 'ncm'> & {
+type OmieRecebimentoItemRaw = Omit<
+  OmieRecebimentoItem,
+  'nQtdeNfe' | 'cfopEntrada' | 'ncm' | 'categoriaItem'
+> & {
   nQtdeNfe?: number;
   nQtdeNFe?: number;
   cNCM?: string;
@@ -28,16 +42,19 @@ type OmieRecebimentoItemRaw = Omit<OmieRecebimentoItem, 'nQtdeNfe' | 'cfopEntrad
 type OmieRecebimentoLinhaRaw = {
   itensCabec?: OmieRecebimentoItemRaw;
   itensAjustes?: OmieItensAjustesRaw;
+  itensInfoAdic?: OmieItensInfoAdicRaw;
 };
 
 export type OmieConsultarRecebimentoRaw = {
   cabec?: OmieCabecRaw;
+  infoAdicionais?: OmieInfoAdicionaisRaw;
   itensCabec?: OmieRecebimentoItemRaw[];
   itensRecebimento?: OmieRecebimentoLinhaRaw[];
 };
 
 export type ConsultarRecebimentoNormalizado = {
   cabec?: OmieRecebimentoCabecEnriquecido;
+  infoAdicionais?: OmieRecebimentoInfoAdicionais;
   itensCabec: OmieRecebimentoItem[];
 };
 
@@ -59,9 +76,19 @@ function normalizarCabec(raw?: OmieCabecRaw): OmieRecebimentoCabecEnriquecido | 
   };
 }
 
+function normalizarInfoAdicionais(
+  raw?: OmieInfoAdicionaisRaw,
+): OmieRecebimentoInfoAdicionais | undefined {
+  if (!raw) return undefined;
+  const codigo = raw.cCategCompra?.trim();
+  if (!codigo) return undefined;
+  return { cCategCompra: codigo };
+}
+
 function normalizarItem(
   raw: OmieRecebimentoItemRaw,
   ajustes?: OmieItensAjustesRaw,
+  infoAdic?: OmieItensInfoAdicRaw,
 ): OmieRecebimentoItem {
   return {
     nIdItem: raw.nIdItem,
@@ -75,6 +102,7 @@ function normalizarItem(
     cIgnorarItem: raw.cIgnorarItem,
     cfopEntrada: ajustes?.cCFOPEntrada?.trim() || null,
     ncm: raw.cNCM?.trim() || raw.cCodigoNCM?.trim() || null,
+    categoriaItem: infoAdic?.cCategoriaItem?.trim() || null,
   };
 }
 
@@ -82,7 +110,7 @@ function normalizarItensRecebimento(linhas: OmieRecebimentoLinhaRaw[]): OmieRece
   return linhas
     .map((linha) => {
       if (!linha.itensCabec) return null;
-      return normalizarItem(linha.itensCabec, linha.itensAjustes);
+      return normalizarItem(linha.itensCabec, linha.itensAjustes, linha.itensInfoAdic);
     })
     .filter((item): item is OmieRecebimentoItem => item !== null);
 }
@@ -95,6 +123,14 @@ export function normalizarConsultarRecebimento(
 
   return {
     cabec: normalizarCabec(raw.cabec),
+    infoAdicionais: normalizarInfoAdicionais(raw.infoAdicionais),
     itensCabec: itensDiretos.length > 0 ? itensDiretos : itensAninhados,
   };
+}
+
+export function extrairCodigoCategoriaCompra(input: {
+  infoAdicionais?: OmieRecebimentoInfoAdicionais;
+  item?: OmieRecebimentoItem;
+}): string | null {
+  return input.infoAdicionais?.cCategCompra ?? input.item?.categoriaItem ?? null;
 }

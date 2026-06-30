@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Insumo } from '@/app/actions/insumos-actions';
+import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
+import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import InsumoModal from '@/components/Insumos/InsumoModal';
 import InsumosConfigMobileList from '@/components/Insumos/InsumosConfigMobileList';
@@ -19,6 +21,8 @@ type StatusFilter = 'todos' | 'ativos' | 'inativos';
 
 type Props = {
   initialInsumos: Insumo[];
+  receitasPorInsumo: Record<string, InsumoReceitaAssociacao[]>;
+  vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
 };
 
 function compareValues(a: unknown, b: unknown): number {
@@ -41,7 +45,11 @@ function sortValue(insumo: Insumo, key: InsumoSortKey) {
   return insumo[key];
 }
 
-export default function InsumosConfigClient({ initialInsumos }: Props) {
+export default function InsumosConfigClient({
+  initialInsumos,
+  receitasPorInsumo,
+  vinculosOmiePorInsumo,
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -238,13 +246,20 @@ export default function InsumosConfigClient({ initialInsumos }: Props) {
           <>
             <InsumosConfigTable
               items={filtered}
+              receitasPorInsumo={receitasPorInsumo}
+              vinculosOmiePorInsumo={vinculosOmiePorInsumo}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
               onRowClick={openEdit}
               embedded
             />
-            <InsumosConfigMobileList items={filtered} onRowClick={openEdit} />
+            <InsumosConfigMobileList
+              items={filtered}
+              receitasPorInsumo={receitasPorInsumo}
+              vinculosOmiePorInsumo={vinculosOmiePorInsumo}
+              onRowClick={openEdit}
+            />
           </>
         )}
       </Card>

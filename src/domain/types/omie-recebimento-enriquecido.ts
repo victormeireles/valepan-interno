@@ -9,6 +9,10 @@ export type OmieRecebimentoCabecEnriquecido = {
   chaveNfe: string | null;
 };
 
+export type OmieRecebimentoInfoAdicionais = {
+  cCategCompra: string | null;
+};
+
 export type OmieRecebimentoContextoNf = {
   numeroNf: string;
   dataEmissaoNf: string | null;
@@ -18,4 +22,6 @@ export type OmieRecebimentoContextoNf = {
   naturezaOperacao: string | null;
   valorTotalNf: number | null;
   chaveNfe: string | null;
+  categoriaCompraCodigo: string | null;
+  categoriaCompraDescricao: string | null;
 };

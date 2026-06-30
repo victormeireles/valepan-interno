@@ -10,6 +10,14 @@ type TipoOption = {
   icon: string;
 };
 
+type CalculoAutomaticoProps = {
+  resumo: string | null;
+  aviso: string | null;
+  sugestao: number | null;
+  manual: boolean;
+  onRecalcular: () => void;
+};
+
 type Props = {
   option: TipoOption;
   vinculoAtivo: boolean;
@@ -18,6 +26,7 @@ type Props = {
   quantidade: number | undefined;
   isSaving: boolean;
   isDisabled: boolean;
+  calculoAutomatico?: CalculoAutomaticoProps;
   onReceitaChange: (value: string) => void;
   onQuantidadeChange: (value: number | undefined) => void;
   onSave: () => void;
@@ -41,6 +50,7 @@ export default function ProdutoReceitaTipoRow({
   quantidade,
   isSaving,
   isDisabled,
+  calculoAutomatico,
   onReceitaChange,
   onQuantidadeChange,
   onSave,
@@ -150,6 +160,30 @@ export default function ProdutoReceitaTipoRow({
             </button>
           </div>
         </div>
+
+        {calculoAutomatico && receitaId ? (
+          <div className="lg:col-span-3 lg:col-start-2 space-y-1">
+            {calculoAutomatico.resumo ? (
+              <p className="text-xs text-stone-600">
+                <span className="font-medium text-amber-800">Sugestão:</span>{' '}
+                <span className="font-mono tabular-nums">{calculoAutomatico.resumo}</span>
+              </p>
+            ) : null}
+            {calculoAutomatico.aviso ? (
+              <p className="text-xs text-amber-700">{calculoAutomatico.aviso}</p>
+            ) : null}
+            {calculoAutomatico.manual && calculoAutomatico.sugestao != null ? (
+              <button
+                type="button"
+                onClick={calculoAutomatico.onRecalcular}
+                disabled={isDisabled}
+                className="text-xs font-semibold text-amber-700 hover:text-amber-800 disabled:opacity-50"
+              >
+                Recalcular ({calculoAutomatico.sugestao.toLocaleString('pt-BR')})
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -421,6 +421,7 @@ export type Database = {
           parcela_padrao_id: string | null
           pedido_cutoff_hora_brt: number | null
           pedido_lead_time_dias: number | null
+          permite_auto_pedido_hamburgueria: boolean
           permite_pedido_hb_consignada: boolean
           permite_pedido_remessa: boolean
           permite_pedido_venda_normal: boolean
@@ -482,6 +483,7 @@ export type Database = {
           parcela_padrao_id?: string | null
           pedido_cutoff_hora_brt?: number | null
           pedido_lead_time_dias?: number | null
+          permite_auto_pedido_hamburgueria?: boolean
           permite_pedido_hb_consignada?: boolean
           permite_pedido_remessa?: boolean
           permite_pedido_venda_normal?: boolean
@@ -543,6 +545,7 @@ export type Database = {
           parcela_padrao_id?: string | null
           pedido_cutoff_hora_brt?: number | null
           pedido_lead_time_dias?: number | null
+          permite_auto_pedido_hamburgueria?: boolean
           permite_pedido_hb_consignada?: boolean
           permite_pedido_remessa?: boolean
           permite_pedido_venda_normal?: boolean
@@ -1782,12 +1785,20 @@ export type Database = {
       }
       insumo_entrada_pendencias: {
         Row: {
+          cfop_entrada: string | null
+          categoria_compra_codigo: string | null
+          categoria_compra_descricao: string | null
           created_at: string
           data_emissao_nf: string | null
           descricao_produto: string | null
           empresa_id: string
+          fornecedor_cnpj: string | null
+          fornecedor_nome: string | null
+          fornecedor_razao_social: string | null
           id: string
           integracao_insumo_id: string | null
+          natureza_operacao: string | null
+          ncm_produto: string | null
           numero_nf: string | null
           omie_codigo_produto: string | null
           omie_id_produto: number
@@ -1800,14 +1811,23 @@ export type Database = {
           status: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf: string | null
           valor_total_item: number
+          valor_total_nf: number | null
         }
         Insert: {
+          cfop_entrada?: string | null
+          categoria_compra_codigo?: string | null
+          categoria_compra_descricao?: string | null
           created_at?: string
           data_emissao_nf?: string | null
           descricao_produto?: string | null
           empresa_id: string
+          fornecedor_cnpj?: string | null
+          fornecedor_nome?: string | null
+          fornecedor_razao_social?: string | null
           id?: string
           integracao_insumo_id?: string | null
+          natureza_operacao?: string | null
+          ncm_produto?: string | null
           numero_nf?: string | null
           omie_codigo_produto?: string | null
           omie_id_produto: number
@@ -1820,14 +1840,23 @@ export type Database = {
           status?: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf?: string | null
           valor_total_item: number
+          valor_total_nf?: number | null
         }
         Update: {
+          cfop_entrada?: string | null
+          categoria_compra_codigo?: string | null
+          categoria_compra_descricao?: string | null
           created_at?: string
           data_emissao_nf?: string | null
           descricao_produto?: string | null
           empresa_id?: string
+          fornecedor_cnpj?: string | null
+          fornecedor_nome?: string | null
+          fornecedor_razao_social?: string | null
           id?: string
           integracao_insumo_id?: string | null
+          natureza_operacao?: string | null
+          ncm_produto?: string | null
           numero_nf?: string | null
           omie_codigo_produto?: string | null
           omie_id_produto?: number
@@ -1840,6 +1869,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["insumo_pendencia_status"]
           unidade_nf?: string | null
           valor_total_item?: number
+          valor_total_nf?: number | null
         }
         Relationships: [
           {
@@ -1873,6 +1903,7 @@ export type Database = {
           empresa_id: string | null
           id: string
           insumo_id: string
+          numero_nf: string | null
           observacao: string | null
           omie_n_id_item: number | null
           omie_n_id_receb: number | null
@@ -1888,6 +1919,7 @@ export type Database = {
           empresa_id?: string | null
           id?: string
           insumo_id: string
+          numero_nf?: string | null
           observacao?: string | null
           omie_n_id_item?: number | null
           omie_n_id_receb?: number | null
@@ -1903,6 +1935,7 @@ export type Database = {
           empresa_id?: string | null
           id?: string
           insumo_id?: string
+          numero_nf?: string | null
           observacao?: string | null
           omie_n_id_item?: number | null
           omie_n_id_receb?: number | null
@@ -3323,6 +3356,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["receita_id"]
+          },
+        ]
+      }
+      receita_gramaturas: {
+        Row: {
+          created_at: string | null
+          id: string
+          peso_g: number
+          quantidade_padrao: number
+          receita_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          peso_g: number
+          quantidade_padrao: number
+          receita_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          peso_g?: number
+          quantidade_padrao?: number
+          receita_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receita_gramaturas_receita_id_fkey"
+            columns: ["receita_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
           },
         ]
       }

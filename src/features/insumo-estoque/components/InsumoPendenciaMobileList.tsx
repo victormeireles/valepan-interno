@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/Button';
 import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
 import InsumoPendenciaMobileDetalhes from '@/features/insumo-estoque/components/InsumoPendenciaMobileDetalhes';
+import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
 import {
   formatCurrency,
   formatInsumoQuantidade,
+  formatValorUnitarioNf,
 } from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
@@ -51,9 +53,10 @@ export default function InsumoPendenciaMobileList({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-mono text-xs text-stone-500">
-                  {grupo.omieCodigoProduto || grupo.omieIdProduto}
-                </p>
+                <InsumoProdutoOmieHeader
+                  categoriaTitulo={grupo.contexto.categoriaTitulo}
+                  categoriaSubtitulo={grupo.contexto.categoriaSubtitulo}
+                />
                 <p className="mt-0.5 text-sm font-semibold text-stone-900">
                   {grupo.descricaoProduto || '—'}
                 </p>
@@ -65,11 +68,17 @@ export default function InsumoPendenciaMobileList({
                     {grupo.nfsDistintas} NF{grupo.nfsDistintas === 1 ? '' : 's'}
                   </span>
                   <span>{formatCurrency(grupo.valorTotal)}</span>
+                  <span className="text-stone-600">
+                    {formatValorUnitarioNf(grupo.valorUnitarioNf, grupo.unidadeNf)}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <InsumoPendenciaMobileDetalhes grupo={grupo} />
+            <InsumoPendenciaMobileDetalhes
+              grupo={grupo}
+              statuses={variant === 'ignorado' ? ['ignorado'] : ['pendente']}
+            />
 
             <div className="mt-3 flex gap-2 pl-14">
               <Button size="sm" className="flex-1" onClick={() => onVincular(grupo)}>

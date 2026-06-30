@@ -17,6 +17,7 @@ export type OmieRecebimentoItem = {
   cIgnorarItem: string;
   cfopEntrada: string | null;
   ncm: string | null;
+  categoriaItem: string | null;
 };
 
 export type InsumoSaldoComDetalhes = {

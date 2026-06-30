@@ -30,6 +30,8 @@ function makePendencia(
     valor_total_nf: null,
     cfop_entrada: null,
     ncm_produto: null,
+    categoria_compra_codigo: null,
+    categoria_compra_descricao: null,
     empresaNome: 'NOVA RESENDE - RJ',
     ...partial,
   };
@@ -70,5 +72,41 @@ describe('buildPendenciaGrupoContexto', () => {
     expect(contexto.fornecedoresDistintos).toBe(3);
     expect(contexto.fornecedorTitulo).toBe('3 fornecedores');
     expect(contexto.fornecedorSubtitulo).toContain('Fornecedor A');
+  });
+
+  it('resume categoria única e lista múltiplas categorias', () => {
+    const unica = buildPendenciaGrupoContexto([
+      makePendencia({
+        id: 'a',
+        categoria_compra_codigo: '2.01.01',
+        categoria_compra_descricao: 'Compras de Mercadorias para Revenda',
+      }),
+    ]);
+
+    expect(unica.categoriaTitulo).toBe('Compras de Mercadorias para Revenda');
+    expect(unica.categoriasDistintas).toBe(1);
+
+    const multiplas = buildPendenciaGrupoContexto([
+      makePendencia({
+        id: 'a',
+        categoria_compra_codigo: '2.01.01',
+        categoria_compra_descricao: 'Compras de Mercadorias para Revenda',
+      }),
+      makePendencia({
+        id: 'b',
+        categoria_compra_codigo: '2.02.01',
+        categoria_compra_descricao: 'Compras de Materia Prima',
+      }),
+      makePendencia({
+        id: 'c',
+        categoria_compra_codigo: '2.03.01',
+        categoria_compra_descricao: 'Material de Escritório',
+      }),
+    ]);
+
+    expect(multiplas.categoriasDistintas).toBe(3);
+    expect(multiplas.categoriaTitulo).toBe('3 categorias');
+    expect(multiplas.categoriaSubtitulo).toContain('Compras de Mercadorias para Revenda');
+    expect(multiplas.categoriaSubtitulo).toContain('+1');
   });
 });

@@ -13,6 +13,13 @@ import {
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
+import { enrichIntegracaoInsumosComFornecedor } from '@/domain/insumos/insumo-vinculo-fornecedor';
+import {
+  groupPendenciasPorProduto,
+  prepararGruposParaCliente,
+  type InsumoPendenciaProdutoGrupo,
+} from '@/domain/insumos/insumo-pendencia-grupo';
+import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
@@ -33,8 +40,10 @@ export type InsumoSaldosPageData = {
 };
 
 export type InsumoMapeamentoPageData = {
-  pendencias: InsumoPendenciaComEmpresa[];
-  ignoradas: InsumoPendenciaComEmpresa[];
+  pendenciaGrupos: InsumoPendenciaProdutoGrupo[];
+  ignoradaGrupos: InsumoPendenciaProdutoGrupo[];
+  pendenciasCount: number;
+  ignoradasCount: number;
   vinculos: IntegracaoInsumoListItem[];
 };
 
@@ -50,13 +59,32 @@ export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
 }
 
 export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
-  const [pendencias, ignoradas, vinculos] = await Promise.all([
+  const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos] = await Promise.all([
     insumoPendenciaRepository.listPendentes(),
     insumoPendenciaRepository.listIgnoradas(),
     insumoMapeamentoRepository.listAtivosComDetalhes(),
+    insumoPendenciaRepository.listComFornecedorParaVinculos(),
   ]);
 
-  return { pendencias, ignoradas, vinculos };
+  const pendenciaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(pendencias));
+  const ignoradaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(ignoradas));
+  const vinculos = enrichIntegracaoInsumosComFornecedor(vinculosBase, pendenciasParaVinculos);
+
+  return {
+    pendenciaGrupos,
+    ignoradaGrupos,
+    pendenciasCount: pendencias.length,
+    ignoradasCount: ignoradas.length,
+    vinculos,
+  };
+}
+
+export async function getInsumoPendenciasPorProdutoOmie(input: {
+  empresaId: string;
+  omieIdProduto: number;
+  statuses: InsumoPendenciaStatus[];
+}): Promise<InsumoPendenciaComEmpresa[]> {
+  return insumoPendenciaRepository.listPorProdutoOmie(input);
 }
 
 export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboardData> {

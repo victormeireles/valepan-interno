@@ -6,6 +6,7 @@ import { atualizarIntegracaoInsumoVinculo } from '@/app/actions/insumo-estoque-a
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import { Button } from '@/components/ui/Button';
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
+import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
 import {
   formatUnidadeLabel,
   type InsumoSelecionadoResumo,
@@ -153,9 +154,10 @@ export default function InsumoEditarVinculoModal({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
                 Produto Omie
               </p>
-              <p className="mt-2 font-mono text-xs text-stone-500">
-                {vinculo.omie_codigo_produto || vinculo.omie_id_produto}
-              </p>
+              <InsumoProdutoOmieHeader
+                categoriaTitulo={vinculo.contexto.categoriaTitulo}
+                categoriaSubtitulo={vinculo.contexto.categoriaSubtitulo}
+              />
               <p className="mt-1 font-medium text-stone-900">
                 {vinculo.descricao_omie || 'Produto sem descrição'}
               </p>

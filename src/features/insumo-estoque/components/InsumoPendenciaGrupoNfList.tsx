@@ -10,9 +10,15 @@ type Props = {
   grupo: InsumoPendenciaProdutoGrupo;
   fator: number;
   unidadeInsumoLabel: string | null;
+  loading?: boolean;
 };
 
-export default function InsumoPendenciaGrupoNfList({ grupo, fator, unidadeInsumoLabel }: Props) {
+export default function InsumoPendenciaGrupoNfList({
+  grupo,
+  fator,
+  unidadeInsumoLabel,
+  loading = false,
+}: Props) {
   const mostrarFornecedor = grupo.contexto.fornecedoresDistintos !== 1;
   const mostrarConversao = fator > 0 && Boolean(unidadeInsumoLabel);
   const ordenadas = [...grupo.pendencias].sort((a, b) =>
@@ -25,7 +31,12 @@ export default function InsumoPendenciaGrupoNfList({ grupo, fator, unidadeInsumo
         Notas fiscais ({grupo.nfsDistintas})
       </p>
       <ul className="divide-y divide-stone-100">
-        {ordenadas.map((pendencia) => {
+        {loading ? (
+          <li className="px-4 py-6 text-center text-sm text-stone-500">Carregando notas…</li>
+        ) : ordenadas.length === 0 ? (
+          <li className="px-4 py-6 text-center text-sm text-stone-500">Nenhuma nota encontrada</li>
+        ) : (
+          ordenadas.map((pendencia) => {
           const conversaoEstoque =
             mostrarConversao && unidadeInsumoLabel
               ? formatInsumoQuantidade(
@@ -44,7 +55,8 @@ export default function InsumoPendenciaGrupoNfList({ grupo, fator, unidadeInsumo
               />
             </li>
           );
-        })}
+        })
+        )}
       </ul>
     </div>
   );

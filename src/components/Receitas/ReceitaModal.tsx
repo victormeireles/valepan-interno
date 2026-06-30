@@ -1,60 +1,68 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { ReceitaWithRelations, ReceitaInput } from '@/app/actions/receitas-actions';
+import type {
+  ReceitaWithRelations,
+  ReceitaSaveResult,
+  ReceitaInput,
+} from '@/app/actions/receitas-actions';
 import { createReceita, updateReceita } from '@/app/actions/receitas-actions';
-import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
+import type { ReceitaMassaVinculoSyncResult } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
 import TextInput from '@/components/FormControls/TextInput';
-import NumberDecimalInput from '@/components/FormControls/NumberDecimalInput';
+import { type ReceitaIngredienteFormItem } from '@/components/Receitas/ReceitaIngredienteRow';
+import { useReceitaImportFlow } from '@/components/Receitas/useReceitaImportFlow';
+import ReceitaIngredientesAccordion from '@/components/Receitas/ReceitaIngredientesAccordion';
+import ReceitaGramaturasSection, {
+  type ReceitaGramaturaFormItem,
+} from '@/components/Receitas/ReceitaGramaturasSection';
+import { receitaTipoUsaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 
 type TipoReceita = ReceitaWithRelations['tipo'];
 
 interface ReceitaModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (info?: {
+    vinculosMassa?: ReceitaMassaVinculoSyncResult;
+    vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+  }) => void;
   receita?: ReceitaWithRelations | null;
 }
 
-type IngredienteForm = {
-  tempId: string;
-  id?: string;
-  insumoId: string;
-  insumoNome: string;
-  unidadeDescricao?: string | null;
-  quantidade: number;
-};
+type IngredienteForm = ReceitaIngredienteFormItem;
 
 const tipoOptions: Array<{ value: TipoReceita; label: string; helper: string }> = [
   {
     value: 'massa',
     label: 'Massa',
-    helper: 'Quantidade de produtos que 1 receita de massa atende.',
+    helper: 'Ao salvar, atualiza automaticamente a quantidade de pães nos produtos vinculados.',
   },
   {
     value: 'brilho',
     label: 'Brilho',
-    helper: 'Quantidade representa quantos produtos uma receita de brilho cobre.',
+    helper:
+      'Cadastre quantos pães de cada gramatura 1 L cobre. Ao vincular, calcula volume da receita × esse valor.',
   },
   {
     value: 'confeito',
     label: 'Confeito',
-    helper: 'Quantidade representa quantos produtos uma receita de confeito atende.',
+    helper: 'Cadastre quantidades por gramatura para pré-preencher ao vincular produtos.',
   },
   {
     value: 'antimofo',
     label: 'Antimofo',
-    helper: 'Quantidade representa quantos produtos uma receita de antimofo atende.',
+    helper: 'Cadastre quantidades por gramatura para pré-preencher ao vincular produtos.',
   },
   {
     value: 'embalagem',
     label: 'Embalagem',
-    helper: 'Quantidade representa quantos pães vão em um pacote.',
+    helper: 'Cadastre quantidades por gramatura (pães por pacote, etc.).',
   },
   {
     value: 'caixa',
     label: 'Caixa',
-    helper: 'Quantidade representa quantos pacotes (ou pães) vão em uma caixa.',
+    helper: 'Cadastre quantidades por gramatura (pacotes por caixa, etc.).',
   },
 ];
 
@@ -71,6 +79,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
   const [codigo, setCodigo] = useState<string | null>(null);
   const [ativo, setAtivo] = useState(true);
   const [ingredientes, setIngredientes] = useState<IngredienteForm[]>([]);
+  const [gramaturas, setGramaturas] = useState<ReceitaGramaturaFormItem[]>([]);
   const [novoIngredienteNome, setNovoIngredienteNome] = useState('');
   const [novoIngredienteId, setNovoIngredienteId] = useState('');
   const [novoIngredienteUnidade, setNovoIngredienteUnidade] = useState<string | null>(null);
@@ -78,6 +87,25 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
   const [accordionOpen, setAccordionOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const {
+    importPhase,
+    importRows,
+    catalogoLoading,
+    setImportPhase,
+    setImportRows,
+    resetImport,
+    handleStartColarPlanilha,
+    handlePasteContinue,
+    handleImportConfirm,
+  } = useReceitaImportFlow({
+    ingredientes,
+    generateTempId,
+    onIngredientesChange: setIngredientes,
+    onError: setError,
+    onClearError: () => setError(null),
+    onAccordionOpen: () => setAccordionOpen(true),
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -97,20 +125,30 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
             quantidade: item.quantidade_padrao,
           })),
         );
+        setGramaturas(
+          (receita.receita_gramaturas || []).map((item) => ({
+            tempId: item.id,
+            id: item.id,
+            pesoG: item.peso_g,
+            quantidade: Number(item.quantidade_padrao),
+          })),
+        );
       } else {
         setNome('');
         setTipo('massa');
         setCodigo(null);
         setAtivo(true);
         setIngredientes([]);
+        setGramaturas([]);
       }
       setNovoIngredienteId('');
       setNovoIngredienteNome('');
       setNovoIngredienteUnidade(null);
       setNovoIngredienteQuantidade(0);
       setError(null);
+      resetImport();
     }
-  }, [isOpen, receita]);
+  }, [isOpen, receita, resetImport]);
 
   const tipoHelper = useMemo(
     () => tipoOptions.find((option) => option.value === tipo)?.helper ?? '',
@@ -162,32 +200,30 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
     );
   };
 
-  // Função para formatar valor para exibição ao lado do input
-  const formatarValorLateral = (valor: number, unidade: string | null | undefined): string | null => {
-    if (!unidade || valor <= 0) return null;
-    
-    const unidadeLower = unidade.toLowerCase().trim();
-    const isKg = unidadeLower === 'kg' || unidadeLower === 'kilograma' || unidadeLower === 'kilogramas';
-    
-    // Se for kg e valor < 1, mostrar em gramas
-    if (isKg && valor < 1) {
-      return `${Math.round(valor * 1000)}g`;
-    }
-    
-    // Caso contrário, formatar com a unidade
-    const unidadeFormatada = unidade.replace(/\s+/g, '');
-    return `${valor}${unidadeFormatada}`;
+  const handleSwapIngrediente = (
+    tempId: string,
+    swap: Pick<IngredienteForm, 'insumoId' | 'insumoNome' | 'unidadeDescricao'>,
+  ) => {
+    setIngredientes((prev) =>
+      prev.map((item) =>
+        item.tempId === tempId
+          ? {
+              ...item,
+              insumoId: swap.insumoId,
+              insumoNome: swap.insumoNome,
+              unidadeDescricao: swap.unidadeDescricao,
+            }
+          : item,
+      ),
+    );
+    setError(null);
   };
 
-  // Função para calcular gramas (usado no padrão)
-  const calcularGramas = (valor: number, unidade: string | null | undefined): number | null => {
-    if (!unidade) return null;
-    const unidadeLower = unidade.toLowerCase().trim();
-    if ((unidadeLower === 'kg' || unidadeLower === 'kilograma' || unidadeLower === 'kilogramas') && valor > 0 && valor < 1) {
-      return Math.round(valor * 1000);
-    }
-    return null;
-  };
+  const tipoUsaGramatura = receitaTipoUsaGramatura(tipo);
+
+  const gramaturasValidas = gramaturas.filter(
+    (item) => item.pesoG >= 1 && item.quantidade > 0,
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,9 +241,18 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
           insumoId: item.insumoId,
           quantidade: item.quantidade,
         })),
+        ...(tipoUsaGramatura
+          ? {
+              gramaturas: gramaturasValidas.map((item) => ({
+                id: item.id,
+                pesoG: item.pesoG,
+                quantidade: item.quantidade,
+              })),
+            }
+          : {}),
       };
 
-      const result = receita
+      const result: ReceitaSaveResult = receita
         ? await updateReceita({ id: receita.id, ...payload })
         : await createReceita(payload);
 
@@ -215,7 +260,11 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
         throw new Error(result.error as string);
       }
 
-      onSaved?.();
+      onSaved?.(
+        result.success
+          ? { vinculosMassa: result.vinculosMassa, vinculosGramatura: result.vinculosGramatura }
+          : undefined,
+      );
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar receita';
@@ -306,147 +355,36 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
             </div>
           </div>
 
-          <div className="border border-gray-100 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => setAccordionOpen((prev) => !prev)}
-              className="w-full px-6 py-4 flex items-center justify-between text-left"
-            >
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Ingredientes</p>
-                <p className="text-xs text-gray-500">
-                  {ingredientes.length} ingrediente{ingredientes.length === 1 ? '' : 's'} adicionados
-                </p>
-              </div>
-              <span className="material-icons text-gray-500">
-                {accordionOpen ? 'expand_less' : 'expand_more'}
-              </span>
-            </button>
+          <ReceitaIngredientesAccordion
+            isEditing={Boolean(receita)}
+            accordionOpen={accordionOpen}
+            onAccordionToggle={() => setAccordionOpen((prev) => !prev)}
+            ingredientes={ingredientes}
+            importPhase={importPhase}
+            importRows={importRows}
+            catalogoLoading={catalogoLoading}
+            novoIngredienteId={novoIngredienteId}
+            novoIngredienteUnidade={novoIngredienteUnidade}
+            novoIngredienteQuantidade={novoIngredienteQuantidade}
+            onNovoIngredienteIdChange={setNovoIngredienteId}
+            onNovoIngredienteNomeChange={setNovoIngredienteNome}
+            onNovoIngredienteUnidadeChange={setNovoIngredienteUnidade}
+            onNovoIngredienteQuantidadeChange={setNovoIngredienteQuantidade}
+            onAddIngrediente={handleAddIngrediente}
+            onStartColarPlanilha={handleStartColarPlanilha}
+            onPasteContinue={handlePasteContinue}
+            onImportCancel={() => setImportPhase('idle')}
+            onImportRowsChange={setImportRows}
+            onImportConfirm={handleImportConfirm}
+            onImportBack={() => setImportPhase('paste')}
+            onQuantidadeChange={handleQuantidadeChange}
+            onSwap={handleSwapIngrediente}
+            onRemove={handleRemoveIngrediente}
+          />
 
-            {accordionOpen && (
-              <div className="px-6 pb-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="w-full">
-                    <SelectRemoteAutocomplete
-                      value={novoIngredienteId}
-                      onChange={(value) => setNovoIngredienteId(value)}
-                      stage="insumos"
-                      placeholder="Selecione o insumo..."
-                      label="Insumo"
-                      required={false}
-                      onOptionSelected={(option) => {
-                        setNovoIngredienteNome(option?.label ?? '');
-                        const meta = option?.meta as Record<string, string> | undefined;
-                        setNovoIngredienteUnidade(meta?.unidade_nome_resumido ?? null);
-                      }}
-                    />
-                    {novoIngredienteUnidade && (
-                      <p className="text-xs text-gray-500 mt-2 ml-1">
-                        Unidade: <span className="font-semibold text-blue-600">{novoIngredienteUnidade}</span>
-                      </p>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1">
-                        <NumberDecimalInput
-                          label={`Quantidade${novoIngredienteUnidade ? ` (${novoIngredienteUnidade})` : ''}`}
-                          value={novoIngredienteQuantidade}
-                          onChange={setNovoIngredienteQuantidade}
-                          min={0}
-                          step={0.001}
-                          placeholder="Ex: 2.500"
-                        />
-                      </div>
-                      {(() => {
-                        const valorFormatado = formatarValorLateral(novoIngredienteQuantidade, novoIngredienteUnidade);
-                        return valorFormatado ? (
-                          <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium whitespace-nowrap flex-shrink-0 mb-3">
-                            {valorFormatado}
-                          </span>
-                        ) : null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddIngrediente}
-                  className="inline-flex items-center px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition-colors"
-                >
-                  <span className="material-icons text-sm mr-2">add</span>
-                  Adicionar ingrediente
-                </button>
-
-                {ingredientes.length > 0 && (
-                  <div className="space-y-3">
-                    {ingredientes.map((item) => (
-                      <div
-                        key={item.tempId}
-                        className="flex flex-col md:flex-row md:items-center gap-3 bg-gray-50 border border-gray-100 rounded-xl p-4"
-                      >
-                        <div className="flex-1">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-gray-900">{item.insumoNome}</p>
-                              {item.unidadeDescricao && (
-                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">
-                                  {item.unidadeDescricao}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-xs text-gray-500">
-                              Padrão:{' '}
-                              {(() => {
-                                const gramas = calcularGramas(item.quantidade, item.unidadeDescricao);
-                                if (gramas !== null) {
-                                  return (
-                                    <>
-                                      {item.quantidade}{item.unidadeDescricao} / <span className="text-blue-600 font-medium">{gramas}g</span>
-                                    </>
-                                  );
-                                }
-                                return `${item.quantidade} ${item.unidadeDescricao || ''}`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-28">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.001"
-                              value={item.quantidade}
-                              onChange={(e) =>
-                                handleQuantidadeChange(item.tempId, parseFloat(e.target.value) || 0)
-                              }
-                              className="w-full px-3 py-2 bg-white border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-                            />
-                          </div>
-                          {(() => {
-                            const valorFormatado = formatarValorLateral(item.quantidade, item.unidadeDescricao);
-                            return valorFormatado ? (
-                              <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium whitespace-nowrap flex-shrink-0">
-                                {valorFormatado}
-                              </span>
-                            ) : null;
-                          })()}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveIngrediente(item.tempId)}
-                            className="p-2 text-gray-400 hover:text-rose-600 transition-colors"
-                          >
-                            <span className="material-icons text-base">delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {tipoUsaGramatura && (
+            <ReceitaGramaturasSection tipo={tipo} gramaturas={gramaturas} onChange={setGramaturas} />
+          )}
 
           <div className="flex gap-3">
             <button

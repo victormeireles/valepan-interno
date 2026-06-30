@@ -1,7 +1,11 @@
 'use client';
 
 import type { Insumo } from '@/app/actions/insumos-actions';
+import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
+import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
+import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
 import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
 import {
   configSortButtonClass,
@@ -14,6 +18,8 @@ export type InsumoSortKey = 'nome' | 'unidade' | 'custo_unitario' | 'ativo';
 
 type Props = {
   items: Insumo[];
+  receitasPorInsumo: Record<string, InsumoReceitaAssociacao[]>;
+  vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
   sortKey: InsumoSortKey;
   sortDir: 'asc' | 'desc';
   onSort: (key: InsumoSortKey) => void;
@@ -36,16 +42,20 @@ function unidadeLabel(insumo: Insumo) {
 
 export default function InsumosConfigTable({
   items,
+  receitasPorInsumo,
+  vinculosOmiePorInsumo,
   sortKey,
   sortDir,
   onSort,
   onRowClick,
   embedded = false,
 }: Props) {
-  const headers: { key: InsumoSortKey; label: string; align?: 'left' | 'right' }[] = [
+  const headers: { key: InsumoSortKey | null; label: string; align?: 'left' | 'right' }[] = [
     { key: 'nome', label: 'Nome' },
     { key: 'unidade', label: 'Unidade' },
     { key: 'custo_unitario', label: 'Custo unitário', align: 'right' },
+    { key: null, label: 'Receitas', align: 'right' },
+    { key: null, label: 'Omie', align: 'right' },
     { key: 'ativo', label: 'Status' },
   ];
 
@@ -60,19 +70,25 @@ export default function InsumosConfigTable({
           <tr>
             {headers.map(({ key, label, align = 'left' }) => (
               <th
-                key={key}
+                key={label}
                 scope="col"
                 className={`${configTableHeadCellClass} ${align === 'right' ? 'text-right' : 'text-left'}`}
-                aria-sort={sortAriaValue(key, sortKey, sortDir)}
+                aria-sort={key ? sortAriaValue(key, sortKey, sortDir) : undefined}
               >
-                <button
-                  type="button"
-                  onClick={() => onSort(key)}
-                  className={`${configSortButtonClass} ${align === 'right' ? 'ml-auto' : ''}`}
-                >
-                  {label}
-                  <ConfigSortIcon active={sortKey === key} dir={sortDir} />
-                </button>
+                {key ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(key)}
+                    className={`${configSortButtonClass} ${align === 'right' ? 'ml-auto' : ''}`}
+                  >
+                    {label}
+                    <ConfigSortIcon active={sortKey === key} dir={sortDir} />
+                  </button>
+                ) : (
+                  <span className="uppercase tracking-wide text-[11px] font-semibold text-stone-500">
+                    {label}
+                  </span>
+                )}
               </th>
             ))}
           </tr>
@@ -99,6 +115,18 @@ export default function InsumosConfigTable({
               </td>
               <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
                 {formatCurrency(item.custo_unitario)}
+              </td>
+              <td className={`${configTableBodyCellClass} text-right`}>
+                <InsumoReceitasButton
+                  insumoNome={item.nome}
+                  receitas={receitasPorInsumo[item.id] ?? []}
+                />
+              </td>
+              <td className={`${configTableBodyCellClass} text-right`}>
+                <InsumoVinculosOmieButton
+                  insumoNome={item.nome}
+                  vinculos={vinculosOmiePorInsumo[item.id] ?? []}
+                />
               </td>
               <td className={configTableBodyCellClass}>
                 <ConfigAtivoBadge ativo={item.ativo} />

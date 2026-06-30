@@ -6,11 +6,21 @@ export type FornecedorResumo = {
   pendenciaCount: number;
 };
 
+export type CategoriaResumo = {
+  chave: string;
+  label: string;
+  pendenciaCount: number;
+};
+
 export type InsumoPendenciaGrupoContexto = {
   fornecedores: FornecedorResumo[];
   fornecedoresDistintos: number;
   fornecedorTitulo: string;
   fornecedorSubtitulo: string | null;
+  categorias: CategoriaResumo[];
+  categoriasDistintas: number;
+  categoriaTitulo: string | null;
+  categoriaSubtitulo: string | null;
   cfop: string | null;
   ncm: string | null;
 };
@@ -29,6 +39,16 @@ function fornecedorChave(pendencia: InsumoPendenciaComEmpresa): string | null {
   return fornecedorLabel(pendencia);
 }
 
+function categoriaLabel(pendencia: InsumoPendenciaComEmpresa): string | null {
+  return pendencia.categoria_compra_descricao?.trim() || null;
+}
+
+function categoriaChave(pendencia: InsumoPendenciaComEmpresa): string | null {
+  const codigo = pendencia.categoria_compra_codigo?.trim();
+  if (codigo) return codigo;
+  return categoriaLabel(pendencia);
+}
+
 function valorUnico(pendencias: InsumoPendenciaComEmpresa[], campo: 'cfop_entrada' | 'ncm_produto'): string | null {
   const valores = new Set(
     pendencias
@@ -38,27 +58,54 @@ function valorUnico(pendencias: InsumoPendenciaComEmpresa[], campo: 'cfop_entrad
   return valores.size === 1 ? [...valores][0]! : null;
 }
 
-export function buildPendenciaGrupoContexto(
+function agregarResumos<T extends { chave: string; label: string; pendenciaCount: number }>(
   pendencias: InsumoPendenciaComEmpresa[],
-): InsumoPendenciaGrupoContexto {
-  const fornecedorMap = new Map<string, FornecedorResumo>();
+  obterChave: (pendencia: InsumoPendenciaComEmpresa) => string | null,
+  obterLabel: (pendencia: InsumoPendenciaComEmpresa) => string | null,
+): T[] {
+  const map = new Map<string, T>();
 
   for (const pendencia of pendencias) {
-    const chave = fornecedorChave(pendencia);
-    const label = fornecedorLabel(pendencia);
+    const chave = obterChave(pendencia);
+    const label = obterLabel(pendencia);
     if (!chave || !label) continue;
 
-    const existing = fornecedorMap.get(chave);
+    const existing = map.get(chave);
     if (existing) {
       existing.pendenciaCount += 1;
       continue;
     }
 
-    fornecedorMap.set(chave, { chave, label, pendenciaCount: 1 });
+    map.set(chave, { chave, label, pendenciaCount: 1 } as T);
   }
 
-  const fornecedores = [...fornecedorMap.values()].sort(
-    (a, b) => b.pendenciaCount - a.pendenciaCount,
+  return [...map.values()].sort((a, b) => b.pendenciaCount - a.pendenciaCount);
+}
+
+function montarTituloMultiplo(
+  distintos: number,
+  singular: string,
+  itens: Array<{ label: string }>,
+): { titulo: string; subtitulo: string | null } {
+  const subtitulo = itens
+    .slice(0, 2)
+    .map((item) => item.label)
+    .join(' • ');
+  const sufixo = distintos > 2 ? ` • +${distintos - 2}` : '';
+
+  return {
+    titulo: `${distintos} ${singular}`,
+    subtitulo: subtitulo + sufixo || null,
+  };
+}
+
+export function buildPendenciaGrupoContexto(
+  pendencias: InsumoPendenciaComEmpresa[],
+): InsumoPendenciaGrupoContexto {
+  const fornecedores = agregarResumos<FornecedorResumo>(
+    pendencias,
+    fornecedorChave,
+    fornecedorLabel,
   );
   const fornecedoresDistintos = fornecedores.length;
 
@@ -71,14 +118,30 @@ export function buildPendenciaGrupoContexto(
       fornecedorSubtitulo = `${fornecedores[0]!.pendenciaCount} recebimentos`;
     }
   } else if (fornecedoresDistintos > 1) {
-    fornecedorTitulo = `${fornecedoresDistintos} fornecedores`;
-    fornecedorSubtitulo = fornecedores
-      .slice(0, 2)
-      .map((fornecedor) => fornecedor.label)
-      .join(' • ');
-    if (fornecedoresDistintos > 2) {
-      fornecedorSubtitulo += ` • +${fornecedoresDistintos - 2}`;
+    const multiplo = montarTituloMultiplo(fornecedoresDistintos, 'fornecedores', fornecedores);
+    fornecedorTitulo = multiplo.titulo;
+    fornecedorSubtitulo = multiplo.subtitulo;
+  }
+
+  const categorias = agregarResumos<CategoriaResumo>(
+    pendencias,
+    categoriaChave,
+    categoriaLabel,
+  );
+  const categoriasDistintas = categorias.length;
+
+  let categoriaTitulo: string | null = null;
+  let categoriaSubtitulo: string | null = null;
+
+  if (categoriasDistintas === 1) {
+    categoriaTitulo = categorias[0]!.label;
+    if (categorias[0]!.pendenciaCount > 1) {
+      categoriaSubtitulo = `${categorias[0]!.pendenciaCount} recebimentos`;
     }
+  } else if (categoriasDistintas > 1) {
+    const multiplo = montarTituloMultiplo(categoriasDistintas, 'categorias', categorias);
+    categoriaTitulo = multiplo.titulo;
+    categoriaSubtitulo = multiplo.subtitulo;
   }
 
   return {
@@ -86,6 +149,10 @@ export function buildPendenciaGrupoContexto(
     fornecedoresDistintos,
     fornecedorTitulo,
     fornecedorSubtitulo,
+    categorias,
+    categoriasDistintas,
+    categoriaTitulo,
+    categoriaSubtitulo,
     cfop: valorUnico(pendencias, 'cfop_entrada'),
     ncm: valorUnico(pendencias, 'ncm_produto'),
   };

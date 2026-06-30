@@ -4,12 +4,16 @@ import { useState, useEffect } from 'react';
 import {
   createInsumo,
   getIntegracoesInsumo,
+  getReceitasPorInsumo,
   updateInsumo,
   type Insumo,
 } from '@/app/actions/insumos-actions';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
+import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import Accordion from '@/components/Accordion';
+import InsumoReceitasLista from '@/components/Insumos/InsumoReceitasLista';
+import InsumoVinculosOmieLista from '@/components/Insumos/InsumoVinculosOmieLista';
 
 interface InsumoModalProps {
   isOpen: boolean;
@@ -33,6 +37,8 @@ export default function InsumoModal({
   const [animating, setAnimating] = useState(false);
   const [integracoes, setIntegracoes] = useState<IntegracaoInsumoComEmpresa[]>([]);
   const [integracoesLoading, setIntegracoesLoading] = useState(false);
+  const [receitas, setReceitas] = useState<InsumoReceitaAssociacao[]>([]);
+  const [receitasLoading, setReceitasLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -48,6 +54,7 @@ export default function InsumoModal({
         setUnidadeId('');
         setAtivo(true);
         setIntegracoes([]);
+        setReceitas([]);
       }
       setError('');
     } else {
@@ -59,14 +66,22 @@ export default function InsumoModal({
   useEffect(() => {
     if (!isOpen || !insumo) {
       setIntegracoes([]);
+      setReceitas([]);
       return;
     }
 
     setIntegracoesLoading(true);
+    setReceitasLoading(true);
+
     getIntegracoesInsumo(insumo.id)
       .then(setIntegracoes)
       .catch(() => setIntegracoes([]))
       .finally(() => setIntegracoesLoading(false));
+
+    getReceitasPorInsumo(insumo.id)
+      .then(setReceitas)
+      .catch(() => setReceitas([]))
+      .finally(() => setReceitasLoading(false));
   }, [isOpen, insumo]);
 
   if (!isOpen && !animating) return null;
@@ -249,31 +264,23 @@ export default function InsumoModal({
             </div>
 
             {insumo ? (
-              <Accordion title="Vínculos Omie" defaultOpen={false}>
-                {integracoesLoading ? (
-                  <p className="text-sm text-gray-500">Carregando vínculos…</p>
-                ) : integracoes.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhum vínculo Omie cadastrado.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {integracoes.map((vinculo) => (
-                      <li
-                        key={vinculo.id}
-                        className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
-                      >
-                        <p className="font-medium text-gray-900">{vinculo.empresaNome}</p>
-                        <p className="mt-1 font-mono text-xs text-gray-600">
-                          Código Omie: {vinculo.omie_codigo_produto || vinculo.omie_id_produto}
-                        </p>
-                        <p className="mt-1 font-mono text-xs tabular-nums text-gray-600">
-                          Fator de conversão:{' '}
-                          {Number(vinculo.fator_conversao).toLocaleString('pt-BR')}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Accordion>
+              <>
+                <Accordion title={`Receitas (${receitas.length})`} defaultOpen={false}>
+                  {receitasLoading ? (
+                    <p className="text-sm text-gray-500">Carregando receitas…</p>
+                  ) : (
+                    <InsumoReceitasLista receitas={receitas} />
+                  )}
+                </Accordion>
+
+                <Accordion title={`Vínculos Omie (${integracoes.length})`} defaultOpen={false}>
+                  {integracoesLoading ? (
+                    <p className="text-sm text-gray-500">Carregando vínculos…</p>
+                  ) : (
+                    <InsumoVinculosOmieLista vinculos={integracoes} />
+                  )}
+                </Accordion>
+              </>
             ) : null}
 
             <div className="pt-4 flex gap-3">

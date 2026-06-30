@@ -13,6 +13,16 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+export function formatValorUnitarioNf(
+  valorUnitario: number | null,
+  unidadeNf?: string | null,
+): string {
+  if (valorUnitario == null) return '—';
+
+  const valor = formatCurrency(valorUnitario);
+  return unidadeNf ? `${valor} / ${unidadeNf}` : valor;
+}
+
 export function formatDateTime(value: string | null): string {
   if (!value) return '—';
   return new Intl.DateTimeFormat('pt-BR', {

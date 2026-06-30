@@ -30,6 +30,10 @@ import {
   insumoEstoqueService,
   InsumoEstoqueService,
 } from '@/lib/services/insumo-estoque-service';
+import {
+  insumoRecebimentoCategoriaService,
+  InsumoRecebimentoCategoriaService,
+} from '@/domain/insumos/insumo-recebimento-categoria-service';
 
 type ProcessarItemInput = {
   empresaId: string;
@@ -45,11 +49,13 @@ export type InsumoRecebimentoProcessorDeps = {
   mapeamentoRepository: InsumoMapeamentoRepository;
   pendenciaRepository: InsumoPendenciaRepository;
   estoqueService: InsumoEstoqueService;
+  categoriaService?: InsumoRecebimentoCategoriaService;
 };
 
 function montarContextoNf(
   cabec: OmieRecebimentoCabecEnriquecido | undefined,
   dataEmissaoIso: string | null,
+  categoria: { codigo: string | null; descricao: string | null },
 ): OmieRecebimentoContextoNf {
   return {
     numeroNf: cabec?.cNumeroNF ?? '',
@@ -60,11 +66,17 @@ function montarContextoNf(
     naturezaOperacao: cabec?.naturezaOperacao ?? null,
     valorTotalNf: cabec?.valorTotalNf ?? null,
     chaveNfe: cabec?.chaveNfe ?? null,
+    categoriaCompraCodigo: categoria.codigo,
+    categoriaCompraDescricao: categoria.descricao,
   };
 }
 
 export class InsumoRecebimentoProcessor {
-  constructor(private readonly deps: InsumoRecebimentoProcessorDeps) {}
+  private readonly categoriaService: InsumoRecebimentoCategoriaService;
+
+  constructor(private readonly deps: InsumoRecebimentoProcessorDeps) {
+    this.categoriaService = deps.categoriaService ?? insumoRecebimentoCategoriaService;
+  }
 
   async processarEvento(evento: OmieWebhookEventoRow): Promise<void> {
     const payload = evento.payload_json as {
@@ -90,15 +102,35 @@ export class InsumoRecebimentoProcessor {
     });
 
     const dataEmissaoNf = converterDataOmieParaIso(recebimento.cabec?.dDataEmissao ?? null);
-    const contextoNf = montarContextoNf(recebimento.cabec, dataEmissaoNf);
+    const empresaCredenciais = {
+      empresaId: empresa.id,
+      appKey: empresa.app_key,
+      appSecret: empresa.app_secret,
+    };
+    const categoriaRecebimento = await this.categoriaService.resolverCategoriaRecebimento({
+      empresa: empresaCredenciais,
+      infoAdicionais: recebimento.infoAdicionais,
+    });
+    const contextoNf = montarContextoNf(recebimento.cabec, dataEmissaoNf, categoriaRecebimento);
     const itens = recebimento.itensCabec ?? [];
 
     for (const item of itens) {
+      const categoriaItem = await this.categoriaService.resolverCategoriaItem({
+        empresa: empresaCredenciais,
+        infoAdicionais: recebimento.infoAdicionais,
+        item,
+        categoriaRecebimento,
+      });
+
       await this.processarItem({
         empresaId: empresa.id,
         eventoId: evento.id,
         nIdReceb,
-        contextoNf,
+        contextoNf: {
+          ...contextoNf,
+          categoriaCompraCodigo: categoriaItem.codigo,
+          categoriaCompraDescricao: categoriaItem.descricao,
+        },
         item,
       });
     }
@@ -167,6 +199,8 @@ export class InsumoRecebimentoProcessor {
       valorTotalNf: input.contextoNf.valorTotalNf,
       cfopEntrada: input.item.cfopEntrada,
       ncmProduto: input.item.ncm,
+      categoriaCompraCodigo: input.contextoNf.categoriaCompraCodigo,
+      categoriaCompraDescricao: input.contextoNf.categoriaCompraDescricao,
     });
   }
 

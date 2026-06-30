@@ -29,13 +29,19 @@ describe('insumo-pendencia-enriquecimento', () => {
         cIgnorarItem: 'N',
         cfopEntrada: '1.556',
         ncm: '34029039',
+        categoriaItem: null,
       },
+      infoAdicionais: { cCategCompra: '2.01.01' },
+      categoriaCompraCodigo: '2.01.01',
+      categoriaCompraDescricao: 'Compras de Mercadorias para Revenda',
     });
 
     expect(result).toMatchObject({
       fornecedorRazaoSocial: 'CLEAN MIX PROD DE HIG E LIMP LTDA',
       cfopEntrada: '1.556',
       ncmProduto: '34029039',
+      categoriaCompraCodigo: '2.01.01',
+      categoriaCompraDescricao: 'Compras de Mercadorias para Revenda',
       dataEmissaoNf: '2026-06-22',
     });
   });
@@ -54,6 +60,7 @@ describe('insumo-pendencia-enriquecimento', () => {
         cIgnorarItem: 'N',
         cfopEntrada: null,
         ncm: null,
+        categoriaItem: null,
       },
     ]);
 

@@ -5,12 +5,24 @@ import type {
   InsumoPendenciaComEmpresa,
   AtualizarEnriquecimentoPendenciaInput,
 } from '@/domain/types/insumo-estoque-db';
+import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
+import { INSUMO_PENDENCIA_MAPEAMENTO_SELECT } from '@/data/insumos/insumo-pendencia-mapeamento-select';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
 
 type PendenciaWithEmpresa = InsumoEntradaPendenciaRow & {
   empresas: { nome: string } | null;
 };
+
+function mapPendenciaComEmpresa(row: PendenciaWithEmpresa): InsumoPendenciaComEmpresa {
+  return {
+    ...(row as InsumoEntradaPendenciaRow),
+    omie_webhook_evento_id: row.omie_webhook_evento_id ?? null,
+    omie_n_id_receb: row.omie_n_id_receb ?? 0,
+    omie_n_id_item: row.omie_n_id_item ?? 0,
+    empresaNome: row.empresas?.nome ?? '',
+  };
+}
 
 export class InsumoPendenciaRepository {
   constructor(
@@ -79,6 +91,8 @@ export class InsumoPendenciaRepository {
         valor_total_nf: input.valorTotalNf ?? null,
         cfop_entrada: input.cfopEntrada ?? null,
         ncm_produto: input.ncmProduto ?? null,
+        categoria_compra_codigo: input.categoriaCompraCodigo ?? null,
+        categoria_compra_descricao: input.categoriaCompraDescricao ?? null,
         status: 'pendente',
       })
       .select()
@@ -105,7 +119,7 @@ export class InsumoPendenciaRepository {
   async listPendentes(): Promise<InsumoPendenciaComEmpresa[]> {
     const { data, error } = await this.db
       .from('insumo_entrada_pendencias')
-      .select('*, empresas(nome)')
+      .select(INSUMO_PENDENCIA_MAPEAMENTO_SELECT)
       .eq('status', 'pendente')
       .order('created_at', { ascending: false });
 
@@ -113,16 +127,13 @@ export class InsumoPendenciaRepository {
       throw new Error(`Erro ao listar pendências de insumo: ${error.message}`);
     }
 
-    return (data as PendenciaWithEmpresa[] ?? []).map((row) => ({
-      ...(row as InsumoEntradaPendenciaRow),
-      empresaNome: row.empresas?.nome ?? '',
-    }));
+    return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
   }
 
   async listIgnoradas(): Promise<InsumoPendenciaComEmpresa[]> {
     const { data, error } = await this.db
       .from('insumo_entrada_pendencias')
-      .select('*, empresas(nome)')
+      .select(INSUMO_PENDENCIA_MAPEAMENTO_SELECT)
       .eq('status', 'ignorado')
       .order('resolvido_em', { ascending: false });
 
@@ -130,10 +141,41 @@ export class InsumoPendenciaRepository {
       throw new Error(`Erro ao listar pendências ignoradas: ${error.message}`);
     }
 
-    return (data as PendenciaWithEmpresa[] ?? []).map((row) => ({
-      ...(row as InsumoEntradaPendenciaRow),
-      empresaNome: row.empresas?.nome ?? '',
-    }));
+    return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
+  }
+
+  async listComFornecedorParaVinculos(): Promise<InsumoPendenciaComEmpresa[]> {
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select(INSUMO_PENDENCIA_MAPEAMENTO_SELECT)
+      .in('status', ['pendente', 'resolvido'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Erro ao listar pendências para vínculos: ${error.message}`);
+    }
+
+    return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
+  }
+
+  async listPorProdutoOmie(input: {
+    empresaId: string;
+    omieIdProduto: number;
+    statuses: InsumoPendenciaStatus[];
+  }): Promise<InsumoPendenciaComEmpresa[]> {
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select(INSUMO_PENDENCIA_MAPEAMENTO_SELECT)
+      .eq('empresa_id', input.empresaId)
+      .eq('omie_id_produto', input.omieIdProduto)
+      .in('status', input.statuses)
+      .order('data_emissao_nf', { ascending: false, nullsFirst: false });
+
+    if (error) {
+      throw new Error(`Erro ao listar notas do produto Omie: ${error.message}`);
+    }
+
+    return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
   }
 
   async marcarPendente(id: string): Promise<void> {
@@ -197,19 +239,30 @@ export class InsumoPendenciaRepository {
   async listParaEnriquecimento(input: {
     empresaId?: string;
     forcar?: boolean;
+    incluirIgnorados?: boolean;
+    todosStatus?: boolean;
   }): Promise<InsumoEntradaPendenciaRow[]> {
     let query = this.db
       .from('insumo_entrada_pendencias')
       .select('*')
-      .eq('status', 'pendente')
       .order('created_at', { ascending: true });
+
+    if (input.todosStatus) {
+      query = query.in('status', ['pendente', 'ignorado', 'resolvido']);
+    } else if (input.incluirIgnorados) {
+      query = query.in('status', ['pendente', 'ignorado']);
+    } else {
+      query = query.eq('status', 'pendente');
+    }
 
     if (input.empresaId) {
       query = query.eq('empresa_id', input.empresaId);
     }
 
     if (!input.forcar) {
-      query = query.or('fornecedor_razao_social.is.null,cfop_entrada.is.null');
+      query = query.or(
+        'fornecedor_razao_social.is.null,cfop_entrada.is.null,categoria_compra_descricao.is.null',
+      );
     }
 
     const { data, error } = await query;
@@ -235,6 +288,8 @@ export class InsumoPendenciaRepository {
         valor_total_nf: input.valorTotalNf ?? null,
         cfop_entrada: input.cfopEntrada ?? null,
         ncm_produto: input.ncmProduto ?? null,
+        categoria_compra_codigo: input.categoriaCompraCodigo ?? null,
+        categoria_compra_descricao: input.categoriaCompraDescricao ?? null,
         numero_nf: input.numeroNf ?? undefined,
         data_emissao_nf: input.dataEmissaoNf ?? undefined,
       })

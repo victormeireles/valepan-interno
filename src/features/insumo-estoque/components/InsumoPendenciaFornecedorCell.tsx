@@ -5,9 +5,14 @@ import type { InsumoPendenciaGrupoContexto } from '@/domain/insumos/insumo-pende
 type Props = {
   empresaNome: string;
   contexto: InsumoPendenciaGrupoContexto;
+  showEmpresa?: boolean;
 };
 
-export default function InsumoPendenciaFornecedorCell({ empresaNome, contexto }: Props) {
+export default function InsumoPendenciaFornecedorCell({
+  empresaNome,
+  contexto,
+  showEmpresa = true,
+}: Props) {
   const semDados = contexto.fornecedoresDistintos === 0;
 
   return (
@@ -26,7 +31,9 @@ export default function InsumoPendenciaFornecedorCell({ empresaNome, contexto }:
           {contexto.fornecedorSubtitulo}
         </p>
       ) : null}
-      <p className="mt-1 truncate text-xs text-stone-400">{empresaNome}</p>
+      {showEmpresa ? (
+        <p className="mt-1 truncate text-xs text-stone-400">{empresaNome}</p>
+      ) : null}
     </div>
   );
 }

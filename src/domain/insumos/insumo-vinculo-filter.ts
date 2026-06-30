@@ -14,6 +14,9 @@ export function filterIntegracaoInsumos(
       String(item.omie_id_produto),
       item.empresaNome,
       item.insumoNome,
+      item.contexto.fornecedorTitulo,
+      item.contexto.fornecedorSubtitulo,
+      ...item.contexto.fornecedores.map((fornecedor) => fornecedor.label),
     ]
       .filter(Boolean)
       .join(' ')

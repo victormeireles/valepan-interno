@@ -1,5 +1,10 @@
 'use server';
 
+import { receitaGramaturaVinculosSyncManager } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
+import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
+import { receitaMassaVinculosSyncManager } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
+import type { ReceitaMassaVinculoSyncResult } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
+import { receitaTipoUsaGramatura, receitaTipoUsaGramaturaBrilho, receitaTipoUsaGramaturaDireta } from '@/domain/receitas/receita-gramatura-resolver';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 import { Database } from '@/types/database';
@@ -12,12 +17,19 @@ export interface ReceitaIngredienteInput {
   quantidade: number;
 }
 
+export interface ReceitaGramaturaInput {
+  id?: string;
+  pesoG: number;
+  quantidade: number;
+}
+
 export interface ReceitaInput {
   nome: string;
   tipo: TipoReceita;
   codigo?: string | null;
   ativo?: boolean;
   ingredientes: ReceitaIngredienteInput[];
+  gramaturas?: ReceitaGramaturaInput[];
 }
 
 export interface ReceitaUpdateInput extends Partial<ReceitaInput> {
@@ -47,6 +59,11 @@ export interface ReceitaWithRelations {
       } | null;
     } | null;
   }>;
+  receita_gramaturas?: Array<{
+    id: string;
+    peso_g: number;
+    quantidade_padrao: number;
+  }>;
   produto_receitas: Array<{
     id: string;
     tipo: TipoReceita;
@@ -60,6 +77,20 @@ export interface ReceitaWithRelations {
 }
 
 const RECEITAS_PATH = '/config/receitas';
+const PRODUTOS_PATH = '/config/produtos';
+
+export type ReceitaSaveSuccess = {
+  success: true;
+  vinculosMassa?: ReceitaMassaVinculoSyncResult;
+  vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+};
+
+export type ReceitaSaveFailure = {
+  success: false;
+  error: string;
+};
+
+export type ReceitaSaveResult = ReceitaSaveSuccess | ReceitaSaveFailure;
 
 export async function getReceitas(includeInactive = false) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
@@ -83,6 +114,11 @@ export async function getReceitas(includeInactive = false) {
             codigo
           )
         )
+      ),
+      receita_gramaturas (
+        id,
+        peso_g,
+        quantidade_padrao
       ),
       produto_receitas (
         id,
@@ -136,6 +172,11 @@ export async function getReceitaDetalhes(id: string) {
           )
         )
       ),
+      receita_gramaturas (
+        id,
+        peso_g,
+        quantidade_padrao
+      ),
       produto_receitas (
         id,
         quantidade_por_produto,
@@ -160,7 +201,7 @@ export async function getReceitaDetalhes(id: string) {
   return data as unknown as ReceitaWithRelations;
 }
 
-export async function createReceita(payload: ReceitaInput) {
+export async function createReceita(payload: ReceitaInput): Promise<ReceitaSaveResult> {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -181,15 +222,19 @@ export async function createReceita(payload: ReceitaInput) {
 
     await syncReceitaIngredientes(data.id, payload.ingredientes);
 
+    if (payload.gramaturas && receitaTipoUsaGramatura(payload.tipo)) {
+      await syncReceitaGramaturas(data.id, payload.gramaturas);
+    }
+
     revalidatePath(RECEITAS_PATH);
-    return { success: true, data };
+    return { success: true };
   } catch (error) {
     console.error('Erro ao criar receita:', error);
     return { success: false, error: 'Erro ao criar receita' };
   }
 }
 
-export async function updateReceita(payload: ReceitaUpdateInput) {
+export async function updateReceita(payload: ReceitaUpdateInput): Promise<ReceitaSaveResult> {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -207,6 +252,22 @@ export async function updateReceita(payload: ReceitaUpdateInput) {
         }
       }
     }
+
+    if (payload.gramaturas) {
+      validateReceitaGramaturas(payload.gramaturas);
+    }
+
+    const { data: receitaAtual, error: receitaAtualError } = await supabase
+      .from('receitas')
+      .select('tipo')
+      .eq('id', payload.id)
+      .single();
+
+    if (receitaAtualError || !receitaAtual) {
+      return { success: false, error: 'Receita não encontrada' };
+    }
+
+    const tipoEfetivo = payload.tipo ?? receitaAtual.tipo;
 
     const updateData: Record<string, unknown> = {};
     if (payload.nome !== undefined) updateData.nome = payload.nome.trim();
@@ -227,8 +288,31 @@ export async function updateReceita(payload: ReceitaUpdateInput) {
       await syncReceitaIngredientes(payload.id, payload.ingredientes);
     }
 
+    if (payload.gramaturas !== undefined && receitaTipoUsaGramatura(tipoEfetivo)) {
+      await syncReceitaGramaturas(payload.id, payload.gramaturas);
+    } else if (tipoEfetivo === 'massa') {
+      await syncReceitaGramaturas(payload.id, []);
+    }
+
+    let vinculosMassa: ReceitaMassaVinculoSyncResult | undefined;
+    let vinculosGramatura: ReceitaGramaturaVinculoSyncResult | undefined;
+
+    if (tipoEfetivo === 'massa' && payload.ingredientes) {
+      vinculosMassa = await receitaMassaVinculosSyncManager.syncByReceitaId(payload.id);
+      revalidatePath(PRODUTOS_PATH);
+    }
+
+    if (
+      (receitaTipoUsaGramaturaDireta(tipoEfetivo) && payload.gramaturas !== undefined) ||
+      (receitaTipoUsaGramaturaBrilho(tipoEfetivo) &&
+        (payload.gramaturas !== undefined || payload.ingredientes))
+    ) {
+      vinculosGramatura = await receitaGramaturaVinculosSyncManager.syncByReceitaId(payload.id);
+      revalidatePath(PRODUTOS_PATH);
+    }
+
     revalidatePath(RECEITAS_PATH);
-    return { success: true };
+    return { success: true, vinculosMassa, vinculosGramatura };
   } catch (error) {
     console.error('Erro ao atualizar receita:', error);
     return { success: false, error: 'Erro ao atualizar receita' };
@@ -285,6 +369,51 @@ async function syncReceitaIngredientes(
   if (insertError) throw insertError;
 }
 
+async function syncReceitaGramaturas(
+  receitaId: string,
+  gramaturas: ReceitaGramaturaInput[],
+) {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { error: deleteError } = await supabase
+    .from('receita_gramaturas')
+    .delete()
+    .eq('receita_id', receitaId);
+
+  if (deleteError) throw deleteError;
+
+  if (!gramaturas.length) return;
+
+  const insertPayload = gramaturas.map((item) => ({
+    receita_id: receitaId,
+    peso_g: item.pesoG,
+    quantidade_padrao: item.quantidade,
+  }));
+
+  const { error: insertError } = await supabase
+    .from('receita_gramaturas')
+    .insert(insertPayload);
+
+  if (insertError) throw insertError;
+}
+
+function validateReceitaGramaturas(gramaturas: ReceitaGramaturaInput[]) {
+  const pesos = new Set<number>();
+
+  gramaturas.forEach((item) => {
+    if (!Number.isInteger(item.pesoG) || item.pesoG < 1) {
+      throw new Error('Gramatura deve ser um número inteiro em gramas (mínimo 1)');
+    }
+    if (item.quantidade <= 0) {
+      throw new Error('Quantidade padrão deve ser maior que zero');
+    }
+    if (pesos.has(item.pesoG)) {
+      throw new Error(`Gramatura ${item.pesoG}g duplicada`);
+    }
+    pesos.add(item.pesoG);
+  });
+}
+
 function validateReceitaPayload(payload: ReceitaInput) {
   if (!payload.nome.trim()) {
     throw new Error('Nome é obrigatório');
@@ -306,6 +435,10 @@ function validateReceitaPayload(payload: ReceitaInput) {
       throw new Error('Quantidade deve ser maior que zero');
     }
   });
+
+  if (payload.gramaturas?.length) {
+    validateReceitaGramaturas(payload.gramaturas);
+  }
 }
 
 

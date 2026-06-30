@@ -33,6 +33,13 @@ const findEmpresaByAppKey = vi.fn();
 const findByEmpresaProduto = vi.fn();
 const createPendente = vi.fn();
 const registrarEntrada = vi.fn();
+const resolverCategoriaRecebimento = vi.fn();
+const resolverCategoriaItem = vi.fn();
+
+const categoriaService = {
+  resolverCategoriaRecebimento,
+  resolverCategoriaItem,
+};
 
 const processor = new InsumoRecebimentoProcessor({
   client: { consultarRecebimento },
@@ -40,6 +47,7 @@ const processor = new InsumoRecebimentoProcessor({
   mapeamentoRepository: { findByEmpresaProduto } as never,
   pendenciaRepository: { createPendente } as never,
   estoqueService: { registrarEntrada } as never,
+  categoriaService: categoriaService as never,
 });
 
 const eventoBase: OmieWebhookEventoRow = {
@@ -72,6 +80,7 @@ const itemBase: OmieRecebimentoItem = {
   cIgnorarItem: 'N',
   cfopEntrada: null,
   ncm: null,
+  categoriaItem: null,
 };
 
 const mapeamentoBase: IntegracaoInsumoRow = {
@@ -98,7 +107,16 @@ describe('InsumoRecebimentoProcessor', () => {
     });
     consultarRecebimento.mockResolvedValue({
       cabec: { cNumeroNF: '12345', dDataEmissao: '2026-06-18' },
+      infoAdicionais: { cCategCompra: '2.01.01' },
       itensCabec: [itemBase],
+    });
+    resolverCategoriaRecebimento.mockResolvedValue({
+      codigo: '2.01.01',
+      descricao: 'Compras de Mercadorias para Revenda',
+    });
+    resolverCategoriaItem.mockResolvedValue({
+      codigo: '2.01.01',
+      descricao: 'Compras de Mercadorias para Revenda',
     });
     findByEmpresaProduto.mockResolvedValue(mapeamentoBase);
     createPendente.mockResolvedValue({ id: 'pend-1' });
@@ -150,6 +168,8 @@ describe('InsumoRecebimentoProcessor', () => {
       valorTotalNf: null,
       cfopEntrada: null,
       ncmProduto: null,
+      categoriaCompraCodigo: '2.01.01',
+      categoriaCompraDescricao: 'Compras de Mercadorias para Revenda',
     });
     expect(registrarEntrada).not.toHaveBeenCalled();
   });
@@ -183,6 +203,7 @@ describe('InsumoRecebimentoProcessor', () => {
       mapeamentoRepository: { findByEmpresaProduto } as never,
       pendenciaRepository: { createPendente } as never,
       estoqueService: serviceIdempotente,
+      categoriaService: categoriaService as never,
     });
 
     await processorIdempotente.processarEvento(eventoBase);

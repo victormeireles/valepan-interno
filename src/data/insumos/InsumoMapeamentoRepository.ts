@@ -2,7 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import type {
   CriarIntegracaoInsumoInput,
   IntegracaoInsumoComEmpresa,
-  IntegracaoInsumoListItem,
+  IntegracaoInsumoListItemBase,
   IntegracaoInsumoRow,
 } from '@/domain/types/insumo-estoque-db';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -178,7 +178,7 @@ export class InsumoMapeamentoRepository {
     }
   }
 
-  async listAtivosComDetalhes(): Promise<IntegracaoInsumoListItem[]> {
+  async listAtivosComDetalhes(): Promise<IntegracaoInsumoListItemBase[]> {
     const { data, error } = await this.db
       .from('integracao_insumos')
       .select('*, empresas(nome), insumos(nome, unidades(codigo, nome_resumido))')
@@ -238,7 +238,36 @@ export class InsumoMapeamentoRepository {
       throw new Error(`Erro ao listar mapeamentos do insumo: ${error.message}`);
     }
 
-    return (data as IntegracaoWithEmpresa[] ?? []).map((row) => ({
+    return this.mapIntegracoesComEmpresa(data as IntegracaoWithEmpresa[] ?? []);
+  }
+
+  async listVinculosAgrupadosPorInsumo(): Promise<Record<string, IntegracaoInsumoComEmpresa[]>> {
+    const { data, error } = await this.db
+      .from('integracao_insumos')
+      .select('*, empresas(nome)')
+      .eq('ativo', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Erro ao listar vínculos Omie por insumo: ${error.message}`);
+    }
+
+    const map: Record<string, IntegracaoInsumoComEmpresa[]> = {};
+
+    for (const vinculo of this.mapIntegracoesComEmpresa(data as IntegracaoWithEmpresa[] ?? [])) {
+      const existing = map[vinculo.insumo_id];
+      if (existing) {
+        existing.push(vinculo);
+        continue;
+      }
+      map[vinculo.insumo_id] = [vinculo];
+    }
+
+    return map;
+  }
+
+  private mapIntegracoesComEmpresa(rows: IntegracaoWithEmpresa[]): IntegracaoInsumoComEmpresa[] {
+    return rows.map((row) => ({
       ...(row as IntegracaoInsumoRow),
       empresaNome: row.empresas?.nome ?? '',
     }));
