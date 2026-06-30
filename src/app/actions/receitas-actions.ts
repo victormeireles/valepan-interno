@@ -4,7 +4,7 @@ import { receitaGramaturaVinculosSyncManager } from '@/domain/receitas/receita-g
 import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
 import { receitaMassaVinculosSyncManager } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
 import type { ReceitaMassaVinculoSyncResult } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
-import { receitaTipoUsaGramatura, receitaTipoUsaGramaturaBrilho, receitaTipoUsaGramaturaDireta } from '@/domain/receitas/receita-gramatura-resolver';
+import { receitaTipoUsaGramatura, receitaTipoUsaCalculoCoeficienteGramatura, receitaTipoUsaGramaturaDireta } from '@/domain/receitas/receita-gramatura-resolver';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 import { Database } from '@/types/database';
@@ -26,7 +26,6 @@ export interface ReceitaGramaturaInput {
 export interface ReceitaInput {
   nome: string;
   tipo: TipoReceita;
-  codigo?: string | null;
   ativo?: boolean;
   ingredientes: ReceitaIngredienteInput[];
   gramaturas?: ReceitaGramaturaInput[];
@@ -39,7 +38,6 @@ export interface ReceitaUpdateInput extends Partial<ReceitaInput> {
 export interface ReceitaWithRelations {
   id: string;
   nome: string;
-  codigo: string | null;
   tipo: TipoReceita;
   ativo: boolean | null;
   created_at: string | null;
@@ -50,6 +48,7 @@ export interface ReceitaWithRelations {
     insumos: {
       id: string;
       nome: string;
+      custo_unitario: number;
       unidade_id: string;
       unidades: {
         id: string;
@@ -106,6 +105,7 @@ export async function getReceitas(includeInactive = false) {
         insumos (
           id,
           nome,
+          custo_unitario,
           unidade_id,
           unidades (
             id,
@@ -163,6 +163,7 @@ export async function getReceitaDetalhes(id: string) {
         insumos (
           id,
           nome,
+          custo_unitario,
           unidade_id,
           unidades (
             id,
@@ -212,7 +213,6 @@ export async function createReceita(payload: ReceitaInput): Promise<ReceitaSaveR
       .insert({
         nome: payload.nome.trim(),
         tipo: payload.tipo,
-        codigo: payload.codigo?.trim() || null,
         ativo: payload.ativo ?? true,
       })
       .select()
@@ -272,7 +272,6 @@ export async function updateReceita(payload: ReceitaUpdateInput): Promise<Receit
     const updateData: Record<string, unknown> = {};
     if (payload.nome !== undefined) updateData.nome = payload.nome.trim();
     if (payload.tipo !== undefined) updateData.tipo = payload.tipo;
-    if (payload.codigo !== undefined) updateData.codigo = payload.codigo?.trim() || null;
     if (payload.ativo !== undefined) updateData.ativo = payload.ativo;
 
     if (Object.keys(updateData).length > 0) {
@@ -304,7 +303,7 @@ export async function updateReceita(payload: ReceitaUpdateInput): Promise<Receit
 
     if (
       (receitaTipoUsaGramaturaDireta(tipoEfetivo) && payload.gramaturas !== undefined) ||
-      (receitaTipoUsaGramaturaBrilho(tipoEfetivo) &&
+      (receitaTipoUsaCalculoCoeficienteGramatura(tipoEfetivo) &&
         (payload.gramaturas !== undefined || payload.ingredientes))
     ) {
       vinculosGramatura = await receitaGramaturaVinculosSyncManager.syncByReceitaId(payload.id);

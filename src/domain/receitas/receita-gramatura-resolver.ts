@@ -7,20 +7,37 @@ export type ReceitaGramatura = {
   quantidade: number;
 };
 
+import type { ModoCoeficienteGramatura } from '@/domain/receitas/receita-coeficiente-gramatura-calculo';
+
 export const RECEITA_TIPOS_GRAMATURA_DIRETA: TipoReceita[] = [
-  'confeito',
   'antimofo',
   'embalagem',
   'caixa',
 ];
 
+export const RECEITA_TIPOS_COEFICIENTE_GRAMATURA: TipoReceita[] = ['brilho', 'confeito'];
+
 export const RECEITA_TIPOS_COM_GRAMATURA: TipoReceita[] = [
-  'brilho',
+  ...RECEITA_TIPOS_COEFICIENTE_GRAMATURA,
   ...RECEITA_TIPOS_GRAMATURA_DIRETA,
 ];
 
 export function receitaTipoUsaGramaturaBrilho(tipo: TipoReceita): boolean {
   return tipo === 'brilho';
+}
+
+export function receitaTipoUsaGramaturaConfeito(tipo: TipoReceita): boolean {
+  return tipo === 'confeito';
+}
+
+export function receitaTipoUsaCalculoCoeficienteGramatura(tipo: TipoReceita): boolean {
+  return RECEITA_TIPOS_COEFICIENTE_GRAMATURA.includes(tipo);
+}
+
+export function receitaModoCoeficienteGramatura(tipo: TipoReceita): ModoCoeficienteGramatura | null {
+  if (tipo === 'brilho') return 'litro';
+  if (tipo === 'confeito') return 'kg';
+  return null;
 }
 
 export function receitaTipoUsaGramaturaDireta(tipo: TipoReceita): boolean {

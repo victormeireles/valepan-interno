@@ -57,6 +57,7 @@ export function matchLinhasComCatalogo(
       insumoId: null as string | null,
       insumoNome: null as string | null,
       unidadeDescricao: null as string | null,
+      custoUnitario: null as number | null,
       score: null as number | null,
       status: 'not_found' as ReceitaImportMatchStatus,
     };
@@ -79,7 +80,8 @@ export function matchLinhasComCatalogo(
       ...base,
       insumoId: status === 'not_found' ? null : candidate.id,
       insumoNome: status === 'not_found' ? null : candidate.nome,
-      unidadeDescricao: candidate.unidadeCodigo,
+      unidadeDescricao: candidate.unidadeNome || candidate.unidadeCodigo,
+      custoUnitario: status === 'not_found' ? null : candidate.custoUnitario,
       score,
       status,
     };

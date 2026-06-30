@@ -7,7 +7,8 @@ import ReceitaImportMatchReview from '@/components/Receitas/ReceitaImportMatchRe
 import ReceitaIngredienteRow, {
   type ReceitaIngredienteFormItem,
 } from '@/components/Receitas/ReceitaIngredienteRow';
-import { formatarValorLateral } from '@/components/Receitas/receita-ingrediente-format';
+import { formatarValorLateral, resolveCustoInsumoMeta } from '@/components/Receitas/receita-ingrediente-format';
+import { RECEITA_INGREDIENTE_QUANTIDADE_STEP } from '@/domain/receitas/receita-quantidade-constants';
 import type {
   ReceitaImportLinhaRevisao,
   ReceitaPlanilhaLinhaParseada,
@@ -28,6 +29,7 @@ type Props = {
   onNovoIngredienteIdChange: (value: string) => void;
   onNovoIngredienteNomeChange: (value: string) => void;
   onNovoIngredienteUnidadeChange: (value: string | null) => void;
+  onNovoIngredienteCustoUnitarioChange: (value: number | null) => void;
   onNovoIngredienteQuantidadeChange: (value: number) => void;
   onAddIngrediente: () => void;
   onStartColarPlanilha: () => void;
@@ -39,7 +41,10 @@ type Props = {
   onQuantidadeChange: (tempId: string, quantidade: number) => void;
   onSwap: (
     tempId: string,
-    swap: Pick<ReceitaIngredienteFormItem, 'insumoId' | 'insumoNome' | 'unidadeDescricao'>,
+    swap: Pick<
+      ReceitaIngredienteFormItem,
+      'insumoId' | 'insumoNome' | 'unidadeDescricao' | 'custoUnitario'
+    >,
   ) => void;
   onRemove: (tempId: string) => void;
 };
@@ -58,6 +63,7 @@ export default function ReceitaIngredientesAccordion({
   onNovoIngredienteIdChange,
   onNovoIngredienteNomeChange,
   onNovoIngredienteUnidadeChange,
+  onNovoIngredienteCustoUnitarioChange,
   onNovoIngredienteQuantidadeChange,
   onAddIngrediente,
   onStartColarPlanilha,
@@ -113,8 +119,12 @@ export default function ReceitaIngredientesAccordion({
                     required={false}
                     onOptionSelected={(option) => {
                       onNovoIngredienteNomeChange(option?.label ?? '');
-                      const meta = option?.meta as Record<string, string> | undefined;
-                      onNovoIngredienteUnidadeChange(meta?.unidade_nome_resumido ?? null);
+                      const meta = option?.meta as Record<string, unknown> | undefined;
+                      const unidade = meta?.unidadeNomeResumido ?? meta?.unidade_nome_resumido;
+                      onNovoIngredienteUnidadeChange(
+                        typeof unidade === 'string' ? unidade : null,
+                      );
+                      onNovoIngredienteCustoUnitarioChange(resolveCustoInsumoMeta(meta));
                     }}
                   />
                   {novoIngredienteUnidade && (
@@ -132,7 +142,7 @@ export default function ReceitaIngredientesAccordion({
                         value={novoIngredienteQuantidade}
                         onChange={onNovoIngredienteQuantidadeChange}
                         min={0}
-                        step={0.001}
+                        step={RECEITA_INGREDIENTE_QUANTIDADE_STEP}
                         placeholder="Ex: 2.500"
                       />
                     </div>

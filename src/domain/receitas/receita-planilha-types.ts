@@ -12,6 +12,7 @@ export type ReceitaImportLinhaRevisao = {
   insumoId: string | null;
   insumoNome: string | null;
   unidadeDescricao: string | null;
+  custoUnitario?: number | null;
   status: ReceitaImportMatchStatus;
   score: number | null;
   skippedDuplicate?: boolean;

@@ -3,11 +3,17 @@
 import { useState, useEffect } from 'react';
 import {
   createInsumo,
+  deleteInsumo,
   getIntegracoesInsumo,
   getReceitasPorInsumo,
   updateInsumo,
   type Insumo,
 } from '@/app/actions/insumos-actions';
+import {
+  formatarMotivoBloqueioExclusaoInsumo,
+  podeExcluirInsumo,
+  resolverBloqueiosExclusaoInsumo,
+} from '@/domain/insumos/insumo-delete-eligibility';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
@@ -20,6 +26,7 @@ interface InsumoModalProps {
   onClose: () => void;
   insumo?: Insumo;
   onSaved?: () => void;
+  onDeleted?: () => void;
 }
 
 export default function InsumoModal({
@@ -27,12 +34,14 @@ export default function InsumoModal({
   onClose,
   insumo,
   onSaved,
+  onDeleted,
 }: InsumoModalProps) {
   const [nome, setNome] = useState('');
   const [custoUnitario, setCustoUnitario] = useState(0);
   const [unidadeId, setUnidadeId] = useState('');
   const [ativo, setAtivo] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
   const [animating, setAnimating] = useState(false);
   const [integracoes, setIntegracoes] = useState<IntegracaoInsumoComEmpresa[]>([]);
@@ -57,6 +66,7 @@ export default function InsumoModal({
         setReceitas([]);
       }
       setError('');
+      setConfirmDelete(false);
     } else {
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
@@ -85,6 +95,18 @@ export default function InsumoModal({
   }, [isOpen, insumo]);
 
   if (!isOpen && !animating) return null;
+
+  const podeExcluir =
+    !receitasLoading &&
+    !integracoesLoading &&
+    podeExcluirInsumo(receitas.length, integracoes.length);
+  const motivoBloqueioExclusao = formatarMotivoBloqueioExclusaoInsumo(
+    resolverBloqueiosExclusaoInsumo({
+      receitasCount: receitas.length,
+      vinculosOmieCount: integracoes.length,
+      movimentosCount: 0,
+    }),
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +161,37 @@ export default function InsumoModal({
         setAtivo(true);
       }
       setError('');
+      setConfirmDelete(false);
     }, 200);
+  };
+
+  const handleDelete = async () => {
+    if (!insumo || !podeExcluir) return;
+
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await deleteInsumo(insumo.id);
+
+      if (!response.success) {
+        throw new Error(response.error ?? 'Erro ao excluir insumo');
+      }
+
+      onDeleted?.();
+      handleClose();
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao excluir insumo';
+      setError(errorMessage);
+      setConfirmDelete(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -283,32 +335,49 @@ export default function InsumoModal({
               </>
             ) : null}
 
-            <div className="pt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="flex-1 px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-200 transition-all disabled:opacity-50"
-                disabled={loading}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-[2] px-6 py-3.5 text-white bg-gray-900 rounded-xl font-semibold shadow-lg shadow-gray-900/20 hover:bg-black hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-2"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Salvando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{insumo ? 'Salvar Alterações' : 'Criar Insumo'}</span>
-                    <span className="material-icons text-sm">arrow_forward</span>
-                  </>
-                )}
-              </button>
+            <div className="pt-4 flex flex-col gap-3">
+              {insumo ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={loading || !podeExcluir}
+                  title={!podeExcluir ? motivoBloqueioExclusao : undefined}
+                  className="w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 font-semibold text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="material-icons text-base" aria-hidden="true">
+                    delete
+                  </span>
+                  {confirmDelete ? 'Confirmar exclusão' : 'Excluir insumo'}
+                </button>
+              ) : null}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="flex-1 px-6 py-3.5 text-gray-700 bg-white border-2 border-gray-100 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-200 transition-all disabled:opacity-50"
+                  disabled={loading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-[2] px-6 py-3.5 text-white bg-gray-900 rounded-xl font-semibold shadow-lg shadow-gray-900/20 hover:bg-black hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-2"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{insumo ? 'Salvar Alterações' : 'Criar Insumo'}</span>
+                      <span className="material-icons text-sm">arrow_forward</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </div>

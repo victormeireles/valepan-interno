@@ -139,6 +139,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
       client: { consultarRecebimento } as never,
       categoriaService: categoriaService as never,
       listarEmpresas: async () => [empresa],
+      listarChavesProdutosVinculados: async () => new Set(),
     });
 
     const result = await service.executar();
@@ -174,6 +175,7 @@ describe('InsumoPendenciaEnriquecimentoBackfillService', () => {
       client: { consultarRecebimento } as never,
       categoriaService: categoriaService as never,
       listarEmpresas: async () => [empresa],
+      listarChavesProdutosVinculados: async () => new Set(),
     });
 
     const result = await service.executar({ dryRun: true });

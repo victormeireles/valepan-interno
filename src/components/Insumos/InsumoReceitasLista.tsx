@@ -32,9 +32,6 @@ export default function InsumoReceitasLista({ receitas }: Props) {
                 <Badge tone="outline" pill={false}>
                   {labelTipoReceita(item.receitaTipo)}
                 </Badge>
-                {item.receitaCodigo ? (
-                  <span className="font-mono text-xs text-stone-500">{item.receitaCodigo}</span>
-                ) : null}
                 <ConfigAtivoBadge ativo={item.receitaAtiva} />
               </div>
             </div>

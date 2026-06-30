@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import AutocompleteInput from './AutocompleteInput';
+import AutocompleteInput, { type AutocompleteEmptyCreateConfig } from './AutocompleteInput';
 
 interface Option {
   label: string;
@@ -20,6 +20,10 @@ interface SelectRemoteAutocompleteProps {
   field?: string;
   extraFields?: string[];
   onOptionSelected?: (option: Option | null) => void;
+  emptyCreate?: AutocompleteEmptyCreateConfig;
+  optionsRefreshKey?: number;
+  /** Opção exibida enquanto a lista remota ainda não inclui o value selecionado. */
+  pinnedOption?: Option | null;
 }
 
 export default function SelectRemoteAutocomplete({
@@ -33,11 +37,17 @@ export default function SelectRemoteAutocomplete({
   field,
   extraFields,
   onOptionSelected,
+  emptyCreate,
+  optionsRefreshKey = 0,
+  pinnedOption = null,
 }: SelectRemoteAutocompleteProps) {
   const [options, setOptions] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState(() => {
+    if (pinnedOption && value === pinnedOption.value) return pinnedOption.label;
+    return '';
+  });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
   
@@ -51,6 +61,12 @@ export default function SelectRemoteAutocomplete({
   const extraFieldsKey = useMemo(() => {
     return extraFields ? extraFields.join(',') : '';
   }, [extraFields]);
+
+  const resolvedOptions = useMemo(() => {
+    if (!pinnedOption) return options;
+    if (options.some((option) => option.value === pinnedOption.value)) return options;
+    return [...options, pinnedOption];
+  }, [options, pinnedOption]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -69,14 +85,22 @@ export default function SelectRemoteAutocomplete({
         } else if (stage === "unidades") {
           baseUrl = `/api/options/generic?table=unidades&labelField=nome_resumido${extraParam}`;
         } else if (stage === "insumos") {
-          baseUrl = `/api/options/generic?table=insumos&labelField=nome${extraParam}`;
+          const insumoExtraFields = Array.from(
+            new Set(['custo_unitario', ...(extraFields ?? [])]),
+          );
+          const insumoExtraParam =
+            insumoExtraFields.length > 0
+              ? `&extraFields=${insumoExtraFields.join(',')}`
+              : '';
+          baseUrl = `/api/options/generic?table=insumos&labelField=nome${insumoExtraParam}`;
         } else {
           baseUrl = `/api/options/${stage}${extraParam}`;
         }
 
-        const url = field ? `/api/options/${stage}?field=${field}` : baseUrl;
-        
-        const response = await fetch(url);
+        const cacheBust = optionsRefreshKey > 0 ? `&_=${optionsRefreshKey}` : '';
+        const url = `${field ? `/api/options/${stage}?field=${field}` : baseUrl}${cacheBust}`;
+
+        const response = await fetch(url, { cache: 'no-store' });
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -106,7 +130,7 @@ export default function SelectRemoteAutocomplete({
 
     fetchOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, field, extraFieldsKey]);
+  }, [stage, field, extraFieldsKey, optionsRefreshKey]);
 
   useEffect(() => {
     if (!value) {
@@ -116,16 +140,19 @@ export default function SelectRemoteAutocomplete({
       return;
     }
 
-    const match = options.find((opt) => opt.value === value);
+    const match =
+      resolvedOptions.find((opt) => opt.value === value) ??
+      (pinnedOption?.value === value ? pinnedOption : null);
+
     if (match) {
       setSelectedOption(match);
       setInputValue(match.label);
       onOptionSelectedRef.current?.(match);
     }
-  }, [value, options]);
+  }, [value, resolvedOptions, pinnedOption]);
 
   const handleSelect = (labelSelected: string) => {
-    const option = options.find((opt) => opt.label === labelSelected) ?? null;
+    const option = resolveOptionFromLabel(labelSelected);
     setSelectedOption(option);
     setInputValue(option?.label ?? labelSelected);
 
@@ -136,6 +163,35 @@ export default function SelectRemoteAutocomplete({
     }
 
     onOptionSelected?.(option);
+  };
+
+  const resolveOptionFromLabel = (label: string): Option | null => {
+    const normalized = label.trim().toLowerCase();
+    if (!normalized) return null;
+    return resolvedOptions.find((opt) => opt.label.trim().toLowerCase() === normalized) ?? null;
+  };
+
+  const handleInputChange = (newValue: string) => {
+    setInputValue(newValue);
+
+    if (!newValue.trim()) {
+      onChange("");
+      setSelectedOption(null);
+      onOptionSelected?.(null);
+      return;
+    }
+
+    const matchedOption = resolveOptionFromLabel(newValue);
+    if (matchedOption) {
+      setSelectedOption(matchedOption);
+      onChange(matchedOption.value);
+      onOptionSelected?.(matchedOption);
+      return;
+    }
+
+    onChange("");
+    setSelectedOption(null);
+    onOptionSelected?.(null);
   };
 
   if (loading) {
@@ -169,21 +225,15 @@ export default function SelectRemoteAutocomplete({
   return (
     <AutocompleteInput
       value={inputValue}
-      onChange={(newValue) => {
-        setInputValue(newValue);
-        if (!newValue) {
-          onChange("");
-          setSelectedOption(null);
-          onOptionSelected?.(null);
-        }
-      }}
+      onChange={handleInputChange}
       onSelect={handleSelect}
-      options={options.map((o) => o.label)}
+      options={resolvedOptions.map((o) => o.label)}
       placeholder={placeholder}
       required={required}
       disabled={disabled}
       label={label}
       strict={false}
+      emptyCreate={emptyCreate}
     />
   );
 }

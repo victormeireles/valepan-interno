@@ -4,7 +4,6 @@ export type InsumoReceitaAssociacao = {
   ingredienteId: string;
   receitaId: string;
   receitaNome: string;
-  receitaCodigo: string | null;
   receitaTipo: TipoReceita;
   receitaAtiva: boolean;
   quantidadePadrao: number;

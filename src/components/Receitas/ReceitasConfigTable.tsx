@@ -11,7 +11,7 @@ import {
   formatNumericZero,
 } from '@/components/Config/config-table-styles';
 
-export type ReceitaSortKey = 'nome' | 'tipo' | 'codigo' | 'ativo';
+export type ReceitaSortKey = 'nome' | 'tipo' | 'ativo';
 
 const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
   massa: 'Massa',
@@ -67,7 +67,6 @@ export default function ReceitasConfigTable({
   }[] = [
     { key: 'nome', label: 'Nome' },
     { key: 'tipo', label: 'Tipo' },
-    { key: 'codigo', label: 'Código' },
     { key: null, label: 'Ingredientes', align: 'right' },
     { key: null, label: 'Produtos', align: 'right' },
     { key: 'ativo', label: 'Status' },
@@ -124,9 +123,6 @@ export default function ReceitasConfigTable({
               </td>
               <td className={`${configTableBodyCellClass} text-stone-600`}>
                 {TIPO_LABELS[item.tipo]}
-              </td>
-              <td className={`${configTableBodyCellClass} font-mono text-xs text-stone-500`}>
-                {item.codigo || '—'}
               </td>
               <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
                 {formatNumericZero(countIngredientes(item))}

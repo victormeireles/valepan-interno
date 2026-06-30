@@ -10,6 +10,8 @@ import { createReceita, updateReceita } from '@/app/actions/receitas-actions';
 import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
 import type { ReceitaMassaVinculoSyncResult } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
 import TextInput from '@/components/FormControls/TextInput';
+import { Select } from '@/components/ui/Select';
+import { Switch } from '@/components/ui/Switch';
 import { type ReceitaIngredienteFormItem } from '@/components/Receitas/ReceitaIngredienteRow';
 import { useReceitaImportFlow } from '@/components/Receitas/useReceitaImportFlow';
 import ReceitaIngredientesAccordion from '@/components/Receitas/ReceitaIngredientesAccordion';
@@ -47,7 +49,8 @@ const tipoOptions: Array<{ value: TipoReceita; label: string; helper: string }> 
   {
     value: 'confeito',
     label: 'Confeito',
-    helper: 'Cadastre quantidades por gramatura para pré-preencher ao vincular produtos.',
+    helper:
+      'Cadastre quantos pães de cada gramatura 1 kg cobre. Ao vincular, calcula peso da receita × esse valor.',
   },
   {
     value: 'antimofo',
@@ -76,13 +79,13 @@ const generateTempId = () => {
 export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: ReceitaModalProps) {
   const [nome, setNome] = useState('');
   const [tipo, setTipo] = useState<TipoReceita>('massa');
-  const [codigo, setCodigo] = useState<string | null>(null);
   const [ativo, setAtivo] = useState(true);
   const [ingredientes, setIngredientes] = useState<IngredienteForm[]>([]);
   const [gramaturas, setGramaturas] = useState<ReceitaGramaturaFormItem[]>([]);
   const [novoIngredienteNome, setNovoIngredienteNome] = useState('');
   const [novoIngredienteId, setNovoIngredienteId] = useState('');
   const [novoIngredienteUnidade, setNovoIngredienteUnidade] = useState<string | null>(null);
+  const [novoIngredienteCustoUnitario, setNovoIngredienteCustoUnitario] = useState<number | null>(null);
   const [novoIngredienteQuantidade, setNovoIngredienteQuantidade] = useState(0);
   const [accordionOpen, setAccordionOpen] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -112,7 +115,6 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
       if (receita) {
         setNome(receita.nome);
         setTipo(receita.tipo);
-        setCodigo(receita.codigo);
         setAtivo(receita.ativo !== false);
         setIngredientes(
           (receita.receita_ingredientes || []).map((item) => ({
@@ -122,6 +124,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
             insumoNome: item.insumos?.nome ?? 'Ingrediente',
             unidadeDescricao:
               item.insumos?.unidades?.nome_resumido ?? item.insumos?.unidades?.nome ?? null,
+            custoUnitario: item.insumos?.custo_unitario ?? null,
             quantidade: item.quantidade_padrao,
           })),
         );
@@ -136,7 +139,6 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
       } else {
         setNome('');
         setTipo('massa');
-        setCodigo(null);
         setAtivo(true);
         setIngredientes([]);
         setGramaturas([]);
@@ -144,6 +146,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
       setNovoIngredienteId('');
       setNovoIngredienteNome('');
       setNovoIngredienteUnidade(null);
+      setNovoIngredienteCustoUnitario(null);
       setNovoIngredienteQuantidade(0);
       setError(null);
       resetImport();
@@ -179,6 +182,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
         insumoId: novoIngredienteId,
         insumoNome: novoIngredienteNome || 'Ingrediente',
         unidadeDescricao: novoIngredienteUnidade,
+        custoUnitario: novoIngredienteCustoUnitario,
         quantidade: novoIngredienteQuantidade,
       },
     ]);
@@ -186,6 +190,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
     setNovoIngredienteId('');
     setNovoIngredienteNome('');
     setNovoIngredienteUnidade(null);
+    setNovoIngredienteCustoUnitario(null);
     setNovoIngredienteQuantidade(0);
     setError(null);
   };
@@ -202,7 +207,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
 
   const handleSwapIngrediente = (
     tempId: string,
-    swap: Pick<IngredienteForm, 'insumoId' | 'insumoNome' | 'unidadeDescricao'>,
+    swap: Pick<IngredienteForm, 'insumoId' | 'insumoNome' | 'unidadeDescricao' | 'custoUnitario'>,
   ) => {
     setIngredientes((prev) =>
       prev.map((item) =>
@@ -212,6 +217,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
               insumoId: swap.insumoId,
               insumoNome: swap.insumoNome,
               unidadeDescricao: swap.unidadeDescricao,
+              custoUnitario: swap.custoUnitario,
             }
           : item,
       ),
@@ -234,7 +240,6 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
       const payload: ReceitaInput = {
         nome,
         tipo,
-        codigo,
         ativo,
         ingredientes: ingredientes.map((item) => ({
           id: item.id,
@@ -313,46 +318,19 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
               required
             />
 
-            <TextInput
-              label="Código"
-              value={codigo ?? ''}
-              onChange={(value) => setCodigo(value || null)}
-              placeholder="Opcional"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="w-full">
-              <label className="block text-base font-semibold text-gray-800 mb-3">
-                Tipo de receita <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value as TipoReceita)}
-                className="w-full px-4 py-4 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xl font-medium bg-white text-gray-900"
-                required
-              >
-                {tipoOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-2">{tipoHelper}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-gray-700 ml-1">Status</label>
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ativo}
-                  onChange={(e) => setAtivo(e.target.checked)}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                />
-                {ativo ? 'Ativa' : 'Inativa'}
-              </label>
-            </div>
+            <Select
+              label="Tipo de receita"
+              required
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as TipoReceita)}
+              hint={tipoHelper}
+            >
+              {tipoOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <ReceitaIngredientesAccordion
@@ -369,6 +347,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
             onNovoIngredienteIdChange={setNovoIngredienteId}
             onNovoIngredienteNomeChange={setNovoIngredienteNome}
             onNovoIngredienteUnidadeChange={setNovoIngredienteUnidade}
+            onNovoIngredienteCustoUnitarioChange={setNovoIngredienteCustoUnitario}
             onNovoIngredienteQuantidadeChange={setNovoIngredienteQuantidade}
             onAddIngrediente={handleAddIngrediente}
             onStartColarPlanilha={handleStartColarPlanilha}
@@ -385,6 +364,14 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
           {tipoUsaGramatura && (
             <ReceitaGramaturasSection tipo={tipo} gramaturas={gramaturas} onChange={setGramaturas} />
           )}
+
+          <div className="flex items-center justify-end gap-3 border-t border-stone-100 pt-4">
+            <Switch
+              checked={ativo}
+              onChange={setAtivo}
+              label={ativo ? 'Ativa' : 'Inativa'}
+            />
+          </div>
 
           <div className="flex gap-3">
             <button

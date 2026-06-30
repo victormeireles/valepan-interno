@@ -3,6 +3,7 @@
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { receitaIngredienteRepository } from '@/data/receitas/ReceitaIngredienteRepository';
+import { insumoDeleteManager } from '@/domain/insumos/insumo-delete-manager';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
@@ -229,23 +230,13 @@ export async function updateInsumo(params: UpdateInsumoParams) {
 }
 
 export async function deleteInsumo(id: string) {
-  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const result = await insumoDeleteManager.delete(id);
 
-  try {
-    // Soft delete: marca como inativo
-    const { error } = await supabase
-      .from('insumos')
-      .update({ ativo: false })
-      .eq('id', id);
-
-    if (error) throw error;
-
+  if (result.success) {
     revalidatePath('/config/insumos');
-    return { success: true };
-  } catch (error) {
-    console.error('Erro ao deletar insumo:', error);
-    return { success: false, error: 'Erro ao deletar insumo' };
   }
+
+  return result;
 }
 
 

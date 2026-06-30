@@ -23,7 +23,7 @@ export const PRODUTO_RECEITA_TIPO_OPTIONS: Array<{
   {
     value: 'confeito',
     label: 'Confeito',
-    helper: 'Quantidade de produtos que 1 receita de confeito atende.',
+    helper: 'Peso da receita (kg) × pães por kg da gramatura do produto.',
     icon: 'cake',
   },
   {

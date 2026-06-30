@@ -5,7 +5,7 @@
  * fornecedor, CFOP, NCM etc. sem recriar pendências nem entradas.
  *
  * Uso:
- *   npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts [--dry-run] [--limit=N] [--empresa-id=UUID] [--force] [--incluir-ignorados] [--todos-status]
+ *   npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts [--dry-run] [--limit=N] [--empresa-id=UUID] [--force] [--incluir-ignorados] [--todos-status] [--somente-vinculados]
  *
  * npm:
  *   npm run backfill:insumo-pendencias-enriquecimento
@@ -29,6 +29,7 @@ async function main() {
   const forcar = process.argv.includes('--force');
   const incluirIgnorados = process.argv.includes('--incluir-ignorados');
   const todosStatus = process.argv.includes('--todos-status');
+  const somenteVinculados = process.argv.includes('--somente-vinculados');
   const empresaId = parseArgValor('--empresa-id');
   const limitRecebimentos = parseLimit();
 
@@ -43,7 +44,7 @@ async function main() {
   );
 
   console.log(
-    `[backfill-insumo-pendencias-enriquecimento-omie]${dryRun ? ' (dry-run)' : ''}${forcar ? ' force' : ''}${incluirIgnorados ? ' incluir-ignorados' : ''}${todosStatus ? ' todos-status' : ''}`,
+    `[backfill-insumo-pendencias-enriquecimento-omie]${dryRun ? ' (dry-run)' : ''}${forcar ? ' force' : ''}${incluirIgnorados ? ' incluir-ignorados' : ''}${todosStatus ? ' todos-status' : ''}${somenteVinculados ? ' somente-vinculados' : ''}`,
   );
   if (empresaId) console.log(`  empresa-id: ${empresaId}`);
   if (limitRecebimentos) console.log(`  limit: ${limitRecebimentos}`);
@@ -53,6 +54,7 @@ async function main() {
     forcar,
     incluirIgnorados,
     todosStatus,
+    somenteVinculados,
     empresaId,
     limitRecebimentos,
   });

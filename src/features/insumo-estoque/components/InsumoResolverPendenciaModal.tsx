@@ -8,7 +8,7 @@ import {
 } from '@/domain/insumos/insumo-entrada-calculo';
 import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
 import { getInsumoPendenciasPorProdutoOmie, resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
-import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import InsumoVinculoSelectField from '@/features/insumo-estoque/components/InsumoVinculoSelectField';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import InsumoPendenciaGrupoNfList from '@/features/insumo-estoque/components/InsumoPendenciaGrupoNfList';
@@ -275,14 +275,16 @@ export default function InsumoResolverPendenciaModal({
               </p>
             </div>
 
-            <SelectRemoteAutocomplete
+            <InsumoVinculoSelectField
+              key={`${grupo.empresaId}-${grupo.omieIdProduto}`}
               value={insumoId}
               onChange={setInsumoId}
               onOptionSelected={handleInsumoSelected}
-              stage="insumos"
+              nomeSugeridoOmie={grupo.descricaoProduto ?? ''}
               label="Insumo no estoque"
               placeholder="Buscar insumo..."
               required
+              disabled={loading}
             />
 
             <InsumoResolverConversaoSection

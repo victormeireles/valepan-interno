@@ -69,6 +69,7 @@ export function useReceitaImportFlow({
         insumoId: row.insumoId as string,
         insumoNome: row.insumoNome ?? 'Ingrediente',
         unidadeDescricao: row.unidadeDescricao,
+        custoUnitario: row.custoUnitario ?? null,
         quantidade: row.quantidade,
       }));
 

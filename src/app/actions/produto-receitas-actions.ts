@@ -93,6 +93,50 @@ export async function getProdutosComReceitas() {
   return produtosComReceitas;
 }
 
+export async function getProdutoReceitasVinculadas(
+  produtoId: string,
+): Promise<ProdutoResumoComReceitas['receitas_vinculadas']> {
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data: vinculos, error } = await supabase
+    .from('produto_receitas')
+    .select(`
+      id,
+      receita_id,
+      quantidade_por_produto,
+      ativo,
+      receitas (
+        id,
+        nome,
+        tipo
+      )
+    `)
+    .eq('produto_id', produtoId)
+    .eq('ativo', true);
+
+  if (error) {
+    console.error('Erro ao buscar vínculos do produto:', error);
+    return {};
+  }
+
+  const receitasVinculadas: ProdutoResumoComReceitas['receitas_vinculadas'] = {};
+
+  vinculos?.forEach((vinculo) => {
+    const receita = vinculo.receitas;
+    if (receita) {
+      receitasVinculadas[receita.tipo as TipoReceita] = {
+        id: vinculo.id,
+        receita_id: vinculo.receita_id,
+        receita_nome: receita.nome,
+        quantidade: vinculo.quantidade_por_produto,
+        ativo: vinculo.ativo,
+      };
+    }
+  });
+
+  return receitasVinculadas;
+}
+
 export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 

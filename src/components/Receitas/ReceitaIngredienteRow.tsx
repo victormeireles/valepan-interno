@@ -3,9 +3,14 @@
 import { useState } from 'react';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import {
+  calcularCustoTotal,
   calcularGramas,
+  formatarCustoPorUnidade,
+  formatarMoeda,
   formatarValorLateral,
+  resolveCustoInsumoMeta,
 } from '@/components/Receitas/receita-ingrediente-format';
+import { RECEITA_INGREDIENTE_QUANTIDADE_STEP } from '@/domain/receitas/receita-quantidade-constants';
 
 export type ReceitaIngredienteFormItem = {
   tempId: string;
@@ -13,12 +18,13 @@ export type ReceitaIngredienteFormItem = {
   insumoId: string;
   insumoNome: string;
   unidadeDescricao?: string | null;
+  custoUnitario?: number | null;
   quantidade: number;
 };
 
 type SwapPayload = Pick<
   ReceitaIngredienteFormItem,
-  'insumoId' | 'insumoNome' | 'unidadeDescricao'
+  'insumoId' | 'insumoNome' | 'unidadeDescricao' | 'custoUnitario'
 >;
 
 type Props = {
@@ -45,12 +51,14 @@ export default function ReceitaIngredienteRow({
   const [novoInsumoId, setNovoInsumoId] = useState('');
   const [novoInsumoNome, setNovoInsumoNome] = useState('');
   const [novoUnidade, setNovoUnidade] = useState<string | null>(null);
+  const [novoCustoUnitario, setNovoCustoUnitario] = useState<number | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
   const resetSwapState = () => {
     setNovoInsumoId('');
     setNovoInsumoNome('');
     setNovoUnidade(null);
+    setNovoCustoUnitario(null);
     setSwapError(null);
   };
 
@@ -78,6 +86,7 @@ export default function ReceitaIngredienteRow({
       insumoId: novoInsumoId,
       insumoNome: novoInsumoNome || 'Ingrediente',
       unidadeDescricao: novoUnidade,
+      custoUnitario: novoCustoUnitario,
     });
     resetSwapState();
     setSwapping(false);
@@ -85,6 +94,11 @@ export default function ReceitaIngredienteRow({
 
   const gramas = calcularGramas(item.quantidade, item.unidadeDescricao);
   const valorFormatado = formatarValorLateral(item.quantidade, item.unidadeDescricao);
+  const custoTotal = calcularCustoTotal(item.quantidade, item.custoUnitario);
+  const custoUnitarioLabel =
+    item.custoUnitario != null && item.custoUnitario > 0
+      ? formatarCustoPorUnidade(item.custoUnitario, item.unidadeDescricao)
+      : null;
 
   if (swapping) {
     return (
@@ -107,6 +121,7 @@ export default function ReceitaIngredienteRow({
             setNovoInsumoNome(option?.label ?? '');
             const meta = option?.meta as Record<string, unknown> | undefined;
             setNovoUnidade(resolveUnidadeFromMeta(meta));
+            setNovoCustoUnitario(resolveCustoInsumoMeta(meta));
             setSwapError(null);
           }}
         />
@@ -167,6 +182,11 @@ export default function ReceitaIngredienteRow({
               `${item.quantidade} ${item.unidadeDescricao || ''}`
             )}
           </span>
+          {custoUnitarioLabel ? (
+            <span className="font-mono text-xs tabular-nums text-stone-600">
+              {custoUnitarioLabel}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -175,7 +195,7 @@ export default function ReceitaIngredienteRow({
           <input
             type="number"
             min="0"
-            step="0.001"
+            step={RECEITA_INGREDIENTE_QUANTIDADE_STEP}
             value={item.quantidade}
             onChange={(e) =>
               onQuantidadeChange(item.tempId, parseFloat(e.target.value) || 0)
@@ -188,6 +208,12 @@ export default function ReceitaIngredienteRow({
         {valorFormatado ? (
           <span className="inline-flex flex-shrink-0 items-center whitespace-nowrap rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
             {valorFormatado}
+          </span>
+        ) : null}
+
+        {custoTotal != null ? (
+          <span className="inline-flex flex-shrink-0 items-center whitespace-nowrap rounded bg-amber-50 px-2 py-1 font-mono text-xs font-semibold tabular-nums text-amber-800">
+            {formatarMoeda(custoTotal)}
           </span>
         ) : null}
 

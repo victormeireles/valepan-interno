@@ -9,7 +9,12 @@ import {
   type ReceitaMassaIngrediente,
 } from '@/domain/receitas/receita-massa-calculo';
 import {
-  receitaTipoUsaGramaturaBrilho,
+  calcularQuantidadePorProdutoConfeito,
+  formatarResumoCalculoConfeito,
+} from '@/domain/receitas/receita-confeito-calculo';
+import {
+  receitaTipoUsaCalculoCoeficienteGramatura,
+  receitaTipoUsaGramaturaConfeito,
   receitaTipoUsaGramaturaDireta,
   resolverQuantidadePorGramatura,
   type ReceitaGramatura,
@@ -67,7 +72,7 @@ export function resolverQuantidadeReceitaParaProduto(
     };
   }
 
-  if (receitaTipoUsaGramaturaBrilho(input.tipo)) {
+  if (receitaTipoUsaCalculoCoeficienteGramatura(input.tipo)) {
     if (!input.ingredientes?.length || !input.gramaturas?.length) {
       return { pesoGramas, quantidade: null, resumo: null, aviso: null };
     }
@@ -76,9 +81,34 @@ export function resolverQuantidadeReceitaParaProduto(
         pesoGramas: null,
         quantidade: null,
         resumo: null,
-        aviso: 'Gramatura do produto não encontrada para calcular o brilho.',
+        aviso: receitaTipoUsaGramaturaConfeito(input.tipo)
+          ? 'Gramatura do produto não encontrada para calcular o confeito.'
+          : 'Gramatura do produto não encontrada para calcular o brilho.',
       };
     }
+
+    if (receitaTipoUsaGramaturaConfeito(input.tipo)) {
+      const resultado = calcularQuantidadePorProdutoConfeito(
+        input.ingredientes,
+        input.gramaturas,
+        pesoGramas,
+      );
+      if (!resultado) {
+        return {
+          pesoGramas,
+          quantidade: null,
+          resumo: null,
+          aviso: `Sem rendimento cadastrado para ${pesoGramas} g nesta receita de confeito.`,
+        };
+      }
+      return {
+        pesoGramas,
+        quantidade: resultado.quantidade,
+        resumo: formatarResumoCalculoConfeito(resultado, pesoGramas),
+        aviso: null,
+      };
+    }
+
     const resultado = calcularQuantidadePorProdutoBrilho(
       input.ingredientes,
       input.gramaturas,

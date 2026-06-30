@@ -1,7 +1,8 @@
 import { resolvePesoGramas } from '@/domain/assadeiras/produto-peso';
-import { calcularQuantidadePorProdutoBrilho } from '@/domain/receitas/receita-brilho-calculo';
+import { calcularQuantidadePorProdutoCoeficienteGramatura } from '@/domain/receitas/receita-coeficiente-gramatura-calculo';
 import {
-  receitaTipoUsaGramaturaBrilho,
+  receitaTipoUsaCalculoCoeficienteGramatura,
+  receitaTipoUsaGramaturaConfeito,
   receitaTipoUsaGramaturaDireta,
   resolverQuantidadePorGramatura,
   type ReceitaGramatura,
@@ -63,8 +64,12 @@ function resolverQuantidadeVinculo(
 ): number | null {
   if (!pesoGramas) return null;
 
-  if (receitaTipoUsaGramaturaBrilho(tipo)) {
-    const resultado = calcularQuantidadePorProdutoBrilho(ingredientes, gramaturas, pesoGramas);
+  if (receitaTipoUsaCalculoCoeficienteGramatura(tipo)) {
+    const resultado = calcularQuantidadePorProdutoCoeficienteGramatura(
+      ingredientes,
+      gramaturas,
+      pesoGramas,
+    );
     return resultado?.quantidade ?? null;
   }
 
@@ -144,8 +149,8 @@ export class ReceitaGramaturaVinculosSyncManager {
         ignorados.push({
           produtoNome: produto.nome,
           motivo: pesoGramas
-            ? receitaTipoUsaGramaturaBrilho(tipo)
-              ? `sem rendimento de brilho cadastrado para ${pesoGramas} g`
+            ? receitaTipoUsaCalculoCoeficienteGramatura(tipo)
+              ? `sem rendimento cadastrado para ${pesoGramas} g (${receitaTipoUsaGramaturaConfeito(tipo) ? 'confeito' : 'brilho'})`
               : `sem quantidade cadastrada para ${pesoGramas} g`
             : 'gramatura do produto não encontrada',
         });

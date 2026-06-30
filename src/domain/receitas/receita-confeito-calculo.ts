@@ -6,37 +6,37 @@ import {
 import type { ReceitaMassaIngrediente } from '@/domain/receitas/receita-massa-calculo';
 import type { ReceitaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 
-export type ReceitaBrilhoCalculoResultado = ReceitaCoeficienteGramaturaResultado & {
-  volumeLitros: number;
-  paesPorLitro: number;
+export type ReceitaConfeitoCalculoResultado = ReceitaCoeficienteGramaturaResultado & {
+  pesoTotalKg: number;
+  paesPorKg: number;
 };
 
-function mapResultadoBrilho(
+function mapResultadoConfeito(
   resultado: ReceitaCoeficienteGramaturaResultado,
-): ReceitaBrilhoCalculoResultado {
+): ReceitaConfeitoCalculoResultado {
   return {
     ...resultado,
-    volumeLitros: resultado.totalKg,
-    paesPorLitro: resultado.paesPorUnidade,
+    pesoTotalKg: resultado.totalKg,
+    paesPorKg: resultado.paesPorUnidade,
   };
 }
 
-export function calcularQuantidadePorProdutoBrilho(
+export function calcularQuantidadePorProdutoConfeito(
   ingredientes: ReceitaMassaIngrediente[],
   gramaturas: ReceitaGramatura[],
   pesoGramas: number,
-): ReceitaBrilhoCalculoResultado | null {
+): ReceitaConfeitoCalculoResultado | null {
   const resultado = calcularQuantidadePorProdutoCoeficienteGramatura(
     ingredientes,
     gramaturas,
     pesoGramas,
   );
-  return resultado ? mapResultadoBrilho(resultado) : null;
+  return resultado ? mapResultadoConfeito(resultado) : null;
 }
 
-export function formatarResumoCalculoBrilho(
-  resultado: ReceitaBrilhoCalculoResultado,
+export function formatarResumoCalculoConfeito(
+  resultado: ReceitaConfeitoCalculoResultado,
   pesoGramas: number,
 ): string {
-  return formatarResumoCalculoCoeficienteGramatura('litro', resultado, pesoGramas);
+  return formatarResumoCalculoCoeficienteGramatura('kg', resultado, pesoGramas);
 }

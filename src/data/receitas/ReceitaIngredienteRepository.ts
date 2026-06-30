@@ -11,7 +11,6 @@ type ReceitaIngredienteRow = {
   receitas: {
     id: string;
     nome: string;
-    codigo: string | null;
     tipo: TipoReceita;
     ativo: boolean | null;
   } | null;
@@ -33,7 +32,6 @@ export class ReceitaIngredienteRepository {
       ingredienteId: row.id,
       receitaId: row.receitas.id,
       receitaNome: row.receitas.nome,
-      receitaCodigo: row.receitas.codigo,
       receitaTipo: row.receitas.tipo,
       receitaAtiva: row.receitas.ativo !== false,
       quantidadePadrao: Number(row.quantidade_padrao),
@@ -50,7 +48,6 @@ export class ReceitaIngredienteRepository {
         receitas (
           id,
           nome,
-          codigo,
           tipo,
           ativo
         )
@@ -77,7 +74,6 @@ export class ReceitaIngredienteRepository {
         receitas (
           id,
           nome,
-          codigo,
           tipo,
           ativo
         )

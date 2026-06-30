@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
 import { atualizarIntegracaoInsumoVinculo } from '@/app/actions/insumo-estoque-actions';
-import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import InsumoVinculoSelectField from '@/features/insumo-estoque/components/InsumoVinculoSelectField';
 import { Button } from '@/components/ui/Button';
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
 import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
@@ -167,14 +167,16 @@ export default function InsumoEditarVinculoModal({
               Alteração vale para próximos recebimentos. Entradas já registradas não mudam.
             </p>
 
-            <SelectRemoteAutocomplete
+            <InsumoVinculoSelectField
+              key={vinculo.id}
               value={insumoId}
               onChange={setInsumoId}
               onOptionSelected={handleInsumoSelected}
-              stage="insumos"
+              nomeSugeridoOmie={vinculo.descricao_omie ?? ''}
               label="Insumo no estoque"
               placeholder="Buscar insumo..."
               required
+              disabled={loading}
             />
 
             <InsumoResolverConversaoSection

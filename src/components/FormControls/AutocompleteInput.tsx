@@ -3,6 +3,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { controlInputClassName } from '@/components/ui/Input';
 
+export type AutocompleteEmptyCreateConfig = {
+  minQueryLength?: number;
+  actionLabel?: string;
+  onAction: (query: string) => void;
+};
+
 interface AutocompleteInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -13,6 +19,7 @@ interface AutocompleteInputProps {
   disabled?: boolean;
   label?: string;
   strict?: boolean;
+  emptyCreate?: AutocompleteEmptyCreateConfig;
 }
 
 export default function AutocompleteInput({
@@ -25,6 +32,7 @@ export default function AutocompleteInput({
   disabled = false,
   label,
   strict = false,
+  emptyCreate,
 }: AutocompleteInputProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filteredOptions, setFilteredOptions] = useState<string[]>([]);
@@ -212,6 +220,30 @@ export default function AutocompleteInput({
                   {option}
                 </li>
               ))
+            ) : emptyCreate &&
+              (inputValue.trim().length >= (emptyCreate.minQueryLength ?? 2) ||
+                options.length === 0) ? (
+              <li className="px-4 py-3 text-center">
+                <p className="text-sm text-stone-500">
+                  {inputValue.trim()
+                    ? `Nenhum resultado para “${inputValue.trim()}”`
+                    : 'Nenhum insumo cadastrado'}
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 inline-flex min-h-11 items-center justify-center gap-1 rounded-xl px-3 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    emptyCreate.onAction(inputValue.trim());
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="material-icons text-base" aria-hidden="true">
+                    add
+                  </span>
+                  {emptyCreate.actionLabel ?? 'Criar insumo'}
+                </button>
+              </li>
             ) : (
               <li className="px-4 py-3 text-center text-sm italic text-text-muted">
                 Nenhum resultado encontrado

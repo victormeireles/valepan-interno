@@ -2,6 +2,7 @@ import type {
   InsumoEntradaPendenciaRow,
   RecebimentoPendenciaChave,
 } from '@/domain/types/insumo-estoque-db';
+import { buildPendenciaGrupoChave } from '@/domain/insumos/insumo-pendencia-grupo';
 import {
   indexarItensRecebimentoPorIdItem,
   montarEnriquecimentoPendencia,
@@ -28,6 +29,7 @@ export type InsumoPendenciaEnriquecimentoBackfillInput = {
   forcar?: boolean;
   incluirIgnorados?: boolean;
   todosStatus?: boolean;
+  somenteVinculados?: boolean;
   dryRun?: boolean;
 };
 
@@ -43,6 +45,7 @@ type BackfillDeps = {
   client: OmieRecebimentoClient;
   categoriaService: InsumoRecebimentoCategoriaService;
   listarEmpresas: () => Promise<EmpresaCredenciaisRow[]>;
+  listarChavesProdutosVinculados: () => Promise<Set<string>>;
 };
 
 export class InsumoPendenciaEnriquecimentoBackfillService {
@@ -54,12 +57,21 @@ export class InsumoPendenciaEnriquecimentoBackfillService {
     const empresas = await this.deps.listarEmpresas();
     const empresasPorId = new Map(empresas.map((empresa) => [empresa.id, empresa]));
 
-    const pendencias = await this.deps.pendenciaRepository.listParaEnriquecimento({
+    let pendencias = await this.deps.pendenciaRepository.listParaEnriquecimento({
       empresaId: input.empresaId,
       forcar: input.forcar,
       incluirIgnorados: input.incluirIgnorados,
       todosStatus: input.todosStatus,
     });
+
+    if (input.somenteVinculados) {
+      const chavesVinculados = await this.deps.listarChavesProdutosVinculados();
+      pendencias = pendencias.filter((pendencia) =>
+        chavesVinculados.has(
+          buildPendenciaGrupoChave(pendencia.empresa_id, pendencia.omie_id_produto),
+        ),
+      );
+    }
 
     const chaves = this.agruparRecebimentosUnicos(pendencias);
     const limite = input.limitRecebimentos ?? chaves.length;
@@ -193,5 +205,16 @@ export const insumoPendenciaEnriquecimentoBackfillService =
         '@/data/omie/OmieWebhookEventoRepository'
       );
       return new OmieWebhookEventoRepository().listEmpresas();
+    },
+    listarChavesProdutosVinculados: async () => {
+      const { insumoMapeamentoRepository } = await import(
+        '@/data/insumos/InsumoMapeamentoRepository'
+      );
+      const vinculos = await insumoMapeamentoRepository.listAtivosComDetalhes();
+      return new Set(
+        vinculos.map((vinculo) =>
+          buildPendenciaGrupoChave(vinculo.empresa_id, vinculo.omie_id_produto),
+        ),
+      );
     },
   });

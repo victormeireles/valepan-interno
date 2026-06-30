@@ -112,6 +112,7 @@ async function loadCatalogo(): Promise<InsumoCatalogoItem[]> {
     nome: insumo.nome,
     unidadeCodigo: insumo.unidades?.codigo ?? '',
     unidadeNome: insumo.unidades?.nome_resumido ?? insumo.unidades?.nome ?? '',
+    custoUnitario: insumo.custo_unitario,
   }));
 }
 

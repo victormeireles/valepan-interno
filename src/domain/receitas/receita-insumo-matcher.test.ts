@@ -3,8 +3,20 @@ import { matchLinhasComCatalogo } from './receita-insumo-matcher';
 import type { InsumoCatalogoItem } from '@/domain/insumos/insumo-vinculo-sugestao';
 
 const catalogo: InsumoCatalogoItem[] = [
-  { id: '1', nome: 'Farinha de trigo especial', unidadeCodigo: 'KG', unidadeNome: 'Quilograma' },
-  { id: '2', nome: 'Açúcar cristal', unidadeCodigo: 'KG', unidadeNome: 'Quilograma' },
+  {
+    id: '1',
+    nome: 'Farinha de trigo especial',
+    unidadeCodigo: 'KG',
+    unidadeNome: 'Quilograma',
+    custoUnitario: 5,
+  },
+  {
+    id: '2',
+    nome: 'Açúcar cristal',
+    unidadeCodigo: 'KG',
+    unidadeNome: 'Quilograma',
+    custoUnitario: 3,
+  },
 ];
 
 describe('matchLinhasComCatalogo', () => {

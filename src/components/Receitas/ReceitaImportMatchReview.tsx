@@ -3,6 +3,8 @@
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import NumberDecimalInput from '@/components/FormControls/NumberDecimalInput';
 import type { ReceitaImportLinhaRevisao } from '@/domain/receitas/receita-planilha-types';
+import { resolveCustoInsumoMeta } from '@/components/Receitas/receita-ingrediente-format';
+import { RECEITA_INGREDIENTE_QUANTIDADE_STEP } from '@/domain/receitas/receita-quantidade-constants';
 
 type Props = {
   rows: ReceitaImportLinhaRevisao[];
@@ -47,7 +49,13 @@ export default function ReceitaImportMatchReview({
   const activeRows = rows.filter((row) => !row.skippedDuplicate);
   const canConfirm = activeRows.every((row) => Boolean(row.insumoId));
 
-  const handleInsumoChange = (rowId: string, insumoId: string, nome: string, unidade: string | null) => {
+  const handleInsumoChange = (
+    rowId: string,
+    insumoId: string,
+    nome: string,
+    unidade: string | null,
+    custoUnitario: number | null,
+  ) => {
     if (insumoId) {
       const duplicateInRows = rows.some(
         (entry) => entry.id !== rowId && entry.insumoId === insumoId && !entry.skippedDuplicate,
@@ -62,6 +70,7 @@ export default function ReceitaImportMatchReview({
       insumoId: insumoId || null,
       insumoNome: nome || null,
       unidadeDescricao: unidade,
+      custoUnitario,
       status: insumoId ? 'matched' : 'not_found',
       score: insumoId ? 1 : null,
     });
@@ -107,7 +116,7 @@ export default function ReceitaImportMatchReview({
                     value={row.insumoId ?? ''}
                     onChange={(value) => {
                       if (!value) {
-                        handleInsumoChange(row.id, '', '', null);
+                        handleInsumoChange(row.id, '', '', null, null);
                         return;
                       }
                     }}
@@ -116,12 +125,14 @@ export default function ReceitaImportMatchReview({
                     label="Insumo"
                     required={false}
                     onOptionSelected={(option) => {
-                      const meta = option?.meta as Record<string, string> | undefined;
+                      const meta = option?.meta as Record<string, unknown> | undefined;
+                      const unidade = meta?.unidadeNomeResumido ?? meta?.unidade_nome_resumido;
                       handleInsumoChange(
                         row.id,
                         option?.value ?? '',
                         option?.label?.replace(/\s*\([^)]+\)$/, '') ?? '',
-                        meta?.unidadeNomeResumido ?? meta?.unidade_nome_resumido ?? null,
+                        typeof unidade === 'string' ? unidade : null,
+                        resolveCustoInsumoMeta(meta),
                       );
                     }}
                   />
@@ -130,7 +141,7 @@ export default function ReceitaImportMatchReview({
                     value={row.quantidade}
                     onChange={(value) => handleQuantidadeChange(row.id, value)}
                     min={0}
-                    step={0.001}
+                    step={RECEITA_INGREDIENTE_QUANTIDADE_STEP}
                     placeholder="Ex: 0,300"
                   />
                 </div>

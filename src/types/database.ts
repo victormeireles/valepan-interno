@@ -3397,7 +3397,6 @@ export type Database = {
       receitas: {
         Row: {
           ativo: boolean | null
-          codigo: string | null
           created_at: string | null
           id: string
           nome: string
@@ -3405,7 +3404,6 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
-          codigo?: string | null
           created_at?: string | null
           id?: string
           nome: string
@@ -3413,7 +3411,6 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
-          codigo?: string | null
           created_at?: string | null
           id?: string
           nome?: string
@@ -4254,7 +4251,6 @@ export type Database = {
           produto_nome: string | null
           quantidade_por_produto: number | null
           receita_ativa: boolean | null
-          receita_codigo: string | null
           receita_id: string | null
           receita_nome: string | null
           receita_vinculada_ativa: boolean | null

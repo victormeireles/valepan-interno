@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import {
-  getProdutosComReceitas,
+  getProdutoReceitasVinculadas,
   linkReceitaAoProduto,
   unlinkProdutoReceita,
   updateProdutoReceita,
@@ -115,12 +115,9 @@ export default function ProdutoReceitasConfigModal({
   }, [receitasCatalogo]);
 
   const refreshLocalProduto = async () => {
-    const updatedProdutos = await getProdutosComReceitas();
-    const updated = updatedProdutos.find((item) => item.id === produto.id);
-    if (!updated) return;
-
-    setLocalVinculadas(updated.receitas_vinculadas);
-    onUpdated(produto.id, updated.receitas_vinculadas);
+    const receitasVinculadas = await getProdutoReceitasVinculadas(produto.id);
+    setLocalVinculadas(receitasVinculadas);
+    onUpdated(produto.id, receitasVinculadas);
   };
 
   const handleReceitaChange = (tipo: TipoReceita, receitaId: string) => {
@@ -221,43 +218,47 @@ export default function ProdutoReceitasConfigModal({
     setLoadingTipo('all');
     setMessage(null);
 
-    const errors: string[] = [];
+    try {
+      const errors: string[] = [];
 
-    for (const option of PRODUTO_RECEITA_TIPO_OPTIONS) {
-      const receitaId = selectedReceitas[option.value];
-      const quantidade = quantidades[option.value];
-      const vinculoExistente = localVinculadas[option.value];
+      for (const option of PRODUTO_RECEITA_TIPO_OPTIONS) {
+        const receitaId = selectedReceitas[option.value];
+        const quantidade = quantidades[option.value];
+        const vinculoExistente = localVinculadas[option.value];
 
-      if (!receitaId) continue;
+        if (!receitaId) continue;
 
-      if (!quantidade || quantidade <= 0) {
-        errors.push(`${option.label}: quantidade deve ser maior que zero.`);
-        continue;
+        if (!quantidade || quantidade <= 0) {
+          errors.push(`${option.label}: quantidade deve ser maior que zero.`);
+          continue;
+        }
+
+        const result =
+          vinculoExistente?.ativo && vinculoExistente.receita_id === receitaId
+            ? await updateProdutoReceita(vinculoExistente.id, quantidade)
+            : await linkReceitaAoProduto({
+                produtoId: produto.id,
+                receitaId,
+                quantidade,
+              });
+
+        if (!result.success) {
+          errors.push(`${option.label}: ${result.error || 'Erro ao salvar.'}`);
+        }
       }
 
-      const result =
-        vinculoExistente?.ativo && vinculoExistente.receita_id === receitaId
-          ? await updateProdutoReceita(vinculoExistente.id, quantidade)
-          : await linkReceitaAoProduto({
-              produtoId: produto.id,
-              receitaId,
-              quantidade,
-            });
-
-      if (!result.success) {
-        errors.push(`${option.label}: ${result.error || 'Erro ao salvar.'}`);
+      if (errors.length > 0) {
+        setMessage(errors.join('\n'));
+        return;
       }
-    }
 
-    if (errors.length > 0) {
-      setMessage(errors.join('\n'));
+      await refreshLocalProduto();
+      onClose();
+    } catch {
+      setMessage('Erro inesperado ao salvar receitas.');
+    } finally {
       setLoadingTipo(null);
-      return;
     }
-
-    await refreshLocalProduto();
-    setMessage('Alterações salvas com sucesso.');
-    setLoadingTipo(null);
   };
 
   if (!isOpen) return null;
@@ -287,8 +288,8 @@ export default function ProdutoReceitasConfigModal({
               {produto.nome}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Massa: pelo peso da receita ÷ gramatura. Brilho: volume da receita × pães/L da
-              gramatura. Demais tipos: valor fixo por gramatura cadastrada.
+              Massa: peso ÷ gramatura. Brilho: volume (L) × pães/L. Confeito: peso (kg) × pães/kg.
+              Demais tipos: valor fixo por gramatura.
             </p>
           </div>
           <button

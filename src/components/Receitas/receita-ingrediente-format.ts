@@ -1,3 +1,35 @@
+export function formatarMoeda(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+export function resolveCustoInsumoMeta(
+  meta: Record<string, unknown> | undefined,
+): number | null {
+  const raw = meta?.custo_unitario ?? meta?.custoUnitario;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = parseFloat(raw);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+export function calcularCustoTotal(
+  quantidade: number,
+  custoUnitario: number | null | undefined,
+): number | null {
+  if (custoUnitario == null || quantidade <= 0) return null;
+  return quantidade * custoUnitario;
+}
+
+export function formatarCustoPorUnidade(
+  custoUnitario: number,
+  unidade: string | null | undefined,
+): string {
+  const unidadeLabel = unidade?.trim() || 'un';
+  return `${formatarMoeda(custoUnitario)} / ${unidadeLabel}`;
+}
+
 export function formatarValorLateral(
   valor: number,
   unidade: string | null | undefined,

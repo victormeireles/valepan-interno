@@ -1,8 +1,9 @@
 'use client';
 
 import ReceitaGramaturaRow from '@/components/Receitas/ReceitaGramaturaRow';
+import type { ModoCoeficienteGramatura } from '@/domain/receitas/receita-coeficiente-gramatura-calculo';
 import type { TipoReceita } from '@/domain/receitas/receita-gramatura-resolver';
-import { receitaTipoUsaGramaturaBrilho } from '@/domain/receitas/receita-gramatura-resolver';
+import { receitaModoCoeficienteGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 
 export type ReceitaGramaturaFormItem = {
   tempId: string;
@@ -17,8 +18,31 @@ type Props = {
   onChange: (items: ReceitaGramaturaFormItem[]) => void;
 };
 
+function getSectionCopy(modoCoeficiente: ModoCoeficienteGramatura | null) {
+  if (modoCoeficiente === 'litro') {
+    return {
+      titulo: 'Rendimento do brilho por gramatura',
+      descricao:
+        'Informe quantos pães de cada gramatura 1 litro da receita cobre (1 kg = 1 L). Ao vincular ao produto, o volume total da receita é multiplicado por esse valor.',
+    };
+  }
+  if (modoCoeficiente === 'kg') {
+    return {
+      titulo: 'Rendimento do confeito por gramatura',
+      descricao:
+        'Informe quantos pães de cada gramatura 1 kg da receita cobre. Ao vincular ao produto, o peso total da receita é multiplicado por esse valor.',
+    };
+  }
+  return {
+    titulo: 'Quantidades por gramatura',
+    descricao:
+      'Ao vincular a um produto, a quantidade será pré-preenchida quando a gramatura coincidir (ex.: 50, 65, 75 g).',
+  };
+}
+
 export default function ReceitaGramaturasSection({ tipo, gramaturas, onChange }: Props) {
-  const modoBrilho = receitaTipoUsaGramaturaBrilho(tipo);
+  const modoCoeficiente = receitaModoCoeficienteGramatura(tipo);
+  const copy = getSectionCopy(modoCoeficiente);
 
   const handleAdd = () => {
     const tempId =
@@ -45,14 +69,8 @@ export default function ReceitaGramaturasSection({ tipo, gramaturas, onChange }:
   return (
     <div className="border border-stone-200 rounded-2xl px-6 py-5 space-y-4">
       <div>
-        <p className="text-sm font-semibold text-stone-900">
-          {modoBrilho ? 'Rendimento do brilho por gramatura' : 'Quantidades por gramatura'}
-        </p>
-        <p className="text-xs text-stone-500 mt-1">
-          {modoBrilho
-            ? 'Informe quantos pães de cada gramatura 1 litro da receita cobre (1 kg = 1 L). Ao vincular ao produto, o volume total da receita é multiplicado por esse valor.'
-            : 'Ao vincular a um produto, a quantidade será pré-preenchida quando a gramatura coincidir (ex.: 50, 65, 75 g).'}
-        </p>
+        <p className="text-sm font-semibold text-stone-900">{copy.titulo}</p>
+        <p className="text-xs text-stone-500 mt-1">{copy.descricao}</p>
       </div>
 
       {gramaturas.length > 0 && (
@@ -60,7 +78,7 @@ export default function ReceitaGramaturasSection({ tipo, gramaturas, onChange }:
           {gramaturas.map((item) => (
             <ReceitaGramaturaRow
               key={item.tempId}
-              modoBrilho={modoBrilho}
+              modoCoeficiente={modoCoeficiente}
               pesoG={item.pesoG}
               quantidade={item.quantidade}
               onPesoChange={(pesoG) => handleUpdate(item.tempId, { pesoG })}

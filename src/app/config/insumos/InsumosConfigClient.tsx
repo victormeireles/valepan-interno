@@ -126,6 +126,12 @@ export default function InsumosConfigClient({
     setTimeout(() => setToast(null), 4000);
   };
 
+  const handleDeleted = () => {
+    setToast('Insumo excluído com sucesso');
+    router.refresh();
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: 'ativos', label: 'Ativos' },
     { value: 'inativos', label: 'Inativos' },
@@ -272,6 +278,7 @@ export default function InsumosConfigClient({
         }}
         insumo={editing}
         onSaved={handleSaved}
+        onDeleted={handleDeleted}
       />
     </div>
   );
