@@ -66,14 +66,14 @@ export function calcularPesoTotalMassaKg(ingredientes: ReceitaMassaIngrediente[]
 
 export function calcularQuantidadePorProdutoMassa(
   ingredientes: ReceitaMassaIngrediente[],
-  pesoGramas: number,
+  massaCruaGramas: number,
 ): ReceitaMassaCalculoResultado | null {
-  if (!Number.isFinite(pesoGramas) || pesoGramas <= 0) return null;
+  if (!Number.isFinite(massaCruaGramas) || massaCruaGramas <= 0) return null;
 
   const { totalKg, ingredientesIgnorados } = calcularPesoTotalMassaKg(ingredientes);
   if (totalKg === null || totalKg <= 0) return null;
 
-  const quantidade = Math.round((totalKg * 1000) / pesoGramas);
+  const quantidade = Math.round((totalKg * 1000) / massaCruaGramas);
   if (quantidade <= 0) return null;
 
   return { quantidade, pesoTotalKg: totalKg, ingredientesIgnorados };
@@ -81,14 +81,14 @@ export function calcularQuantidadePorProdutoMassa(
 
 export function formatarResumoCalculoMassa(
   resultado: ReceitaMassaCalculoResultado,
-  pesoGramas: number,
+  massaCruaGramas: number,
 ): string {
   const pesoFormatado = resultado.pesoTotalKg.toLocaleString('pt-BR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3,
   });
 
-  let texto = `${pesoFormatado} kg ÷ ${pesoGramas} g = ${resultado.quantidade.toLocaleString('pt-BR')} pães/receita`;
+  let texto = `${pesoFormatado} kg ÷ ${massaCruaGramas} g (massa crua) = ${resultado.quantidade.toLocaleString('pt-BR')} pães/receita`;
   if (resultado.ingredientesIgnorados > 0) {
     texto += ` (${resultado.ingredientesIgnorados} ingrediente(s) em unidade não pesável ignorado(s))`;
   }

@@ -4,6 +4,7 @@ import type { ModoCoeficienteGramatura } from '@/domain/receitas/receita-coefici
 
 type Props = {
   modoCoeficiente?: ModoCoeficienteGramatura | null;
+  modoMassa?: boolean;
   pesoG: number;
   quantidade: number;
   onPesoChange: (value: number) => void;
@@ -14,7 +15,11 @@ type Props = {
 const fieldClassName =
   'w-full min-h-11 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10';
 
-function getQuantidadeLabel(modoCoeficiente: ModoCoeficienteGramatura | null | undefined) {
+function getQuantidadeLabel(
+  modoCoeficiente: ModoCoeficienteGramatura | null | undefined,
+  modoMassa: boolean,
+) {
+  if (modoMassa) return 'Massa crua (g)';
   if (modoCoeficiente === 'litro') return 'Pães por 1 L';
   if (modoCoeficiente === 'kg') return 'Pães por 1 kg';
   return 'Quantidade padrão';
@@ -22,18 +27,21 @@ function getQuantidadeLabel(modoCoeficiente: ModoCoeficienteGramatura | null | u
 
 export default function ReceitaGramaturaRow({
   modoCoeficiente = null,
+  modoMassa = false,
   pesoG,
   quantidade,
   onPesoChange,
   onQuantidadeChange,
   onRemove,
 }: Props) {
-  const usaCoeficiente = modoCoeficiente != null;
+  const usaInteiro = modoCoeficiente != null || modoMassa;
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-stone-100 bg-stone-50/80 p-4 sm:flex-row sm:items-end">
       <div className="flex-1">
-        <label className="mb-1.5 block text-sm font-semibold text-stone-700">Gramatura (g)</label>
+        <label className="mb-1.5 block text-sm font-semibold text-stone-700">
+          {modoMassa ? 'Gramatura assada (g)' : 'Gramatura (g)'}
+        </label>
         <input
           type="number"
           min={1}
@@ -46,16 +54,22 @@ export default function ReceitaGramaturaRow({
       </div>
       <div className="flex-1">
         <label className="mb-1.5 block text-sm font-semibold text-stone-700">
-          {getQuantidadeLabel(modoCoeficiente)}
+          {getQuantidadeLabel(modoCoeficiente, modoMassa)}
         </label>
         <input
           type="number"
           min={0}
-          step={usaCoeficiente ? 1 : 0.001}
+          step={usaInteiro ? 1 : 0.001}
           value={quantidade || ''}
-          onChange={(e) => onQuantidadeChange(parseFloat(e.target.value) || 0)}
+          onChange={(e) =>
+            onQuantidadeChange(
+              modoMassa
+                ? parseInt(e.target.value, 10) || 0
+                : parseFloat(e.target.value) || 0,
+            )
+          }
           className={`${fieldClassName} tabular-nums`}
-          placeholder={usaCoeficiente ? 'Ex: 1200' : 'Ex: 12'}
+          placeholder={modoMassa ? 'Ex: 70' : modoCoeficiente != null ? 'Ex: 1200' : 'Ex: 12'}
         />
       </div>
       <button

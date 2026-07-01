@@ -5,6 +5,7 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import { resolverFatorConversaoEntrada } from '@/domain/insumos/insumo-entrada-fator';
 import {
   isPendenciaIgnoravel,
   isPendenciaRestauravel,
@@ -25,6 +26,7 @@ import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepos
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
+import { insumoEntradaFatorRecalcIntegracaoService } from '@/lib/services/insumo-entrada-fator-recalc-integracao-service';
 
 const REVALIDATE_PATHS = ['/estoque-insumos', '/mapeamento-insumos'] as const;
 
@@ -76,6 +78,25 @@ export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPag
     pendenciasCount: pendencias.length,
     ignoradasCount: ignoradas.length,
     vinculos,
+  };
+}
+
+export async function getIntegracaoInsumoPorProdutoOmie(input: {
+  empresaId: string;
+  omieIdProduto: number;
+}) {
+  const integracao = await insumoMapeamentoRepository.findByEmpresaProduto(
+    input.empresaId,
+    input.omieIdProduto,
+  );
+
+  if (!integracao) {
+    return null;
+  }
+
+  return {
+    insumoId: integracao.insumo_id,
+    fatorConversao: Number(integracao.fator_conversao),
   };
 }
 
@@ -159,18 +180,30 @@ export async function resolverInsumoPendencia(
       return { success: false as const, error: 'Pendência já foi tratada' };
     }
 
-    const integracao = await insumoMapeamentoRepository.create({
-      empresaId: pendencia.empresa_id,
-      omieIdProduto: pendencia.omie_id_produto,
-      omieCodigoProduto: pendencia.omie_codigo_produto,
-      insumoId,
+    const integracaoExistente = await insumoMapeamentoRepository.findByEmpresaProduto(
+      pendencia.empresa_id,
+      pendencia.omie_id_produto,
+    );
+
+    const integracao =
+      integracaoExistente ??
+      (await insumoMapeamentoRepository.create({
+        empresaId: pendencia.empresa_id,
+        omieIdProduto: pendencia.omie_id_produto,
+        omieCodigoProduto: pendencia.omie_codigo_produto,
+        insumoId,
+        fatorConversao,
+        descricaoOmie: pendencia.descricao_produto,
+      }));
+
+    const fatorEfetivo = resolverFatorConversaoEntrada(
       fatorConversao,
-      descricaoOmie: pendencia.descricao_produto,
-    });
+      Number(integracao.fator_conversao),
+    );
 
     const quantidadeEntrada = calcularQuantidadeEntrada(
       Number(pendencia.quantidade_nf),
-      fatorConversao,
+      fatorEfetivo,
     );
     const custoUnitario = calcularCustoUnitarioEntrada(
       Number(pendencia.valor_total_item),
@@ -347,10 +380,41 @@ export async function restaurarInsumoPendenciasEmLote(pendenciaIds: string[]) {
   }
 }
 
+export async function previewRecalcEntradasVinculo(
+  integracaoId: string,
+  fatorConversao: number,
+) {
+  try {
+    if (!integracaoId) {
+      return { success: false as const, error: 'Vínculo não informado' };
+    }
+
+    if (fatorConversao <= 0) {
+      return {
+        success: false as const,
+        error: 'Fator de conversão deve ser maior que zero',
+      };
+    }
+
+    const preview = await insumoEntradaFatorRecalcIntegracaoService.previewPorIntegracao(
+      integracaoId,
+      fatorConversao,
+    );
+
+    return { success: true as const, preview };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Erro ao simular recálculo';
+    console.error('Erro ao simular recálculo de entradas:', error);
+    return { success: false as const, error: message };
+  }
+}
+
 export async function atualizarIntegracaoInsumoVinculo(
   integracaoId: string,
   insumoId: string,
   fatorConversao: number,
+  options?: { recalcularEntradasAnteriores?: boolean },
 ) {
   try {
     if (!integracaoId) {
@@ -373,13 +437,26 @@ export async function atualizarIntegracaoInsumoVinculo(
       return { success: false as const, error: 'Vínculo não encontrado' };
     }
 
+    const insumoMudou = integracao.insumo_id !== insumoId;
+    const fatorMudou = Number(integracao.fator_conversao) !== fatorConversao;
+    const recalcular =
+      Boolean(options?.recalcularEntradasAnteriores) && fatorMudou && !insumoMudou;
+
     await insumoMapeamentoRepository.update(integracaoId, {
       insumoId,
       fatorConversao,
     });
 
+    let recalcResult = null;
+    if (recalcular) {
+      recalcResult = await insumoEntradaFatorRecalcIntegracaoService.executarPorIntegracao(
+        integracaoId,
+        fatorConversao,
+      );
+    }
+
     revalidateInsumoPages();
-    return { success: true as const };
+    return { success: true as const, recalcResult };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Erro ao atualizar vínculo';

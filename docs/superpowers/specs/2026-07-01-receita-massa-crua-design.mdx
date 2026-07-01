@@ -1,0 +1,94 @@
+---
+title: Massa crua no cálculo de rendimento da massa
+date: 2026-07-01
+status: aprovado
+---
+
+## Contexto / Problema
+
+O custo por produto usa o rendimento das receitas de `massa` para ratear o custo da
+massa por pão. Hoje o rendimento é calculado dividindo o peso total dos ingredientes
+pela **gramatura assada** do produto:
+
+```
+quantidade_de_paes = peso_total_massa_g / gramatura_assada_g   // ERRADO
+```
+
+Como o pão perde água no forno, a **massa crua** é mais pesada que a gramatura assada
+(ex.: 65 g assado ≈ 70 g de massa crua). Dividir pela gramatura assada superestima o
+número de pães (~7–8%) e, por consequência, subestima o custo por pão da massa.
+
+O correto é dividir pela **massa crua**:
+
+```
+quantidade_de_paes = peso_total_massa_g / massa_crua_g   // CORRETO
+```
+
+## Decisões (confirmadas com o usuário)
+
+1. **Onde guardar os pares** (`gramatura assada → massa crua`): reaproveitar a tabela
+   `receita_gramaturas`, que hoje **não é usada** para o tipo `massa`. Para receitas de
+   massa: `peso_g` = gramatura assada (chave de casamento com o produto);
+   `quantidade_padrao` = massa crua em gramas.
+2. **Produto sem par cadastrado**: **não calcular** a massa desse produto (custo
+   incompleto). Nada de fallback para a gramatura assada. O vínculo é ignorado com
+   motivo "massa crua não cadastrada para {X} g".
+3. **Massa crua** é sempre em **gramas inteiras**.
+4. **Gramatura assada única** por receita (mesma regra dos outros tipos).
+5. **Sem backfill separado**: o próprio save da receita já recalcula os vínculos de
+   massa (`ReceitaMassaVinculosSyncManager.syncByReceitaId`).
+
+## Modelo de dados
+
+Sem migration nova. Reuso de `receita_gramaturas`:
+
+| coluna              | tipos brilho/confeito/... | tipo `massa` (novo)                 |
+|---------------------|---------------------------|-------------------------------------|
+| `peso_g` (int)      | gramatura do produto      | **gramatura assada** (ex.: 65)      |
+| `quantidade_padrao` | quantidade/coeficiente    | **massa crua em g** (ex.: 70)       |
+
+## Mudanças de código
+
+### Domínio
+- `receita-gramatura-resolver.ts`
+  - Incluir `massa` em `RECEITA_TIPOS_COM_GRAMATURA` (via novo grupo, para não
+    entrar nos caminhos de gramatura direta nem de coeficiente).
+  - `receitaTipoUsaGramaturaMassa(tipo)` → `true` só para `massa`.
+  - `resolverMassaCruaGramas(gramaturas, pesoAssado)` → retorna a massa crua do par
+    com `peso_g === pesoAssado`, ou `null`.
+- `receita-massa-calculo.ts`
+  - `calcularQuantidadePorProdutoMassa(ingredientes, massaCruaGramas)` passa a receber
+    a **massa crua** como divisor (nome do parâmetro atualizado; mesma matemática).
+  - Resumo textual passa a citar "massa crua".
+- `receita-produto-quantidade-resolver.ts`
+  - Para `massa`: exige `gramaturas`; resolve `massaCrua` via
+    `resolverMassaCruaGramas(gramaturas, pesoAssado)`; se não houver par, retorna
+    `quantidade: null` com aviso "massa crua não cadastrada para {peso} g".
+- `receita-massa-vinculos-resolver.ts`
+  - Recebe também as `gramaturas` da receita; para cada vínculo, resolve a massa crua
+    pela gramatura assada do produto; sem par → ignora com o motivo padrão.
+- `receita-massa-vinculos-sync-manager.ts`
+  - Carrega `receita_gramaturas` da receita e passa ao resolver.
+
+### Server actions
+- `receitas-actions.ts`
+  - `syncReceitaGramaturas` passa a rodar também para `massa` (remover o ramo
+    `else if (tipoEfetivo === 'massa') → syncReceitaGramaturas([])`).
+  - `ReceitaInput`/`ReceitaModal` enviam `gramaturas` também para `massa`.
+
+### UI
+- `ReceitaGramaturasSection.tsx` + `ReceitaGramaturaRow.tsx`
+  - Novo modo "massa": título "Massa crua por gramatura"; colunas
+    "Gramatura assada (g)" e "Massa crua (g)"; ambos inteiros.
+- `ReceitaModal.tsx`
+  - `receitaTipoUsaGramatura('massa')` agora é `true`, então a seção aparece para massa.
+
+## Testes
+- `receita-massa-calculo.test.ts`: divisor passa a ser massa crua.
+- `receita-gramatura-resolver.test.ts`: `resolverMassaCruaGramas` (match, sem match,
+  peso inválido).
+
+## Impacto / rollout
+- Enquanto os pares não forem cadastrados, produtos de massa ficam sem custo de massa
+  (esperado). O usuário cadastra os pares por receita; ao salvar, os vínculos são
+  recalculados automaticamente.

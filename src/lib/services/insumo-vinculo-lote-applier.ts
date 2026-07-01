@@ -2,6 +2,7 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import { resolverFatorConversaoEntrada } from '@/domain/insumos/insumo-entrada-fator';
 import { isPendenciaIgnoravel, isPendenciaVinculavel } from '@/domain/insumos/insumo-pendencia-acao';
 import type {
   InsumoVinculoLoteItem,
@@ -51,13 +52,18 @@ export class InsumoVinculoLoteApplier {
           });
         }
 
+        const fatorEfetivo = resolverFatorConversaoEntrada(
+          item.fatorConversao,
+          Number(integracao.fator_conversao),
+        );
+
         for (const pendenciaId of item.pendenciaIds) {
           const pendencia = await insumoPendenciaRepository.findById(pendenciaId);
           if (!pendencia || !isPendenciaVinculavel(pendencia.status)) continue;
 
           const quantidadeEntrada = calcularQuantidadeEntrada(
             Number(pendencia.quantidade_nf),
-            item.fatorConversao,
+            fatorEfetivo,
           );
           const custoUnitario = calcularCustoUnitarioEntrada(
             Number(pendencia.valor_total_item),

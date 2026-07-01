@@ -16,6 +16,7 @@ import {
   receitaTipoUsaCalculoCoeficienteGramatura,
   receitaTipoUsaGramaturaConfeito,
   receitaTipoUsaGramaturaDireta,
+  resolverMassaCruaGramas,
   resolverQuantidadePorGramatura,
   type ReceitaGramatura,
   type TipoReceita,
@@ -55,7 +56,16 @@ export function resolverQuantidadeReceitaParaProduto(
         aviso: 'Gramatura do produto não encontrada. Informe o peso no ERP ou no nome (ex.: 65g).',
       };
     }
-    const resultado = calcularQuantidadePorProdutoMassa(input.ingredientes, pesoGramas);
+    const massaCruaGramas = resolverMassaCruaGramas(input.gramaturas ?? [], pesoGramas);
+    if (massaCruaGramas == null) {
+      return {
+        pesoGramas,
+        quantidade: null,
+        resumo: null,
+        aviso: `Massa crua não cadastrada para ${pesoGramas} g nesta receita. Adicione o par gramatura assada → massa crua.`,
+      };
+    }
+    const resultado = calcularQuantidadePorProdutoMassa(input.ingredientes, massaCruaGramas);
     if (!resultado) {
       return {
         pesoGramas,
@@ -67,7 +77,7 @@ export function resolverQuantidadeReceitaParaProduto(
     return {
       pesoGramas,
       quantidade: resultado.quantidade,
-      resumo: formatarResumoCalculoMassa(resultado, pesoGramas),
+      resumo: formatarResumoCalculoMassa(resultado, massaCruaGramas),
       aviso: null,
     };
   }

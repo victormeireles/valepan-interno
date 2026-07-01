@@ -289,8 +289,6 @@ export async function updateReceita(payload: ReceitaUpdateInput): Promise<Receit
 
     if (payload.gramaturas !== undefined && receitaTipoUsaGramatura(tipoEfetivo)) {
       await syncReceitaGramaturas(payload.id, payload.gramaturas);
-    } else if (tipoEfetivo === 'massa') {
-      await syncReceitaGramaturas(payload.id, []);
     }
 
     let vinculosMassa: ReceitaMassaVinculoSyncResult | undefined;

@@ -3,6 +3,7 @@ import {
   type VinculoMassaParaSync,
 } from '@/domain/receitas/receita-massa-vinculos-resolver';
 import type { ReceitaMassaIngrediente } from '@/domain/receitas/receita-massa-calculo';
+import type { ReceitaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 export type { VinculoMassaParaSync } from '@/domain/receitas/receita-massa-vinculos-resolver';
@@ -47,9 +48,21 @@ type ReceitaMassaRow = {
   nome: string;
 };
 
+type GramaturaDbRow = {
+  peso_g: number;
+  quantidade_padrao: number;
+};
+
 function unwrapJoin<T>(value: T | T[] | null): T | null {
   if (value == null) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function mapGramaturasDb(rows: GramaturaDbRow[]): ReceitaGramatura[] {
+  return rows.map((row) => ({
+    pesoG: row.peso_g,
+    quantidade: Number(row.quantidade_padrao),
+  }));
 }
 
 function mapIngredientesDb(rows: IngredienteDbRow[]): ReceitaMassaIngrediente[] {
@@ -132,11 +145,14 @@ export class ReceitaMassaVinculosSyncManager {
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const receitaNome = options.receitaNome ?? receitaId;
 
-    const [{ data: ingredientesRows, error: ingredientesError }, { data: vinculosRows, error: vinculosError }] =
-      await Promise.all([
-        supabase
-          .from('receita_ingredientes')
-          .select(`
+    const [
+      { data: ingredientesRows, error: ingredientesError },
+      { data: vinculosRows, error: vinculosError },
+      { data: gramaturasRows, error: gramaturasError },
+    ] = await Promise.all([
+      supabase
+        .from('receita_ingredientes')
+        .select(`
             quantidade_padrao,
             insumos (
               unidades (
@@ -145,10 +161,10 @@ export class ReceitaMassaVinculosSyncManager {
               )
             )
           `)
-          .eq('receita_id', receitaId),
-        supabase
-          .from('produto_receitas')
-          .select(`
+        .eq('receita_id', receitaId),
+      supabase
+        .from('produto_receitas')
+        .select(`
             id,
             quantidade_por_produto,
             produtos (
@@ -156,15 +172,21 @@ export class ReceitaMassaVinculosSyncManager {
               unit_weight
             )
           `)
-          .eq('receita_id', receitaId)
-          .eq('ativo', true),
-      ]);
+        .eq('receita_id', receitaId)
+        .eq('ativo', true),
+      supabase
+        .from('receita_gramaturas')
+        .select('peso_g, quantidade_padrao')
+        .eq('receita_id', receitaId),
+    ]);
 
     if (ingredientesError) throw ingredientesError;
     if (vinculosError) throw vinculosError;
+    if (gramaturasError) throw gramaturasError;
 
     const ingredientes = mapIngredientesDb((ingredientesRows ?? []) as IngredienteDbRow[]);
     const vinculos = mapVinculosDb((vinculosRows ?? []) as VinculoDbRow[]);
+    const gramaturas = mapGramaturasDb((gramaturasRows ?? []) as GramaturaDbRow[]);
 
     if (vinculos.length === 0) {
       return {
@@ -176,7 +198,11 @@ export class ReceitaMassaVinculosSyncManager {
       };
     }
 
-    const { atualizacoes, ignorados } = resolverAtualizacoesVinculoMassa(ingredientes, vinculos);
+    const { atualizacoes, ignorados } = resolverAtualizacoesVinculoMassa(
+      ingredientes,
+      vinculos,
+      gramaturas,
+    );
     const quantidadeAtualPorVinculo = new Map(
       vinculos.map((item) => [item.vinculoId, item.quantidadeAtual]),
     );

@@ -3,6 +3,10 @@ import {
   calcularQuantidadePorProdutoMassa,
   type ReceitaMassaIngrediente,
 } from '@/domain/receitas/receita-massa-calculo';
+import {
+  resolverMassaCruaGramas,
+  type ReceitaGramatura,
+} from '@/domain/receitas/receita-gramatura-resolver';
 
 export type VinculoMassaParaSync = {
   vinculoId: string;
@@ -13,6 +17,7 @@ export type VinculoMassaParaSync = {
 export function resolverAtualizacoesVinculoMassa(
   ingredientes: ReceitaMassaIngrediente[],
   vinculos: VinculoMassaParaSync[],
+  gramaturas: ReceitaGramatura[] = [],
 ): {
   atualizacoes: Array<{ vinculoId: string; quantidade: number }>;
   ignorados: Array<{ produtoNome: string; motivo: string }>;
@@ -34,7 +39,16 @@ export function resolverAtualizacoesVinculoMassa(
       continue;
     }
 
-    const resultado = calcularQuantidadePorProdutoMassa(ingredientes, pesoGramas);
+    const massaCruaGramas = resolverMassaCruaGramas(gramaturas, pesoGramas);
+    if (massaCruaGramas == null) {
+      ignorados.push({
+        produtoNome: vinculo.produtoNome,
+        motivo: `massa crua não cadastrada para ${pesoGramas} g`,
+      });
+      continue;
+    }
+
+    const resultado = calcularQuantidadePorProdutoMassa(ingredientes, massaCruaGramas);
     if (!resultado) {
       ignorados.push({
         produtoNome: vinculo.produtoNome,

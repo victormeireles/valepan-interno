@@ -48,7 +48,7 @@ describe('calcularPesoTotalMassaKg', () => {
 });
 
 describe('calcularQuantidadePorProdutoMassa', () => {
-  it('calcula pães por receita dividindo peso total pela gramatura', () => {
+  it('calcula pães por receita dividindo peso total pela massa crua', () => {
     const resultado = calcularQuantidadePorProdutoMassa(
       [
         { quantidade: 5, unidade: 'kg' },
@@ -64,16 +64,16 @@ describe('calcularQuantidadePorProdutoMassa', () => {
     });
   });
 
-  it('calcula para pão de 65g', () => {
-    const resultado = calcularQuantidadePorProdutoMassa(
-      [{ quantidade: 6.5, unidade: 'kg' }],
-      65,
-    );
+  it('usa a massa crua (70g) e não a gramatura assada (65g)', () => {
+    const ingredientes = [{ quantidade: 7, unidade: 'kg' }];
 
-    expect(resultado?.quantidade).toBe(100);
+    // 7000 g / 70 g (massa crua) = 100 pães
+    expect(calcularQuantidadePorProdutoMassa(ingredientes, 70)?.quantidade).toBe(100);
+    // Confere que dividir pela gramatura assada (65) daria um número maior (errado)
+    expect(calcularQuantidadePorProdutoMassa(ingredientes, 65)?.quantidade).toBe(108);
   });
 
-  it('retorna null sem gramatura', () => {
+  it('retorna null sem massa crua', () => {
     expect(
       calcularQuantidadePorProdutoMassa([{ quantidade: 10, unidade: 'kg' }], 0),
     ).toBeNull();

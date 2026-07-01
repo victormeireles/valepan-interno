@@ -3,7 +3,10 @@
 import ReceitaGramaturaRow from '@/components/Receitas/ReceitaGramaturaRow';
 import type { ModoCoeficienteGramatura } from '@/domain/receitas/receita-coeficiente-gramatura-calculo';
 import type { TipoReceita } from '@/domain/receitas/receita-gramatura-resolver';
-import { receitaModoCoeficienteGramatura } from '@/domain/receitas/receita-gramatura-resolver';
+import {
+  receitaModoCoeficienteGramatura,
+  receitaTipoUsaGramaturaMassa,
+} from '@/domain/receitas/receita-gramatura-resolver';
 
 export type ReceitaGramaturaFormItem = {
   tempId: string;
@@ -18,7 +21,14 @@ type Props = {
   onChange: (items: ReceitaGramaturaFormItem[]) => void;
 };
 
-function getSectionCopy(modoCoeficiente: ModoCoeficienteGramatura | null) {
+function getSectionCopy(modoCoeficiente: ModoCoeficienteGramatura | null, modoMassa: boolean) {
+  if (modoMassa) {
+    return {
+      titulo: 'Massa crua por gramatura',
+      descricao:
+        'Para cada gramatura assada, informe quantos gramas de massa crua rendem aquele pão (ex.: 65 g assado = 70 g de massa crua). O rendimento da massa passa a dividir pela massa crua. Sem o par cadastrado, o produto fica sem custo de massa.',
+    };
+  }
   if (modoCoeficiente === 'litro') {
     return {
       titulo: 'Rendimento do brilho por gramatura',
@@ -42,7 +52,8 @@ function getSectionCopy(modoCoeficiente: ModoCoeficienteGramatura | null) {
 
 export default function ReceitaGramaturasSection({ tipo, gramaturas, onChange }: Props) {
   const modoCoeficiente = receitaModoCoeficienteGramatura(tipo);
-  const copy = getSectionCopy(modoCoeficiente);
+  const modoMassa = receitaTipoUsaGramaturaMassa(tipo);
+  const copy = getSectionCopy(modoCoeficiente, modoMassa);
 
   const handleAdd = () => {
     const tempId =
@@ -79,6 +90,7 @@ export default function ReceitaGramaturasSection({ tipo, gramaturas, onChange }:
             <ReceitaGramaturaRow
               key={item.tempId}
               modoCoeficiente={modoCoeficiente}
+              modoMassa={modoMassa}
               pesoG={item.pesoG}
               quantidade={item.quantidade}
               onPesoChange={(pesoG) => handleUpdate(item.tempId, { pesoG })}

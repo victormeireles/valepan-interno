@@ -38,7 +38,8 @@ const tipoOptions: Array<{ value: TipoReceita; label: string; helper: string }> 
   {
     value: 'massa',
     label: 'Massa',
-    helper: 'Ao salvar, atualiza automaticamente a quantidade de pães nos produtos vinculados.',
+    helper:
+      'Cadastre a massa crua (g) por gramatura assada. Ao salvar, recalcula a quantidade de pães dos produtos vinculados.',
   },
   {
     value: 'brilho',

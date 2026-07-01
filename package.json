@@ -19,6 +19,8 @@
     "backfill:insumo-recebimentos:periodo:dry": "npx tsx scripts/backfill-insumo-recebimentos-omie.ts --de=01/05/2026 --dry-run",
     "backfill:insumo-pendencias-enriquecimento": "npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts",
     "backfill:insumo-pendencias-enriquecimento:dry": "npx tsx scripts/backfill-insumo-pendencias-enriquecimento-omie.ts --dry-run",
+    "backfill:insumo-entrada-fator": "npx tsx scripts/backfill-insumo-entrada-fator.ts",
+    "backfill:insumo-entrada-fator:dry": "npx tsx scripts/backfill-insumo-entrada-fator.ts --dry-run",
     "migrate:produto-assadeiras-excecoes": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts",
     "migrate:produto-assadeiras-excecoes:dry": "npx tsx scripts/migrate-produto-assadeiras-to-excecoes.ts --dry-run",
     "migrate:tipos-estoque-etiqueta-flags": "npx tsx scripts/migrate-tipos-estoque-etiqueta-flags.ts",

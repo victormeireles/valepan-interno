@@ -7,7 +7,7 @@ import {
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
 import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
-import { getInsumoPendenciasPorProdutoOmie, resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
+import { getInsumoPendenciasPorProdutoOmie, getIntegracaoInsumoPorProdutoOmie, resolverInsumoPendenciaGrupo } from '@/app/actions/insumo-estoque-actions';
 import InsumoVinculoSelectField from '@/features/insumo-estoque/components/InsumoVinculoSelectField';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -16,6 +16,7 @@ import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/Insumo
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
 import { formatInsumoQuantidade } from '@/features/insumo-estoque/utils/formatters';
 import {
+  buildSugestoesFatorConversao,
   formatUnidadeLabel,
   type InsumoSelecionadoResumo,
 } from '@/features/insumo-estoque/utils/insumo-conversao-ui';
@@ -60,13 +61,37 @@ export default function InsumoResolverPendenciaModal({
       setGrupoDetalhado(null);
       setDetalhesLoading(true);
 
-      getInsumoPendenciasPorProdutoOmie({
-        empresaId: grupo.empresaId,
-        omieIdProduto: grupo.omieIdProduto,
-        statuses: pendenciaStatuses,
-      })
-        .then((pendencias) => {
+      Promise.all([
+        getInsumoPendenciasPorProdutoOmie({
+          empresaId: grupo.empresaId,
+          omieIdProduto: grupo.omieIdProduto,
+          statuses: pendenciaStatuses,
+        }),
+        getIntegracaoInsumoPorProdutoOmie({
+          empresaId: grupo.empresaId,
+          omieIdProduto: grupo.omieIdProduto,
+        }),
+      ])
+        .then(([pendencias, integracao]) => {
           setGrupoDetalhado(mesclarPendenciasNoGrupo(grupo, pendencias));
+
+          if (integracao?.fatorConversao) {
+            setFatorConversao(String(integracao.fatorConversao));
+            if (integracao.insumoId) {
+              setInsumoId(integracao.insumoId);
+            }
+            return;
+          }
+
+          const sugestaoPeso = buildSugestoesFatorConversao({
+            descricaoOmie: grupo.descricaoProduto ?? '',
+            unidadeNf: grupo.unidadeNf,
+            unidadeInsumo: null,
+          }).find((item) => item.value > 1);
+
+          if (sugestaoPeso) {
+            setFatorConversao(String(sugestaoPeso.value));
+          }
         })
         .catch(() => {
           setError('Erro ao carregar notas do produto');

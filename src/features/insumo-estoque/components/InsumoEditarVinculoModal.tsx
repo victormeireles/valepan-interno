@@ -2,8 +2,11 @@
 
 import { useEffect, useId, useState } from 'react';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
-import { atualizarIntegracaoInsumoVinculo } from '@/app/actions/insumo-estoque-actions';
+import {
+  atualizarIntegracaoInsumoVinculo,
+} from '@/app/actions/insumo-estoque-actions';
 import InsumoVinculoSelectField from '@/features/insumo-estoque/components/InsumoVinculoSelectField';
+import InsumoVinculoRecalcSection from '@/features/insumo-estoque/components/InsumoVinculoRecalcSection';
 import { Button } from '@/components/ui/Button';
 import InsumoResolverConversaoSection from '@/features/insumo-estoque/components/InsumoResolverConversaoSection';
 import InsumoProdutoOmieHeader from '@/features/insumo-estoque/components/InsumoProdutoOmieHeader';
@@ -34,6 +37,7 @@ export default function InsumoEditarVinculoModal({
   const [insumoId, setInsumoId] = useState('');
   const [insumoSelecionado, setInsumoSelecionado] = useState<InsumoSelecionadoResumo | null>(null);
   const [fatorConversao, setFatorConversao] = useState('1');
+  const [recalcularEntradas, setRecalcularEntradas] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [animating, setAnimating] = useState(false);
@@ -49,6 +53,7 @@ export default function InsumoEditarVinculoModal({
         unidadeNome: vinculo.insumoUnidadeNome ?? '',
       });
       setFatorConversao(String(vinculo.fator_conversao));
+      setRecalcularEntradas(false);
       setError('');
     } else if (!isOpen) {
       const timer = setTimeout(() => setAnimating(false), 200);
@@ -81,14 +86,22 @@ export default function InsumoEditarVinculoModal({
     setError('');
 
     const fator = Number(fatorConversao.replace(',', '.'));
-    const result = await atualizarIntegracaoInsumoVinculo(vinculo.id, insumoId, fator);
+    const result = await atualizarIntegracaoInsumoVinculo(vinculo.id, insumoId, fator, {
+      recalcularEntradasAnteriores: recalcularEntradas,
+    });
     if (!result.success) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
-    onSaved('Vínculo atualizado');
+    const recalc = result.recalcResult;
+    const message =
+      recalc && recalc.movimentosCorrigidos > 0
+        ? `Vínculo atualizado. ${recalc.movimentosCorrigidos} entrada${recalc.movimentosCorrigidos === 1 ? '' : 's'} recalculada${recalc.movimentosCorrigidos === 1 ? '' : 's'}.`
+        : 'Vínculo atualizado';
+
+    onSaved(message);
     onClose();
     setLoading(false);
   };
@@ -163,9 +176,16 @@ export default function InsumoEditarVinculoModal({
               </p>
             </div>
 
-            <p className="text-xs text-stone-500">
-              Alteração vale para próximos recebimentos. Entradas já registradas não mudam.
-            </p>
+            <InsumoVinculoRecalcSection
+              vinculoId={vinculo.id}
+              fatorOriginal={vinculo.fator_conversao}
+              fatorNovo={fatorConversao}
+              insumoOriginalId={vinculo.insumo_id}
+              insumoAtualId={insumoId}
+              recalcular={recalcularEntradas}
+              onRecalcularChange={setRecalcularEntradas}
+              disabled={loading}
+            />
 
             <InsumoVinculoSelectField
               key={vinculo.id}

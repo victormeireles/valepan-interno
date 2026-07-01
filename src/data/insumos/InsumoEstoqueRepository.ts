@@ -137,6 +137,20 @@ export class InsumoEstoqueRepository {
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }
 
+  async listInsumoIdsComMovimentoPendencia(): Promise<string[]> {
+    const { data, error } = await this.db
+      .from('insumo_movimentos')
+      .select('insumo_id')
+      .in('origem', ENTRADA_ORIGENS)
+      .not('pendencia_id', 'is', null);
+
+    if (error) {
+      throw new Error(`Erro ao listar insumos com pendência vinculada: ${error.message}`);
+    }
+
+    return [...new Set((data ?? []).map((row) => row.insumo_id as string))];
+  }
+
   async listMovimentos(insumoId: string, limit = 100): Promise<InsumoMovimentoRecord[]> {
     const { data, error } = await this.db
       .from('insumo_movimentos')
@@ -150,6 +164,43 @@ export class InsumoEstoqueRepository {
     }
 
     return (data as InsumoMovimentoRow[] ?? []).map((row) => this.mapMovimento(row));
+  }
+
+  async listMovimentosCronologicos(insumoId: string): Promise<InsumoMovimentoRow[]> {
+    const { data, error } = await this.db
+      .from('insumo_movimentos')
+      .select('*')
+      .eq('insumo_id', insumoId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar movimentos cronológicos: ${error.message}`);
+    }
+
+    return (data ?? []) as InsumoMovimentoRow[];
+  }
+
+  async updateMovimentoCorrecao(
+    movimentoId: string,
+    input: {
+      deltaQuantidade: number;
+      custoUnitario: number;
+      saldoResultante: number;
+    },
+  ): Promise<void> {
+    const { error } = await this.db
+      .from('insumo_movimentos')
+      .update({
+        delta_quantidade: input.deltaQuantidade,
+        custo_unitario: input.custoUnitario,
+        saldo_resultante: input.saldoResultante,
+      })
+      .eq('id', movimentoId);
+
+    if (error) {
+      throw new Error(`Erro ao corrigir movimento de insumo: ${error.message}`);
+    }
   }
 
   async listEntradasNfSemNumero(): Promise<
