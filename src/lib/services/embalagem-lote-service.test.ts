@@ -71,6 +71,13 @@ vi.mock('@/lib/services/etapa-finalizacao-service', () => ({
   },
 }));
 
+vi.mock('@/lib/services/insumo-consumo-embalagem-service', () => ({
+  insumoConsumoEmbalagemService: {
+    sincronizar: vi.fn().mockResolvedValue({ aplicado: true, avisos: [] }),
+    estornar: vi.fn().mockResolvedValue({ aplicado: true, avisos: [] }),
+  },
+}));
+
 describe('EmbalagemLoteService', () => {
   beforeEach(() => {
     vi.clearAllMocks();

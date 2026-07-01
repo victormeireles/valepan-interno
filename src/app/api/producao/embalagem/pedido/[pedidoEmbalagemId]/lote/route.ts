@@ -123,6 +123,7 @@ export async function POST(
       return NextResponse.json({
         message: 'Lote criado com sucesso',
         loteId: loteRecord.id,
+        insumoConsumo: loteRecord.insumoConsumo,
       });
     } catch (dbError) {
       if (loteId) {

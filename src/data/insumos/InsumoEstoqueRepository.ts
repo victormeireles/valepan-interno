@@ -22,6 +22,11 @@ type SaldoWithInsumo = InsumoSaldoRow & {
 
 const ENTRADA_ORIGENS: InsumoMovimentoOrigem[] = ['entrada_nf', 'resolucao_pendencia'];
 
+export type InsumoMovimentoLoteColuna =
+  | 'fermentacao_lote_id'
+  | 'forno_lote_id'
+  | 'embalagem_lote_id';
+
 export class InsumoEstoqueRepository {
   constructor(
     private readonly supabase: SupabaseClient<Database> = supabaseClientFactory.createServiceRoleClient(),
@@ -84,6 +89,8 @@ export class InsumoEstoqueRepository {
         numero_nf: input.numeroNf ?? null,
         observacao: input.observacao ?? null,
         fermentacao_lote_id: input.fermentacaoLoteId ?? null,
+        forno_lote_id: input.fornoLoteId ?? null,
+        embalagem_lote_id: input.embalagemLoteId ?? null,
       })
       .select()
       .single();
@@ -202,13 +209,14 @@ export class InsumoEstoqueRepository {
     return data !== null;
   }
 
-  async sumDeltaByFermentacaoLoteInsumo(
-    fermentacaoLoteId: string,
+  async sumDeltaByLoteInsumo(
+    coluna: InsumoMovimentoLoteColuna,
+    loteId: string,
   ): Promise<Map<string, number>> {
     const { data, error } = await this.db
       .from('insumo_movimentos')
       .select('insumo_id, delta_quantidade')
-      .eq('fermentacao_lote_id', fermentacaoLoteId);
+      .eq(coluna, loteId);
 
     if (error) {
       throw new Error(`Erro ao agregar movimentos do lote: ${error.message}`);
@@ -222,15 +230,25 @@ export class InsumoEstoqueRepository {
     return map;
   }
 
-  async clearFermentacaoLoteId(fermentacaoLoteId: string): Promise<void> {
+  async clearLoteId(coluna: InsumoMovimentoLoteColuna, loteId: string): Promise<void> {
     const { error } = await this.db
       .from('insumo_movimentos')
-      .update({ fermentacao_lote_id: null })
-      .eq('fermentacao_lote_id', fermentacaoLoteId);
+      .update({ [coluna]: null })
+      .eq(coluna, loteId);
 
     if (error) {
       throw new Error(`Erro ao limpar vínculo do lote: ${error.message}`);
     }
+  }
+
+  async sumDeltaByFermentacaoLoteInsumo(
+    fermentacaoLoteId: string,
+  ): Promise<Map<string, number>> {
+    return this.sumDeltaByLoteInsumo('fermentacao_lote_id', fermentacaoLoteId);
+  }
+
+  async clearFermentacaoLoteId(fermentacaoLoteId: string): Promise<void> {
+    return this.clearLoteId('fermentacao_lote_id', fermentacaoLoteId);
   }
 
   async updateInsumoCustoUnitario(insumoId: string, custoUnitario: number): Promise<void> {

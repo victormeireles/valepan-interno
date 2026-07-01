@@ -71,7 +71,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 });
     }
 
-    await fornoLoteService.atualizarLote(loteId, {
+    const { insumoConsumo } = await fornoLoteService.atualizarLote(loteId, {
       quantidade: { assadeiras: loteAssadeiras, unidades: loteUnidades },
       fotos: {
         fotoUrl: fotoUrl || undefined,
@@ -102,7 +102,7 @@ export async function PUT(
 
     revalidatePath('/api/painel/forno');
 
-    return NextResponse.json({ message: 'Lote atualizado com sucesso' });
+    return NextResponse.json({ message: 'Lote atualizado com sucesso', insumoConsumo });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -119,11 +119,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'ID do lote inválido' }, { status: 400 });
     }
 
-    await fornoLoteService.excluirLote(loteId);
+    const insumoConsumo = await fornoLoteService.excluirLote(loteId);
 
     revalidatePath('/api/painel/forno');
 
-    return NextResponse.json({ message: 'Lote excluído com sucesso' });
+    return NextResponse.json({ message: 'Lote excluído com sucesso', insumoConsumo });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -8,11 +8,13 @@ import type {
   EmbalagemLoteInsert,
   EmbalagemLoteRecord,
 } from '@/domain/types/embalagem-lote';
+import type { InsumoConsumoResultado } from '@/domain/types/insumo-estoque';
 import type { Quantidade } from '@/domain/types/inventario';
 import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import { EstoqueResolverError } from '@/lib/services/estoque-resolver-service';
 import { etapaFinalizacaoService } from '@/lib/services/etapa-finalizacao-service';
 import { estoqueService } from '@/lib/services/estoque-service';
+import { insumoConsumoEmbalagemService } from '@/lib/services/insumo-consumo-embalagem-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
@@ -30,6 +32,10 @@ export type CriarLotePorPedidoInput = {
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
   continuaProduzindo?: boolean;
+};
+
+export type EmbalagemLoteComConsumo = EmbalagemLoteRecord & {
+  insumoConsumo: InsumoConsumoResultado;
 };
 
 async function totalProduzidoScalarEmbalagem(pedidoId: string): Promise<number> {
@@ -57,6 +63,23 @@ function validarQuantidadePositiva(q: Quantidade): void {
   }
 }
 
+async function sincronizarConsumoInsumos(
+  operacao: () => Promise<InsumoConsumoResultado>,
+): Promise<InsumoConsumoResultado> {
+  try {
+    return await operacao();
+  } catch (error) {
+    return {
+      aplicado: false,
+      avisos: [
+        error instanceof Error
+          ? `Estoque de insumos não atualizado: ${error.message}`
+          : 'Estoque de insumos não atualizado',
+      ],
+    };
+  }
+}
+
 export class EmbalagemLoteService {
   async criarLote(input: EmbalagemLoteInsert): Promise<EmbalagemLoteRecord> {
     return embalagemLoteRepository.insert(input);
@@ -64,7 +87,7 @@ export class EmbalagemLoteService {
 
   async criarLotePorPedidoEmbalagem(
     input: CriarLotePorPedidoInput,
-  ): Promise<EmbalagemLoteRecord> {
+  ): Promise<EmbalagemLoteComConsumo> {
     const pedido = await pedidoEmbalagemRepository.findById(input.pedidoEmbalagemId);
     if (!pedido) {
       throw new Error('Pedido de embalagem não encontrado');
@@ -100,7 +123,11 @@ export class EmbalagemLoteService {
 
     await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);
 
-    return lote;
+    const insumoConsumo = await sincronizarConsumoInsumos(() =>
+      insumoConsumoEmbalagemService.sincronizar(lote),
+    );
+
+    return { ...lote, insumoConsumo };
   }
 
   async atualizarLote(
@@ -111,7 +138,7 @@ export class EmbalagemLoteService {
       fotos?: EmbalagemLoteFotos;
       continuaProduzindo?: boolean;
     },
-  ): Promise<EmbalagemLoteRecord> {
+  ): Promise<EmbalagemLoteComConsumo> {
     const existing = await embalagemLoteRepository.findById(loteId);
     if (!existing) {
       throw new Error('Lote não encontrado');
@@ -179,7 +206,11 @@ export class EmbalagemLoteService {
 
     await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);
 
-    return updated;
+    const insumoConsumo = await sincronizarConsumoInsumos(() =>
+      insumoConsumoEmbalagemService.sincronizar(updated),
+    );
+
+    return { ...updated, insumoConsumo };
   }
 
   async syncFotosFromLoteId(loteId: string, fotos: EmbalagemLoteFotos): Promise<void> {
@@ -219,6 +250,8 @@ export class EmbalagemLoteService {
         quantidade: { ...q },
       });
     }
+
+    await sincronizarConsumoInsumos(() => insumoConsumoEmbalagemService.estornar(lote));
 
     await estoqueRepository.clearEmbalagemLoteId(loteId);
     await embalagemLoteRepository.deleteById(loteId);

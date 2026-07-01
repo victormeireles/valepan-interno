@@ -27,6 +27,12 @@ vi.mock('@/lib/services/etapa-finalizacao-service', () => ({
     aplicarAposSalvarLote: (...args: unknown[]) => mockAplicarAposSalvarLote(...args),
   },
 }));
+vi.mock('@/lib/services/insumo-consumo-forno-service', () => ({
+  insumoConsumoFornoService: {
+    sincronizar: vi.fn().mockResolvedValue({ aplicado: true, avisos: [] }),
+    estornar: vi.fn().mockResolvedValue({ aplicado: true, avisos: [] }),
+  },
+}));
 
 describe('FornoLoteService', () => {
   beforeEach(() => {
@@ -58,7 +64,7 @@ describe('FornoLoteService', () => {
       quantidade: { assadeiras: 5, unidades: 0 },
     });
 
-    expect(result.id).toBe('l-new');
+    expect(result.lote.id).toBe('l-new');
     expect(mockInsert).toHaveBeenCalled();
   });
 
@@ -68,7 +74,7 @@ describe('FornoLoteService', () => {
       ordemProducaoId: 'o1',
       quantidade: { assadeiras: 2, unidades: 0 },
     });
-    expect(result.id).toBe('l-new');
+    expect(result.lote.id).toBe('l-new');
     expect(mockInsert).toHaveBeenCalled();
   });
 
@@ -89,7 +95,7 @@ describe('FornoLoteService', () => {
       quantidade: { assadeiras: 5, unidades: 0 },
     });
 
-    expect(result.id).toBe('l1');
+    expect(result.lote.id).toBe('l1');
     expect(mockUpdateById).toHaveBeenCalled();
   });
 });

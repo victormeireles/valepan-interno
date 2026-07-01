@@ -131,6 +131,10 @@ export default function ProducaoFornoPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao excluir lote');
+        if (data.insumoConsumo?.avisos?.length) {
+          setMessage(`Aviso: ${data.insumoConsumo.avisos.join(' ')}`);
+          setTimeout(() => setMessage(null), 6000);
+        }
         await refreshOrdensOnly();
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao excluir lote'));
@@ -139,6 +143,14 @@ export default function ProducaoFornoPage() {
       }
     },
     [refreshOrdensOnly, setMessage],
+  );
+
+  const handleInsumoConsumoAviso = useCallback(
+    (avisos: string[]) => {
+      setMessage(`Aviso: ${avisos.join(' ')}`);
+      setTimeout(() => setMessage(null), 6000);
+    },
+    [setMessage],
   );
 
   const handleSaveProducao = useCallback(
@@ -165,9 +177,14 @@ export default function ProducaoFornoPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
-        setMessage('Produção de forno atualizada com sucesso!');
+        if (data.insumoConsumo?.avisos?.length) {
+          setMessage(`Aviso: ${data.insumoConsumo.avisos.join(' ')}`);
+          setTimeout(() => setMessage(null), 6000);
+        } else {
+          setMessage('Produção de forno atualizada com sucesso!');
+          setTimeout(() => setMessage(null), 3000);
+        }
         await refreshOrdensOnly();
-        setTimeout(() => setMessage(null), 3000);
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção de forno'));
       } finally {
@@ -332,6 +349,7 @@ export default function ProducaoFornoPage() {
         onClose={onCloseModal}
         isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
+        onInsumoConsumoAviso={handleInsumoConsumoAviso}
         onSaveSuccess={async () => {
           await refreshOrdensOnly();
         }}

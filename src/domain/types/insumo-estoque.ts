@@ -2,7 +2,9 @@ export type InsumoMovimentoOrigem =
   | 'entrada_nf'
   | 'ajuste_manual'
   | 'resolucao_pendencia'
-  | 'producao_fermentacao';
+  | 'producao_fermentacao'
+  | 'producao_forno'
+  | 'producao_embalagem';
 
 export type InsumoConsumoResultado = {
   aplicado: boolean;

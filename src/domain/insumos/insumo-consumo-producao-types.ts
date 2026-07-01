@@ -2,6 +2,7 @@ import type {
   EtapaQuantidade,
   ModoQuantidadeEtapa,
 } from '@/domain/producao-etapa/etapa-quantidade';
+import type { TipoReceita } from '@/domain/receitas/receita-gramatura-resolver';
 
 export type InsumoReceitaMassaIngrediente = {
   insumoId: string;
@@ -13,6 +14,25 @@ export type InsumoReceitaMassaContexto = {
   quantidadePorProduto: number;
   ingredientes: InsumoReceitaMassaIngrediente[];
   unidadesPorAssadeira: number | null;
+};
+
+/**
+ * Contexto de consumo de insumos por receita/tipo em uma etapa de produção.
+ * `quantidadePorProduto` muda de semântica conforme o tipo:
+ *  - massa/brilho/confeito/antimofo = pães por receita
+ *  - embalagem = pães por pacote
+ *  - caixa = pacotes por caixa
+ */
+export type InsumoReceitaTipoContexto = {
+  tipo: TipoReceita;
+  quantidadePorProduto: number;
+  ingredientes: InsumoReceitaMassaIngrediente[];
+};
+
+export type InsumoReceitaProducaoContexto = {
+  produtoNome: string;
+  unidadesPorAssadeira: number | null;
+  receitas: InsumoReceitaTipoContexto[];
 };
 
 export type InsumoConsumoCalculado = {

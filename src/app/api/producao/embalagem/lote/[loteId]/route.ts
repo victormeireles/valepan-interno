@@ -118,13 +118,15 @@ export async function PUT(
       palletFotoUploadedAt: palletFotoUploadedAt || undefined,
     };
 
+    let insumoConsumo;
     try {
-      await embalagemLoteService.atualizarLote(loteId, {
+      const atualizado = await embalagemLoteService.atualizarLote(loteId, {
         quantidade: { caixas: c, pacotes: p, unidades: u, kg: k },
         obsEmbalagem: obsEmbalagem || '',
         fotos,
         continuaProduzindo: continuaProduzindo ?? true,
       });
+      insumoConsumo = atualizado.insumoConsumo;
     } catch (e) {
       if (e instanceof EstoqueResolverError) {
         return NextResponse.json({ error: e.message }, { status: 400 });
@@ -135,7 +137,7 @@ export async function PUT(
     revalidatePath('/api/painel/embalagem');
     revalidatePath('/api/painel/estoque');
 
-    return NextResponse.json({ message: 'Lote atualizado com sucesso' });
+    return NextResponse.json({ message: 'Lote atualizado com sucesso', insumoConsumo });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

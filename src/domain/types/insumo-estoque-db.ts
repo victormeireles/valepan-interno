@@ -22,6 +22,8 @@ export type InsumoMovimentoRow = {
   numero_nf: string | null;
   observacao: string | null;
   fermentacao_lote_id: string | null;
+  forno_lote_id: string | null;
+  embalagem_lote_id: string | null;
 };
 
 export type IntegracaoInsumoRow = {
@@ -81,6 +83,8 @@ export type RegistrarInsumoMovimentoInput = {
   numeroNf?: string | null;
   observacao?: string | null;
   fermentacaoLoteId?: string | null;
+  fornoLoteId?: string | null;
+  embalagemLoteId?: string | null;
 };
 
 export type CriarIntegracaoInsumoInput = {

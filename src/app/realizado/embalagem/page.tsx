@@ -314,14 +314,27 @@ export default function ProducaoEmbalagemPage() {
 
       setEditingItem(null);
       setProducaoLoading(false);
-      setMessage('Produção atualizada com sucesso!');
+      if (data.insumoConsumo?.avisos?.length) {
+        setMessage(`Aviso: ${data.insumoConsumo.avisos.join(' ')}`);
+        setTimeout(() => setMessage(null), 6000);
+      } else {
+        setMessage('Produção atualizada com sucesso!');
+        setTimeout(() => setMessage(null), 3000);
+      }
       await refreshPainelData();
-      setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       setMessage(getVisibleErrorMessage(err, 'Erro ao salvar produção'));
       setProducaoLoading(false);
     }
   };
+
+  const handleInsumoConsumoAviso = useCallback(
+    (avisos: string[]) => {
+      setMessage(`Aviso: ${avisos.join(' ')}`);
+      setTimeout(() => setMessage(null), 6000);
+    },
+    [setMessage],
+  );
 
   const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
   const toolbarMetrics = useMemo(
@@ -416,6 +429,7 @@ export default function ProducaoEmbalagemPage() {
         }}
         isNewLote={isNewLoteModal}
         onSave={handleSaveProducao}
+        onInsumoConsumoAviso={handleInsumoConsumoAviso}
         onSaveSuccess={refreshPainelData}
         initialData={
           editingItem

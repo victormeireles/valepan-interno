@@ -3,11 +3,7 @@ import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 
 const mockReceitaRepo = { loadContexto: vi.fn() };
-const mockEstoqueRepo = {
-  sumDeltaByFermentacaoLoteInsumo: vi.fn(),
-  clearFermentacaoLoteId: vi.fn(),
-};
-const mockEstoqueService = { aplicarDelta: vi.fn() };
+const mockAplicador = { reconciliar: vi.fn(), estornar: vi.fn() };
 
 const ordem: OrdemProducaoRecord = {
   id: 'ordem-1',
@@ -19,13 +15,10 @@ const ordem: OrdemProducaoRecord = {
   observacao: '',
   assadeiras: 10,
   ordemPlanejamento: 1,
-  quantidade: { unidades: 0, kg: 0 },
+  quantidade: { caixas: 0, pacotes: 0, unidades: 0, kg: 0 },
   createdAt: '',
   updatedAt: '',
-  fermentacaoFinalizada: false,
-  fornoFinalizado: false,
-  embalagemFinalizada: false,
-};
+} as unknown as OrdemProducaoRecord;
 
 const lote: FermentacaoLoteRecord = {
   id: 'lote-1',
@@ -34,24 +27,21 @@ const lote: FermentacaoLoteRecord = {
   assadeiras: 1,
   unidades: 0,
   produzidoEm: '2026-06-30T10:00:00Z',
+  createdAt: '2026-06-30T10:00:00Z',
 };
 
 vi.mock('@/data/insumos/InsumoReceitaMassaRepository', () => ({
   insumoReceitaMassaRepository: mockReceitaRepo,
 }));
-vi.mock('@/data/insumos/InsumoEstoqueRepository', () => ({
-  insumoEstoqueRepository: mockEstoqueRepo,
-}));
-vi.mock('@/lib/services/insumo-estoque-service', () => ({
-  insumoEstoqueService: mockEstoqueService,
+vi.mock('@/lib/services/insumo-consumo-aplicador', () => ({
+  insumoConsumoAplicador: mockAplicador,
 }));
 
 describe('InsumoConsumoProducaoService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockEstoqueRepo.sumDeltaByFermentacaoLoteInsumo.mockResolvedValue(new Map());
-    mockEstoqueRepo.clearFermentacaoLoteId.mockResolvedValue(undefined);
-    mockEstoqueService.aplicarDelta.mockResolvedValue(undefined);
+    mockAplicador.reconciliar.mockResolvedValue(undefined);
+    mockAplicador.estornar.mockResolvedValue(true);
   });
 
   it('sincroniza consumo quando receita existe', async () => {
@@ -65,18 +55,16 @@ describe('InsumoConsumoProducaoService', () => {
     const { InsumoConsumoProducaoService } = await import('./insumo-consumo-producao-service');
     const service = new InsumoConsumoProducaoService(
       mockReceitaRepo as never,
-      mockEstoqueRepo as never,
-      mockEstoqueService as never,
+      mockAplicador as never,
     );
 
     const result = await service.sincronizarFermentacaoLote(lote, ordem);
     expect(result.aplicado).toBe(true);
-    expect(mockEstoqueService.aplicarDelta).toHaveBeenCalledWith(
+    expect(mockAplicador.reconciliar).toHaveBeenCalledWith(
       expect.objectContaining({
-        insumoId: 'farinha',
-        delta: -3,
+        vinculo: { coluna: 'fermentacao_lote_id', loteId: 'lote-1' },
         origem: 'producao_fermentacao',
-        fermentacaoLoteId: 'lote-1',
+        consumosAlvo: [{ insumoId: 'farinha', quantidade: 3 }],
       }),
     );
   });
@@ -87,39 +75,29 @@ describe('InsumoConsumoProducaoService', () => {
     const { InsumoConsumoProducaoService } = await import('./insumo-consumo-producao-service');
     const service = new InsumoConsumoProducaoService(
       mockReceitaRepo as never,
-      mockEstoqueRepo as never,
-      mockEstoqueService as never,
+      mockAplicador as never,
     );
 
     const result = await service.sincronizarFermentacaoLote(lote, ordem);
     expect(result.aplicado).toBe(false);
     expect(result.avisos[0]).toContain('sem receita de massa');
-    expect(mockEstoqueService.aplicarDelta).not.toHaveBeenCalled();
+    expect(mockAplicador.reconciliar).not.toHaveBeenCalled();
   });
 
   it('estorna movimentos ao excluir lote', async () => {
-    mockEstoqueRepo.sumDeltaByFermentacaoLoteInsumo.mockResolvedValue(
-      new Map([['farinha', -3]]),
-    );
-    mockReceitaRepo.loadContexto.mockResolvedValue({
-      produtoNome: 'HB 65g',
-      quantidadePorProduto: 100,
-      unidadesPorAssadeira: 30,
-      ingredientes: [],
-    });
-
     const { InsumoConsumoProducaoService } = await import('./insumo-consumo-producao-service');
     const service = new InsumoConsumoProducaoService(
       mockReceitaRepo as never,
-      mockEstoqueRepo as never,
-      mockEstoqueService as never,
+      mockAplicador as never,
     );
 
-    const result = await service.estornarFermentacaoLote(lote, ordem);
+    const result = await service.estornarFermentacaoLote(lote);
     expect(result.aplicado).toBe(true);
-    expect(mockEstoqueService.aplicarDelta).toHaveBeenCalledWith(
-      expect.objectContaining({ insumoId: 'farinha', delta: 3 }),
+    expect(mockAplicador.estornar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vinculo: { coluna: 'fermentacao_lote_id', loteId: 'lote-1' },
+        origem: 'producao_fermentacao',
+      }),
     );
-    expect(mockEstoqueRepo.clearFermentacaoLoteId).toHaveBeenCalledWith('lote-1');
   });
 });

@@ -2,30 +2,27 @@ import {
   insumoReceitaMassaRepository,
   InsumoReceitaMassaRepository,
 } from '@/data/insumos/InsumoReceitaMassaRepository';
-import {
-  insumoEstoqueRepository,
-  InsumoEstoqueRepository,
-} from '@/data/insumos/InsumoEstoqueRepository';
 import { calcularConsumoInsumosProducao } from '@/domain/insumos/insumo-consumo-producao-calculator';
 import { formatarObservacaoConsumoFermentacao } from '@/domain/insumos/insumo-consumo-observacao';
-import type { InsumoConsumoCalculado } from '@/domain/insumos/insumo-consumo-producao-types';
 import { resolveModoQuantidadeEtapa } from '@/domain/producao-etapa/etapa-quantidade';
 import type { InsumoConsumoResultado } from '@/domain/types/insumo-estoque';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import {
-  insumoEstoqueService,
-  InsumoEstoqueService,
-} from '@/lib/services/insumo-estoque-service';
+  insumoConsumoAplicador,
+  InsumoConsumoAplicador,
+} from '@/lib/services/insumo-consumo-aplicador';
+
+const COLUNA = 'fermentacao_lote_id' as const;
+const ORIGEM = 'producao_fermentacao' as const;
 
 export class InsumoConsumoProducaoService {
   constructor(
     private readonly receitaRepository: InsumoReceitaMassaRepository = insumoReceitaMassaRepository,
-    private readonly estoqueRepository: InsumoEstoqueRepository = insumoEstoqueRepository,
-    private readonly estoqueService: InsumoEstoqueService = insumoEstoqueService,
+    private readonly aplicador: InsumoConsumoAplicador = insumoConsumoAplicador,
   ) {}
 
-  async sincronizarFermentacaoLote(
+  private async aplicarLote(
     lote: FermentacaoLoteRecord,
     ordem: OrdemProducaoRecord,
   ): Promise<InsumoConsumoResultado> {
@@ -46,10 +43,7 @@ export class InsumoConsumoProducaoService {
       });
 
       if (!calculo.ok) {
-        return {
-          aplicado: false,
-          avisos: [`Estoque não atualizado: ${calculo.motivo}`],
-        };
+        return { aplicado: false, avisos: [`Estoque não atualizado: ${calculo.motivo}`] };
       }
 
       const observacao = formatarObservacaoConsumoFermentacao({
@@ -60,7 +54,13 @@ export class InsumoConsumoProducaoService {
         loteId: lote.id,
       });
 
-      await this.aplicarConsumos(lote.id, calculo.consumos, observacao);
+      await this.aplicador.reconciliar({
+        vinculo: { coluna: COLUNA, loteId: lote.id },
+        origem: ORIGEM,
+        consumosAlvo: calculo.consumos,
+        observacao,
+      });
+
       return { aplicado: true, avisos: [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido';
@@ -71,95 +71,30 @@ export class InsumoConsumoProducaoService {
     }
   }
 
+  async sincronizarFermentacaoLote(
+    lote: FermentacaoLoteRecord,
+    ordem: OrdemProducaoRecord,
+  ): Promise<InsumoConsumoResultado> {
+    return this.aplicarLote(lote, ordem);
+  }
+
   async ajustarFermentacaoLote(
-    loteAntes: FermentacaoLoteRecord,
+    _loteAntes: FermentacaoLoteRecord,
     loteDepois: FermentacaoLoteRecord,
     ordem: OrdemProducaoRecord,
   ): Promise<InsumoConsumoResultado> {
-    try {
-      const contexto = await this.receitaRepository.loadContexto(ordem);
-      if (!contexto) {
-        return {
-          aplicado: false,
-          avisos: ['Estoque não atualizado: produto sem receita de massa vinculada'],
-        };
-      }
-
-      const modo = resolveModoQuantidadeEtapa(ordem.assadeiraId);
-      const calculo = calcularConsumoInsumosProducao({
-        lote: { assadeiras: loteDepois.assadeiras, unidades: loteDepois.unidades },
-        modo,
-        contexto,
-      });
-
-      if (!calculo.ok) {
-        return {
-          aplicado: false,
-          avisos: [`Estoque não atualizado: ${calculo.motivo}`],
-        };
-      }
-
-      const observacao = formatarObservacaoConsumoFermentacao({
-        produtoNome: contexto.produtoNome,
-        modo,
-        lote: { assadeiras: loteDepois.assadeiras, unidades: loteDepois.unidades },
-        unidadesPorAssadeira: contexto.unidadesPorAssadeira,
-        loteId: loteDepois.id,
-      });
-
-      await this.aplicarConsumos(loteDepois.id, calculo.consumos, observacao);
-
-      if (
-        loteAntes.assadeiras === loteDepois.assadeiras &&
-        loteAntes.unidades === loteDepois.unidades
-      ) {
-        return { aplicado: true, avisos: [] };
-      }
-
-      return { aplicado: true, avisos: [] };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'erro desconhecido';
-      return {
-        aplicado: false,
-        avisos: [`Estoque de insumos não atualizado: ${message}`],
-      };
-    }
+    return this.aplicarLote(loteDepois, ordem);
   }
 
   async estornarFermentacaoLote(
     lote: FermentacaoLoteRecord,
-    ordem: OrdemProducaoRecord,
   ): Promise<InsumoConsumoResultado> {
     try {
-      const deltas = await this.estoqueRepository.sumDeltaByFermentacaoLoteInsumo(lote.id);
-      if (deltas.size === 0) {
-        return { aplicado: true, avisos: [] };
-      }
-
-      const contexto = await this.receitaRepository.loadContexto(ordem);
-      const modo = resolveModoQuantidadeEtapa(ordem.assadeiraId);
-      const observacaoBase = contexto
-        ? `Estorno — ${formatarObservacaoConsumoFermentacao({
-            produtoNome: contexto.produtoNome,
-            modo,
-            lote: { assadeiras: lote.assadeiras, unidades: lote.unidades },
-            unidadesPorAssadeira: contexto.unidadesPorAssadeira,
-            loteId: lote.id,
-          })}`
-        : `Estorno — lote fermentação ${lote.id.slice(0, 8)}`;
-
-      for (const [insumoId, deltaTotal] of deltas) {
-        if (deltaTotal >= 0) continue;
-        await this.estoqueService.aplicarDelta({
-          insumoId,
-          delta: -deltaTotal,
-          origem: 'producao_fermentacao',
-          fermentacaoLoteId: lote.id,
-          observacao: observacaoBase,
-        });
-      }
-
-      await this.estoqueRepository.clearFermentacaoLoteId(lote.id);
+      await this.aplicador.estornar({
+        vinculo: { coluna: COLUNA, loteId: lote.id },
+        origem: ORIGEM,
+        observacao: `Estorno — produção fermentação lote ${lote.id.slice(0, 8)}`,
+      });
       return { aplicado: true, avisos: [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido';
@@ -167,32 +102,6 @@ export class InsumoConsumoProducaoService {
         aplicado: false,
         avisos: [`Estorno de insumos não concluído: ${message}`],
       };
-    }
-  }
-
-  private async aplicarConsumos(
-    fermentacaoLoteId: string,
-    consumosAlvo: InsumoConsumoCalculado[],
-    observacao: string,
-  ): Promise<void> {
-    const deltasAtuais =
-      await this.estoqueRepository.sumDeltaByFermentacaoLoteInsumo(fermentacaoLoteId);
-    const alvoMap = new Map(consumosAlvo.map((c) => [c.insumoId, c.quantidade]));
-    const insumoIds = new Set([...deltasAtuais.keys(), ...alvoMap.keys()]);
-
-    for (const insumoId of insumoIds) {
-      const consumoAlvo = alvoMap.get(insumoId) ?? 0;
-      const deltaJaRegistrado = deltasAtuais.get(insumoId) ?? 0;
-      const deltaNecessario = -consumoAlvo - deltaJaRegistrado;
-      if (deltaNecessario === 0) continue;
-
-      await this.estoqueService.aplicarDelta({
-        insumoId,
-        delta: deltaNecessario,
-        origem: 'producao_fermentacao',
-        fermentacaoLoteId,
-        observacao,
-      });
     }
   }
 }

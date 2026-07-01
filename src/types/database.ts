@@ -1900,8 +1900,10 @@ export type Database = {
           created_at: string
           custo_unitario: number
           delta_quantidade: number
+          embalagem_lote_id: string | null
           empresa_id: string | null
           fermentacao_lote_id: string | null
+          forno_lote_id: string | null
           id: string
           insumo_id: string
           numero_nf: string | null
@@ -1917,8 +1919,10 @@ export type Database = {
           created_at?: string
           custo_unitario?: number
           delta_quantidade: number
+          embalagem_lote_id?: string | null
           empresa_id?: string | null
           fermentacao_lote_id?: string | null
+          forno_lote_id?: string | null
           id?: string
           insumo_id: string
           numero_nf?: string | null
@@ -1934,8 +1938,10 @@ export type Database = {
           created_at?: string
           custo_unitario?: number
           delta_quantidade?: number
+          embalagem_lote_id?: string | null
           empresa_id?: string | null
           fermentacao_lote_id?: string | null
+          forno_lote_id?: string | null
           id?: string
           insumo_id?: string
           numero_nf?: string | null
@@ -1949,6 +1955,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "insumo_movimentos_embalagem_lote_id_fkey"
+            columns: ["embalagem_lote_id"]
+            isOneToOne: false
+            referencedRelation: "embalagem_lotes"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "insumo_movimentos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
@@ -1960,6 +1973,13 @@ export type Database = {
             columns: ["fermentacao_lote_id"]
             isOneToOne: false
             referencedRelation: "fermentacao_lotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_movimentos_forno_lote_id_fkey"
+            columns: ["forno_lote_id"]
+            isOneToOne: false
+            referencedRelation: "forno_lotes"
             referencedColumns: ["id"]
           },
           {
@@ -4358,6 +4378,8 @@ export type Database = {
         | "ajuste_manual"
         | "resolucao_pendencia"
         | "producao_fermentacao"
+        | "producao_forno"
+        | "producao_embalagem"
       insumo_pendencia_status: "pendente" | "resolvido" | "ignorado"
       producao_lote_modo: "parcial" | "substituicao"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
@@ -4540,6 +4562,8 @@ export const Constants = {
         "ajuste_manual",
         "resolucao_pendencia",
         "producao_fermentacao",
+        "producao_forno",
+        "producao_embalagem",
       ],
       insumo_pendencia_status: ["pendente", "resolvido", "ignorado"],
       producao_lote_modo: ["parcial", "substituicao"],

@@ -25,6 +25,8 @@ type AplicarDeltaInput = {
   delta: number;
   origem: InsumoMovimentoOrigem;
   fermentacaoLoteId?: string | null;
+  fornoLoteId?: string | null;
+  embalagemLoteId?: string | null;
   observacao?: string | null;
 };
 
@@ -124,6 +126,8 @@ export class InsumoEstoqueService {
       custoUnitario: custoAtual,
       origem: input.origem,
       fermentacaoLoteId: input.fermentacaoLoteId ?? null,
+      fornoLoteId: input.fornoLoteId ?? null,
+      embalagemLoteId: input.embalagemLoteId ?? null,
       observacao: input.observacao ?? null,
     });
   }
