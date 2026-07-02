@@ -1,0 +1,798 @@
+# Custo tri-state em insumos — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Distinguir custo pendente (`null`), sem custo intencional (`0`) e custo definido (`> 0`) no cadastro de insumos, com badges nas listas e nas receitas.
+
+**Architecture:** Migration torna `insumos.custo_unitario` nullable (default `null`). Módulo de domínio centraliza a semântica tri-state. Dois componentes UI (`InsumoCustoSegmentControl`, `InsumoCustoBadge`) reutilizam `Chip` e `Badge` existentes. Server actions validam transições; Omie continua atualizando custo sem checar estado.
+
+**Tech Stack:** Next.js 15 App Router, React 19, Supabase, Vitest, Tailwind v4, componentes `Chip`/`Badge` em `src/components/ui/`.
+
+**Spec:** `docs/superpowers/specs/2026-07-02-insumo-custo-tristate-design.mdx`
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260702100000_insumo_custo_unitario_nullable.sql` | `DROP NOT NULL`, `DEFAULT null` |
+| `src/domain/insumos/insumo-custo-estado.ts` | Resolve estado, converte form → DB |
+| `src/domain/insumos/insumo-custo-estado.test.ts` | Testes unitários do domínio |
+| `src/components/Insumos/InsumoCustoSegmentControl.tsx` | 3 chips no modal |
+| `src/components/Insumos/InsumoCustoBadge.tsx` | Badge reutilizável (tabela, receitas) |
+| `src/app/actions/insumos-actions.ts` | Tipos `number \| null`, validação |
+| `src/components/Insumos/InsumoModal.tsx` | Integrar segment control |
+| `src/components/Insumos/InsumosConfigTable.tsx` | Badge na coluna custo |
+| `src/components/Insumos/InsumosConfigMobileList.tsx` | Badge na lista mobile |
+| `src/features/insumo-estoque/components/InsumoCriarInlinePanel.tsx` | Default `null` |
+| `src/components/Receitas/receita-ingrediente-format.ts` | `calcularCustoTotal` tri-state |
+| `src/domain/receitas/receita-ingrediente-format.test.ts` | Testes do helper |
+| `src/components/Receitas/ReceitaIngredienteRow.tsx` | Chips de custo no ingrediente |
+| `src/domain/receitas/receita-insumo-catalogo.ts` | Preservar `null` no catálogo |
+| `src/data/insumos/InsumoEstoqueRepository.ts` | `findInsumoCustoUnitario` retorna `number \| null` |
+| `types/database.ts` | Regenerar após migration (`npm run gen:types`) |
+
+**Sem mudança de comportamento:** `InsumoEstoqueService.registrarEntrada` — continua chamando `updateInsumoCustoUnitario` sempre (spec decisão A).
+
+---
+
+### Task 1: Migration — `custo_unitario` nullable
+
+**Files:**
+- Create: `supabase/migrations/20260702100000_insumo_custo_unitario_nullable.sql`
+
+- [ ] **Step 1: Criar migration**
+
+```sql
+-- Custo tri-state: null = pendente, 0 = sem custo, > 0 = definido
+-- Estratégia C: registros existentes com 0 permanecem 0
+
+ALTER TABLE insumos
+  ALTER COLUMN custo_unitario DROP NOT NULL,
+  ALTER COLUMN custo_unitario SET DEFAULT null;
+
+COMMENT ON COLUMN insumos.custo_unitario IS
+  'null = custo pendente; 0 = sem custo intencional; > 0 = custo definido';
+```
+
+- [ ] **Step 2: Aplicar migration no Supabase** (projeto remoto ou local)
+
+```bash
+supabase db push
+```
+
+Expected: migration aplicada sem erro.
+
+- [ ] **Step 3: Regenerar tipos TypeScript**
+
+```bash
+npm run gen:types
+```
+
+Expected: em `types/database.ts`, `insumos.Row.custo_unitario` vira `number | null`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260702100000_insumo_custo_unitario_nullable.sql types/database.ts src/types/database.ts
+git commit -m "feat(insumos): tornar custo_unitario nullable com default null"
+```
+
+---
+
+### Task 2: Domínio — `insumo-custo-estado`
+
+**Files:**
+- Create: `src/domain/insumos/insumo-custo-estado.ts`
+- Create: `src/domain/insumos/insumo-custo-estado.test.ts`
+
+- [ ] **Step 1: Escrever testes (falham)**
+
+```typescript
+// src/domain/insumos/insumo-custo-estado.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  custoUnitarioFromForm,
+  estadoInicialFromCusto,
+  resolveInsumoCustoEstado,
+} from './insumo-custo-estado';
+
+describe('resolveInsumoCustoEstado', () => {
+  it('null ou undefined → pendente', () => {
+    expect(resolveInsumoCustoEstado(null)).toBe('pendente');
+    expect(resolveInsumoCustoEstado(undefined)).toBe('pendente');
+  });
+
+  it('0 → sem_custo', () => {
+    expect(resolveInsumoCustoEstado(0)).toBe('sem_custo');
+  });
+
+  it('> 0 → com_custo', () => {
+    expect(resolveInsumoCustoEstado(3.5)).toBe('com_custo');
+  });
+});
+
+describe('custoUnitarioFromForm', () => {
+  it('pendente → null', () => {
+    expect(custoUnitarioFromForm('pendente', 99)).toBeNull();
+  });
+
+  it('sem_custo → 0', () => {
+    expect(custoUnitarioFromForm('sem_custo', null)).toBe(0);
+  });
+
+  it('com_custo → valor digitado', () => {
+    expect(custoUnitarioFromForm('com_custo', 12.5)).toBe(12.5);
+  });
+
+  it('com_custo sem valor → null (validação na action)', () => {
+    expect(custoUnitarioFromForm('com_custo', null)).toBeNull();
+    expect(custoUnitarioFromForm('com_custo', 0)).toBeNull();
+  });
+});
+
+describe('estadoInicialFromCusto', () => {
+  it('espelha resolveInsumoCustoEstado', () => {
+    expect(estadoInicialFromCusto(null)).toBe('pendente');
+    expect(estadoInicialFromCusto(0)).toBe('sem_custo');
+    expect(estadoInicialFromCusto(10)).toBe('com_custo');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes — devem falhar**
+
+```bash
+npm test -- src/domain/insumos/insumo-custo-estado.test.ts
+```
+
+Expected: FAIL — módulo não encontrado.
+
+- [ ] **Step 3: Implementar módulo**
+
+```typescript
+// src/domain/insumos/insumo-custo-estado.ts
+export type InsumoCustoEstado = 'pendente' | 'sem_custo' | 'com_custo';
+
+export function resolveInsumoCustoEstado(
+  custoUnitario: number | null | undefined,
+): InsumoCustoEstado {
+  if (custoUnitario == null) return 'pendente';
+  if (custoUnitario === 0) return 'sem_custo';
+  return 'com_custo';
+}
+
+export function custoUnitarioFromForm(
+  estado: InsumoCustoEstado,
+  valorDigitado: number | null | undefined,
+): number | null {
+  if (estado === 'pendente') return null;
+  if (estado === 'sem_custo') return 0;
+  if (valorDigitado == null || valorDigitado <= 0) return null;
+  return valorDigitado;
+}
+
+export function estadoInicialFromCusto(
+  custoUnitario: number | null | undefined,
+): InsumoCustoEstado {
+  return resolveInsumoCustoEstado(custoUnitario);
+}
+```
+
+- [ ] **Step 4: Rodar testes — devem passar**
+
+```bash
+npm test -- src/domain/insumos/insumo-custo-estado.test.ts
+```
+
+Expected: PASS (3 suites).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-custo-estado.ts src/domain/insumos/insumo-custo-estado.test.ts
+git commit -m "feat(insumos): adicionar domínio de custo tri-state"
+```
+
+---
+
+### Task 3: Server actions — tipos e validação
+
+**Files:**
+- Modify: `src/app/actions/insumos-actions.ts`
+
+- [ ] **Step 1: Atualizar interface `Insumo` e params**
+
+```typescript
+// src/app/actions/insumos-actions.ts — alterações principais
+export interface Insumo {
+  // ...
+  custo_unitario: number | null;
+  // ...
+}
+
+interface CreateInsumoParams {
+  nome: string;
+  custo_unitario: number | null;
+  unidade_id: string;
+  ativo?: boolean;
+}
+
+interface UpdateInsumoParams {
+  id: string;
+  nome?: string;
+  custo_unitario?: number | null;
+  // ...
+}
+```
+
+- [ ] **Step 2: Ajustar validação em `createInsumo`**
+
+Substituir bloco de validação de custo:
+
+```typescript
+if (params.custo_unitario != null && params.custo_unitario < 0) {
+  return { success: false, error: 'Custo unitário não pode ser negativo' };
+}
+
+if (params.custo_unitario != null && params.custo_unitario > 0 && params.custo_unitario === 0) {
+  // redundante — remover se existir
+}
+
+// Inserir: custo_unitario aceita null, 0 ou > 0
+// Rejeitar apenas: negativo, ou valor entre 0 exclusivo (ex.: não há — 0 é válido)
+```
+
+Regra final na action:
+- `null` → OK (pendente)
+- `0` → OK (sem custo)
+- `> 0` → OK
+- `< 0` → erro
+- Não há valor "inválido" entre null e 0 além de negativo.
+
+- [ ] **Step 3: Mesma validação em `updateInsumo`**
+
+```typescript
+if (params.custo_unitario !== undefined) {
+  if (params.custo_unitario != null && params.custo_unitario < 0) {
+    return { success: false, error: 'Custo unitário não pode ser negativo' };
+  }
+  updateData.custo_unitario = params.custo_unitario;
+}
+```
+
+- [ ] **Step 4: Verificar build de tipos**
+
+```bash
+npm run build
+```
+
+Expected: sem erros de tipo em arquivos que usam `Insumo` (podem aparecer em cascata — corrigir nas tasks seguintes).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/actions/insumos-actions.ts
+git commit -m "feat(insumos): aceitar custo_unitario nullable nas actions"
+```
+
+---
+
+### Task 4: Componentes UI — Badge e SegmentControl
+
+**Files:**
+- Create: `src/components/Insumos/InsumoCustoBadge.tsx`
+- Create: `src/components/Insumos/InsumoCustoSegmentControl.tsx`
+
+- [ ] **Step 1: Criar `InsumoCustoBadge.tsx`**
+
+```tsx
+'use client';
+
+import { Badge } from '@/components/ui/Badge';
+import { resolveInsumoCustoEstado } from '@/domain/insumos/insumo-custo-estado';
+
+type Props = {
+  custoUnitario: number | null | undefined;
+  className?: string;
+};
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+export default function InsumoCustoBadge({ custoUnitario, className = '' }: Props) {
+  const estado = resolveInsumoCustoEstado(custoUnitario);
+
+  if (estado === 'pendente') {
+    return (
+      <Badge tone="warning" className={className}>
+        Custo pendente
+      </Badge>
+    );
+  }
+
+  if (estado === 'sem_custo') {
+    return (
+      <Badge tone="neutral" className={className}>
+        Sem custo
+      </Badge>
+    );
+  }
+
+  return (
+    <span className={`font-mono text-sm tabular-nums text-stone-700 ${className}`}>
+      {formatCurrency(custoUnitario as number)}
+    </span>
+  );
+}
+```
+
+- [ ] **Step 2: Criar `InsumoCustoSegmentControl.tsx`**
+
+```tsx
+'use client';
+
+import { Chip } from '@/components/ui/Chip';
+import type { InsumoCustoEstado } from '@/domain/insumos/insumo-custo-estado';
+
+const OPCOES: { id: InsumoCustoEstado; label: string }[] = [
+  { id: 'pendente', label: 'Pendente' },
+  { id: 'sem_custo', label: 'Sem custo' },
+  { id: 'com_custo', label: 'Com custo' },
+];
+
+type Props = {
+  estado: InsumoCustoEstado;
+  valorComCusto: number;
+  onEstadoChange: (estado: InsumoCustoEstado) => void;
+  onValorComCustoChange: (valor: number) => void;
+};
+
+export default function InsumoCustoSegmentControl({
+  estado,
+  valorComCusto,
+  onEstadoChange,
+  onValorComCustoChange,
+}: Props) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-2 text-sm font-semibold text-stone-700">Custo de compra</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Custo de compra">
+          {OPCOES.map((opcao) => (
+            <Chip
+              key={opcao.id}
+              active={estado === opcao.id}
+              onClick={() => onEstadoChange(opcao.id)}
+              className="min-h-11"
+            >
+              {opcao.label}
+            </Chip>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Sem custo: embalagem reutilizável ou fornecida pelo cliente.
+        </p>
+      </div>
+
+      {estado === 'com_custo' ? (
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-stone-700" htmlFor="insumo-custo-valor">
+            Valor unitário
+          </label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-stone-400">
+              R$
+            </span>
+            <input
+              id="insumo-custo-valor"
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={valorComCusto > 0 ? valorComCusto : ''}
+              onChange={(e) => onValorComCustoChange(parseFloat(e.target.value) || 0)}
+              className="w-full rounded-xl border-2 border-stone-100 bg-stone-50 px-4 py-3 pl-10 font-medium text-stone-900 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-amber-500/10"
+              placeholder="0,00"
+              required
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Insumos/InsumoCustoBadge.tsx src/components/Insumos/InsumoCustoSegmentControl.tsx
+git commit -m "feat(insumos): componentes de badge e segment control para custo tri-state"
+```
+
+---
+
+### Task 5: `InsumoModal` — integrar segment control
+
+**Files:**
+- Modify: `src/components/Insumos/InsumoModal.tsx`
+
+- [ ] **Step 1: Substituir state de custo**
+
+Remover `const [custoUnitario, setCustoUnitario] = useState(0)` e adicionar:
+
+```typescript
+import InsumoCustoSegmentControl from '@/components/Insumos/InsumoCustoSegmentControl';
+import {
+  custoUnitarioFromForm,
+  estadoInicialFromCusto,
+  type InsumoCustoEstado,
+} from '@/domain/insumos/insumo-custo-estado';
+
+const [custoEstado, setCustoEstado] = useState<InsumoCustoEstado>('pendente');
+const [valorComCusto, setValorComCusto] = useState(0);
+```
+
+- [ ] **Step 2: Hidratar no `useEffect` ao abrir**
+
+```typescript
+if (insumo) {
+  const estado = estadoInicialFromCusto(insumo.custo_unitario);
+  setCustoEstado(estado);
+  setValorComCusto(estado === 'com_custo' ? (insumo.custo_unitario ?? 0) : 0);
+} else {
+  setCustoEstado('pendente');
+  setValorComCusto(0);
+}
+```
+
+- [ ] **Step 3: Montar payload no submit**
+
+```typescript
+const custoResolvido = custoUnitarioFromForm(custoEstado, valorComCusto);
+
+if (custoEstado === 'com_custo' && custoResolvido == null) {
+  throw new Error('Informe um valor maior que zero para custo com compra');
+}
+
+const payload = {
+  nome: nome.trim(),
+  custo_unitario: custoResolvido,
+  unidade_id: unidadeId,
+  ativo,
+};
+```
+
+- [ ] **Step 4: Substituir bloco do input de custo pelo componente**
+
+```tsx
+<InsumoCustoSegmentControl
+  estado={custoEstado}
+  valorComCusto={valorComCusto}
+  onEstadoChange={setCustoEstado}
+  onValorComCustoChange={setValorComCusto}
+/>
+```
+
+Remover label "Custo Unitário *" e input antigo.
+
+- [ ] **Step 5: Testar manualmente**
+
+Abrir `/config/insumos` → Novo insumo → chips visíveis, default Pendente → Salvar → reabrir → badge "Custo pendente" na tabela.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/components/Insumos/InsumoModal.tsx
+git commit -m "feat(insumos): modal com segment control de custo tri-state"
+```
+
+---
+
+### Task 6: Listas de insumos — tabela e mobile
+
+**Files:**
+- Modify: `src/components/Insumos/InsumosConfigTable.tsx`
+- Modify: `src/components/Insumos/InsumosConfigMobileList.tsx`
+
+- [ ] **Step 1: Tabela — substituir `formatCurrency(item.custo_unitario)`**
+
+```tsx
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
+
+// na célula de custo:
+<td className={`${configTableBodyCellClass} text-right`}>
+  <InsumoCustoBadge custoUnitario={item.custo_unitario} className="justify-end" />
+</td>
+```
+
+Remover função `formatCurrency` local se não for mais usada.
+
+- [ ] **Step 2: Mobile — substituir parágrafo de custo**
+
+```tsx
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
+
+// substituir <p className="mt-1 font-mono...">{formatCurrency(...)}</p> por:
+<div className="mt-1">
+  <InsumoCustoBadge custoUnitario={item.custo_unitario} />
+</div>
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Insumos/InsumosConfigTable.tsx src/components/Insumos/InsumosConfigMobileList.tsx
+git commit -m "feat(insumos): badges de custo tri-state na tabela e lista mobile"
+```
+
+---
+
+### Task 7: Criação inline — default pendente
+
+**Files:**
+- Modify: `src/features/insumo-estoque/components/InsumoCriarInlinePanel.tsx`
+
+- [ ] **Step 1: Alterar payload de criação**
+
+```typescript
+const result = await createInsumo({
+  nome: nome.trim(),
+  custo_unitario: null,
+  unidade_id: unidadeId,
+  ativo: true,
+});
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/features/insumo-estoque/components/InsumoCriarInlinePanel.tsx
+git commit -m "fix(insumos): criar insumo inline com custo pendente (null)"
+```
+
+---
+
+### Task 8: Receitas — `calcularCustoTotal` e testes
+
+**Files:**
+- Modify: `src/components/Receitas/receita-ingrediente-format.ts`
+- Create: `src/domain/receitas/receita-ingrediente-format.test.ts`
+
+- [ ] **Step 1: Escrever testes**
+
+```typescript
+// src/domain/receitas/receita-ingrediente-format.test.ts
+import { describe, expect, it } from 'vitest';
+import { calcularCustoTotal } from '@/components/Receitas/receita-ingrediente-format';
+
+describe('calcularCustoTotal', () => {
+  it('null → null (pendente)', () => {
+    expect(calcularCustoTotal(10, null)).toBeNull();
+  });
+
+  it('0 → 0 (sem custo)', () => {
+    expect(calcularCustoTotal(10, 0)).toBe(0);
+  });
+
+  it('> 0 → quantidade * custo', () => {
+    expect(calcularCustoTotal(2, 3.5)).toBe(7);
+  });
+
+  it('quantidade <= 0 → null', () => {
+    expect(calcularCustoTotal(0, 5)).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar — deve falhar se `0` retorna null hoje**
+
+```bash
+npm test -- src/domain/receitas/receita-ingrediente-format.test.ts
+```
+
+- [ ] **Step 3: Ajustar `calcularCustoTotal`**
+
+```typescript
+export function calcularCustoTotal(
+  quantidade: number,
+  custoUnitario: number | null | undefined,
+): number | null {
+  if (quantidade <= 0) return null;
+  if (custoUnitario == null) return null;
+  return quantidade * custoUnitario;
+}
+```
+
+Nota: `0 * quantidade = 0` — comportamento correto para sem custo.
+
+- [ ] **Step 4: Rodar testes**
+
+```bash
+npm test -- src/domain/receitas/receita-ingrediente-format.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/Receitas/receita-ingrediente-format.ts src/domain/receitas/receita-ingrediente-format.test.ts
+git commit -m "feat(receitas): calcularCustoTotal respeita custo null vs zero"
+```
+
+---
+
+### Task 9: `ReceitaIngredienteRow` — badges de custo
+
+**Files:**
+- Modify: `src/components/Receitas/ReceitaIngredienteRow.tsx`
+
+- [ ] **Step 1: Importar badge e resolver estado**
+
+```tsx
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
+import { resolveInsumoCustoEstado } from '@/domain/insumos/insumo-custo-estado';
+```
+
+- [ ] **Step 2: Substituir bloco de custo unitário label**
+
+Onde hoje:
+```tsx
+const custoUnitarioLabel =
+  item.custoUnitario != null && item.custoUnitario > 0
+    ? formatarCustoPorUnidade(...)
+    : null;
+```
+
+Substituir renderização por:
+
+```tsx
+const custoEstado = resolveInsumoCustoEstado(item.custoUnitario);
+
+// no JSX, abaixo da quantidade padrão:
+{custoEstado === 'com_custo' && item.custoUnitario != null ? (
+  <span className="font-mono text-xs tabular-nums text-stone-600">
+    {formatarCustoPorUnidade(item.custoUnitario, item.unidadeDescricao)}
+  </span>
+) : (
+  <InsumoCustoBadge custoUnitario={item.custoUnitario} />
+)}
+```
+
+- [ ] **Step 3: Ajustar badge de custo total**
+
+Manter `custoTotal != null` — com a mudança em `calcularCustoTotal`, `0` mostra `R$ 0,00`; `null` não mostra badge.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/Receitas/ReceitaIngredienteRow.tsx
+git commit -m "feat(receitas): badges de custo pendente/sem custo nos ingredientes"
+```
+
+---
+
+### Task 10: Catálogo e repository — preservar null
+
+**Files:**
+- Modify: `src/domain/receitas/receita-insumo-catalogo.ts`
+- Modify: `src/data/insumos/InsumoEstoqueRepository.ts`
+
+- [ ] **Step 1: Catálogo — não coagir null para 0**
+
+```typescript
+// src/domain/receitas/receita-insumo-catalogo.ts
+function parseCustoUnitario(meta: Record<string, string | number> | undefined): number | null {
+  const raw = meta?.custo_unitario;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : n;
+}
+
+// no map:
+custoUnitario: parseCustoUnitario(opt.meta as Record<string, string | number>),
+```
+
+Atualizar tipo `InsumoCatalogoItem` em `insumo-vinculo-sugestao.ts` se `custoUnitario` for `number` — mudar para `number | null`.
+
+- [ ] **Step 2: Repository — `findInsumoCustoUnitario` nullable**
+
+```typescript
+async findInsumoCustoUnitario(insumoId: string): Promise<number | null> {
+  const { data, error } = await this.supabase
+    .from('insumos')
+    .select('custo_unitario')
+    .eq('id', insumoId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar custo do insumo: ${error.message}`);
+  }
+
+  if (data?.custo_unitario == null) return null;
+  return Number(data.custo_unitario);
+}
+```
+
+Em `insumo-estoque-service.ts`, onde usa `custoAtual` para movimentos:
+
+```typescript
+const custoAtual = (await this.repository.findInsumoCustoUnitario(input.insumoId)) ?? 0;
+```
+
+(snapshot de movimento usa 0 quando insumo está pendente — aceitável).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/domain/receitas/receita-insumo-catalogo.ts src/domain/insumos/insumo-vinculo-sugestao.ts src/data/insumos/InsumoEstoqueRepository.ts src/lib/services/insumo-estoque-service.ts
+git commit -m "fix(insumos): preservar custo null no catálogo e repository"
+```
+
+---
+
+### Task 11: Verificação final
+
+**Files:** (nenhum novo)
+
+- [ ] **Step 1: Rodar suite de testes**
+
+```bash
+npm test
+```
+
+Expected: todos passam (ajustar testes quebrados que assumiam `custo_unitario: 0` obrigatório).
+
+- [ ] **Step 2: Lint**
+
+```bash
+npm run lint
+```
+
+- [ ] **Step 3: Build**
+
+```bash
+npm run build
+```
+
+- [ ] **Step 4: Smoke manual**
+
+| Cenário | Resultado esperado |
+|---------|-------------------|
+| Novo insumo, chip Pendente | Salva `null`, badge âmbar na tabela |
+| Novo insumo, chip Sem custo | Salva `0`, badge stone |
+| Novo insumo, chip Com custo R$ 5 | Salva `5`, mostra moeda |
+| Insumo legado com `0` | Abre como Sem custo |
+| Receita com ingrediente pendente | Chip âmbar, salva normalmente |
+| Receita com ingrediente sem custo | Chip stone, total R$ 0,00 |
+
+- [ ] **Step 5: Commit final se houver ajustes de teste**
+
+```bash
+git add -A
+git commit -m "test: ajustar testes para custo tri-state em insumos"
+```
+
+---
+
+## Spec coverage (self-review)
+
+| Requisito spec | Task |
+|----------------|------|
+| Migration nullable, default null, sem backfill | Task 1 |
+| Domínio tri-state | Task 2 |
+| Chips no modal | Task 4, 5 |
+| Badge tabela + mobile | Task 4, 6 |
+| Badge receitas | Task 8, 9 |
+| Salvar receita sem bloqueio | Task 9 (só visual) |
+| Omie sempre atualiza | Sem mudança (documentado) |
+| Inline create default null | Task 7 |
+| `calcularCustoTotal` null vs 0 | Task 8 |
+| Fora de escopo respeitado | Nenhuma task Omie/estoque alertas |
+
+**Placeholder scan:** nenhum TBD/TODO no plano.
+
+**Type consistency:** `Insumo.custo_unitario: number | null` propagado desde Task 3.
