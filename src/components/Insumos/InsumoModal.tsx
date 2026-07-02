@@ -18,8 +18,14 @@ import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-d
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import Accordion from '@/components/Accordion';
+import InsumoCustoSegmentControl from '@/components/Insumos/InsumoCustoSegmentControl';
 import InsumoReceitasLista from '@/components/Insumos/InsumoReceitasLista';
 import InsumoVinculosOmieLista from '@/components/Insumos/InsumoVinculosOmieLista';
+import {
+  custoUnitarioFromForm,
+  estadoInicialFromCusto,
+  type InsumoCustoEstado,
+} from '@/domain/insumos/insumo-custo-estado';
 
 interface InsumoModalProps {
   isOpen: boolean;
@@ -37,7 +43,8 @@ export default function InsumoModal({
   onDeleted,
 }: InsumoModalProps) {
   const [nome, setNome] = useState('');
-  const [custoUnitario, setCustoUnitario] = useState(0);
+  const [custoEstado, setCustoEstado] = useState<InsumoCustoEstado>('pendente');
+  const [valorComCusto, setValorComCusto] = useState(0);
   const [unidadeId, setUnidadeId] = useState('');
   const [ativo, setAtivo] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -53,13 +60,16 @@ export default function InsumoModal({
     if (isOpen) {
       setAnimating(true);
       if (insumo) {
+        const estado = estadoInicialFromCusto(insumo.custo_unitario);
         setNome(insumo.nome);
-        setCustoUnitario(insumo.custo_unitario);
+        setCustoEstado(estado);
+        setValorComCusto(estado === 'com_custo' ? (insumo.custo_unitario ?? 0) : 0);
         setUnidadeId(insumo.unidade_id);
         setAtivo(insumo.ativo);
       } else {
         setNome('');
-        setCustoUnitario(0);
+        setCustoEstado('pendente');
+        setValorComCusto(0);
         setUnidadeId('');
         setAtivo(true);
         setIntegracoes([]);
@@ -118,17 +128,19 @@ export default function InsumoModal({
         throw new Error('Nome é obrigatório');
       }
 
-      if (custoUnitario < 0) {
-        throw new Error('Custo unitário não pode ser negativo');
-      }
-
       if (!unidadeId) {
         throw new Error('Unidade é obrigatória');
       }
 
+      const custoResolvido = custoUnitarioFromForm(custoEstado, valorComCusto);
+
+      if (custoEstado === 'com_custo' && custoResolvido == null) {
+        throw new Error('Informe um valor maior que zero para custo com compra');
+      }
+
       const payload = {
         nome: nome.trim(),
-        custo_unitario: custoUnitario,
+        custo_unitario: custoResolvido,
         unidade_id: unidadeId,
         ativo,
       };
@@ -156,7 +168,8 @@ export default function InsumoModal({
     setTimeout(() => {
       if (!insumo) {
         setNome('');
-        setCustoUnitario(0);
+        setCustoEstado('pendente');
+        setValorComCusto(0);
         setUnidadeId('');
         setAtivo(true);
       }
@@ -192,13 +205,6 @@ export default function InsumoModal({
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
   };
 
   return (
@@ -254,50 +260,29 @@ export default function InsumoModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700 ml-1">
-                  Custo Unitário <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">
-                    R$
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={custoUnitario}
-                    onChange={(e) => setCustoUnitario(parseFloat(e.target.value) || 0)}
-                    className="w-full px-4 py-3 pl-10 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                    placeholder="0,00"
-                    required
-                  />
-                </div>
-                {custoUnitario > 0 && (
-                  <p className="text-xs text-gray-500 ml-1">
-                    {formatCurrency(custoUnitario)}
-                  </p>
-                )}
-              </div>
+            <InsumoCustoSegmentControl
+              estado={custoEstado}
+              valorComCusto={valorComCusto}
+              onEstadoChange={setCustoEstado}
+              onValorComCustoChange={setValorComCusto}
+            />
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700 ml-1">
-                  Status
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-gray-700 ml-1">
+                Status
+              </label>
+              <div className="flex items-center h-[50px]">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ativo}
+                    onChange={(e) => setAtivo(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-700">
+                    {ativo ? 'Ativo' : 'Inativo'}
+                  </span>
                 </label>
-                <div className="flex items-center h-[50px]">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={ativo}
-                      onChange={(e) => setAtivo(e.target.checked)}
-                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <span className="ml-3 text-sm font-medium text-gray-700">
-                      {ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </label>
-                </div>
               </div>
             </div>
 
