@@ -18,8 +18,8 @@ export type InsumoEntradaFatorRecalcIntegracaoResult = {
   movimentosCorrigidos: number;
   saldoAnterior: number;
   saldoNovo: number;
-  custoAnterior: number;
-  custoNovo: number;
+  custoAnterior: number | null;
+  custoNovo: number | null;
 };
 
 type RecalcDeps = {
@@ -127,10 +127,12 @@ export class InsumoEntradaFatorRecalcIntegracaoService {
 
     if (!dryRun && movimentosCorrigidos > 0) {
       await this.deps.estoqueRepository.upsertSaldo(integracao.insumo_id, saldo);
-      await this.deps.estoqueRepository.updateInsumoCustoUnitario(
-        integracao.insumo_id,
-        ultimoCustoEntrada,
-      );
+      if (ultimoCustoEntrada != null) {
+        await this.deps.estoqueRepository.updateInsumoCustoUnitario(
+          integracao.insumo_id,
+          ultimoCustoEntrada,
+        );
+      }
     }
 
     return {

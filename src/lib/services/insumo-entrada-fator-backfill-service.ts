@@ -17,8 +17,8 @@ export type InsumoEntradaFatorBackfillResult = {
     movimentosCorrigidos: number;
     saldoAnterior: number;
     saldoNovo: number;
-    custoAnterior: number;
-    custoNovo: number;
+    custoAnterior: number | null;
+    custoNovo: number | null;
   }>;
 };
 
@@ -115,7 +115,9 @@ export class InsumoEntradaFatorBackfillService {
 
     if (!dryRun && movimentosCorrigidos > 0) {
       await this.deps.estoqueRepository.upsertSaldo(insumoId, saldo);
-      await this.deps.estoqueRepository.updateInsumoCustoUnitario(insumoId, ultimoCustoEntrada);
+      if (ultimoCustoEntrada != null) {
+        await this.deps.estoqueRepository.updateInsumoCustoUnitario(insumoId, ultimoCustoEntrada);
+      }
     }
 
     return {
