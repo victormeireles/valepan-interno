@@ -10,6 +10,7 @@ import EtapaPageSkeleton from './etapa/EtapaPageSkeleton';
 import EtapaResumoDashboard from './etapa/EtapaResumoDashboard';
 import EtapaHourlyDashboard from './etapa/EtapaHourlyDashboard';
 import EtapaSaidasDashboard from './etapa/EtapaSaidasDashboard';
+import { resolveEtapaMessageTone } from './etapa/resolve-etapa-message-tone';
 
 export default function RealizadoEtapa({
   config,
@@ -32,7 +33,7 @@ export default function RealizadoEtapa({
   ritmoCompacto = false,
 }: RealizadoEtapaProps) {
   const hasMeta = hasMetaProp ?? config.hasMeta ?? true;
-  const messageTone = message?.includes('sucesso') ? 'success' : 'error';
+  const messageTone = resolveEtapaMessageTone(message);
 
   return (
     <div

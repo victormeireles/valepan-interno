@@ -143,7 +143,7 @@ export default function ProducaoFermentacaoPage() {
 
   const handleInsumoConsumoAviso = useCallback(
     (avisos: string[]) => {
-      setMessage(`Aviso: ${avisos.join(' ')}`);
+      setMessage(`Lote salvo. ${avisos.join(' ')}`);
       setTimeout(() => setMessage(null), 6000);
     },
     [setMessage],
@@ -174,7 +174,7 @@ export default function ProducaoFermentacaoPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao salvar produção');
         if (data.insumoConsumo?.avisos?.length) {
-          setMessage(`Aviso: ${data.insumoConsumo.avisos.join(' ')}`);
+          setMessage(`Lote salvo. ${data.insumoConsumo.avisos.join(' ')}`);
           setTimeout(() => setMessage(null), 6000);
         } else {
           setMessage('Produção de fermentação atualizada com sucesso!');

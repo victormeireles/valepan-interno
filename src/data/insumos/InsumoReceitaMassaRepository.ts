@@ -22,7 +22,6 @@ type ReceitaJoin = {
 };
 
 type VinculoRow = {
-  tipo: string;
   quantidade_por_produto: number;
   receitas: ReceitaJoin | ReceitaJoin[] | null;
 };
@@ -77,9 +76,8 @@ export class InsumoReceitaMassaRepository {
     const { data, error } = await this.supabase
       .from('produto_receitas')
       .select(`
-        tipo,
         quantidade_por_produto,
-        receitas (
+        receitas!inner (
           id,
           tipo,
           ativo,
@@ -90,11 +88,15 @@ export class InsumoReceitaMassaRepository {
         )
       `)
       .eq('produto_id', produtoId)
-      .in('tipo', tipos)
       .eq('ativo', true);
 
     if (error || !data) return [];
-    return data as unknown as VinculoRow[];
+
+    const tiposPermitidos = new Set<TipoReceita>(tipos);
+    return (data as unknown as VinculoRow[]).filter((vinculo) => {
+      const receita = extrairReceita(vinculo.receitas);
+      return receita !== null && tiposPermitidos.has(receita.tipo as TipoReceita);
+    });
   }
 
   /** Contexto da receita de massa (fermentação). Mantido para a fase 2a. */
@@ -149,7 +151,7 @@ export class InsumoReceitaMassaRepository {
       const receita = extrairReceita(vinculo.receitas);
       if (!receita) continue;
       receitas.push({
-        tipo: vinculo.tipo as TipoReceita,
+        tipo: receita.tipo as TipoReceita,
         quantidadePorProduto: Number(vinculo.quantidade_por_produto),
         ingredientes: normalizarIngredientes(receita.receita_ingredientes),
       });
