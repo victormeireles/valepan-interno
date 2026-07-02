@@ -70,5 +70,5 @@ export type InsumoCatalogoItem = {
   nome: string;
   unidadeCodigo: string;
   unidadeNome: string;
-  custoUnitario: number;
+  custoUnitario: number | null;
 };

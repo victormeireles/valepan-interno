@@ -1,5 +1,12 @@
 import type { InsumoCatalogoItem } from '@/domain/insumos/insumo-vinculo-sugestao';
 
+function parseCustoUnitario(raw: string | number | undefined): number | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number') return Number.isNaN(raw) ? null : raw;
+  const parsed = parseFloat(String(raw));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 type OptionsResponse = {
   options?: Array<{
     value: string;
@@ -20,6 +27,6 @@ export async function fetchInsumoCatalogo(): Promise<InsumoCatalogoItem[]> {
     nome: opt.label.replace(/\s*\([^)]+\)$/, ''),
     unidadeCodigo: String(opt.meta?.unidadeCodigo ?? ''),
     unidadeNome: String(opt.meta?.unidadeNomeResumido ?? opt.meta?.unidadeCodigo ?? ''),
-    custoUnitario: Number(opt.meta?.custo_unitario ?? 0),
+    custoUnitario: parseCustoUnitario(opt.meta?.custo_unitario),
   }));
 }

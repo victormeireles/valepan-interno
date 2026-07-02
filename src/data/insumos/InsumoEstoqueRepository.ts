@@ -316,7 +316,7 @@ export class InsumoEstoqueRepository {
     }
   }
 
-  async findInsumoCustoUnitario(insumoId: string): Promise<number> {
+  async findInsumoCustoUnitario(insumoId: string): Promise<number | null> {
     const { data, error } = await this.supabase
       .from('insumos')
       .select('custo_unitario')
@@ -327,7 +327,8 @@ export class InsumoEstoqueRepository {
       throw new Error(`Erro ao buscar custo do insumo: ${error.message}`);
     }
 
-    return Number(data?.custo_unitario ?? 0);
+    if (data?.custo_unitario == null) return null;
+    return Number(data.custo_unitario);
   }
 
   private async fetchUltimasEntradasPorInsumo(

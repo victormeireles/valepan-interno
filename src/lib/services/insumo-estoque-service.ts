@@ -97,7 +97,8 @@ export class InsumoEstoqueService {
       return;
     }
 
-    const custoAtual = await this.repository.findInsumoCustoUnitario(input.insumoId);
+    const custoAtual =
+      (await this.repository.findInsumoCustoUnitario(input.insumoId)) ?? 0;
 
     await this.repository.upsertSaldo(input.insumoId, input.novoSaldo);
     await this.repository.insertMovimento({
@@ -116,7 +117,8 @@ export class InsumoEstoqueService {
     const saldoAtual = await this.repository.findSaldo(input.insumoId);
     const quantidadeAtual = Number(saldoAtual?.quantidade ?? 0);
     const novoSaldo = quantidadeAtual + input.delta;
-    const custoAtual = await this.repository.findInsumoCustoUnitario(input.insumoId);
+    const custoAtual =
+      (await this.repository.findInsumoCustoUnitario(input.insumoId)) ?? 0;
 
     await this.repository.upsertSaldo(input.insumoId, novoSaldo);
     await this.repository.insertMovimento({
