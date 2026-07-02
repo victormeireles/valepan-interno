@@ -30,6 +30,12 @@ export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
     description: 'Controle de saídas com meta e foto',
     icon: 'local_shipping',
   },
+  {
+    href: '/realizado/painel-producao',
+    title: 'Painel',
+    description: 'Visão unificada de fermentação, forno e embalagem',
+    icon: 'monitor',
+  },
 ];
 
 export const HUB_OPERACAO_ITEMS: HubNavItem[] = [

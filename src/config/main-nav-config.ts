@@ -77,6 +77,13 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'label',
         match: (pathname) => pathname.startsWith('/etiquetas'),
       },
+      {
+        type: 'link',
+        href: '/realizado/painel-producao',
+        label: 'Painel',
+        icon: 'monitor',
+        match: (pathname) => pathname.startsWith('/realizado/painel-producao'),
+      },
     ],
   },
   {

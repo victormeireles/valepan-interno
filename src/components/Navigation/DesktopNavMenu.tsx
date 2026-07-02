@@ -8,6 +8,7 @@ import {
   DESKTOP_NAV_TRIGGER_CLASS,
   DROPDOWN_MENU_CLASS,
   DROPDOWN_PANEL_CLASS,
+  DROPDOWN_ITEM_ICON_CLASS,
   desktopNavLinkState,
   desktopNavTriggerState,
   dropdownItemState,
@@ -92,10 +93,10 @@ function DesktopNavDropdown({
                     className={dropdownItemState(childActive)}
                     onClick={onClose}
                   >
-                    <span className="material-icons text-lg text-stone-500" aria-hidden="true">
+                    <span className={DROPDOWN_ITEM_ICON_CLASS} aria-hidden="true">
                       {child.icon}
                     </span>
-                    {child.label}
+                    <span>{child.label}</span>
                   </Link>
                 </li>
               );

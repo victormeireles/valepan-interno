@@ -9,6 +9,10 @@ import {
   type ProdutoResumoComReceitas,
 } from '@/app/actions/produto-receitas-actions';
 import type { ProdutoConfigResumo } from '@/domain/produtos/produto-config-resumo';
+import {
+  formatarFeedbackQuantidadeReceita,
+  receitaTipoUsaFeedbackQuantidadeManual,
+} from '@/domain/receitas/receita-quantidade-feedback';
 import { resolverQuantidadeReceitaParaProduto } from '@/domain/receitas/receita-produto-quantidade-resolver';
 import type { ReceitaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
 import ProdutoReceitaTipoRow from '@/components/ProdutosConfig/ProdutoReceitaTipoRow';
@@ -330,6 +334,16 @@ export default function ProdutoReceitasConfigModal({
                 ? receitasCatalogo.find((item) => item.id === receitaId)
                 : undefined;
               const sugestao = buildSugestao(receita, option.value, produto);
+              const resumoManual =
+                receitaTipoUsaFeedbackQuantidadeManual(option.value) &&
+                receita?.ingredientes?.length
+                  ? formatarFeedbackQuantidadeReceita(
+                      option.value,
+                      receita.ingredientes,
+                      quantidades[option.value],
+                      sugestao.quantidade,
+                    )
+                  : null;
 
               return (
                 <ProdutoReceitaTipoRow
@@ -345,6 +359,7 @@ export default function ProdutoReceitasConfigModal({
                     receitaId
                       ? {
                           resumo: sugestao.resumo,
+                          resumoManual,
                           aviso: sugestao.aviso,
                           sugestao: sugestao.quantidade,
                           manual: Boolean(quantidadesManuais[option.value]),

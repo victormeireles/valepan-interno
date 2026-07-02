@@ -30,8 +30,13 @@ export const DROPDOWN_MENU_CLASS = [
 ].join(' ');
 
 export const DROPDOWN_ITEM_CLASS = [
-  'flex min-h-11 items-center gap-2.5 px-3 py-2 text-sm font-medium tracking-[-0.004em]',
+  'flex w-full min-h-11 items-center gap-2.5 px-3 py-2 text-sm font-medium tracking-[-0.004em]',
   'text-stone-700 transition-colors duration-[130ms] hover:bg-amber-50 hover:text-amber-900',
+].join(' ');
+
+export const DROPDOWN_ITEM_ICON_CLASS = [
+  'material-icons inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center',
+  'overflow-hidden text-lg leading-none text-stone-500 [&_svg]:m-0',
 ].join(' ');
 
 export function dropdownItemState(active: boolean): string {

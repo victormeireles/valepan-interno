@@ -12,6 +12,7 @@ type TipoOption = {
 
 type CalculoAutomaticoProps = {
   resumo: string | null;
+  resumoManual: string | null;
   aviso: string | null;
   sugestao: number | null;
   manual: boolean;
@@ -163,7 +164,12 @@ export default function ProdutoReceitaTipoRow({
 
         {calculoAutomatico && receitaId ? (
           <div className="lg:col-span-3 lg:col-start-2 space-y-1">
-            {calculoAutomatico.resumo ? (
+            {calculoAutomatico.resumoManual ? (
+              <p className="text-xs text-stone-600">
+                <span className="font-medium text-amber-800">Rendimento:</span>{' '}
+                <span className="font-mono tabular-nums">{calculoAutomatico.resumoManual}</span>
+              </p>
+            ) : calculoAutomatico.resumo ? (
               <p className="text-xs text-stone-600">
                 <span className="font-medium text-amber-800">Sugestão:</span>{' '}
                 <span className="font-mono tabular-nums">{calculoAutomatico.resumo}</span>

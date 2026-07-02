@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calcularMassaCruaPorUnidade,
   calcularPesoTotalMassaKg,
   calcularQuantidadePorProdutoMassa,
   converterQuantidadeParaKg,
@@ -77,5 +78,20 @@ describe('calcularQuantidadePorProdutoMassa', () => {
     expect(
       calcularQuantidadePorProdutoMassa([{ quantidade: 10, unidade: 'kg' }], 0),
     ).toBeNull();
+  });
+});
+
+describe('calcularMassaCruaPorUnidade', () => {
+  it('divide o peso total pela quantidade informada', () => {
+    const resultado = calcularMassaCruaPorUnidade(
+      [{ quantidade: 1.5, unidade: 'kg' }],
+      30,
+    );
+
+    expect(resultado).toEqual({
+      pesoTotalGramas: 1500,
+      massaCruaGramas: 50,
+      ingredientesIgnorados: 0,
+    });
   });
 });

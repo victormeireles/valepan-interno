@@ -79,6 +79,25 @@ export function calcularQuantidadePorProdutoMassa(
   return { quantidade, pesoTotalKg: totalKg, ingredientesIgnorados };
 }
 
+export function calcularMassaCruaPorUnidade(
+  ingredientes: ReceitaMassaIngrediente[],
+  quantidadeUnidades: number,
+): {
+  pesoTotalGramas: number;
+  massaCruaGramas: number;
+  ingredientesIgnorados: number;
+} | null {
+  if (!Number.isFinite(quantidadeUnidades) || quantidadeUnidades <= 0) return null;
+
+  const { totalKg, ingredientesIgnorados } = calcularPesoTotalMassaKg(ingredientes);
+  if (totalKg === null || totalKg <= 0) return null;
+
+  const pesoTotalGramas = totalKg * 1000;
+  const massaCruaGramas = pesoTotalGramas / quantidadeUnidades;
+
+  return { pesoTotalGramas, massaCruaGramas, ingredientesIgnorados };
+}
+
 export function formatarResumoCalculoMassa(
   resultado: ReceitaMassaCalculoResultado,
   massaCruaGramas: number,
