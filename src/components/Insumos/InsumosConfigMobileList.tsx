@@ -4,6 +4,7 @@ import type { Insumo } from '@/app/actions/insumos-actions';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
@@ -14,10 +15,6 @@ type Props = {
   vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
   onRowClick: (item: Insumo) => void;
 };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
 
 export default function InsumosConfigMobileList({
   items,
@@ -44,9 +41,9 @@ export default function InsumosConfigMobileList({
               <p className="mt-1 text-sm text-stone-600">
                 {item.unidades?.nome_resumido || item.unidades?.nome || '—'}
               </p>
-              <p className="mt-1 font-mono text-sm font-medium tabular-nums text-stone-700">
-                {formatCurrency(item.custo_unitario)}
-              </p>
+              <div className="mt-1">
+                <InsumoCustoBadge custoUnitario={item.custo_unitario} />
+              </div>
             </div>
           </button>
           <div className="flex shrink-0 items-center gap-2">

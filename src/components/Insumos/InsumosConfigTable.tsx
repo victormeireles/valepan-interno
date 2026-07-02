@@ -4,6 +4,7 @@ import type { Insumo } from '@/app/actions/insumos-actions';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
 import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
@@ -30,10 +31,6 @@ type Props = {
 function sortAriaValue(key: InsumoSortKey, activeKey: InsumoSortKey, dir: 'asc' | 'desc') {
   if (key !== activeKey) return 'none' as const;
   return dir === 'asc' ? ('ascending' as const) : ('descending' as const);
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
 function unidadeLabel(insumo: Insumo) {
@@ -113,8 +110,8 @@ export default function InsumosConfigTable({
               <td className={`${configTableBodyCellClass} text-stone-600`}>
                 {unidadeLabel(item)}
               </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
-                {formatCurrency(item.custo_unitario)}
+              <td className={`${configTableBodyCellClass} text-right`}>
+                <InsumoCustoBadge custoUnitario={item.custo_unitario} className="justify-end" />
               </td>
               <td className={`${configTableBodyCellClass} text-right`}>
                 <InsumoReceitasButton
