@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
+import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import {
   calcularCustoTotal,
   calcularGramas,
@@ -10,6 +11,7 @@ import {
   formatarValorLateral,
   resolveCustoInsumoMeta,
 } from '@/components/Receitas/receita-ingrediente-format';
+import { resolveInsumoCustoEstado } from '@/domain/insumos/insumo-custo-estado';
 import { RECEITA_INGREDIENTE_QUANTIDADE_STEP } from '@/domain/receitas/receita-quantidade-constants';
 
 export type ReceitaIngredienteFormItem = {
@@ -95,10 +97,7 @@ export default function ReceitaIngredienteRow({
   const gramas = calcularGramas(item.quantidade, item.unidadeDescricao);
   const valorFormatado = formatarValorLateral(item.quantidade, item.unidadeDescricao);
   const custoTotal = calcularCustoTotal(item.quantidade, item.custoUnitario);
-  const custoUnitarioLabel =
-    item.custoUnitario != null && item.custoUnitario > 0
-      ? formatarCustoPorUnidade(item.custoUnitario, item.unidadeDescricao)
-      : null;
+  const custoEstado = resolveInsumoCustoEstado(item.custoUnitario);
 
   if (swapping) {
     return (
@@ -182,11 +181,13 @@ export default function ReceitaIngredienteRow({
               `${item.quantidade} ${item.unidadeDescricao || ''}`
             )}
           </span>
-          {custoUnitarioLabel ? (
+          {custoEstado === 'com_custo' ? (
             <span className="font-mono text-xs tabular-nums text-stone-600">
-              {custoUnitarioLabel}
+              {formatarCustoPorUnidade(item.custoUnitario as number, item.unidadeDescricao)}
             </span>
-          ) : null}
+          ) : (
+            <InsumoCustoBadge custoUnitario={item.custoUnitario} />
+          )}
         </div>
       </div>
 
