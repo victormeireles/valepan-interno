@@ -47,7 +47,7 @@ export default function InsumoCriarInlinePanel({ nomeInicial, onCreated, onCance
 
     const result = await createInsumo({
       nome: nome.trim(),
-      custo_unitario: 0,
+      custo_unitario: null,
       unidade_id: unidadeId,
       ativo: true,
     });
