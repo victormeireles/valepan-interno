@@ -86,7 +86,7 @@ function resolveEmbalagemCardStatusOverride(
 function resolveDataEtiquetaLabel(pedido: PainelPedidoEmbalagem): string | undefined {
   const dataFab = pedido.dataFabricacao?.trim();
   if (!dataFab || dataFab === pedido.dataPedido) return undefined;
-  return `Etiqueta ${formatISODateBrNoYear(dataFab)}`;
+  return formatISODateBrNoYear(dataFab);
 }
 
 function mapPedidoToProduct(

@@ -75,7 +75,7 @@ export type EtapaProductItem = {
   /** Cliente / tipo de estoque — inline no card (embalagem). */
   cliente?: string;
   observacao?: string;
-  /** Ex.: "Etiqueta 24/06" quando data da etiqueta ≠ data da OP. */
+  /** Ex.: "24/06" quando data da etiqueta ≠ data da OP. */
   dataEtiqueta?: string;
   hasPhoto?: boolean;
   photoUrl?: string;

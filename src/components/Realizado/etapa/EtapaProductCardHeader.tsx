@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { resolveTipoEstoqueMarca } from '@/lib/utils/cliente-display';
+import DataEtiquetaBadge from './DataEtiquetaBadge';
 import TipoEstoqueMarcaBadge from './TipoEstoqueMarcaBadge';
 
 type EtapaStatusStyles = {
@@ -19,6 +20,8 @@ export type EtapaProductCardHeaderProps = {
   onProductPhotoClick?: () => void;
   /** Assadeira, cliente inline, observação — entre produto e progresso no desktop */
   metaItems?: string[];
+  /** Data da etiqueta (dd/mm) — badge destacado quando ≠ data da OP. */
+  dataEtiqueta?: string;
   /** Cliente / tipo de estoque — badge D/T/V à direita do produto quando aplicável. */
   tipoEstoqueCliente?: string;
   showTipoEstoqueMarcaBadge?: boolean;
@@ -87,18 +90,18 @@ function ProductTitle({
   produto,
   tipoEstoqueCliente,
   showTipoEstoqueMarcaBadge = false,
+  dataEtiqueta,
   congelado,
   hasPhoto,
   onProductPhotoClick,
-  truncate = false,
 }: {
   produto: string;
   tipoEstoqueCliente?: string;
   showTipoEstoqueMarcaBadge?: boolean;
+  dataEtiqueta?: string;
   congelado?: boolean;
   hasPhoto?: boolean;
   onProductPhotoClick?: () => void;
-  truncate?: boolean;
 }) {
   const marca =
     showTipoEstoqueMarcaBadge && tipoEstoqueCliente
@@ -106,14 +109,8 @@ function ProductTitle({
       : null;
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      <span
-        className={[
-          'text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong',
-          truncate ? 'truncate' : '',
-        ].join(' ')}
-        title={produto}
-      >
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong">
         {produto}
       </span>
       {marca ? <TipoEstoqueMarcaBadge marca={marca} /> : null}
@@ -122,6 +119,7 @@ function ProductTitle({
         hasPhoto={hasPhoto}
         onProductPhotoClick={onProductPhotoClick}
       />
+      {dataEtiqueta ? <DataEtiquetaBadge data={dataEtiqueta} /> : null}
     </div>
   );
 }
@@ -303,6 +301,7 @@ export default function EtapaProductCardHeader({
   hasPhoto,
   onProductPhotoClick,
   metaItems = [],
+  dataEtiqueta,
   tipoEstoqueCliente,
   showTipoEstoqueMarcaBadge = false,
   horario,
@@ -347,6 +346,7 @@ export default function EtapaProductCardHeader({
     produto,
     tipoEstoqueCliente,
     showTipoEstoqueMarcaBadge,
+    dataEtiqueta,
     congelado,
     hasPhoto,
     onProductPhotoClick,
@@ -393,26 +393,23 @@ export default function EtapaProductCardHeader({
           aria-hidden="true"
         />
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="shrink-0">
+            <ProductTitle {...titleProps} />
+          </div>
+
           {metaItems.length > 0 ? (
-            <>
-              <div className="min-w-0 max-w-[32%] lg:max-w-[36%]">
-                <ProductTitle {...titleProps} truncate />
-              </div>
-              <div className="min-w-0 flex-1">
-                <MetaLine items={metaItems} />
-              </div>
-            </>
-          ) : (
-            <div className="min-w-0 flex-1">
-              <ProductTitle {...titleProps} truncate />
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <MetaLine items={metaItems} />
             </div>
+          ) : (
+            <div className="min-w-2 flex-1" aria-hidden="true" />
           )}
 
           <QuantityBlock
             {...quantityProps}
             align="right"
-            className="shrink-0"
+            className="w-[9.5rem] shrink-0"
           />
 
           {horario ? (
