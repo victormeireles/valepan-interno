@@ -1,0 +1,176 @@
+---
+title: Custo tri-state em insumos (null / zero / valor)
+date: 2026-07-02
+status: aprovado
+---
+
+## Contexto / Problema
+
+Insumos como caixa plástica reutilizável ou embalagem fornecida pelo cliente têm
+**custo zero de compra** — isso é intencional. Outros insumos ficam com
+`custo_unitario = 0` simplesmente porque o custo ainda não foi cadastrado.
+
+Hoje o sistema não distingue esses casos: `0` é ambíguo. Receitas, cadastro e
+integrações não sabem se devem alertar ou aceitar o valor.
+
+## Decisões (confirmadas com o usuário)
+
+| Tema | Decisão |
+|------|---------|
+| Modelo | **Opção B** — `null` = pendente, `0` = sem custo intencional, `> 0` = definido |
+| Migration | **C** — registros existentes com `0` permanecem `0`; tri-state vale para novos cadastros e edições explícitas |
+| UI cadastro | **Segmented control** (3 chips): Pendente / Sem custo / Com custo; campo R$ só em "Com custo" |
+| Default novo insumo | Chip **Pendente** → salva `null` |
+| Legado `custo = 0` | Ao editar, chip **Sem custo** pré-selecionado |
+| Alertas | **B** — badge na tabela de insumos **e** aviso no ingrediente da receita |
+| Receitas | **A** — só aviso visual; salvar receita permitido com ingredientes pendentes |
+| Omie / NF | **A** — entrada de NF **sempre** atualiza `insumos.custo_unitario` (mesmo saindo de `0`) |
+| Escopo fora | Alertas em estoque, pendências Omie, painéis TV |
+
+## Modelo de dados
+
+### `insumos.custo_unitario`
+
+Migration:
+
+```sql
+ALTER TABLE insumos
+  ALTER COLUMN custo_unitario DROP NOT NULL,
+  ALTER COLUMN custo_unitario SET DEFAULT null;
+```
+
+Sem backfill: linhas existentes com `0` ou `> 0` não são alteradas.
+
+| Valor | Estado semântico | Uso |
+|-------|------------------|-----|
+| `null` | Pendente | Custo ainda não informado — alertar |
+| `0` | Sem custo | Zero intencional — não alertar |
+| `> 0` | Com custo | Valor definido |
+
+### `insumo_movimentos.custo_unitario`
+
+Permanece `NOT NULL`. Representa o custo no momento do movimento (snapshot
+histórico), independente do estado semântico atual do insumo.
+
+## Domínio
+
+Novo módulo `src/domain/insumos/insumo-custo-estado.ts`:
+
+```typescript
+export type InsumoCustoEstado = 'pendente' | 'sem_custo' | 'com_custo';
+
+export function resolveInsumoCustoEstado(
+  custoUnitario: number | null | undefined,
+): InsumoCustoEstado;
+
+export function custoUnitarioFromForm(
+  estado: InsumoCustoEstado,
+  valorDigitado: number | null | undefined,
+): number | null;
+
+export function estadoInicialFromCusto(
+  custoUnitario: number | null | undefined,
+): InsumoCustoEstado;
+```
+
+Regras:
+
+- `resolveInsumoCustoEstado(null)` → `'pendente'`
+- `resolveInsumoCustoEstado(0)` → `'sem_custo'`
+- `resolveInsumoCustoEstado(n)` com `n > 0` → `'com_custo'`
+- `custoUnitarioFromForm('pendente', _)` → `null`
+- `custoUnitarioFromForm('sem_custo', _)` → `0`
+- `custoUnitarioFromForm('com_custo', v)` → `v` (validar `v > 0` na action)
+
+Testes unitários cobrindo os três estados e bordas (`undefined`, negativo na action).
+
+## UI — Cadastro (`InsumoModal`)
+
+Componente `InsumoCustoSegmentControl`:
+
+| Chip | Salva | Campo R$ |
+|------|-------|----------|
+| Pendente | `null` | oculto |
+| Sem custo | `0` | oculto (travado) |
+| Com custo | valor digitado | visível, obrigatório `> 0` |
+
+- Chips com alvo de toque ≥ 44px; ativo em amber (design system Valepan).
+- Helper text persistente: *Sem custo: embalagem reutilizável ou fornecida pelo cliente.*
+- Remover asterisco de obrigatoriedade do campo de custo — o estado é sempre explícito via chips.
+- Novo insumo: estado inicial `pendente`.
+
+Componente compartilhado `InsumoCustoBadge` para tabela, lista mobile e receitas.
+
+## UI — Tabela `/config/insumos`
+
+| Estado | Exibição na coluna "Custo unitário" |
+|--------|-------------------------------------|
+| Pendente | badge âmbar `Custo pendente` |
+| Sem custo | badge stone `Sem custo` |
+| Com custo | `R$ X,XX` (Geist Mono, tabular-nums) |
+
+Mesma lógica em `InsumosConfigMobileList`.
+
+## UI — Receitas
+
+Em `ReceitaIngredienteRow` (e helpers em `receita-ingrediente-format.ts`):
+
+| Estado do insumo | Exibição |
+|------------------|----------|
+| Pendente | chip âmbar `Custo pendente` |
+| Sem custo | chip stone `Sem custo` |
+| Com custo | custo unitário + total como hoje |
+
+`calcularCustoTotal(quantidade, custoUnitario)`:
+
+- `custoUnitario == null` → retorna `null` (não mostra total)
+- `custoUnitario === 0` → retorna `0` (contribui zero ao custo, sem alerta)
+- `custoUnitario > 0` → `quantidade * custoUnitario`
+
+Salvar receita: **sem bloqueio** por ingredientes pendentes.
+
+## Integração Omie / estoque
+
+`InsumoEstoqueService.registrarEntrada` continua chamando
+`updateInsumoCustoUnitario` após cada entrada de NF — **sempre**, sem checar
+estado semântico anterior.
+
+Comportamento aceito: insumo "Sem custo" (`0`) que receber NF com preço `> 0`
+passa automaticamente a "Com custo" na próxima entrada. Movimentos e saldo não
+são afetados pela semântica — apenas o custo cadastral do insumo.
+
+Alertas de divergência de custo em pendências Omie: **fora de escopo** desta entrega.
+
+## Arquivos impactados
+
+| Área | Arquivos |
+|------|----------|
+| DB | `supabase/migrations/20260702100000_insumo_custo_unitario_nullable.sql` |
+| Domínio | `insumo-custo-estado.ts`, `insumo-custo-estado.test.ts` |
+| Actions | `insumos-actions.ts` — tipos `custo_unitario: number \| null` |
+| Cadastro | `InsumoModal.tsx`, `InsumoCustoSegmentControl.tsx`, `InsumoCustoBadge.tsx` |
+| Lista | `InsumosConfigTable.tsx`, `InsumosConfigMobileList.tsx` |
+| Inline create | `InsumoCriarInlinePanel.tsx` — default `null` |
+| Receitas | `ReceitaIngredienteRow.tsx`, `receita-ingrediente-format.ts`, `receita-insumo-catalogo.ts` |
+| Data | `InsumoEstoqueRepository.ts`, `types/database.ts` |
+| Options API | meta `custo_unitario` nullable no autocomplete |
+
+## Testes
+
+- `insumo-custo-estado.test.ts` — resolve, fromForm, estadoInicial
+- Ajustar testes existentes que assumem `custo_unitario: 0` como default de insumo novo
+- `receita-ingrediente-format` — `calcularCustoTotal` com `null`, `0`, `> 0`
+
+## Fora de escopo
+
+- Flag ou tipo de insumo (reutilizável vs. fornecido pelo cliente)
+- Alertas em estoque, pendências Omie, custo de produto agregado
+- Backfill de registros legados `0` → `null`
+- Tornar `insumo_movimentos.custo_unitario` nullable
+
+## Rollout
+
+1. Aplicar migration (nullable + default null).
+2. Deploy código com chips e badges.
+3. Insumos legados com `0` aparecem como "Sem custo" — revisar manualmente os que deveriam ser "Pendente".
+4. Novos insumos começam em "Pendente" até o usuário definir o estado.
