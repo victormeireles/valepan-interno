@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache';
 export interface Insumo {
   id: string;
   nome: string;
-  custo_unitario: number;
+  custo_unitario: number | null;
   unidade_id: string;
   ativo: boolean;
   created_at: string;
@@ -26,7 +26,7 @@ export interface Insumo {
 
 interface CreateInsumoParams {
   nome: string;
-  custo_unitario: number;
+  custo_unitario: number | null;
   unidade_id: string;
   ativo?: boolean;
 }
@@ -34,7 +34,7 @@ interface CreateInsumoParams {
 interface UpdateInsumoParams {
   id: string;
   nome?: string;
-  custo_unitario?: number;
+  custo_unitario?: number | null;
   unidade_id?: string;
   ativo?: boolean;
 }
@@ -143,7 +143,7 @@ export async function createInsumo(params: CreateInsumoParams) {
       return { success: false, error: 'Nome é obrigatório' };
     }
 
-    if (params.custo_unitario < 0) {
+    if (params.custo_unitario != null && params.custo_unitario < 0) {
       return { success: false, error: 'Custo unitário não pode ser negativo' };
     }
 
@@ -192,7 +192,7 @@ export async function updateInsumo(params: UpdateInsumoParams) {
     }
 
     if (params.custo_unitario !== undefined) {
-      if (params.custo_unitario < 0) {
+      if (params.custo_unitario != null && params.custo_unitario < 0) {
         return { success: false, error: 'Custo unitário não pode ser negativo' };
       }
       updateData.custo_unitario = params.custo_unitario;
