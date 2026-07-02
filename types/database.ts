@@ -2035,7 +2035,7 @@ export type Database = {
         Row: {
           ativo: boolean | null
           created_at: string | null
-          custo_unitario: number
+          custo_unitario: number | null
           id: string
           nome: string
           unidade_id: string
@@ -2044,7 +2044,7 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           created_at?: string | null
-          custo_unitario?: number
+          custo_unitario?: number | null
           id?: string
           nome: string
           unidade_id: string
@@ -2053,7 +2053,7 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           created_at?: string | null
-          custo_unitario?: number
+          custo_unitario?: number | null
           id?: string
           nome?: string
           unidade_id?: string
