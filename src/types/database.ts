@@ -2214,15 +2214,22 @@ export type Database = {
       nota_fiscal_itens: {
         Row: {
           cfop: string | null
+          cmv_calculado_em: string | null
+          cmv_recalculado_em: string | null
+          cmv_status: string
+          cmv_total: number | null
           codigo_produto: string | null
           created_at: string
+          custo_unitario_cmv: number | null
           descricao: string | null
           id: string
           ncm: string | null
           nota_fiscal_id: string
           omie_cod_item: number | null
           omie_cod_prod: number | null
+          produto_id: string | null
           quantidade: number | null
+          quantidade_unidades: number | null
           sequencia: number
           unidade: string | null
           updated_at: string
@@ -2241,15 +2248,22 @@ export type Database = {
         }
         Insert: {
           cfop?: string | null
+          cmv_calculado_em?: string | null
+          cmv_recalculado_em?: string | null
+          cmv_status?: string
+          cmv_total?: number | null
           codigo_produto?: string | null
           created_at?: string
+          custo_unitario_cmv?: number | null
           descricao?: string | null
           id?: string
           ncm?: string | null
           nota_fiscal_id: string
           omie_cod_item?: number | null
           omie_cod_prod?: number | null
+          produto_id?: string | null
           quantidade?: number | null
+          quantidade_unidades?: number | null
           sequencia: number
           unidade?: string | null
           updated_at?: string
@@ -2268,15 +2282,22 @@ export type Database = {
         }
         Update: {
           cfop?: string | null
+          cmv_calculado_em?: string | null
+          cmv_recalculado_em?: string | null
+          cmv_status?: string
+          cmv_total?: number | null
           codigo_produto?: string | null
           created_at?: string
+          custo_unitario_cmv?: number | null
           descricao?: string | null
           id?: string
           ncm?: string | null
           nota_fiscal_id?: string
           omie_cod_item?: number | null
           omie_cod_prod?: number | null
+          produto_id?: string | null
           quantidade?: number | null
+          quantidade_unidades?: number | null
           sequencia?: number
           unidade?: string | null
           updated_at?: string
@@ -2300,6 +2321,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "notas_fiscais"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nota_fiscal_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "vw_produtos_com_receitas"
+            referencedColumns: ["produto_id"]
           },
         ]
       }
@@ -3516,34 +3551,49 @@ export type Database = {
       roteiro_veiculos: {
         Row: {
           created_at: string | null
+          custo_fixo_snapshot: number | null
+          custo_percentual_snapshot: number | null
+          custos_congelados_em: string | null
           id: string
           motorista_alocado_em: string | null
           motorista_alocado_por: string | null
           motorista_usuario_id: string | null
           ordem_exibicao: number
+          propriedade_snapshot: string | null
           roteiro_id: string
+          transportadora_nome_snapshot: string | null
           updated_at: string | null
           veiculo_logistica_id: string
         }
         Insert: {
           created_at?: string | null
+          custo_fixo_snapshot?: number | null
+          custo_percentual_snapshot?: number | null
+          custos_congelados_em?: string | null
           id?: string
           motorista_alocado_em?: string | null
           motorista_alocado_por?: string | null
           motorista_usuario_id?: string | null
           ordem_exibicao?: number
+          propriedade_snapshot?: string | null
           roteiro_id: string
+          transportadora_nome_snapshot?: string | null
           updated_at?: string | null
           veiculo_logistica_id: string
         }
         Update: {
           created_at?: string | null
+          custo_fixo_snapshot?: number | null
+          custo_percentual_snapshot?: number | null
+          custos_congelados_em?: string | null
           id?: string
           motorista_alocado_em?: string | null
           motorista_alocado_por?: string | null
           motorista_usuario_id?: string | null
           ordem_exibicao?: number
+          propriedade_snapshot?: string | null
           roteiro_id?: string
+          transportadora_nome_snapshot?: string | null
           updated_at?: string | null
           veiculo_logistica_id?: string
         }
@@ -3728,6 +3778,30 @@ export type Database = {
           nome?: string
           possui_etiqueta?: boolean
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      transportadoras_logistica: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -3918,9 +3992,13 @@ export type Database = {
           capacidade: number
           capacidade_unidade: string
           created_at: string | null
+          custo_fixo_viagem: number
+          custo_percentual_nf: number
           id: string
           nome: string
           placa: string | null
+          propriedade: string
+          transportadora_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -3928,9 +4006,13 @@ export type Database = {
           capacidade: number
           capacidade_unidade: string
           created_at?: string | null
+          custo_fixo_viagem?: number
+          custo_percentual_nf?: number
           id?: string
           nome: string
           placa?: string | null
+          propriedade?: string
+          transportadora_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -3938,12 +4020,24 @@ export type Database = {
           capacidade?: number
           capacidade_unidade?: string
           created_at?: string | null
+          custo_fixo_viagem?: number
+          custo_percentual_nf?: number
           id?: string
           nome?: string
           placa?: string | null
+          propriedade?: string
+          transportadora_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "veiculos_logistica_transportadora_id_fkey"
+            columns: ["transportadora_id"]
+            isOneToOne: false
+            referencedRelation: "transportadoras_logistica"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendedores: {
         Row: {
