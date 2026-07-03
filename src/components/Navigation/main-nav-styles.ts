@@ -34,10 +34,8 @@ export const DROPDOWN_ITEM_CLASS = [
   'text-stone-700 transition-colors duration-[130ms] hover:bg-amber-50 hover:text-amber-900',
 ].join(' ');
 
-export const DROPDOWN_ITEM_ICON_CLASS = [
-  'material-icons inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center',
-  'overflow-hidden text-lg leading-none text-stone-500 [&_svg]:m-0',
-].join(' ');
+export const DROPDOWN_ITEM_ICON_CLASS =
+  'material-icons shrink-0 text-base leading-none text-stone-500';
 
 export function dropdownItemState(active: boolean): string {
   return active
