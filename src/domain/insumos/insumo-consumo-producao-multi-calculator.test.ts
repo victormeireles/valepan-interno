@@ -5,7 +5,6 @@ describe('calcularConsumoMultiReceitas', () => {
   it('soma consumo de brilho e confeito por unidades produzidas', () => {
     const result = calcularConsumoMultiReceitas({
       unidadesProduzidas: 300,
-      pacotesProduzidos: null,
       receitas: [
         {
           tipo: 'brilho',
@@ -26,10 +25,9 @@ describe('calcularConsumoMultiReceitas', () => {
     ]);
   });
 
-  it('usa pacotes para receita de caixa e unidades para as demais', () => {
+  it('usa unidades para receita de caixa e embalagem', () => {
     const result = calcularConsumoMultiReceitas({
       unidadesProduzidas: 240,
-      pacotesProduzidos: 40,
       receitas: [
         {
           tipo: 'embalagem',
@@ -38,7 +36,7 @@ describe('calcularConsumoMultiReceitas', () => {
         },
         {
           tipo: 'caixa',
-          quantidadePorProduto: 10,
+          quantidadePorProduto: 48,
           ingredientes: [{ insumoId: 'papelao', quantidadePadrao: 1 }],
         },
       ],
@@ -47,13 +45,12 @@ describe('calcularConsumoMultiReceitas', () => {
     const filme = result.consumos.find((c) => c.insumoId === 'filme');
     const papelao = result.consumos.find((c) => c.insumoId === 'papelao');
     expect(filme?.quantidade).toBe(40);
-    expect(papelao?.quantidade).toBe(4);
+    expect(papelao?.quantidade).toBe(5);
   });
 
-  it('ignora receita de caixa quando pacotes indisponível, mas processa demais', () => {
+  it('ignora receitas quando unidades produzidas é zero', () => {
     const result = calcularConsumoMultiReceitas({
-      unidadesProduzidas: 120,
-      pacotesProduzidos: null,
+      unidadesProduzidas: 0,
       receitas: [
         {
           tipo: 'antimofo',
@@ -62,13 +59,13 @@ describe('calcularConsumoMultiReceitas', () => {
         },
         {
           tipo: 'caixa',
-          quantidadePorProduto: 10,
+          quantidadePorProduto: 48,
           ingredientes: [{ insumoId: 'papelao', quantidadePadrao: 1 }],
         },
       ],
     });
 
-    expect(result.consumos).toEqual([{ insumoId: 'antimofo-insumo', quantidade: 2 }]);
-    expect(result.avisos.some((a) => a.includes('caixa'))).toBe(true);
+    expect(result.consumos).toEqual([]);
+    expect(result.avisos.length).toBe(2);
   });
 });

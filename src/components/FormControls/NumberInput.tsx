@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { controlInputClassName } from '@/components/ui/Input';
 
 const stepperBtnClass =
@@ -18,6 +18,8 @@ interface NumberInputProps {
   min?: number;
   step?: number;
   max?: number;
+  /** Conteúdo opcional após os botões +/- (ex.: atalho de lote padrão). */
+  suffix?: ReactNode;
 }
 
 export default function NumberInput({
@@ -29,6 +31,7 @@ export default function NumberInput({
   min = 0,
   step = 1,
   max = 99999,
+  suffix,
 }: NumberInputProps) {
   const safeValue = typeof value === 'number' && !isNaN(value) ? value : 0;
 
@@ -123,6 +126,7 @@ export default function NumberInput({
         >
           +
         </button>
+        {suffix}
       </div>
     </div>
   );

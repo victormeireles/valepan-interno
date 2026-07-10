@@ -34,6 +34,11 @@ import {
   insumoRecebimentoCategoriaService,
   InsumoRecebimentoCategoriaService,
 } from '@/domain/insumos/insumo-recebimento-categoria-service';
+import type { CriarPendenciaInput } from '@/domain/types/insumo-estoque-db';
+import {
+  insumoRecebimentoDecisaoHistoricaService,
+  InsumoRecebimentoDecisaoHistoricaService,
+} from '@/lib/services/insumo-recebimento-decisao-historica-service';
 
 type ProcessarItemInput = {
   empresaId: string;
@@ -50,6 +55,7 @@ export type InsumoRecebimentoProcessorDeps = {
   pendenciaRepository: InsumoPendenciaRepository;
   estoqueService: InsumoEstoqueService;
   categoriaService?: InsumoRecebimentoCategoriaService;
+  decisaoHistoricaService?: InsumoRecebimentoDecisaoHistoricaService;
 };
 
 function montarContextoNf(
@@ -73,9 +79,12 @@ function montarContextoNf(
 
 export class InsumoRecebimentoProcessor {
   private readonly categoriaService: InsumoRecebimentoCategoriaService;
+  private readonly decisaoHistoricaService: InsumoRecebimentoDecisaoHistoricaService;
 
   constructor(private readonly deps: InsumoRecebimentoProcessorDeps) {
     this.categoriaService = deps.categoriaService ?? insumoRecebimentoCategoriaService;
+    this.decisaoHistoricaService =
+      deps.decisaoHistoricaService ?? insumoRecebimentoDecisaoHistoricaService;
   }
 
   async processarEvento(evento: OmieWebhookEventoRow): Promise<void> {
@@ -161,10 +170,19 @@ export class InsumoRecebimentoProcessor {
       return;
     }
 
-    const mapeamento = await this.deps.mapeamentoRepository.findByEmpresaProduto(
+    let mapeamento = await this.deps.mapeamentoRepository.findByEmpresaProduto(
       input.empresaId,
       input.item.nIdProduto,
     );
+
+    if (!mapeamento) {
+      mapeamento = await this.decisaoHistoricaService.resolverMapeamentoPorDescricao({
+        empresaId: input.empresaId,
+        omieIdProduto: input.item.nIdProduto,
+        omieCodigoProduto: input.item.cCodigoProduto,
+        descricaoProduto: input.item.cDescricaoProduto,
+      });
+    }
 
     if (mapeamento) {
       await this.registrarEntradaMapeada({
@@ -178,7 +196,24 @@ export class InsumoRecebimentoProcessor {
       return;
     }
 
-    await this.deps.pendenciaRepository.createPendente({
+    const pendenciaInput = this.montarPendenciaInput(input);
+    const foiIgnorado = await this.decisaoHistoricaService.produtoFoiIgnoradoAnteriormente({
+      empresaId: input.empresaId,
+      omieIdProduto: input.item.nIdProduto,
+      descricaoProduto: input.item.cDescricaoProduto,
+    });
+
+    if (foiIgnorado) {
+      const pendencia = await this.deps.pendenciaRepository.createPendente(pendenciaInput);
+      await this.deps.pendenciaRepository.marcarIgnorado(pendencia.id);
+      return;
+    }
+
+    await this.deps.pendenciaRepository.createPendente(pendenciaInput);
+  }
+
+  private montarPendenciaInput(input: ProcessarItemInput): CriarPendenciaInput {
+    return {
       empresaId: input.empresaId,
       omieWebhookEventoId: input.eventoId,
       omieNIdReceb: input.nIdReceb,
@@ -201,7 +236,7 @@ export class InsumoRecebimentoProcessor {
       ncmProduto: input.item.ncm,
       categoriaCompraCodigo: input.contextoNf.categoriaCompraCodigo,
       categoriaCompraDescricao: input.contextoNf.categoriaCompraDescricao,
-    });
+    };
   }
 
   private async registrarEntradaMapeada(params: {

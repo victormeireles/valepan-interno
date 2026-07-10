@@ -66,7 +66,7 @@ const tipoOptions: Array<{ value: TipoReceita; label: string; helper: string }> 
   {
     value: 'caixa',
     label: 'Caixa',
-    helper: 'Cadastre quantidades por gramatura (pacotes por caixa, etc.).',
+    helper: 'Cadastre quantidades por gramatura (pães por caixa, etc.).',
   },
 ];
 

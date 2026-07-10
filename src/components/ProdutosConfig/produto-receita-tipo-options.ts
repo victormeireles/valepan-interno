@@ -41,7 +41,7 @@ export const PRODUTO_RECEITA_TIPO_OPTIONS: Array<{
   {
     value: 'caixa',
     label: 'Caixa',
-    helper: 'Quantidade de pacotes (ou pães) por caixa.',
+    helper: 'Quantidade de pães por caixa.',
     icon: 'all_inbox',
   },
 ];

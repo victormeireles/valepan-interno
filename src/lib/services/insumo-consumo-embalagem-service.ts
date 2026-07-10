@@ -39,7 +39,6 @@ export class InsumoConsumoEmbalagemService {
       const dimensoes = derivarDimensoesEmbalagem(lote.quantidade, contexto.receitas);
       const calculo = calcularConsumoMultiReceitas({
         unidadesProduzidas: dimensoes.unidades ?? 0,
-        pacotesProduzidos: dimensoes.pacotes,
         receitas: contexto.receitas,
       });
 

@@ -2,7 +2,6 @@ import type {
   InsumoConsumoCalculado,
   InsumoReceitaTipoContexto,
 } from '@/domain/insumos/insumo-consumo-producao-types';
-import type { TipoReceita } from '@/domain/receitas/receita-gramatura-resolver';
 
 const CASAS = 6;
 
@@ -14,17 +13,12 @@ function arredondar(value: number): number {
 /**
  * Dimensão produzida usada como base do consumo de cada tipo de receita.
  * Regra: `quantidade_por_produto` = quantos itens da dimensão 1 receita rende.
- *  - massa/brilho/confeito/antimofo/embalagem: dimensão = pães (unidades)
- *    (embalagem: qpp = pães/pacote, então unidades ÷ qpp = nº de pacotes = nº de receitas)
- *  - caixa: dimensão = pacotes (qpp = pacotes/caixa)
+ *  - massa/brilho/confeito/antimofo: dimensão = pães (unidades)
+ *  - embalagem: qpp = pães/pacote → unidades ÷ qpp = nº de pacotes = nº de receitas
+ *  - caixa: qpp = pães/caixa → unidades ÷ qpp = nº de caixas = nº de receitas
  */
-function dimensaoDoTipo(tipo: TipoReceita): 'unidades' | 'pacotes' {
-  return tipo === 'caixa' ? 'pacotes' : 'unidades';
-}
-
 export type InsumoConsumoMultiInput = {
   unidadesProduzidas: number;
-  pacotesProduzidos: number | null;
   receitas: InsumoReceitaTipoContexto[];
 };
 
@@ -45,12 +39,9 @@ export function calcularConsumoMultiReceitas(
   const avisos: string[] = [];
 
   for (const receita of input.receitas) {
-    const base =
-      dimensaoDoTipo(receita.tipo) === 'pacotes'
-        ? input.pacotesProduzidos
-        : input.unidadesProduzidas;
+    const base = input.unidadesProduzidas;
 
-    if (base == null || base <= 0) {
+    if (base <= 0) {
       avisos.push(
         `Receita ${receita.tipo} ignorada: quantidade base indisponível para o cálculo`,
       );

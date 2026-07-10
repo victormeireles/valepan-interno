@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { normalizarDescricaoProdutoOmie } from '@/domain/insumos/insumo-produto-descricao-normalizer';
 import type {
   CriarIntegracaoInsumoInput,
   IntegracaoInsumoComEmpresa,
@@ -46,6 +47,35 @@ export class InsumoMapeamentoRepository {
     }
 
     return data as IntegracaoInsumoRow | null;
+  }
+
+  async findAtivoByDescricaoOmie(
+    empresaId: string,
+    descricaoNormalizada: string,
+  ): Promise<IntegracaoInsumoRow | null> {
+    if (!descricaoNormalizada) {
+      return null;
+    }
+
+    const { data, error } = await this.db
+      .from('integracao_insumos')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .eq('ativo', true)
+      .not('descricao_omie', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      throw new Error(`Erro ao buscar mapeamento por descrição: ${error.message}`);
+    }
+
+    return (
+      ((data as IntegracaoInsumoRow[]) ?? []).find(
+        (row) =>
+          normalizarDescricaoProdutoOmie(row.descricao_omie) === descricaoNormalizada,
+      ) ?? null
+    );
   }
 
   async findByEmpresaProduto(

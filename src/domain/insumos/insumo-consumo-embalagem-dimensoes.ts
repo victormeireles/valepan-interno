@@ -20,7 +20,7 @@ function qppDoTipo(
 
 /**
  * Deriva unidades (pães) e pacotes produzidos a partir da unidade principal do
- * lote de embalagem, usando pães/pacote (receita embalagem) e pacotes/caixa
+ * lote de embalagem, usando pães/pacote (receita embalagem) e pães/caixa
  * (receita caixa). Retorna avisos quando não é possível converter alguma dimensão.
  */
 export function derivarDimensoesEmbalagem(
@@ -28,18 +28,18 @@ export function derivarDimensoesEmbalagem(
   receitas: InsumoReceitaTipoContexto[],
 ): EmbalagemDimensoesProduzidas {
   const paesPorPacote = qppDoTipo(receitas, 'embalagem');
-  const pacotesPorCaixa = qppDoTipo(receitas, 'caixa');
+  const unidadesPorCaixa = qppDoTipo(receitas, 'caixa');
   const avisos: string[] = [];
 
   let unidades: number | null = null;
   let pacotes: number | null = null;
 
   if (quantidade.caixas > 0) {
-    if (pacotesPorCaixa) {
-      pacotes = quantidade.caixas * pacotesPorCaixa;
-      unidades = paesPorPacote ? pacotes * paesPorPacote : null;
+    if (unidadesPorCaixa) {
+      unidades = quantidade.caixas * unidadesPorCaixa;
+      pacotes = paesPorPacote ? unidades / paesPorPacote : null;
     } else {
-      avisos.push('Lote em caixas sem receita de caixa (pacotes/caixa): estoque não derivado');
+      avisos.push('Lote em caixas sem receita de caixa (pães/caixa): estoque não derivado');
     }
   } else if (quantidade.pacotes > 0) {
     pacotes = quantidade.pacotes;

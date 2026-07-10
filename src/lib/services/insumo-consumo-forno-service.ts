@@ -56,7 +56,6 @@ export class InsumoConsumoFornoService {
       const unidadesProduzidas = resolverUnidadesProduzidas(lote, ordem, contexto);
       const calculo = calcularConsumoMultiReceitas({
         unidadesProduzidas: unidadesProduzidas ?? 0,
-        pacotesProduzidos: null,
         receitas: contexto.receitas,
       });
 

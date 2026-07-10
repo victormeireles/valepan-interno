@@ -13,6 +13,13 @@ import {
 import { EmbalagemLoteModalShell } from './EmbalagemLoteModal';
 import EmbalagemDiscardSheet from './EmbalagemLoteModal/EmbalagemDiscardSheet';
 import { hasProducaoDraftChanged } from '@/domain/realizado/producao-draft-changes';
+import {
+  aplicarAtalhoLotePadrao,
+  aplicarAtalhoLoteValor,
+  calcularSaldoLoteRestante,
+  LOTE_PADRAO_LATAS_ETAPA,
+} from '@/domain/realizado/producao-lote-atalhos';
+import ProducaoLoteAtalhosButtons from './FormControls/ProducaoLoteAtalhosButtons';
 import EtapaLoteQuantidadePreview from './Realizado/etapa/EtapaLoteQuantidadePreview';
 import EtapaLoteModalFooter from './Realizado/etapa/EtapaLoteModalFooter';
 import EtapaContinuidadeConfirmDialog from './Realizado/etapa/EtapaContinuidadeConfirmDialog';
@@ -143,6 +150,10 @@ export default function ProducaoModal({
         ? formData.unidades || 0
         : formData.caixas || 0;
   const totalProjetadoEtapa = Math.max(0, produzidoAtual + quantidadeLoteAtual);
+  const saldoLoteRestante = calcularSaldoLoteRestante(
+    metaReferenciaEfetiva,
+    produzidoAtual,
+  );
 
   const camposVisiveis: CamposRealizadoEmbalagem = useMemo(() => {
     if (mode !== 'embalagem' || !pedidoMetaOriginal) {
@@ -647,6 +658,14 @@ export default function ProducaoModal({
     setShowDiscardSheet(false);
   };
 
+  const handlePreencherLotePadraoEtapa = () => {
+    setFormData((prev) => aplicarAtalhoLotePadrao(prev, 'etapa-latas'));
+  };
+
+  const handlePreencherSaldoRestanteEtapa = () => {
+    setFormData((prev) => aplicarAtalhoLoteValor(prev, 'caixas', saldoLoteRestante));
+  };
+
   const handleRemovePhotoConfirm = async () => {
     const slot = removeConfirmSlot;
     if (!slot) return;
@@ -764,6 +783,7 @@ export default function ProducaoModal({
           totalProjetado={totalProjetadoEtapa}
           metaReferencia={metaReferenciaEfetiva}
           metaPlanejada={metaPlanejadaEfetiva}
+          produzidoAtual={produzidoAtual}
           unidade={etapaUnidadeNorm}
           message={message}
           showPhotoWarning={showPhotoWarning}
@@ -862,6 +882,18 @@ export default function ProducaoModal({
                   onChange={(value) => setFormData((prev) => ({ ...prev, caixas: value }))}
                   min={0}
                   step={1}
+                  suffix={
+                    isEtapaMode ? (
+                      <ProducaoLoteAtalhosButtons
+                        lotePadrao={LOTE_PADRAO_LATAS_ETAPA}
+                        saldoRestante={saldoLoteRestante}
+                        unidade="LT"
+                        disabled={loading || isSubmitting}
+                        onPreencherPadrao={handlePreencherLotePadraoEtapa}
+                        onPreencherRestante={handlePreencherSaldoRestanteEtapa}
+                      />
+                    ) : undefined
+                  }
                 />
               )}
               {showUnidadesField && (

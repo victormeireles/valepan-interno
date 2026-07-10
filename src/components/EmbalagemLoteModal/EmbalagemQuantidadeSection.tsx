@@ -1,6 +1,14 @@
 'use client';
 
 import NumberInput from '@/components/FormControls/NumberInput';
+import ProducaoLoteAtalhosButtons from '@/components/FormControls/ProducaoLoteAtalhosButtons';
+import {
+  aplicarAtalhoLotePadrao,
+  aplicarAtalhoLoteValor,
+  calcularSaldoLoteRestante,
+  LOTE_PADRAO_CAIXAS_EMBALAGEM,
+  type ProducaoLoteAtalhoUnidade,
+} from '@/domain/realizado/producao-lote-atalhos';
 import type { CamposRealizadoEmbalagem } from '@/domain/embalagem/painel-quantidade';
 import type { ProducaoData } from '@/domain/types';
 
@@ -8,16 +16,27 @@ type Props = {
   camposVisiveis: CamposRealizadoEmbalagem;
   formData: ProducaoData;
   setFormData: React.Dispatch<React.SetStateAction<ProducaoData>>;
-  pedidoQuantidades?: { caixas: number; pacotes: number; unidades: number; kg: number };
+  metaReferencia: number;
+  produzidoAtual: number;
+  unidade: string;
   loading: boolean;
   isSubmitting: boolean;
 };
+
+function resolverUnidadeAtalho(unidade: string): ProducaoLoteAtalhoUnidade {
+  const norm = unidade.toUpperCase();
+  if (norm === 'CX') return 'cx';
+  if (norm === 'UN') return 'UN';
+  return 'cx';
+}
 
 export default function EmbalagemQuantidadeSection({
   camposVisiveis,
   formData,
   setFormData,
-  pedidoQuantidades,
+  metaReferencia,
+  produzidoAtual,
+  unidade,
   loading,
   isSubmitting,
 }: Props) {
@@ -29,24 +48,17 @@ export default function EmbalagemQuantidadeSection({
   ].filter(Boolean).length;
 
   const gridCols = visibleCount === 1 ? 'grid-cols-1' : 'grid-cols-2';
+  const saldoRestante = calcularSaldoLoteRestante(metaReferencia, produzidoAtual);
+  const unidadeAtalho = resolverUnidadeAtalho(unidade);
+  const busy = loading || isSubmitting;
 
-  const handlePreencherRestante = () => {
-    if (!pedidoQuantidades) return;
-    setFormData((prev) => ({
-      ...prev,
-      caixas: camposVisiveis.caixas ? pedidoQuantidades.caixas : prev.caixas,
-      pacotes: camposVisiveis.pacotes ? pedidoQuantidades.pacotes : prev.pacotes,
-      unidades: camposVisiveis.unidades ? pedidoQuantidades.unidades : prev.unidades,
-      kg: camposVisiveis.kg ? pedidoQuantidades.kg : prev.kg,
-    }));
+  const handlePreencherLotePadrao = () => {
+    setFormData((prev) => aplicarAtalhoLotePadrao(prev, 'embalagem-caixas'));
   };
 
-  const hasSaldo =
-    pedidoQuantidades &&
-    ((camposVisiveis.caixas && pedidoQuantidades.caixas > 0) ||
-      (camposVisiveis.pacotes && pedidoQuantidades.pacotes > 0) ||
-      (camposVisiveis.unidades && pedidoQuantidades.unidades > 0) ||
-      (camposVisiveis.kg && pedidoQuantidades.kg > 0));
+  const handlePreencherSaldoRestante = () => {
+    setFormData((prev) => aplicarAtalhoLoteValor(prev, 'caixas', saldoRestante));
+  };
 
   return (
     <section>
@@ -89,16 +101,17 @@ export default function EmbalagemQuantidadeSection({
           />
         )}
       </div>
-      {hasSaldo && (
-        <button
-          type="button"
-          onClick={handlePreencherRestante}
-          disabled={loading || isSubmitting}
-          className="mt-3 min-h-11 px-3 py-2 text-sm font-medium rounded-md border border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-        >
-          Preencher quantidade
-        </button>
-      )}
+      {camposVisiveis.caixas ? (
+        <ProducaoLoteAtalhosButtons
+          lotePadrao={LOTE_PADRAO_CAIXAS_EMBALAGEM}
+          saldoRestante={saldoRestante}
+          unidade={unidadeAtalho}
+          disabled={busy}
+          placement="below"
+          onPreencherPadrao={handlePreencherLotePadrao}
+          onPreencherRestante={handlePreencherSaldoRestante}
+        />
+      ) : null}
     </section>
   );
 }

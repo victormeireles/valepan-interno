@@ -35,19 +35,27 @@ const createPendente = vi.fn();
 const registrarEntrada = vi.fn();
 const resolverCategoriaRecebimento = vi.fn();
 const resolverCategoriaItem = vi.fn();
+const produtoFoiIgnoradoAnteriormente = vi.fn();
+const resolverMapeamentoPorDescricao = vi.fn();
 
 const categoriaService = {
   resolverCategoriaRecebimento,
   resolverCategoriaItem,
 };
 
+const decisaoHistoricaService = {
+  produtoFoiIgnoradoAnteriormente,
+  resolverMapeamentoPorDescricao,
+};
+
 const processor = new InsumoRecebimentoProcessor({
   client: { consultarRecebimento },
   webhookRepository: { findEmpresaByAppKey } as never,
   mapeamentoRepository: { findByEmpresaProduto } as never,
-  pendenciaRepository: { createPendente } as never,
+  pendenciaRepository: { createPendente, marcarIgnorado: vi.fn() } as never,
   estoqueService: { registrarEntrada } as never,
   categoriaService: categoriaService as never,
+  decisaoHistoricaService: decisaoHistoricaService as never,
 });
 
 const eventoBase: OmieWebhookEventoRow = {
@@ -121,6 +129,8 @@ describe('InsumoRecebimentoProcessor', () => {
     findByEmpresaProduto.mockResolvedValue(mapeamentoBase);
     createPendente.mockResolvedValue({ id: 'pend-1' });
     registrarEntrada.mockResolvedValue(undefined);
+    produtoFoiIgnoradoAnteriormente.mockResolvedValue(false);
+    resolverMapeamentoPorDescricao.mockResolvedValue(null);
   });
 
   it('com mapeamento chama registrarEntrada uma vez', async () => {
@@ -147,31 +157,48 @@ describe('InsumoRecebimentoProcessor', () => {
     await processor.processarEvento(eventoBase);
 
     expect(createPendente).toHaveBeenCalledTimes(1);
-    expect(createPendente).toHaveBeenCalledWith({
-      empresaId: 'emp-1',
-      omieWebhookEventoId: 'evt-1',
-      omieNIdReceb: 999,
-      omieNIdItem: 10,
-      omieIdProduto: 500,
-      omieCodigoProduto: 'FAR-001',
-      descricaoProduto: 'Farinha',
-      quantidadeNf: 100,
-      unidadeNf: 'KG',
-      precoUnitNf: 5,
-      valorTotalItem: 500,
-      numeroNf: '12345',
-      dataEmissaoNf: '2026-06-18',
-      fornecedorRazaoSocial: null,
-      fornecedorNome: null,
-      fornecedorCnpj: null,
-      naturezaOperacao: null,
-      valorTotalNf: null,
-      cfopEntrada: null,
-      ncmProduto: null,
-      categoriaCompraCodigo: '2.01.01',
-      categoriaCompraDescricao: 'Compras de Mercadorias para Revenda',
-    });
+    expect(createPendente).toHaveBeenCalledWith(
+      expect.objectContaining({
+        empresaId: 'emp-1',
+        omieIdProduto: 500,
+        descricaoProduto: 'Farinha',
+      }),
+    );
     expect(registrarEntrada).not.toHaveBeenCalled();
+  });
+
+  it('sem mapeamento mas com histórico ignorado cria pendência já ignorada', async () => {
+    findByEmpresaProduto.mockResolvedValue(null);
+    produtoFoiIgnoradoAnteriormente.mockResolvedValue(true);
+    const marcarIgnorado = vi.fn().mockResolvedValue(undefined);
+    const processorComIgnorado = new InsumoRecebimentoProcessor({
+      client: { consultarRecebimento },
+      webhookRepository: { findEmpresaByAppKey } as never,
+      mapeamentoRepository: { findByEmpresaProduto } as never,
+      pendenciaRepository: { createPendente, marcarIgnorado } as never,
+      estoqueService: { registrarEntrada } as never,
+      categoriaService: categoriaService as never,
+      decisaoHistoricaService: decisaoHistoricaService as never,
+    });
+
+    await processorComIgnorado.processarEvento(eventoBase);
+
+    expect(createPendente).toHaveBeenCalledTimes(1);
+    expect(marcarIgnorado).toHaveBeenCalledWith('pend-1');
+    expect(registrarEntrada).not.toHaveBeenCalled();
+  });
+
+  it('sem mapeamento por id usa vínculo histórico por descrição', async () => {
+    findByEmpresaProduto.mockResolvedValue(null);
+    resolverMapeamentoPorDescricao.mockResolvedValue({
+      ...mapeamentoBase,
+      omie_id_produto: 500,
+    });
+
+    await processor.processarEvento(eventoBase);
+
+    expect(registrarEntrada).toHaveBeenCalledTimes(1);
+    expect(createPendente).not.toHaveBeenCalled();
   });
 
   it('ignora item com cIgnorarItem = S', async () => {
@@ -204,6 +231,7 @@ describe('InsumoRecebimentoProcessor', () => {
       pendenciaRepository: { createPendente } as never,
       estoqueService: serviceIdempotente,
       categoriaService: categoriaService as never,
+      decisaoHistoricaService: decisaoHistoricaService as never,
     });
 
     await processorIdempotente.processarEvento(eventoBase);

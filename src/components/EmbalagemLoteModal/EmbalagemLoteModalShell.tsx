@@ -34,6 +34,7 @@ export type EmbalagemLoteModalShellProps = {
   totalProjetado: number;
   metaReferencia: number;
   metaPlanejada: number;
+  produzidoAtual: number;
   unidade: string;
   message: { type: 'success' | 'error'; text: string } | null;
   showPhotoWarning: boolean;
@@ -75,6 +76,7 @@ export default function EmbalagemLoteModalShell({
   totalProjetado,
   metaReferencia,
   metaPlanejada,
+  produzidoAtual,
   unidade,
   message,
   showPhotoWarning,
@@ -133,7 +135,9 @@ export default function EmbalagemLoteModalShell({
             camposVisiveis={camposVisiveis}
             formData={formData}
             setFormData={setFormData}
-            pedidoQuantidades={pedidoQuantidades}
+            metaReferencia={metaReferencia}
+            produzidoAtual={produzidoAtual}
+            unidade={unidade}
             loading={loading}
             isSubmitting={isSubmitting}
           />

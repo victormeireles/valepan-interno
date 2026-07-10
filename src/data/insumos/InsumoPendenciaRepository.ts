@@ -194,6 +194,46 @@ export class InsumoPendenciaRepository {
     }
   }
 
+  async existsIgnoradoPorProdutoOmie(
+    empresaId: string,
+    omieIdProduto: number,
+  ): Promise<boolean> {
+    const { count, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .eq('omie_id_produto', omieIdProduto)
+      .eq('status', 'ignorado');
+
+    if (error) {
+      throw new Error(`Erro ao verificar produto ignorado: ${error.message}`);
+    }
+
+    return (count ?? 0) > 0;
+  }
+
+  async existsIgnoradoPorDescricao(
+    empresaId: string,
+    descricaoNormalizada: string,
+  ): Promise<boolean> {
+    if (!descricaoNormalizada) {
+      return false;
+    }
+
+    const { count, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ignorado')
+      .ilike('descricao_produto', descricaoNormalizada);
+
+    if (error) {
+      throw new Error(`Erro ao verificar descrição ignorada: ${error.message}`);
+    }
+
+    return (count ?? 0) > 0;
+  }
+
   async marcarIgnorado(id: string): Promise<void> {
     const { error } = await this.db
       .from('insumo_entrada_pendencias')

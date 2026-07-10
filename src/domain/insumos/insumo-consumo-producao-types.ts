@@ -21,7 +21,7 @@ export type InsumoReceitaMassaContexto = {
  * `quantidadePorProduto` muda de semântica conforme o tipo:
  *  - massa/brilho/confeito/antimofo = pães por receita
  *  - embalagem = pães por pacote
- *  - caixa = pacotes por caixa
+ *  - caixa = pães por caixa
  */
 export type InsumoReceitaTipoContexto = {
   tipo: TipoReceita;
