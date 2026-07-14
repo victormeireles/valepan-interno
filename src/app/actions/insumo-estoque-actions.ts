@@ -21,6 +21,7 @@ import {
   type InsumoPendenciaProdutoGrupo,
 } from '@/domain/insumos/insumo-pendencia-grupo';
 import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
+import { insumoControleEstoqueFilter } from '@/domain/insumos/insumo-controle-estoque-filter';
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
@@ -57,7 +58,10 @@ export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
     insumoPendenciaRepository.countPendentes(),
   ]);
 
-  return { saldos, pendenciasCount };
+  return {
+    saldos: insumoControleEstoqueFilter.filterSaldosControlaveis(saldos),
+    pendenciasCount,
+  };
 }
 
 export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
