@@ -1,12 +1,26 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { controlInputClassName } from '@/components/ui/Input';
+
+const DROPDOWN_GAP_PX = 8;
+const DROPDOWN_MARGIN_PX = 16;
+const DROPDOWN_MAX_HEIGHT_PX = 240;
+const DROPDOWN_MIN_HEIGHT_PX = 160;
 
 export type AutocompleteEmptyCreateConfig = {
   minQueryLength?: number;
   actionLabel?: string;
   onAction: (query: string) => void;
+};
+
+type DropdownBounds = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+  opensUpward: boolean;
 };
 
 interface AutocompleteInputProps {
@@ -42,8 +56,10 @@ export default function AutocompleteInput({
   const [inputValue, setInputValue] = useState(value);
   
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [dropdownBounds, setDropdownBounds] = useState<DropdownBounds | null>(null);
 
   // Sincronizar input visual quando value externo muda
   useEffect(() => {
@@ -137,6 +153,46 @@ export default function AutocompleteInput({
     setIsOpen(true);
   };
 
+  const updateDropdownBounds = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || typeof window === 'undefined') return;
+
+    const rect = container.getBoundingClientRect();
+    const availableBelow =
+      window.innerHeight - rect.bottom - DROPDOWN_MARGIN_PX - DROPDOWN_GAP_PX;
+    const availableAbove = rect.top - DROPDOWN_MARGIN_PX - DROPDOWN_GAP_PX;
+    const opensUpward =
+      availableBelow < DROPDOWN_MIN_HEIGHT_PX && availableAbove > availableBelow;
+    const availableSpace = opensUpward ? availableAbove : availableBelow;
+
+    setDropdownBounds({
+      top: opensUpward ? rect.top - DROPDOWN_GAP_PX : rect.bottom + DROPDOWN_GAP_PX,
+      left: rect.left,
+      width: rect.width,
+      maxHeight: Math.max(
+        96,
+        Math.min(DROPDOWN_MAX_HEIGHT_PX, availableSpace),
+      ),
+      opensUpward,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setDropdownBounds(null);
+      return;
+    }
+
+    updateDropdownBounds();
+    window.addEventListener('resize', updateDropdownBounds);
+    window.addEventListener('scroll', updateDropdownBounds, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownBounds);
+      window.removeEventListener('scroll', updateDropdownBounds, true);
+    };
+  }, [isOpen, updateDropdownBounds]);
+
   // Scroll para o item destacado
   useEffect(() => {
     if (highlightedIndex >= 0 && listRef.current) {
@@ -152,9 +208,14 @@ export default function AutocompleteInput({
   // Click Outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const eventTarget = event.target as Node;
+      const clickedInsideControl = containerRef.current?.contains(eventTarget);
+      const clickedInsideDropdown = dropdownRef.current?.contains(eventTarget);
+
       if (
         containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        !clickedInsideControl &&
+        !clickedInsideDropdown
       ) {
         setIsOpen(false);
         setHighlightedIndex(-1);
@@ -171,6 +232,79 @@ export default function AutocompleteInput({
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [strict, options, validateStrict]); 
+
+  const dropdownStyle: CSSProperties | undefined = dropdownBounds
+    ? {
+        top: dropdownBounds.top,
+        left: dropdownBounds.left,
+        width: dropdownBounds.width,
+        transform: dropdownBounds.opensUpward ? 'translateY(-100%)' : undefined,
+      }
+    : undefined;
+
+  const dropdownMenu =
+    isOpen && dropdownBounds && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={dropdownRef}
+            className="animation-fade-in-down fixed z-[1000] overflow-hidden rounded-xl border border-border-default bg-surface shadow-control"
+            style={dropdownStyle}
+          >
+            <ul
+              ref={listRef}
+              className="overflow-auto py-1"
+              style={{ maxHeight: dropdownBounds.maxHeight }}
+            >
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((option, index) => (
+                  <li
+                    key={`${option}-${index}`}
+                    className={`cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors ${
+                      index === highlightedIndex
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'text-stone-700 hover:bg-stone-50'
+                    }`}
+                    onMouseDown={(e) => e.preventDefault()} // Previne blur ao clicar
+                    onClick={() => handleOptionSelect(option)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                  >
+                    {option}
+                  </li>
+                ))
+              ) : emptyCreate &&
+                (inputValue.trim().length >= (emptyCreate.minQueryLength ?? 2) ||
+                  options.length === 0) ? (
+                <li className="px-4 py-3 text-center">
+                  <p className="text-sm text-stone-500">
+                    {inputValue.trim()
+                      ? `Nenhum resultado para “${inputValue.trim()}”`
+                      : 'Nenhum insumo cadastrado'}
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 inline-flex min-h-11 items-center justify-center gap-1 rounded-xl px-3 text-sm font-medium text-amber-800 hover:bg-amber-50"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      emptyCreate.onAction(inputValue.trim());
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span className="material-icons text-base" aria-hidden="true">
+                      add
+                    </span>
+                    {emptyCreate.actionLabel ?? 'Criar insumo'}
+                  </button>
+                </li>
+              ) : (
+                <li className="px-4 py-3 text-center text-sm italic text-text-muted">
+                  Nenhum resultado encontrado
+                </li>
+              )}
+            </ul>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div ref={containerRef} className="relative w-full group">
@@ -201,57 +335,7 @@ export default function AutocompleteInput({
         </div>
       </div>
 
-      {isOpen && (
-        <div className="animation-fade-in-down absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border-default bg-surface shadow-control">
-          <ul ref={listRef} className="max-h-60 overflow-auto py-1">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option, index) => (
-                <li
-                  key={`${option}-${index}`}
-                  className={`cursor-pointer px-4 py-2.5 text-sm font-medium transition-colors ${
-                    index === highlightedIndex
-                      ? 'bg-amber-50 text-amber-800'
-                      : 'text-stone-700 hover:bg-stone-50'
-                  }`}
-                  onMouseDown={(e) => e.preventDefault()} // Previne blur ao clicar
-                  onClick={() => handleOptionSelect(option)}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                >
-                  {option}
-                </li>
-              ))
-            ) : emptyCreate &&
-              (inputValue.trim().length >= (emptyCreate.minQueryLength ?? 2) ||
-                options.length === 0) ? (
-              <li className="px-4 py-3 text-center">
-                <p className="text-sm text-stone-500">
-                  {inputValue.trim()
-                    ? `Nenhum resultado para “${inputValue.trim()}”`
-                    : 'Nenhum insumo cadastrado'}
-                </p>
-                <button
-                  type="button"
-                  className="mt-2 inline-flex min-h-11 items-center justify-center gap-1 rounded-xl px-3 text-sm font-medium text-amber-800 hover:bg-amber-50"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    emptyCreate.onAction(inputValue.trim());
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="material-icons text-base" aria-hidden="true">
-                    add
-                  </span>
-                  {emptyCreate.actionLabel ?? 'Criar insumo'}
-                </button>
-              </li>
-            ) : (
-              <li className="px-4 py-3 text-center text-sm italic text-text-muted">
-                Nenhum resultado encontrado
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
+      {dropdownMenu}
     </div>
   );
 }
