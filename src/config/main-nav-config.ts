@@ -102,7 +102,8 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     icon: 'grain',
     match: (pathname) =>
       pathname.startsWith('/estoque-insumos') ||
-      pathname.startsWith('/mapeamento-insumos'),
+      pathname.startsWith('/mapeamento-insumos') ||
+      pathname.startsWith('/consumo-insumos'),
     children: [
       {
         type: 'link',
@@ -117,6 +118,13 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Mapeamento',
         icon: 'link',
         match: (pathname) => pathname.startsWith('/mapeamento-insumos'),
+      },
+      {
+        type: 'link',
+        href: '/consumo-insumos',
+        label: 'Consumo',
+        icon: 'query_stats',
+        match: (pathname) => pathname.startsWith('/consumo-insumos'),
       },
     ],
   },

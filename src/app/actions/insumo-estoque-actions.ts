@@ -14,6 +14,15 @@ import {
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
+import type {
+  InsumoConsumoPeriodo,
+  InsumoConsumoVisualizacao,
+} from '@/domain/insumos/insumo-consumo-semanal-periodo';
+import { insumoConsumoSemanalPeriodoBuilder } from '@/domain/insumos/insumo-consumo-semanal-periodo';
+import type {
+  InsumoConsumoReceitaDetalhe,
+  InsumoConsumoSemanalItem,
+} from '@/domain/insumos/insumo-consumo-semanal-aggregator';
 import { enrichIntegracaoInsumosComFornecedor } from '@/domain/insumos/insumo-vinculo-fornecedor';
 import {
   groupPendenciasPorProduto,
@@ -23,13 +32,15 @@ import {
 import type { InsumoPendenciaStatus } from '@/domain/types/insumo-estoque';
 import { insumoControleEstoqueFilter } from '@/domain/insumos/insumo-controle-estoque-filter';
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
+import { insumoConsumoRepository } from '@/data/insumos/InsumoConsumoRepository';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
 import { insumoEntradaFatorRecalcIntegracaoService } from '@/lib/services/insumo-entrada-fator-recalc-integracao-service';
 
-const REVALIDATE_PATHS = ['/estoque-insumos', '/mapeamento-insumos'] as const;
+const REVALIDATE_PATHS = ['/estoque-insumos', '/mapeamento-insumos', '/consumo-insumos'] as const;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function revalidateInsumoPages() {
   for (const path of REVALIDATE_PATHS) {
@@ -48,6 +59,11 @@ export type InsumoMapeamentoPageData = {
   pendenciasCount: number;
   ignoradasCount: number;
   vinculos: IntegracaoInsumoListItem[];
+};
+
+export type InsumoConsumoSemanalPageData = {
+  periodo: InsumoConsumoPeriodo;
+  items: InsumoConsumoSemanalItem[];
 };
 
 export type InsumoEstoqueDashboardData = InsumoSaldosPageData & InsumoMapeamentoPageData;
@@ -85,6 +101,33 @@ export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPag
   };
 }
 
+export async function getInsumoConsumoSemanalPageData(input?: {
+  dataInicio?: string;
+  dataFim?: string;
+  visualizacao?: string;
+}): Promise<InsumoConsumoSemanalPageData> {
+  const periodo = resolveConsumoSemanalPeriodo(input);
+  const items = await insumoConsumoRepository.listConsumoSemanal(periodo);
+
+  return {
+    periodo,
+    items,
+  };
+}
+
+export async function getInsumoConsumoDetalhesPorProduto(input: {
+  insumoId: string;
+  dataInicio?: string;
+  dataFim?: string;
+  visualizacao?: string;
+}): Promise<InsumoConsumoReceitaDetalhe[]> {
+  const periodo = resolveConsumoSemanalPeriodo(input);
+  return insumoConsumoRepository.listConsumoDetalhesPorProduto({
+    insumoId: input.insumoId,
+    periodo,
+  });
+}
+
 export async function getIntegracaoInsumoPorProdutoOmie(input: {
   empresaId: string;
   omieIdProduto: number;
@@ -102,6 +145,37 @@ export async function getIntegracaoInsumoPorProdutoOmie(input: {
     insumoId: integracao.insumo_id,
     fatorConversao: Number(integracao.fator_conversao),
   };
+}
+
+function resolveConsumoSemanalPeriodo(input?: {
+  dataInicio?: string;
+  dataFim?: string;
+  visualizacao?: string;
+}): InsumoConsumoPeriodo {
+  const visualizacao = resolveConsumoVisualizacao(input?.visualizacao);
+
+  if (
+    input?.dataInicio &&
+    input.dataFim &&
+    ISO_DATE_PATTERN.test(input.dataInicio) &&
+    ISO_DATE_PATTERN.test(input.dataFim)
+  ) {
+    try {
+      return insumoConsumoSemanalPeriodoBuilder.buildFromRange(
+        input.dataInicio,
+        input.dataFim,
+        visualizacao,
+      );
+    } catch {
+      return insumoConsumoSemanalPeriodoBuilder.buildDefault(undefined, visualizacao);
+    }
+  }
+
+  return insumoConsumoSemanalPeriodoBuilder.buildDefault(undefined, visualizacao);
+}
+
+function resolveConsumoVisualizacao(value?: string): InsumoConsumoVisualizacao {
+  return value === 'diaria' ? 'diaria' : 'semanal';
 }
 
 export async function getInsumoPendenciasPorProdutoOmie(input: {

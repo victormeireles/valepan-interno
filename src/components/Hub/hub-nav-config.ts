@@ -64,6 +64,12 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     icon: 'link',
   },
   {
+    href: '/consumo-insumos',
+    title: 'Consumo de insumos',
+    description: 'Tabela semanal de saídas do estoque de insumos',
+    icon: 'query_stats',
+  },
+  {
     href: '/painel/dashboard-estoque',
     title: 'Estoque',
     description: 'Dashboards em TV e monitor',

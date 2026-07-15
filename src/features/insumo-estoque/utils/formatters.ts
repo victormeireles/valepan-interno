@@ -6,6 +6,17 @@ export function formatInsumoQuantidade(value: number, unidade?: string): string 
   return unidade ? `${formatted} ${unidade}` : formatted;
 }
 
+export function formatInsumoQuantidadeArredondada(value: number, unidade?: string): string {
+  if (value === 0) return '-';
+
+  const shouldUseDecimal = Math.abs(value) < 5;
+  const formatted = value.toLocaleString('pt-BR', {
+    minimumFractionDigits: shouldUseDecimal ? 1 : 0,
+    maximumFractionDigits: shouldUseDecimal ? 1 : 0,
+  });
+  return unidade ? `${formatted} ${unidade}` : formatted;
+}
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
