@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 import {
   dateInputsToIsoRange,
@@ -32,11 +32,13 @@ export function StockManualAdjustmentsDialog({
   const [movimentos, setMovimentos] = useState<EstoqueMovimentoRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<Element | null>(null);
 
   const truncated = movimentos.length >= 100;
   const showDateOnTime = de !== ate;
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (signal?: AbortSignal) => {
     if (!de || !ate) return;
 
     setLoading(true);
@@ -51,6 +53,7 @@ export function StockManualAdjustmentsDialog({
       });
       const res = await fetch(`/api/estoque/movimentos?${params.toString()}`, {
         cache: 'no-store',
+        signal,
       });
       const json = await res.json();
       if (!res.ok) {
@@ -58,10 +61,13 @@ export function StockManualAdjustmentsDialog({
       }
       setMovimentos(json.data ?? []);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
       setMovimentos([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [de, ate]);
 
@@ -77,8 +83,23 @@ export function StockManualAdjustmentsDialog({
 
   useEffect(() => {
     if (!isOpen || !de || !ate) return;
-    void carregar();
+    const controller = new AbortController();
+    void carregar(controller.signal);
+    return () => controller.abort();
   }, [isOpen, de, ate, carregar]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    previouslyFocusedRef.current = document.activeElement;
+    closeButtonRef.current?.focus();
+    return () => {
+      const previouslyFocused = previouslyFocusedRef.current;
+      if (previouslyFocused instanceof HTMLElement) {
+        previouslyFocused.focus();
+      }
+      previouslyFocusedRef.current = null;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -143,6 +164,7 @@ export function StockManualAdjustmentsDialog({
               </div>
             </header>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
               className="shrink-0 flex items-center justify-center rounded-xl border border-stone-200 p-2.5 text-stone-600 hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 min-h-11 min-w-11"
