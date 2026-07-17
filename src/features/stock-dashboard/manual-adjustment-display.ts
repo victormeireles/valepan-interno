@@ -5,12 +5,46 @@ import { calcularSaldoAntes } from '@/domain/estoque/quantidade-calculo';
 export type ManualAdjustmentDisplay = {
   id: string;
   createdAt: string;
+  tipoEstoqueId: string;
   tipoEstoqueNome: string;
   produtoNome: string;
   antes: Quantidade;
   depois: Quantidade;
   delta: Quantidade;
 };
+
+/** Warm, distinct pill tones — stable per tipo via hash. */
+const TIPO_ESTOQUE_BADGE_PALETTE = [
+  'bg-amber-100 text-amber-900 ring-1 ring-amber-200/80',
+  'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80',
+  'bg-rose-100 text-rose-900 ring-1 ring-rose-200/80',
+  'bg-violet-100 text-violet-900 ring-1 ring-violet-200/80',
+  'bg-orange-100 text-orange-900 ring-1 ring-orange-200/80',
+  'bg-teal-100 text-teal-900 ring-1 ring-teal-200/80',
+  'bg-fuchsia-100 text-fuchsia-900 ring-1 ring-fuchsia-200/80',
+  'bg-sky-100 text-sky-900 ring-1 ring-sky-200/80',
+  'bg-lime-100 text-lime-900 ring-1 ring-lime-200/80',
+  'bg-stone-200 text-stone-900 ring-1 ring-stone-300/80',
+] as const;
+
+function hashTipoKey(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+/** Stable badge classes for a tipo de estoque (prefer id; fallback to name). */
+export function tipoEstoqueBadgeClass(tipoEstoqueIdOrNome: string): string {
+  const key = tipoEstoqueIdOrNome.trim().toLowerCase();
+  if (!key) {
+    return TIPO_ESTOQUE_BADGE_PALETTE[TIPO_ESTOQUE_BADGE_PALETTE.length - 1];
+  }
+  return TIPO_ESTOQUE_BADGE_PALETTE[
+    hashTipoKey(key) % TIPO_ESTOQUE_BADGE_PALETTE.length
+  ];
+}
 
 export type CxPctDeltaChip = {
   unit: 'cx' | 'pct';
@@ -25,6 +59,7 @@ export function buildManualAdjustmentDisplay(
   return {
     id: mov.id,
     createdAt: mov.createdAt,
+    tipoEstoqueId: mov.tipoEstoqueId,
     tipoEstoqueNome: mov.tipoEstoqueNome,
     produtoNome: mov.produtoNome,
     antes: calcularSaldoAntes(mov.saldo, mov.delta),

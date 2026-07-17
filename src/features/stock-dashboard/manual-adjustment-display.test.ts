@@ -3,6 +3,7 @@ import {
   buildCxPctDeltaChips,
   buildManualAdjustmentDisplay,
   formatAdjustmentTime,
+  tipoEstoqueBadgeClass,
 } from './manual-adjustment-display';
 import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 
@@ -55,6 +56,18 @@ describe('buildCxPctDeltaChips', () => {
       { unit: 'cx', value: 5, signedLabel: '+5', tone: 'positive' },
       { unit: 'pct', value: 2, signedLabel: '+2', tone: 'positive' },
     ]);
+  });
+});
+
+describe('tipoEstoqueBadgeClass', () => {
+  it('é estável para o mesmo id', () => {
+    expect(tipoEstoqueBadgeClass('t1')).toBe(tipoEstoqueBadgeClass('t1'));
+  });
+
+  it('varia entre ids diferentes (em geral)', () => {
+    const a = tipoEstoqueBadgeClass('tipo-alpha');
+    const b = tipoEstoqueBadgeClass('tipo-omega');
+    expect(a).not.toBe(b);
   });
 });
 
