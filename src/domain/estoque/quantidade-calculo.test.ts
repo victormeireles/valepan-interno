@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aplicarDeltaComClamp,
   calcularDelta,
+  calcularSaldoAntes,
   criarQuantidadeZerada,
   somarQuantidades,
 } from './quantidade-calculo';
@@ -61,6 +62,52 @@ describe('aplicarDeltaComClamp', () => {
     expect(aplicarDeltaComClamp(atual, delta)).toEqual({
       saldo: { caixas: 5, pacotes: 0, unidades: 0, kg: 0 },
       delta,
+    });
+  });
+});
+
+describe('calcularSaldoAntes', () => {
+  it('subtrai delta positivo do saldo depois', () => {
+    const depois = { caixas: 10, pacotes: 2, unidades: 5, kg: 1.5 };
+    const delta = { caixas: 3, pacotes: 1, unidades: 2, kg: 0.5 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 7,
+      pacotes: 1,
+      unidades: 3,
+      kg: 1,
+    });
+  });
+
+  it('subtrai delta negativo (ajuste que reduziu estoque)', () => {
+    const depois = { caixas: 7, pacotes: 0, unidades: 0, kg: 0 };
+    const delta = { caixas: -3, pacotes: 0, unidades: 0, kg: 0 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 10,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+    });
+  });
+
+  it('arredonda kg em 3 casas', () => {
+    const depois = { caixas: 0, pacotes: 0, unidades: 0, kg: 1.234 };
+    const delta = { caixas: 0, pacotes: 0, unidades: 0, kg: 0.111 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 1.123,
+    });
+  });
+
+  it('não aplica clamp a zero', () => {
+    const depois = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+    const delta = { caixas: 5, pacotes: 0, unidades: 0, kg: 0 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: -5,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
     });
   });
 });
