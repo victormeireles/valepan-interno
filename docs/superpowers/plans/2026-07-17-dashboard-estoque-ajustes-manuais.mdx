@@ -27,8 +27,9 @@
 |------|----------------|
 | `src/domain/estoque/quantidade-calculo.ts` | Add `calcularSaldoAntes` |
 | `src/domain/estoque/quantidade-calculo.test.ts` | Tests for helper |
+| `src/features/stock-dashboard/manual-adjustment-display.ts` | Mapper + time format (testável em Node) |
+| `src/features/stock-dashboard/manual-adjustment-display.test.ts` | Unit tests do mapper |
 | `src/features/stock-dashboard/components/StockManualAdjustmentList.tsx` | Presentational list |
-| `src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx` | List unit tests |
 | `src/features/stock-dashboard/components/StockManualAdjustmentsDialog.tsx` | Modal + fetch + filters |
 | `src/features/stock-dashboard/components/StockDashboardToolbar.tsx` | Swap button prop |
 | `src/features/stock-dashboard/components/StockDashboard.tsx` | Wire modal; remove NewStock |
@@ -142,83 +143,105 @@ git commit -m "feat(estoque): add calcularSaldoAntes for adjustment audit"
 
 ---
 
-### Task 2: `StockManualAdjustmentList`
+### Task 2: `StockManualAdjustmentList` + display mapper
+
+**Note:** Vitest no projeto usa `environment: 'node'` e `include: ['src/**/*.test.ts']` — sem React Testing Library. Testar o mapper puro em `.test.ts`; o componente React só apresenta.
 
 **Files:**
+- Create: `src/features/stock-dashboard/manual-adjustment-display.ts`
+- Create: `src/features/stock-dashboard/manual-adjustment-display.test.ts`
 - Create: `src/features/stock-dashboard/components/StockManualAdjustmentList.tsx`
-- Create: `src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx`
 
 **Interfaces:**
 - Consumes: `EstoqueMovimentoRecord`, `calcularSaldoAntes`, `formatQuantidade`
-- Produces: `StockManualAdjustmentList({ movimentos, showDateOnTime?: boolean })`
+- Produces:
+  - `buildManualAdjustmentDisplay(mov): { id, createdAt, tipoEstoqueNome, produtoNome, antes, depois }`
+  - `formatAdjustmentTime(iso, showDate): string`
+  - `StockManualAdjustmentList({ movimentos, showDateOnTime?: boolean })`
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write failing tests** in `manual-adjustment-display.test.ts`
 
-```tsx
+```ts
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { StockManualAdjustmentList } from './StockManualAdjustmentList';
+import {
+  buildManualAdjustmentDisplay,
+  formatAdjustmentTime,
+} from './manual-adjustment-display';
 import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 
-function makeMov(
-  overrides: Partial<EstoqueMovimentoRecord> = {},
-): EstoqueMovimentoRecord {
-  return {
-    id: 'm1',
-    createdAt: '2026-07-17T14:30:00.000Z',
-    tipoEstoqueId: 't1',
-    tipoEstoqueNome: 'Congelado',
-    produtoId: 'p1',
-    produtoNome: 'Brioche 90g',
-    delta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
-    saldo: { caixas: 12, pacotes: 0, unidades: 0, kg: 0 },
-    origem: 'ajuste_manual',
-    ...overrides,
-  };
-}
+const mov: EstoqueMovimentoRecord = {
+  id: 'm1',
+  createdAt: '2026-07-17T14:30:00.000Z',
+  tipoEstoqueId: 't1',
+  tipoEstoqueNome: 'Congelado',
+  produtoId: 'p1',
+  produtoNome: 'Brioche 90g',
+  delta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
+  saldo: { caixas: 12, pacotes: 0, unidades: 0, kg: 0 },
+  origem: 'ajuste_manual',
+};
 
-describe('StockManualAdjustmentList', () => {
-  it('renderiza empty quando sem movimentos', () => {
-    const { container } = render(
-      <StockManualAdjustmentList movimentos={[]} />,
-    );
-    expect(container.querySelector('ol')?.children.length ?? 0).toBe(0);
+describe('buildManualAdjustmentDisplay', () => {
+  it('deriva antes = saldo - delta e preserva nomes', () => {
+    const row = buildManualAdjustmentDisplay(mov);
+    expect(row.tipoEstoqueNome).toBe('Congelado');
+    expect(row.produtoNome).toBe('Brioche 90g');
+    expect(row.antes).toEqual({ caixas: 10, pacotes: 0, unidades: 0, kg: 0 });
+    expect(row.depois).toEqual(mov.saldo);
+  });
+});
+
+describe('formatAdjustmentTime', () => {
+  it('retorna só hora quando showDate false', () => {
+    const text = formatAdjustmentTime(mov.createdAt, false);
+    expect(text).toMatch(/\d{2}:\d{2}/);
+    expect(text).not.toContain('·');
   });
 
-  it('mostra tipo, produto e antes → depois', () => {
-    render(
-      <StockManualAdjustmentList movimentos={[makeMov()]} showDateOnTime />,
-    );
-    expect(screen.getByText('Congelado')).toBeTruthy();
-    expect(screen.getByText('Brioche 90g')).toBeTruthy();
-    // antes = 12 - 2 = 10 cx; depois = 12 cx
-    expect(screen.getByText(/10 cx/)).toBeTruthy();
-    expect(screen.getByText(/12 cx/)).toBeTruthy();
+  it('inclui dd/MM quando showDate true', () => {
+    const text = formatAdjustmentTime(mov.createdAt, true);
+    expect(text).toContain('·');
+    expect(text).toMatch(/\d{2}\/\d{2}/);
   });
 });
 ```
 
-If the project prefers `@testing-library/jest-dom` matchers already configured, use `toBeInTheDocument()`. Check existing feature tests for the pattern (e.g. grep `render(` under `src/features`).
+- [ ] **Step 2: Run — expect FAIL**
 
-- [ ] **Step 2: Run — expect FAIL** (module missing)
+Run: `npx vitest run src/features/stock-dashboard/manual-adjustment-display.test.ts`
 
-Run: `npx vitest run src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx`
+- [ ] **Step 3: Implement mapper + list**
 
-- [ ] **Step 3: Implement list component**
+`manual-adjustment-display.ts`:
 
-```tsx
-'use client';
-
+```ts
+import type { Quantidade } from '@/domain/types/inventario';
 import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 import { calcularSaldoAntes } from '@/domain/estoque/quantidade-calculo';
-import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
 
-export type StockManualAdjustmentListProps = {
-  movimentos: EstoqueMovimentoRecord[];
-  showDateOnTime?: boolean;
+export type ManualAdjustmentDisplay = {
+  id: string;
+  createdAt: string;
+  tipoEstoqueNome: string;
+  produtoNome: string;
+  antes: Quantidade;
+  depois: Quantidade;
 };
 
-function formatAdjustmentTime(iso: string, showDate: boolean): string {
+export function buildManualAdjustmentDisplay(
+  mov: EstoqueMovimentoRecord,
+): ManualAdjustmentDisplay {
+  return {
+    id: mov.id,
+    createdAt: mov.createdAt,
+    tipoEstoqueNome: mov.tipoEstoqueNome,
+    produtoNome: mov.produtoNome,
+    antes: calcularSaldoAntes(mov.saldo, mov.delta),
+    depois: mov.saldo,
+  };
+}
+
+export function formatAdjustmentTime(iso: string, showDate: boolean): string {
   const date = new Date(iso);
   const time = date.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
@@ -231,58 +254,18 @@ function formatAdjustmentTime(iso: string, showDate: boolean): string {
   });
   return `${day} · ${time}`;
 }
-
-export function StockManualAdjustmentList({
-  movimentos,
-  showDateOnTime = false,
-}: StockManualAdjustmentListProps) {
-  return (
-    <ol className="space-y-2" aria-label="Lista de ajustes manuais">
-      {movimentos.map((mov) => {
-        const antes = calcularSaldoAntes(mov.saldo, mov.delta);
-        return (
-          <li
-            key={mov.id}
-            className="rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-sm"
-          >
-            <time
-              className="text-sm font-semibold tabular-nums text-stone-900"
-              dateTime={mov.createdAt}
-            >
-              {formatAdjustmentTime(mov.createdAt, showDateOnTime)}
-            </time>
-            <p className="mt-1 text-sm text-stone-700">
-              <span className="font-medium">{mov.tipoEstoqueNome}</span>
-              <span className="text-stone-400"> · </span>
-              <span>{mov.produtoNome}</span>
-            </p>
-            <p className="mt-1.5 text-sm tabular-nums text-stone-800">
-              <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
-                Antes
-              </span>{' '}
-              <span className="font-semibold">{formatQuantidade(antes)}</span>
-              <span className="mx-1.5 text-stone-400" aria-hidden="true">
-                →
-              </span>
-              <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
-                Depois
-              </span>{' '}
-              <span className="font-semibold">{formatQuantidade(mov.saldo)}</span>
-            </p>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
 ```
 
+`StockManualAdjustmentList.tsx` — use `buildManualAdjustmentDisplay` + `formatAdjustmentTime` + `formatQuantidade` (same visual layout as previous plan draft: stone borders, Antes → Depois labels).
+
 - [ ] **Step 4: Run tests — PASS**
+
+Run: `npx vitest run src/features/stock-dashboard/manual-adjustment-display.test.ts`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/features/stock-dashboard/components/StockManualAdjustmentList.tsx src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx
+git add src/features/stock-dashboard/manual-adjustment-display.ts src/features/stock-dashboard/manual-adjustment-display.test.ts src/features/stock-dashboard/components/StockManualAdjustmentList.tsx
 git commit -m "feat(estoque): list component for manual stock adjustments"
 ```
 
@@ -428,7 +411,7 @@ Grep for `NewStockDialog` / `onNewStock` / `Novo estoque` under `src/` and fix l
 - [ ] **Step 4: Run focused tests**
 
 ```bash
-npx vitest run src/domain/estoque/quantidade-calculo.test.ts src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx
+npx vitest run src/domain/estoque/quantidade-calculo.test.ts src/features/stock-dashboard/manual-adjustment-display.test.ts
 ```
 
 Expected: all PASS.
