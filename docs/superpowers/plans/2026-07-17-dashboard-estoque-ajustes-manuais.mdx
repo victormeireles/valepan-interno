@@ -1,0 +1,461 @@
+# Dashboard Estoque — Ajustes Manuais Globais Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Substituir “Novo estoque” por um modal global de ajustes manuais (data/hora, tipo, produto, antes → depois) no dashboard de estoque.
+
+**Architecture:** Reutilizar `GET /api/estoque/movimentos?origem=ajuste_manual` sem endpoint novo. Derivar “estoque antes” com `calcularSaldoAntes(saldo, delta)`. Novos componentes `StockManualAdjustmentsDialog` + `StockManualAdjustmentList`; toolbar e empty-state atualizados; `NewStockDialog` removido. Histórico por produto permanece intacto.
+
+**Tech Stack:** Next.js App Router, React client components, Vitest, Tailwind, Material Icons, helpers existentes em `estoque-date-range` e `quantidade-formatter`.
+
+**Spec:** `docs/superpowers/specs/2026-07-17-dashboard-estoque-ajustes-manuais-design.mdx`
+
+## Global Constraints
+
+- Copy pt-BR operacional; botão **“Ajustes manuais”**; empty state sem CTA de criar estoque.
+- Botão da toolbar: variante **secondary** (não primary/âmbar); ícone Material `history`; `aria-label="Ver ajustes manuais"`.
+- Modal: padrão Hoje; atalhos Hoje · Ontem · 7 dias; `limit=100`; lista mais recente no topo.
+- Campos por linha: data/hora · tipo de estoque · produto · antes → depois.
+- `calcularSaldoAntes` **não** aplica clamp a zero.
+- Não alterar `StockHistoryDialog` / timeline por produto.
+- Arquivos ≤500 linhas; funções focadas; sem autor do ajuste / CSV / paginação extra.
+- Commits frequentes por task; mensagens em inglês imperativo curto ou pt-BR estilo do repo.
+
+## File Structure
+
+| File | Responsibility |
+|------|----------------|
+| `src/domain/estoque/quantidade-calculo.ts` | Add `calcularSaldoAntes` |
+| `src/domain/estoque/quantidade-calculo.test.ts` | Tests for helper |
+| `src/features/stock-dashboard/components/StockManualAdjustmentList.tsx` | Presentational list |
+| `src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx` | List unit tests |
+| `src/features/stock-dashboard/components/StockManualAdjustmentsDialog.tsx` | Modal + fetch + filters |
+| `src/features/stock-dashboard/components/StockDashboardToolbar.tsx` | Swap button prop |
+| `src/features/stock-dashboard/components/StockDashboard.tsx` | Wire modal; remove NewStock |
+| `src/features/stock-dashboard/components/NewStockDialog.tsx` | **Delete** |
+
+---
+
+### Task 1: `calcularSaldoAntes`
+
+**Files:**
+- Modify: `src/domain/estoque/quantidade-calculo.ts`
+- Modify: `src/domain/estoque/quantidade-calculo.test.ts`
+
+**Interfaces:**
+- Consumes: `Quantidade` from `@/domain/types/inventario`
+- Produces: `calcularSaldoAntes(saldoDepois: Quantidade, delta: Quantidade): Quantidade`
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `quantidade-calculo.test.ts`:
+
+```ts
+import {
+  // ...existing
+  calcularSaldoAntes,
+} from './quantidade-calculo';
+
+describe('calcularSaldoAntes', () => {
+  it('subtrai delta positivo do saldo depois', () => {
+    const depois = { caixas: 10, pacotes: 2, unidades: 5, kg: 1.5 };
+    const delta = { caixas: 3, pacotes: 1, unidades: 2, kg: 0.5 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 7,
+      pacotes: 1,
+      unidades: 3,
+      kg: 1,
+    });
+  });
+
+  it('subtrai delta negativo (ajuste que reduziu estoque)', () => {
+    const depois = { caixas: 7, pacotes: 0, unidades: 0, kg: 0 };
+    const delta = { caixas: -3, pacotes: 0, unidades: 0, kg: 0 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 10,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+    });
+  });
+
+  it('arredonda kg em 3 casas', () => {
+    const depois = { caixas: 0, pacotes: 0, unidades: 0, kg: 1.234 };
+    const delta = { caixas: 0, pacotes: 0, unidades: 0, kg: 0.111 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 1.123,
+    });
+  });
+
+  it('não aplica clamp a zero', () => {
+    const depois = { caixas: 0, pacotes: 0, unidades: 0, kg: 0 };
+    const delta = { caixas: 5, pacotes: 0, unidades: 0, kg: 0 };
+    expect(calcularSaldoAntes(depois, delta)).toEqual({
+      caixas: -5,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+    });
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/domain/estoque/quantidade-calculo.test.ts`
+
+Expected: FAIL — `calcularSaldoAntes` is not exported / not a function.
+
+- [ ] **Step 3: Implement**
+
+Add to `quantidade-calculo.ts`:
+
+```ts
+export function calcularSaldoAntes(
+  saldoDepois: Quantidade,
+  delta: Quantidade,
+): Quantidade {
+  return {
+    caixas: saldoDepois.caixas - (delta.caixas || 0),
+    pacotes: saldoDepois.pacotes - (delta.pacotes || 0),
+    unidades: saldoDepois.unidades - (delta.unidades || 0),
+    kg: parseFloat(
+      ((saldoDepois.kg || 0) - (delta.kg || 0)).toFixed(3),
+    ),
+  };
+}
+```
+
+- [ ] **Step 4: Run tests — expect PASS**
+
+Run: `npx vitest run src/domain/estoque/quantidade-calculo.test.ts`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/estoque/quantidade-calculo.ts src/domain/estoque/quantidade-calculo.test.ts
+git commit -m "feat(estoque): add calcularSaldoAntes for adjustment audit"
+```
+
+---
+
+### Task 2: `StockManualAdjustmentList`
+
+**Files:**
+- Create: `src/features/stock-dashboard/components/StockManualAdjustmentList.tsx`
+- Create: `src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx`
+
+**Interfaces:**
+- Consumes: `EstoqueMovimentoRecord`, `calcularSaldoAntes`, `formatQuantidade`
+- Produces: `StockManualAdjustmentList({ movimentos, showDateOnTime?: boolean })`
+
+- [ ] **Step 1: Write failing tests**
+
+```tsx
+import { describe, expect, it } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { StockManualAdjustmentList } from './StockManualAdjustmentList';
+import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
+
+function makeMov(
+  overrides: Partial<EstoqueMovimentoRecord> = {},
+): EstoqueMovimentoRecord {
+  return {
+    id: 'm1',
+    createdAt: '2026-07-17T14:30:00.000Z',
+    tipoEstoqueId: 't1',
+    tipoEstoqueNome: 'Congelado',
+    produtoId: 'p1',
+    produtoNome: 'Brioche 90g',
+    delta: { caixas: 2, pacotes: 0, unidades: 0, kg: 0 },
+    saldo: { caixas: 12, pacotes: 0, unidades: 0, kg: 0 },
+    origem: 'ajuste_manual',
+    ...overrides,
+  };
+}
+
+describe('StockManualAdjustmentList', () => {
+  it('renderiza empty quando sem movimentos', () => {
+    const { container } = render(
+      <StockManualAdjustmentList movimentos={[]} />,
+    );
+    expect(container.querySelector('ol')?.children.length ?? 0).toBe(0);
+  });
+
+  it('mostra tipo, produto e antes → depois', () => {
+    render(
+      <StockManualAdjustmentList movimentos={[makeMov()]} showDateOnTime />,
+    );
+    expect(screen.getByText('Congelado')).toBeTruthy();
+    expect(screen.getByText('Brioche 90g')).toBeTruthy();
+    // antes = 12 - 2 = 10 cx; depois = 12 cx
+    expect(screen.getByText(/10 cx/)).toBeTruthy();
+    expect(screen.getByText(/12 cx/)).toBeTruthy();
+  });
+});
+```
+
+If the project prefers `@testing-library/jest-dom` matchers already configured, use `toBeInTheDocument()`. Check existing feature tests for the pattern (e.g. grep `render(` under `src/features`).
+
+- [ ] **Step 2: Run — expect FAIL** (module missing)
+
+Run: `npx vitest run src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx`
+
+- [ ] **Step 3: Implement list component**
+
+```tsx
+'use client';
+
+import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
+import { calcularSaldoAntes } from '@/domain/estoque/quantidade-calculo';
+import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
+
+export type StockManualAdjustmentListProps = {
+  movimentos: EstoqueMovimentoRecord[];
+  showDateOnTime?: boolean;
+};
+
+function formatAdjustmentTime(iso: string, showDate: boolean): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  if (!showDate) return time;
+  const day = date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+  return `${day} · ${time}`;
+}
+
+export function StockManualAdjustmentList({
+  movimentos,
+  showDateOnTime = false,
+}: StockManualAdjustmentListProps) {
+  return (
+    <ol className="space-y-2" aria-label="Lista de ajustes manuais">
+      {movimentos.map((mov) => {
+        const antes = calcularSaldoAntes(mov.saldo, mov.delta);
+        return (
+          <li
+            key={mov.id}
+            className="rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-sm"
+          >
+            <time
+              className="text-sm font-semibold tabular-nums text-stone-900"
+              dateTime={mov.createdAt}
+            >
+              {formatAdjustmentTime(mov.createdAt, showDateOnTime)}
+            </time>
+            <p className="mt-1 text-sm text-stone-700">
+              <span className="font-medium">{mov.tipoEstoqueNome}</span>
+              <span className="text-stone-400"> · </span>
+              <span>{mov.produtoNome}</span>
+            </p>
+            <p className="mt-1.5 text-sm tabular-nums text-stone-800">
+              <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Antes
+              </span>{' '}
+              <span className="font-semibold">{formatQuantidade(antes)}</span>
+              <span className="mx-1.5 text-stone-400" aria-hidden="true">
+                →
+              </span>
+              <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                Depois
+              </span>{' '}
+              <span className="font-semibold">{formatQuantidade(mov.saldo)}</span>
+            </p>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+```
+
+- [ ] **Step 4: Run tests — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/features/stock-dashboard/components/StockManualAdjustmentList.tsx src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx
+git commit -m "feat(estoque): list component for manual stock adjustments"
+```
+
+---
+
+### Task 3: `StockManualAdjustmentsDialog`
+
+**Files:**
+- Create: `src/features/stock-dashboard/components/StockManualAdjustmentsDialog.tsx`
+
+**Interfaces:**
+- Consumes: `StockManualAdjustmentList`, `getPresetRange`, `dateInputsToIsoRange`, `EstoqueDatePreset`
+- Produces: `StockManualAdjustmentsDialog({ isOpen, onClose })`
+- Fetch: `GET /api/estoque/movimentos?origem=ajuste_manual&de=&ate=&limit=100`
+
+Mirror the structure of `StockHistoryDialog.tsx` (filters, Esc, scrim, skeleton, error, truncated banner), but:
+- No `tipoEstoqueId` / `produtoId` / produto header.
+- Eyebrow: **Ajustes manuais**
+- Title can be fixed “Histórico de correções” or omit product title — use **Ajustes manuais** as `h2`.
+- Body uses `StockManualAdjustmentList`.
+- Empty copy: “Nenhum ajuste manual neste período”
+- Truncated: “Mostrando os 100 ajustes mais recentes — refine o período”
+- Width: `sm:max-w-2xl`
+- Prefer stone/amber focus rings (match dashboard), not blue from older history dialog if easy — follow Valepan tokens where practical without redesigning History.
+
+- [ ] **Step 1: Implement dialog** (no separate TDD file required if list+helper covered; manually verify compile)
+
+Key fetch params:
+
+```ts
+const params = new URLSearchParams({
+  origem: 'ajuste_manual',
+  de: deIso,
+  ate: ateIso,
+  limit: '100',
+});
+```
+
+Shell outline (adapt from `StockHistoryDialog`):
+
+```tsx
+export type StockManualAdjustmentsDialogProps = {
+  isOpen: boolean;
+  onClose: () => void;
+};
+
+export function StockManualAdjustmentsDialog({
+  isOpen,
+  onClose,
+}: StockManualAdjustmentsDialogProps) {
+  // state: activePreset, de, ate, movimentos, loading, error
+  // on open: reset to getPresetRange('hoje')
+  // fetch when isOpen + de + ate change
+  // Esc listener
+  // render StockManualAdjustmentList when data ready
+}
+```
+
+Keep file under ~350 lines; extract tiny CloseIcon/SpinnerIcon locally like History dialog if needed.
+
+- [ ] **Step 2: Typecheck / lint the new file**
+
+Run: `npx tsc --noEmit -p tsconfig.json` (or project’s usual check). If too heavy, at least ensure imports resolve.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/features/stock-dashboard/components/StockManualAdjustmentsDialog.tsx
+git commit -m "feat(estoque): modal for global manual stock adjustments"
+```
+
+---
+
+### Task 4: Wire toolbar + dashboard; remove Novo estoque
+
+**Files:**
+- Modify: `src/features/stock-dashboard/components/StockDashboardToolbar.tsx`
+- Modify: `src/features/stock-dashboard/components/StockDashboard.tsx`
+- Delete: `src/features/stock-dashboard/components/NewStockDialog.tsx`
+
+**Interfaces:**
+- Toolbar: replace `onNewStock: () => void` with `onManualAdjustments: () => void`
+- Dashboard: `manualAdjustmentsOpen` state; render `StockManualAdjustmentsDialog`
+- Remove `newStockOpen`, `reloadStock` (if only used by NewStock), all `NewStockDialog` imports/usages
+
+- [ ] **Step 1: Update toolbar**
+
+Replace the primary “Novo estoque” button with:
+
+```tsx
+<Button
+  type="button"
+  variant="secondary"
+  icon="history"
+  className="shrink-0"
+  onClick={onManualAdjustments}
+  aria-label="Ver ajustes manuais"
+>
+  Ajustes manuais
+</Button>
+```
+
+Rename prop in the interface and destructuring.
+
+- [ ] **Step 2: Update StockDashboard**
+
+1. Import `StockManualAdjustmentsDialog`; remove `NewStockDialog` import.
+2. Replace `newStockOpen` with `manualAdjustmentsOpen`.
+3. Empty state:
+
+```tsx
+<EmptyState
+  icon="inventory_2"
+  title="Nenhum produto no estoque"
+  description="Produtos cadastrados aparecerão aqui com saldo zero para ajuste."
+/>
+```
+
+No `action` button. Remove the empty-state `NewStockDialog`.
+
+4. Toolbar callbacks: `onManualAdjustments={() => setManualAdjustmentsOpen(true)}`
+5. At bottom (both empty and non-empty paths if needed — prefer single dialog outside branches):
+
+```tsx
+<StockManualAdjustmentsDialog
+  isOpen={manualAdjustmentsOpen}
+  onClose={() => setManualAdjustmentsOpen(false)}
+/>
+```
+
+Ensure empty-state branch also has the dialog + toolbar wired so the button still works when empty.
+
+6. Delete `reloadStock` if unused after removal.
+
+- [ ] **Step 3: Delete NewStockDialog.tsx**
+
+```bash
+git rm src/features/stock-dashboard/components/NewStockDialog.tsx
+```
+
+Grep for `NewStockDialog` / `onNewStock` / `Novo estoque` under `src/` and fix leftovers.
+
+- [ ] **Step 4: Run focused tests**
+
+```bash
+npx vitest run src/domain/estoque/quantidade-calculo.test.ts src/features/stock-dashboard/components/StockManualAdjustmentList.test.tsx
+```
+
+Expected: all PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/features/stock-dashboard/components/StockDashboardToolbar.tsx src/features/stock-dashboard/components/StockDashboard.tsx
+git add -u src/features/stock-dashboard/components/NewStockDialog.tsx
+git commit -m "feat(estoque): replace Novo estoque with global adjustments modal"
+```
+
+---
+
+## Spec coverage checklist (plan self-review)
+
+| Spec requirement | Task |
+|------------------|------|
+| Botão Ajustes manuais no lugar de Novo estoque | 4 |
+| Modal global origem=ajuste_manual | 3 |
+| Campos data/hora, tipo, produto, antes, depois | 2 |
+| Filtros Hoje/Ontem/7d + De/Até | 3 |
+| limit 100 + truncado | 3 |
+| Remover NewStockDialog / empty CTA | 4 |
+| Histórico por produto intacto | (não tocado) |
+| calcularSaldoAntes sem clamp | 1 |
+
+## Execution
+
+Use **subagent-driven-development**: one implementer subagent per task, review after each, then whole-branch review + finishing-a-development-branch.
