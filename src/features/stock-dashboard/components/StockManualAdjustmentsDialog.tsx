@@ -32,6 +32,7 @@ export function StockManualAdjustmentsDialog({
   const [movimentos, setMovimentos] = useState<EstoqueMovimentoRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<Element | null>(null);
 
@@ -86,7 +87,7 @@ export function StockManualAdjustmentsDialog({
     const controller = new AbortController();
     void carregar(controller.signal);
     return () => controller.abort();
-  }, [isOpen, de, ate, carregar]);
+  }, [isOpen, de, ate, reloadNonce, carregar]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -244,7 +245,7 @@ export function StockManualAdjustmentsDialog({
               </div>
               <button
                 type="button"
-                onClick={() => void carregar()}
+                onClick={() => setReloadNonce((n) => n + 1)}
                 className="text-sm font-semibold text-amber-700 hover:text-amber-800 focus:outline-none focus-visible:underline"
               >
                 Tentar novamente
