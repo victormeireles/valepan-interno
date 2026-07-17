@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StockAdjustmentDialog } from './StockAdjustmentDialog';
 import { StockOutflowDialog } from './StockOutflowDialog';
 import { StockHistoryDialog } from './StockHistoryDialog';
-import { NewStockDialog } from './NewStockDialog';
+import { StockManualAdjustmentsDialog } from './StockManualAdjustmentsDialog';
 import {
   adjustStockAction,
   registerOutflowAction,
@@ -53,7 +53,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [outflowLoading, setOutflowLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [newStockOpen, setNewStockOpen] = useState(false);
+  const [manualAdjustmentsOpen, setManualAdjustmentsOpen] = useState(false);
   const [filterTerm, setFilterTerm] = useState('');
   const [selectedTipoId, setSelectedTipoId] = useState<string | null>(null);
 
@@ -302,22 +302,6 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
     [outflowTarget, applyOutflow, showFeedback],
   );
 
-  const reloadStock = useCallback(async () => {
-    try {
-      const res = await fetch('/api/painel/estoque', { cache: 'no-store' });
-      const json = await res.json();
-      if (res.ok && json.data) {
-        setCurrentData(json.data);
-        showFeedback({
-          type: 'success',
-          message: 'Estoque criado/atualizado com sucesso!',
-        });
-      }
-    } catch {
-      // Erro ao recarregar estoque
-    }
-  }, [showFeedback]);
-
   if (isEmpty) {
     return (
       <>
@@ -327,27 +311,20 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
           tipos={[]}
           selectedTipoId={null}
           onSelectTipo={setSelectedTipoId}
-          onNewStock={() => setNewStockOpen(true)}
+          onManualAdjustments={() => setManualAdjustmentsOpen(true)}
           updatedAtLabel={updatedAtLabel}
         />
         <div>
           <div className="rounded-2xl border border-stone-200 bg-white shadow-sm">
             <EmptyState
               icon="inventory_2"
-              title="Nenhum dado de estoque encontrado"
-              description='Use "Novo estoque" para cadastrar o primeiro item.'
-              action={
-                <Button icon="add" onClick={() => setNewStockOpen(true)}>
-                  Novo estoque
-                </Button>
-              }
+              title="Nenhum produto no estoque"
+              description="Produtos cadastrados aparecerão aqui com saldo zero para ajuste."
             />
           </div>
-          <NewStockDialog
-            isOpen={newStockOpen}
-            loading={false}
-            onClose={() => setNewStockOpen(false)}
-            onSuccess={reloadStock}
+          <StockManualAdjustmentsDialog
+            isOpen={manualAdjustmentsOpen}
+            onClose={() => setManualAdjustmentsOpen(false)}
           />
         </div>
       </>
@@ -369,7 +346,7 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
         tipos={filteredTree}
         selectedTipoId={selectedTipoId}
         onSelectTipo={setSelectedTipoId}
-        onNewStock={() => setNewStockOpen(true)}
+        onManualAdjustments={() => setManualAdjustmentsOpen(true)}
         updatedAtLabel={updatedAtLabel}
         filterResultHint={filterResultHint}
       />
@@ -483,11 +460,9 @@ export const StockDashboard: React.FC<Props> = ({ initialData }) => {
         onSubmit={handleOutflowSubmit}
       />
 
-      <NewStockDialog
-        isOpen={newStockOpen}
-        loading={false}
-        onClose={() => setNewStockOpen(false)}
-        onSuccess={reloadStock}
+      <StockManualAdjustmentsDialog
+        isOpen={manualAdjustmentsOpen}
+        onClose={() => setManualAdjustmentsOpen(false)}
       />
       </div>
     </>
