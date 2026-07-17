@@ -9,6 +9,14 @@ export type ManualAdjustmentDisplay = {
   produtoNome: string;
   antes: Quantidade;
   depois: Quantidade;
+  delta: Quantidade;
+};
+
+export type CxPctDeltaChip = {
+  unit: 'cx' | 'pct';
+  value: number;
+  signedLabel: string;
+  tone: 'positive' | 'negative';
 };
 
 export function buildManualAdjustmentDisplay(
@@ -21,6 +29,38 @@ export function buildManualAdjustmentDisplay(
     produtoNome: mov.produtoNome,
     antes: calcularSaldoAntes(mov.saldo, mov.delta),
     depois: mov.saldo,
+    delta: mov.delta,
+  };
+}
+
+/** Zero inherits the overall cx+pct direction so labels stay "+0" / "-0". */
+export function buildCxPctDeltaChips(delta: Quantidade): CxPctDeltaChip[] {
+  const caixas = delta.caixas || 0;
+  const pacotes = delta.pacotes || 0;
+  const overallPositive = caixas + pacotes >= 0;
+
+  return [
+    toCxPctChip('cx', caixas, overallPositive),
+    toCxPctChip('pct', pacotes, overallPositive),
+  ];
+}
+
+function toCxPctChip(
+  unit: 'cx' | 'pct',
+  value: number,
+  overallPositive: boolean,
+): CxPctDeltaChip {
+  if (value > 0) {
+    return { unit, value, signedLabel: `+${value}`, tone: 'positive' };
+  }
+  if (value < 0) {
+    return { unit, value, signedLabel: String(value), tone: 'negative' };
+  }
+  return {
+    unit,
+    value: 0,
+    signedLabel: overallPositive ? '+0' : '-0',
+    tone: overallPositive ? 'positive' : 'negative',
   };
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCxPctDeltaChips,
   buildManualAdjustmentDisplay,
   formatAdjustmentTime,
 } from './manual-adjustment-display';
@@ -24,6 +25,36 @@ describe('buildManualAdjustmentDisplay', () => {
     expect(row.produtoNome).toBe('Brioche 90g');
     expect(row.antes).toEqual({ caixas: 10, pacotes: 0, unidades: 0, kg: 0 });
     expect(row.depois).toEqual(mov.saldo);
+    expect(row.delta).toEqual(mov.delta);
+  });
+});
+
+describe('buildCxPctDeltaChips', () => {
+  it('sempre retorna cx e pct, com +0 no pct quando só cx sobe', () => {
+    expect(
+      buildCxPctDeltaChips({ caixas: 3, pacotes: 0, unidades: 0, kg: 0 }),
+    ).toEqual([
+      { unit: 'cx', value: 3, signedLabel: '+3', tone: 'positive' },
+      { unit: 'pct', value: 0, signedLabel: '+0', tone: 'positive' },
+    ]);
+  });
+
+  it('usa -0 em cx quando só pct cai', () => {
+    expect(
+      buildCxPctDeltaChips({ caixas: 0, pacotes: -4, unidades: 0, kg: 0 }),
+    ).toEqual([
+      { unit: 'cx', value: 0, signedLabel: '-0', tone: 'negative' },
+      { unit: 'pct', value: -4, signedLabel: '-4', tone: 'negative' },
+    ]);
+  });
+
+  it('mostra ambos positivos', () => {
+    expect(
+      buildCxPctDeltaChips({ caixas: 5, pacotes: 2, unidades: 0, kg: 0 }),
+    ).toEqual([
+      { unit: 'cx', value: 5, signedLabel: '+5', tone: 'positive' },
+      { unit: 'pct', value: 2, signedLabel: '+2', tone: 'positive' },
+    ]);
   });
 });
 

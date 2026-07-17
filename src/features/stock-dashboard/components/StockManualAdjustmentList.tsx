@@ -3,13 +3,20 @@
 import type { EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
 import {
+  buildCxPctDeltaChips,
   buildManualAdjustmentDisplay,
   formatAdjustmentTime,
+  type CxPctDeltaChip,
 } from '../manual-adjustment-display';
 
 export type StockManualAdjustmentListProps = {
   movimentos: EstoqueMovimentoRecord[];
   showDateOnTime?: boolean;
+};
+
+const CHIP_TONE_CLASS: Record<CxPctDeltaChip['tone'], string> = {
+  positive: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200',
+  negative: 'bg-rose-50 text-rose-800 ring-1 ring-rose-200',
 };
 
 export function StockManualAdjustmentList({
@@ -24,6 +31,10 @@ export function StockManualAdjustmentList({
     <ol className="space-y-2" aria-label="Lista de ajustes manuais">
       {movimentos.map((mov) => {
         const row = buildManualAdjustmentDisplay(mov);
+        const chips = buildCxPctDeltaChips(row.delta);
+        const deltaSummary = chips
+          .map((chip) => `${chip.signedLabel}${chip.unit}`)
+          .join(' e ');
 
         return (
           <li
@@ -46,23 +57,35 @@ export function StockManualAdjustmentList({
               {row.produtoNome}
             </p>
 
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-stone-600">
-              <span className="font-medium uppercase tracking-wide text-stone-500">
-                Antes
-              </span>
-              <span className="font-semibold tabular-nums text-stone-800">
-                {formatQuantidade(row.antes)}
-              </span>
-              <span className="text-stone-400" aria-hidden="true">
-                →
-              </span>
-              <span className="font-medium uppercase tracking-wide text-stone-500">
-                Depois
-              </span>
-              <span className="font-semibold tabular-nums text-stone-800">
+            <div
+              className="mt-2 flex flex-wrap items-center gap-1.5"
+              aria-label={`Delta ${deltaSummary}`}
+            >
+              {chips.map((chip, index) => (
+                <span key={chip.unit} className="inline-flex items-center gap-1.5">
+                  {index > 0 ? (
+                    <span className="text-xs font-medium text-stone-400" aria-hidden="true">
+                      e
+                    </span>
+                  ) : null}
+                  <span
+                    className={`inline-flex min-h-8 items-center rounded-lg px-2.5 py-1 text-sm font-semibold tabular-nums ${CHIP_TONE_CLASS[chip.tone]}`}
+                  >
+                    {chip.signedLabel}
+                    <span className="ml-0.5 text-xs font-medium opacity-80">
+                      {chip.unit}
+                    </span>
+                  </span>
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-1.5 text-xs text-stone-500">
+              Saldo após{' '}
+              <span className="font-semibold tabular-nums text-stone-700">
                 {formatQuantidade(row.depois)}
               </span>
-            </div>
+            </p>
           </li>
         );
       })}
