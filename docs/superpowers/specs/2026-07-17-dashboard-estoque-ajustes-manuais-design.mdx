@@ -1,0 +1,187 @@
+# Design: Log global de ajustes manuais no dashboard de estoque
+
+**Data:** 2026-07-17  
+**Status:** Aguardando revisão do stakeholder  
+**Rota:** `/painel/dashboard-estoque`  
+**Depende de:** Histórico por produto (`StockHistoryDialog`), `GET /api/estoque/movimentos`, ledger `estoque_movimentos`
+
+## Contexto
+
+O dashboard de estoque já permite **Ajustar**, **Saída** e **Histórico** por produto. O Histórico por produto lista todos os movimentos (embalagem, saída, ajuste manual) daquele SKU.
+
+Operadores precisam auditar **o que foi alterado manualmente** em qualquer produto, sem abrir card a card. Com a regra de que todo produto aparece no painel (inclusive com saldo 0), o CTA **“Novo estoque”** deixou de fazer sentido: o saldo se corrige pelo fluxo de ajuste do próprio produto.
+
+## Objetivos
+
+1. Substituir o botão **Novo estoque** da toolbar por **Ajustes manuais**.
+2. Abrir modal **global** com todos os movimentos `origem = ajuste_manual` do período.
+3. Exibir por linha: data/hora, tipo de estoque, produto, estoque antes, estoque depois.
+4. Remover o fluxo de criação de estoque via `NewStockDialog` do dashboard.
+5. Manter o Histórico por produto intacto.
+
+## Decisões de produto (validadas)
+
+| Tópico | Decisão |
+|--------|---------|
+| Escopo da lista | Global — todos os produtos e tipos de estoque no período |
+| Campos da linha | Data/hora · tipo de estoque · produto · estoque antes · estoque depois |
+| Estoque antes | Derivado: `saldo_depois − delta` (sem coluna nova no banco) |
+| Filtro de data | Atalhos Hoje · Ontem · 7 dias + De/Até; padrão **Hoje** |
+| Ordem | Mais recente no topo |
+| Limite | `limit=100`; banner se truncado |
+| Botão na toolbar | Substitui “Novo estoque”; estilo secundário/neutro (não CTA âmbar) |
+| Novo estoque | Remover botão, modal e empty-state que dependem dele |
+| Histórico por produto | Manter como está (todos os tipos de movimento) |
+| Autor do ajuste | Fora de escopo (campo ainda não existe no ledger) |
+
+## Fora de escopo
+
+- Export CSV
+- Paginação “carregar mais” além do limit 100
+- Autor / usuário do movimento
+- Alterar estoque a partir deste modal
+- Mudanças no modal `StockHistoryDialog` por produto
+- Link dedicado para `/estoque/auditoria`
+- Filtro adicional por tipo de estoque ou produto no modal (v1)
+
+## UI — Toolbar (`StockDashboardToolbar`)
+
+- Remover prop `onNewStock` e o `Button` “Novo estoque”.
+- Adicionar prop `onManualAdjustments` e botão:
+
+```
+[ ícone history ] Ajustes manuais
+```
+
+- Variante secundária/outline (neutra), `min-h-11`, `aria-label="Ver ajustes manuais"`.
+- Posição: mesmo slot à direita do filtro / badge “Atualizado”.
+
+## UI — Empty state do dashboard
+
+- Se a árvore de estoque estiver vazia, mensagem neutra (ex.: “Nenhum produto no estoque”) **sem** CTA “Novo estoque”.
+- Remover instâncias de `NewStockDialog` ligadas ao empty state e ao fluxo normal.
+
+## UI — Modal `StockManualAdjustmentsDialog`
+
+### Shell
+
+- Mesmo padrão dos dialogs do dashboard: scrim, `role="dialog"`, `aria-modal`, Esc / X / clique no scrim.
+- Largura: `sm:max-w-2xl` (lista com mais colunas que o Histórico por produto).
+- Mobile: bottom-sheet (`items-end`, `rounded-t-3xl`).
+
+### Header
+
+- Eyebrow: **Ajustes manuais**
+- Contador após carga: `N ajuste(s)` (ou oculto em loading/erro)
+
+### Filtros
+
+- Segment: Hoje | Ontem | 7 dias — preenche De/Até via `getPresetRange`.
+- Inputs `type="date"` De e Até editáveis.
+- Recarrega ao mudar período (mesmo padrão de `StockHistoryDialog`).
+
+### Corpo (lista)
+
+Lista densa, não timeline colorida por origem (só há `ajuste_manual`).
+
+Cada item:
+
+| Elemento | Conteúdo |
+|----------|----------|
+| Data/hora | `HH:mm`; se `de ≠ ate`, prefixo `dd/MM ·` |
+| Tipo de estoque | Nome (`tipoEstoqueNome`) |
+| Produto | Nome (`produtoNome`) |
+| Antes → Depois | `formatQuantidade(antes)` → `formatQuantidade(depois)` com tabular-nums |
+
+### Estados
+
+| Estado | Comportamento |
+|--------|----------------|
+| Loading | Skeleton 3–4 linhas |
+| Vazio | “Nenhum ajuste manual neste período” + sugerir ampliar intervalo |
+| Erro | Mensagem + “Tentar novamente” |
+| Truncado (≥100) | Banner: “Mostrando os 100 ajustes mais recentes — refine o período” |
+
+### Footer
+
+- Botão **Fechar** (secundário).
+
+## Dados e API
+
+### Fetch
+
+```
+GET /api/estoque/movimentos?origem=ajuste_manual&de={isoStart}&ate={isoEnd}&limit=100
+```
+
+- Sem `tipoEstoqueId` / `produtoId` → movimentos de **todos** os produtos.
+- Sem endpoint novo; reutilizar `estoqueService.listarMovimentos` e a route existente.
+- Datas: `dateInputsToIsoRange` / `getPresetRange` de `estoque-date-range.ts`.
+
+### Domínio — saldo antes
+
+Em `src/domain/estoque/quantidade-calculo.ts`:
+
+```ts
+calcularSaldoAntes(saldoDepois: Quantidade, delta: Quantidade): Quantidade
+```
+
+- Subtrai cada dimensão do delta do saldo depois.
+- `kg` com 3 casas decimais (mesmo padrão de `calcularDelta` / `somarQuantidades`).
+- Não aplica clamp a zero: o “antes” deve refletir o saldo lógico pré-movimento.
+
+A UI chama o helper ao montar cada linha; não persiste coluna nova.
+
+## Arquitetura de componentes
+
+| Artefato | Responsabilidade |
+|----------|------------------|
+| `StockManualAdjustmentsDialog.tsx` | Modal, filtros, fetch, estados |
+| `StockManualAdjustmentList.tsx` | Render da lista (props: movimentos + flag de data) |
+| `StockDashboardToolbar.tsx` | Botão Ajustes manuais |
+| `StockDashboard.tsx` | Estado `manualAdjustmentsOpen`; remove NewStock |
+| `quantidade-calculo.ts` | `calcularSaldoAntes` |
+| `NewStockDialog.tsx` | **Apagar** (uso exclusivo do dashboard) |
+
+## Tratamento de erros
+
+| Situação | Comportamento |
+|----------|----------------|
+| HTTP 4xx/5xx | Mensagem no modal + retry |
+| 0 ajustes no período | Empty state |
+| ≥100 ajustes | Banner de truncamento |
+
+## Testes
+
+| Tipo | Caso |
+|------|------|
+| Unit | `calcularSaldoAntes`: delta positivo/negativo, kg com 3 casas, dimensões zero |
+| Unit | `StockManualAdjustmentList`: 0 itens, 1 item, formatação antes→depois |
+| Unit (opcional) | Toolbar não renderiza “Novo estoque”; renderiza “Ajustes manuais” |
+
+## Critérios de aceite
+
+- [ ] Toolbar exibe **Ajustes manuais** no lugar de **Novo estoque**
+- [ ] `NewStockDialog` removido do dashboard (arquivo e referências)
+- [ ] Empty state não oferece criar estoque pelo botão antigo
+- [ ] Modal lista ajustes manuais de **todos** os produtos no período
+- [ ] Cada linha mostra data/hora, tipo de estoque, produto, antes e depois
+- [ ] Período padrão **Hoje**; atalhos Ontem / 7 dias funcionam
+- [ ] Lista mais recente no topo; limit 100 com aviso se truncado
+- [ ] Histórico por produto permanece disponível e inalterado
+- [ ] Modal acessível (dialog, Esc, foco, labels)
+
+## Relação com specs anteriores
+
+- Complementa `2026-06-03-dashboard-estoque-historico-design.mdx` (histórico **por produto**, todos os movimentos).
+- Este design é o log **global** filtrado a `ajuste_manual`, com ênfase em antes/depois.
+
+## Referências no código
+
+- `src/features/stock-dashboard/components/StockDashboard.tsx`
+- `src/features/stock-dashboard/components/StockDashboardToolbar.tsx`
+- `src/features/stock-dashboard/components/StockHistoryDialog.tsx` (padrão de filtros/fetch)
+- `src/features/stock-dashboard/components/NewStockDialog.tsx` (remover)
+- `src/app/api/estoque/movimentos/route.ts`
+- `src/domain/estoque/quantidade-calculo.ts`
+- `src/lib/utils/estoque-date-range.ts`
