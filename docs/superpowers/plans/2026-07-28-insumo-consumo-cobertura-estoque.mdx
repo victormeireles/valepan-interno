@@ -1,0 +1,654 @@
+# Cobertura de estoque no consumo de insumos — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Enriquecer a tela de Consumo de insumos com estoque atual, média, cobertura de dias e cobertura no pico, usando 4 semanas fechadas no padrão semanal.
+
+**Architecture:** Ajustar o período padrão no `InsumoConsumoSemanalPeriodoBuilder`. Calcular métricas em classe de domínio pura (`InsumoConsumoCoberturaCalculator`). Na action, buscar saldos dos insumos retornados e enriquecer cada item. UI desktop/mobile troca Total por Estoque + métricas.
+
+**Tech Stack:** Next.js App Router, React client components, Vitest, Tailwind, Material Icons, Supabase via `InsumoEstoqueRepository`.
+
+**Spec:** `docs/superpowers/specs/2026-07-28-insumo-consumo-cobertura-estoque-design.mdx`
+
+## Global Constraints
+
+- Copy pt-BR operacional; headers UPPERCASE: `ESTOQUE`, `MÉDIA`, `COBERTURA`, `PICO`, `COB. PICO`.
+- Semanal padrão: 4 semanas fechadas (dom–sáb), exclui semana corrente.
+- Diária padrão: D-7 até D-1 (já existente).
+- Fórmulas: semanal `cobertura = estoque * 7 / media`; diária `cobertura = estoque / media`; idem para pico.
+- `media == 0` ou `pico == 0` → cobertura `null` → UI `—`; `estoque <= 0` → `0 d`.
+- Dias: `Math.round`, mínimo 0.
+- Não incluir insumos só com estoque e sem saída; sem migrations.
+- Arquivos ≤500 linhas; classes/funções com SRP; commits por task.
+
+## File Structure
+
+| File | Responsibility |
+|------|----------------|
+| `src/domain/insumos/insumo-consumo-semanal-periodo.ts` | Default semanal = 4 semanas fechadas |
+| `src/domain/insumos/insumo-consumo-semanal-periodo.test.ts` | Testes do novo default |
+| `src/domain/insumos/insumo-consumo-cobertura-calculator.ts` | Média / cobertura / pico (puro) |
+| `src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts` | Testes do calculator |
+| `src/domain/insumos/insumo-consumo-semanal-aggregator.ts` | Estender tipo `InsumoConsumoSemanalItem` |
+| `src/data/insumos/InsumoEstoqueRepository.ts` | `listQuantidadesByInsumoIds` |
+| `src/app/actions/insumo-estoque-actions.ts` | Cruzar saldos + aplicar calculator |
+| `src/features/insumo-estoque/utils/formatters.ts` | `formatCoberturaDias` |
+| `src/features/insumo-estoque/components/InsumoConsumoSemanalTable.tsx` | Colunas novas; remove Total |
+| `src/features/insumo-estoque/components/InsumoConsumoSemanalMobileList.tsx` | Cards com cobertura |
+| `src/features/insumo-estoque/InsumoConsumoSemanalClient.tsx` | Helper text / descrição |
+
+---
+
+### Task 1: Período padrão — 4 semanas fechadas
+
+**Files:**
+- Modify: `src/domain/insumos/insumo-consumo-semanal-periodo.ts`
+- Modify: `src/domain/insumos/insumo-consumo-semanal-periodo.test.ts`
+
+**Interfaces:**
+- Consumes: existing `InsumoConsumoSemanalPeriodoBuilder`
+- Produces: `buildDefault(anchor, 'semanal')` → 4 semanas fechadas; `dataFim` = sábado da última semana fechada
+
+- [ ] **Step 1: Atualizar o teste do default semanal para falhar**
+
+Substituir o teste `monta periodo padrao com semana atual e tres semanas anteriores` em `insumo-consumo-semanal-periodo.test.ts` por:
+
+```ts
+it('monta periodo padrao com as ultimas quatro semanas fechadas', () => {
+  // Âncora: terça 28/07/2026 — semana corrente = 26/07–01/08 (excluída)
+  const periodo = builder.buildDefault(new Date('2026-07-28T12:00:00-03:00'));
+
+  expect(periodo.visualizacao).toBe('semanal');
+  expect(periodo.dataInicio).toBe('2026-06-28');
+  expect(periodo.dataFim).toBe('2026-07-25');
+  expect(periodo.colunas.map((coluna) => coluna.inicio)).toEqual([
+    '2026-06-28',
+    '2026-07-05',
+    '2026-07-12',
+    '2026-07-19',
+  ]);
+  expect(periodo.colunas.at(-1)?.fim).toBe('2026-07-25');
+});
+```
+
+Manter os demais testes (diário, range customizado, rejeição) intactos.
+
+- [ ] **Step 2: Rodar o teste e confirmar falha**
+
+Run: `npx vitest run src/domain/insumos/insumo-consumo-semanal-periodo.test.ts`
+
+Expected: FAIL — ainda inclui semana corrente / datas antigas.
+
+- [ ] **Step 3: Implementar o default semanal**
+
+Em `insumo-consumo-semanal-periodo.ts`:
+
+1. Trocar `DEFAULT_PREVIOUS_WEEKS = 3` por `DEFAULT_CLOSED_WEEKS = 4`.
+2. No branch semanal de `buildDefault`:
+
+```ts
+const domingoAtual = this.startOfWeek(hoje);
+const dataFim = this.addDays(domingoAtual, -1); // sábado da semana anterior
+const dataInicio = this.addDays(domingoAtual, -DEFAULT_CLOSED_WEEKS * WEEK_LENGTH_DAYS);
+
+return this.buildFromRange(
+  this.formatIsoDate(dataInicio),
+  this.formatIsoDate(dataFim),
+  visualizacao,
+);
+```
+
+Não alterar `buildFromRange` nem o default diário.
+
+- [ ] **Step 4: Rodar testes e confirmar passe**
+
+Run: `npx vitest run src/domain/insumos/insumo-consumo-semanal-periodo.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-consumo-semanal-periodo.ts src/domain/insumos/insumo-consumo-semanal-periodo.test.ts
+git commit -m "fix(insumos): use last 4 closed weeks as default consumo period"
+```
+
+---
+
+### Task 2: `InsumoConsumoCoberturaCalculator`
+
+**Files:**
+- Create: `src/domain/insumos/insumo-consumo-cobertura-calculator.ts`
+- Create: `src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts`
+
+**Interfaces:**
+- Consumes: `InsumoConsumoVisualizacao` from `insumo-consumo-semanal-periodo`
+- Produces:
+
+```ts
+export type InsumoConsumoCoberturaInput = {
+  visualizacao: InsumoConsumoVisualizacao;
+  estoqueAtual: number;
+  consumos: number[]; // valores das colunas do período, na ordem
+};
+
+export type InsumoConsumoCoberturaResult = {
+  media: number;
+  coberturaDias: number | null;
+  pico: number;
+  coberturaPicoDias: number | null;
+};
+
+export class InsumoConsumoCoberturaCalculator {
+  calculate(input: InsumoConsumoCoberturaInput): InsumoConsumoCoberturaResult
+}
+
+export const insumoConsumoCoberturaCalculator = new InsumoConsumoCoberturaCalculator();
+```
+
+- [ ] **Step 1: Escrever testes que falham**
+
+Criar `insumo-consumo-cobertura-calculator.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { InsumoConsumoCoberturaCalculator } from './insumo-consumo-cobertura-calculator';
+
+describe('InsumoConsumoCoberturaCalculator', () => {
+  const calculator = new InsumoConsumoCoberturaCalculator();
+
+  it('calcula media e cobertura semanal (estoque * 7 / media)', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: 100,
+      consumos: [70, 70, 70, 70],
+    });
+
+    expect(result.media).toBe(70);
+    expect(result.pico).toBe(70);
+    // 100 / (70/7) = 10
+    expect(result.coberturaDias).toBe(10);
+    expect(result.coberturaPicoDias).toBe(10);
+  });
+
+  it('usa pico semanal distinto da media', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: 140,
+      consumos: [70, 100, 40, 50],
+    });
+
+    expect(result.media).toBe(65);
+    expect(result.pico).toBe(100);
+    // 140 * 7 / 65 ≈ 15.076 → 15
+    expect(result.coberturaDias).toBe(15);
+    // 140 * 7 / 100 = 9.8 → 10
+    expect(result.coberturaPicoDias).toBe(10);
+  });
+
+  it('calcula cobertura diaria como estoque / media', () => {
+    const result = calculator.calculate({
+      visualizacao: 'diaria',
+      estoqueAtual: 50,
+      consumos: [10, 10, 10, 10, 10],
+    });
+
+    expect(result.media).toBe(10);
+    expect(result.pico).toBe(10);
+    expect(result.coberturaDias).toBe(5);
+    expect(result.coberturaPicoDias).toBe(5);
+  });
+
+  it('usa dia de maior consumo como pico na diaria', () => {
+    const result = calculator.calculate({
+      visualizacao: 'diaria',
+      estoqueAtual: 30,
+      consumos: [5, 20, 5],
+    });
+
+    expect(result.media).toBe(10);
+    expect(result.pico).toBe(20);
+    expect(result.coberturaDias).toBe(3);
+    expect(result.coberturaPicoDias).toBe(2); // Math.round(30/20)=2? 1.5→2; use Math.round
+  });
+
+  it('retorna cobertura null quando media/pico sao zero', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: 40,
+      consumos: [0, 0, 0, 0],
+    });
+
+    expect(result.media).toBe(0);
+    expect(result.pico).toBe(0);
+    expect(result.coberturaDias).toBeNull();
+    expect(result.coberturaPicoDias).toBeNull();
+  });
+
+  it('retorna 0 dias quando estoque e <= 0 e ha consumo', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: 0,
+      consumos: [10, 10, 10, 10],
+    });
+
+    expect(result.coberturaDias).toBe(0);
+    expect(result.coberturaPicoDias).toBe(0);
+  });
+
+  it('retorna media 0 e coberturas null com lista vazia', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: 10,
+      consumos: [],
+    });
+
+    expect(result.media).toBe(0);
+    expect(result.pico).toBe(0);
+    expect(result.coberturaDias).toBeNull();
+    expect(result.coberturaPicoDias).toBeNull();
+  });
+});
+```
+
+Ajuste o valor esperado de `coberturaPicoDias` no caso diário (30/20 = 1.5 → `Math.round` = 2) se o teste acima divergir — a regra da spec é `Math.round`.
+
+- [ ] **Step 2: Rodar e confirmar falha**
+
+Run: `npx vitest run src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts`
+
+Expected: FAIL — módulo não existe.
+
+- [ ] **Step 3: Implementar o calculator**
+
+Criar `insumo-consumo-cobertura-calculator.ts`:
+
+```ts
+import type { InsumoConsumoVisualizacao } from './insumo-consumo-semanal-periodo';
+
+export type InsumoConsumoCoberturaInput = {
+  visualizacao: InsumoConsumoVisualizacao;
+  estoqueAtual: number;
+  consumos: number[];
+};
+
+export type InsumoConsumoCoberturaResult = {
+  media: number;
+  coberturaDias: number | null;
+  pico: number;
+  coberturaPicoDias: number | null;
+};
+
+export class InsumoConsumoCoberturaCalculator {
+  calculate(input: InsumoConsumoCoberturaInput): InsumoConsumoCoberturaResult {
+    const { consumos, estoqueAtual, visualizacao } = input;
+    const n = consumos.length;
+    const soma = consumos.reduce((acc, value) => acc + value, 0);
+    const media = n === 0 ? 0 : soma / n;
+    const pico = n === 0 ? 0 : Math.max(...consumos);
+
+    return {
+      media,
+      pico,
+      coberturaDias: this.coberturaDias(visualizacao, estoqueAtual, media),
+      coberturaPicoDias: this.coberturaDias(visualizacao, estoqueAtual, pico),
+    };
+  }
+
+  private coberturaDias(
+    visualizacao: InsumoConsumoVisualizacao,
+    estoqueAtual: number,
+    consumoReferencia: number,
+  ): number | null {
+    if (consumoReferencia <= 0) return null;
+    if (estoqueAtual <= 0) return 0;
+
+    const consumoDiario =
+      visualizacao === 'semanal' ? consumoReferencia / 7 : consumoReferencia;
+
+    return Math.max(0, Math.round(estoqueAtual / consumoDiario));
+  }
+}
+
+export const insumoConsumoCoberturaCalculator = new InsumoConsumoCoberturaCalculator();
+```
+
+- [ ] **Step 4: Rodar testes e confirmar passe**
+
+Run: `npx vitest run src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-consumo-cobertura-calculator.ts src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts
+git commit -m "feat(insumos): add consumo cobertura calculator"
+```
+
+---
+
+### Task 3: Enriquecer page data com estoque + cobertura
+
+**Files:**
+- Modify: `src/domain/insumos/insumo-consumo-semanal-aggregator.ts` (tipo do item)
+- Modify: `src/data/insumos/InsumoEstoqueRepository.ts`
+- Modify: `src/app/actions/insumo-estoque-actions.ts`
+- Modify: `src/features/insumo-estoque/utils/formatters.ts` (helper de dias; usado na Task 4/5)
+
+**Interfaces:**
+- Consumes: `insumoConsumoCoberturaCalculator.calculate`, `listConsumoSemanal`
+- Produces:
+  - `InsumoConsumoSemanalItem` com campos extras:
+    - `estoqueAtual: number`
+    - `media: number`
+    - `coberturaDias: number | null`
+    - `pico: number`
+    - `coberturaPicoDias: number | null`
+  - `InsumoEstoqueRepository.listQuantidadesByInsumoIds(ids: string[]): Promise<Map<string, number>>`
+  - `formatCoberturaDias(value: number | null): string` → `"12 d"` | `"—"`
+
+- [ ] **Step 1: Estender o tipo `InsumoConsumoSemanalItem`**
+
+Em `insumo-consumo-semanal-aggregator.ts`, adicionar ao type:
+
+```ts
+export type InsumoConsumoSemanalItem = {
+  insumoId: string;
+  nome: string;
+  unidadeResumida: string;
+  consumoPorSemana: Record<string, number>;
+  total: number;
+  receitas: InsumoConsumoReceitaDetalhe[];
+  estoqueAtual: number;
+  media: number;
+  coberturaDias: number | null;
+  pico: number;
+  coberturaPicoDias: number | null;
+};
+```
+
+Em `getOrCreateItem`, inicializar os novos campos com defaults (`estoqueAtual: 0`, `media: 0`, `coberturaDias: null`, `pico: 0`, `coberturaPicoDias: null`) para o agregador continuar compilando. A action sobrescreve após o cálculo.
+
+Se houver testes do aggregator que constroem o item literalmente, atualizar com os defaults.
+
+- [ ] **Step 2: Adicionar `listQuantidadesByInsumoIds` no repository**
+
+Em `InsumoEstoqueRepository.ts`:
+
+```ts
+async listQuantidadesByInsumoIds(insumoIds: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (insumoIds.length === 0) return result;
+
+  const { data, error } = await this.db
+    .from('insumo_saldos')
+    .select('insumo_id, quantidade')
+    .in('insumo_id', insumoIds);
+
+  if (error) {
+    throw new Error(`Erro ao listar saldos de insumos: ${error.message}`);
+  }
+
+  for (const row of data ?? []) {
+    result.set(row.insumo_id, Number(row.quantidade ?? 0));
+  }
+
+  return result;
+}
+```
+
+- [ ] **Step 3: Enriquecer `getInsumoConsumoSemanalPageData`**
+
+Em `insumo-estoque-actions.ts`:
+
+```ts
+import { insumoConsumoCoberturaCalculator } from '@/domain/insumos/insumo-consumo-cobertura-calculator';
+import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
+// (ajustar import do repository se o singleton/export diferir — usar o mesmo padrão já usado no arquivo)
+
+export async function getInsumoConsumoSemanalPageData(input?: {
+  dataInicio?: string;
+  dataFim?: string;
+  visualizacao?: string;
+}): Promise<InsumoConsumoSemanalPageData> {
+  const periodo = resolveConsumoSemanalPeriodo(input);
+  const items = await insumoConsumoRepository.listConsumoSemanal(periodo);
+  const saldos = await insumoEstoqueRepository.listQuantidadesByInsumoIds(
+    items.map((item) => item.insumoId),
+  );
+
+  const itemsComCobertura = items.map((item) => {
+    const estoqueAtual = saldos.get(item.insumoId) ?? 0;
+    const consumos = periodo.colunas.map(
+      (coluna) => item.consumoPorSemana[coluna.inicio] ?? 0,
+    );
+    const cobertura = insumoConsumoCoberturaCalculator.calculate({
+      visualizacao: periodo.visualizacao,
+      estoqueAtual,
+      consumos,
+    });
+
+    return {
+      ...item,
+      estoqueAtual,
+      media: cobertura.media,
+      coberturaDias: cobertura.coberturaDias,
+      pico: cobertura.pico,
+      coberturaPicoDias: cobertura.coberturaPicoDias,
+    };
+  });
+
+  return {
+    periodo,
+    items: itemsComCobertura,
+  };
+}
+```
+
+Verificar o export do repository no arquivo (singleton `insumoEstoqueRepository` vs `new InsumoEstoqueRepository()`). Reutilizar o padrão já presente em `getInsumoSaldosPageData`.
+
+- [ ] **Step 4: Adicionar `formatCoberturaDias`**
+
+Em `formatters.ts`:
+
+```ts
+export function formatCoberturaDias(value: number | null): string {
+  if (value == null) return '—';
+  return `${value} d`;
+}
+```
+
+- [ ] **Step 5: Smoke — TypeScript / testes existentes do aggregator**
+
+Run:
+
+```bash
+npx vitest run src/domain/insumos/insumo-consumo-semanal-aggregator.test.ts src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts src/domain/insumos/insumo-consumo-semanal-periodo.test.ts
+```
+
+Expected: PASS (corrigir literais de item nos testes do aggregator se quebrarem).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/insumos/insumo-consumo-semanal-aggregator.ts src/domain/insumos/insumo-consumo-semanal-aggregator.test.ts src/data/insumos/InsumoEstoqueRepository.ts src/app/actions/insumo-estoque-actions.ts src/features/insumo-estoque/utils/formatters.ts
+git commit -m "feat(insumos): enrich consumo page data with stock coverage"
+```
+
+---
+
+### Task 4: Tabela desktop — colunas de cobertura
+
+**Files:**
+- Modify: `src/features/insumo-estoque/components/InsumoConsumoSemanalTable.tsx`
+
+**Interfaces:**
+- Consumes: `item.estoqueAtual`, `item.media`, `item.coberturaDias`, `item.pico`, `item.coberturaPicoDias`, `formatCoberturaDias`, `formatInsumoQuantidadeArredondada`
+- Produces: tabela sem Total; ordem Insumo → Estoque → períodos → Média → Cobertura → Pico → Cob. pico
+
+- [ ] **Step 1: Atualizar o `<thead>`**
+
+Ordem dos headers:
+
+```tsx
+<th>Insumo</th>
+<th className="text-right"><HeadLabel>Estoque</HeadLabel></th>
+{/* colunas de período (existentes) */}
+<th className="text-right"><HeadLabel>Média</HeadLabel></th>
+<th className="text-right"><HeadLabel>Cobertura</HeadLabel></th>
+<th className="text-right"><HeadLabel>Pico</HeadLabel></th>
+<th className="text-right"><HeadLabel>Cob. pico</HeadLabel></th>
+```
+
+Remover o `<th>Total</th>`.
+
+- [ ] **Step 2: Atualizar cada linha**
+
+Após a célula do nome, renderizar estoque:
+
+```tsx
+<td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+  {formatInsumoQuantidadeArredondada(item.estoqueAtual, item.unidadeResumida)}
+</td>
+```
+
+Manter células de período. Substituir a célula de Total por:
+
+```tsx
+<td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+  {formatInsumoQuantidadeArredondada(item.media, item.unidadeResumida)}
+</td>
+<td className={`${configTableBodyCellClass} text-right font-mono font-semibold tabular-nums text-stone-900`}>
+  {formatCoberturaDias(item.coberturaDias)}
+</td>
+<td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+  {formatInsumoQuantidadeArredondada(item.pico, item.unidadeResumida)}
+</td>
+<td className={`${configTableBodyCellClass} text-right font-mono font-semibold tabular-nums text-stone-900`}>
+  {formatCoberturaDias(item.coberturaPicoDias)}
+</td>
+```
+
+Importar `formatCoberturaDias`.
+
+- [ ] **Step 3: Ajustar detalhe expandido**
+
+Em `ReceitasDetalhe`:
+- Remover a célula de `receita.total`.
+- Atualizar `colSpan` da linha expandida: `colunas.length + 6` (Insumo + Estoque + N períodos + 4 métricas).
+
+Não é necessário calcular cobertura por receita (fora do escopo).
+
+- [ ] **Step 4: Ajustar `min-w` da tabela**
+
+Trocar `min-w-[760px]` por algo como `min-w-[980px]` para acomodar as colunas extras sem esmagar números.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/features/insumo-estoque/components/InsumoConsumoSemanalTable.tsx
+git commit -m "feat(insumos): show stock coverage columns on consumo table"
+```
+
+---
+
+### Task 5: Mobile + copy da página
+
+**Files:**
+- Modify: `src/features/insumo-estoque/components/InsumoConsumoSemanalMobileList.tsx`
+- Modify: `src/features/insumo-estoque/InsumoConsumoSemanalClient.tsx`
+
+**Interfaces:**
+- Consumes: mesmos campos de cobertura do item
+- Produces: card mobile com estoque/média/cobertura em destaque; helper text atualizado
+
+- [ ] **Step 1: Atualizar header do card mobile**
+
+Substituir o total à direita do nome por estoque + cobertura:
+
+```tsx
+<div className="shrink-0 text-right">
+  <p className="font-mono text-sm font-semibold tabular-nums text-stone-900">
+    {formatInsumoQuantidadeArredondada(item.estoqueAtual, item.unidadeResumida)}
+  </p>
+  <p className="font-mono text-xs tabular-nums text-stone-500">
+    {formatCoberturaDias(item.coberturaDias)}
+  </p>
+</div>
+```
+
+- [ ] **Step 2: Após a lista de períodos, adicionar métricas**
+
+```tsx
+<dl className="mt-2 grid grid-cols-2 gap-2">
+  <Metric label="Média" value={formatInsumoQuantidadeArredondada(item.media, item.unidadeResumida)} />
+  <Metric label="Cobertura" value={formatCoberturaDias(item.coberturaDias)} />
+  <Metric label="Pico" value={formatInsumoQuantidadeArredondada(item.pico, item.unidadeResumida)} />
+  <Metric label="Cob. pico" value={formatCoberturaDias(item.coberturaPicoDias)} />
+</dl>
+```
+
+Helper local no mesmo arquivo (ou inline):
+
+```tsx
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-stone-100 bg-white/70 px-2.5 py-2">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt>
+      <dd className="mt-0.5 font-mono text-sm tabular-nums text-stone-800">{value}</dd>
+    </div>
+  );
+}
+```
+
+Remover qualquer destaque residual de `item.total` no card.
+
+- [ ] **Step 3: Atualizar copy no client**
+
+Em `InsumoConsumoSemanalClient.tsx`:
+
+- `description` do header → algo como: `"Consumo por semana ou dia e cobertura de estoque com base nas saídas de produção vinculadas a lotes."`
+- `helperText` semanal → `"4 semanas fechadas (domingo a sábado)."`
+- Diário permanece: `"Colunas por dia. Padrão diário: D-7 até D-1."`
+
+- [ ] **Step 4: Verificação manual rápida**
+
+1. Abrir `/consumo-insumos` (visão semanal, sem query) → 4 colunas de semanas fechadas; sem coluna Total; com Estoque/Média/Cobertura/Pico/Cob. pico.
+2. Alternar para Diária → métricas usam média/pico diários.
+3. Conferir mobile (devtools) — estoque + cobertura no topo do card.
+
+- [ ] **Step 5: Rodar suite de domínio relacionada**
+
+Run:
+
+```bash
+npx vitest run src/domain/insumos/insumo-consumo-semanal-periodo.test.ts src/domain/insumos/insumo-consumo-cobertura-calculator.test.ts src/domain/insumos/insumo-consumo-semanal-aggregator.test.ts
+```
+
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/features/insumo-estoque/components/InsumoConsumoSemanalMobileList.tsx src/features/insumo-estoque/InsumoConsumoSemanalClient.tsx
+git commit -m "feat(insumos): show stock coverage on consumo mobile and update copy"
+```
+
+---
+
+## Spec coverage (self-review)
+
+| Requisito da spec | Task |
+|-------------------|------|
+| 4 semanas fechadas no default semanal | Task 1 |
+| Diária D-7..D-1 inalterada | Task 1 (não mexe) |
+| Coluna Estoque | Tasks 3–5 |
+| Remover Total | Tasks 4–5 |
+| Média + Cobertura + Pico + Cob. pico | Tasks 2–5 |
+| Fórmulas semanal/diária + edge cases | Task 2 |
+| Cruzar saldos na action | Task 3 |
+| Desktop + mobile | Tasks 4–5 |
+| Helper text | Task 5 |
+| Sem migration / sem insumos só-estoque | Task 3 (só enriquece items com saída) |
+| Testes unitários | Tasks 1–2 (+ smoke 3/5) |
