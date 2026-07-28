@@ -1,0 +1,147 @@
+# Cobertura de estoque na tela de consumo de insumos
+
+Data: 2026-07-28  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+Transformar a tabela de **Consumo de insumos** em ferramenta de **cobertura de estoque**: cruzar saldo atual com o ritmo de consumo recente (semanal ou diário) para estimar quantos dias de estoque restam.
+
+## Escopo
+
+Inclui:
+- Ajuste do período padrão semanal para 4 semanas fechadas
+- Coluna de estoque atual
+- Remoção da coluna Total
+- Colunas de média, cobertura, pico e cobertura no pico
+- Mesma lógica na visão diária (pico = dia de maior consumo)
+- Atualização desktop + mobile
+- Testes unitários de período e cobertura
+
+Fora de escopo:
+- Incluir insumos sem saída no período (só com estoque)
+- Mudança de schema / migrations
+- Nova tela ou aba separada
+- Alertas / thresholds de ruptura
+- Ajustes manuais ou movimentos sem lote (já excluídos do consumo)
+
+## Decisão de abordagem
+
+Enriquecer a tabela atual (`InsumoConsumoSemanal*`), sem tela nova.
+
+## Período padrão
+
+### Semanal
+
+Últimas **4 semanas fechadas** (domingo a sábado), **excluindo** a semana corrente.
+
+Exemplo (âncora terça 28/07/2026 em America/Sao_Paulo):
+- 28/06 a 04/07
+- 05/07 a 11/07
+- 12/07 a 18/07
+- 19/07 a 25/07
+
+Implementação: alterar `InsumoConsumoSemanalPeriodoBuilder.buildDefault` para visão `semanal`. Hoje usa 3 semanas anteriores + semana atual; passa a usar 4 semanas anteriores completas, com `dataFim` no sábado da última semana fechada.
+
+### Diária
+
+Mantém o padrão atual: D-7 até D-1 (dias já fechados).
+
+### Filtro manual
+
+Datas customizadas continuam livres. Métricas usam as colunas geradas para o intervalo escolhido (N = número de colunas do período).
+
+## Colunas da tabela
+
+Ordem (desktop):
+
+1. **Insumo** — nome expansível (comportamento atual)
+2. **Estoque** — saldo atual do insumo (mesma unidade)
+3. **Colunas de período** — semanas ou dias (inalteradas)
+4. **Média** — média de consumo nas colunas do período
+5. **Cobertura** — dias de estoque na média
+6. **Pico** — valor da coluna de maior consumo
+7. **Cob. pico** — dias de estoque no ritmo do pico
+
+Remove **Total** na linha principal e no detalhe expandido por produto.
+
+Headers em UPPERCASE curto: `ESTOQUE`, `MÉDIA`, `COBERTURA`, `PICO`, `COB. PICO`.
+
+Mobile: mesma informação em cards — estoque + média/cobertura em destaque; períodos em lista compacta.
+
+## Fórmulas
+
+Seja `consumo[i]` o valor de cada coluna do período, `N` o número de colunas, `estoque` o saldo atual.
+
+### Visão semanal
+
+- `media = sum(consumo) / N`
+- `coberturaDias = estoque / (media / 7)` ≡ `estoque * 7 / media`
+- `pico = max(consumo)`
+- `coberturaPicoDias = estoque / (pico / 7)` ≡ `estoque * 7 / pico`
+
+### Visão diária
+
+- `media = sum(consumo) / N`
+- `coberturaDias = estoque / media`
+- `pico = max(consumo)` (dia de maior consumo)
+- `coberturaPicoDias = estoque / pico`
+
+### Edge cases
+
+- `media == 0` ou `pico == 0` → exibir `—` na cobertura correspondente
+- `estoque <= 0` → cobertura `0 d`
+- Arredondamento de quantidades: reutilizar `formatInsumoQuantidadeArredondada`; dias de cobertura: inteiro com `Math.round`, mínimo 0
+
+## Arquitetura
+
+### Domínio
+
+1. `InsumoConsumoSemanalPeriodoBuilder` — corrigir default semanal.
+2. Novo `InsumoConsumoCoberturaCalculator` (classe dedicada, SRP):
+   - Input: `visualizacao`, `estoqueAtual`, `consumoPorColuna` (Record ou array alinhado às colunas)
+   - Output: `{ media, coberturaDias, pico, coberturaPicoDias }` (números ou null para cobertura indefinida)
+3. Estender `InsumoConsumoSemanalItem`:
+   - `estoqueAtual: number`
+   - `media: number`
+   - `coberturaDias: number | null`
+   - `pico: number`
+   - `coberturaPicoDias: number | null`
+
+### Dados / actions
+
+Em `getInsumoConsumoSemanalPageData`:
+1. Resolver período (já existente)
+2. Agregar consumo (já existente)
+3. Buscar saldos atuais dos insumos retornados (via repositório/serviço de estoque de insumos já usado na tela de saldo)
+4. Aplicar calculator e preencher campos de cobertura
+
+Sem migration.
+
+### UI
+
+- `InsumoConsumoSemanalTable.tsx`
+- `InsumoConsumoSemanalMobileList.tsx`
+- Helper text no client: indicar “4 semanas fechadas” no padrão semanal
+- Descrição da página pode mencionar cobertura de estoque
+
+### Testes
+
+- Atualizar `insumo-consumo-semanal-periodo.test.ts` para o novo default
+- Novo `insumo-consumo-cobertura-calculator.test.ts` cobrindo semanal, diária, zeros e estoque negativo/zero
+
+## Critérios de aceite
+
+1. Ao abrir a tela em visão semanal sem query params, as 4 colunas são semanas fechadas (sem a semana corrente).
+2. Coluna Estoque mostra o saldo atual por insumo.
+3. Coluna Total não aparece.
+4. Média e Cobertura refletem as fórmulas acima na semanal e na diária.
+5. Pico e Cob. pico usam a maior coluna do período (semana ou dia).
+6. Desktop e mobile exibem as novas métricas.
+7. Testes unitários de período e cobertura passam.
+
+## Fora / follow-ups possíveis
+
+- Ordenar por menor cobertura (ruptura iminente)
+- Incluir insumos só com estoque e sem consumo
+- Badges de alerta por faixa de dias
