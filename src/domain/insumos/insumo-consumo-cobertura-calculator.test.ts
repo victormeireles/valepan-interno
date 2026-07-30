@@ -83,6 +83,17 @@ describe('InsumoConsumoCoberturaCalculator', () => {
     expect(result.coberturaPicoDias).toBe(0);
   });
 
+  it('retorna 0 dias quando estoque e negativo e ha consumo', () => {
+    const result = calculator.calculate({
+      visualizacao: 'semanal',
+      estoqueAtual: -5,
+      consumos: [10, 10, 10, 10],
+    });
+
+    expect(result.coberturaDias).toBe(0);
+    expect(result.coberturaPicoDias).toBe(0);
+  });
+
   it('retorna media 0 e coberturas null com lista vazia', () => {
     const result = calculator.calculate({
       visualizacao: 'semanal',

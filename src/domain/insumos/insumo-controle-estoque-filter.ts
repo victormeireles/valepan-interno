@@ -7,6 +7,10 @@ export class InsumoControleEstoqueFilter {
     return saldos.filter((saldo) => this.isControlavel(saldo.nome));
   }
 
+  filterPorNomeControlavel<T extends { nome: string }>(items: T[]): T[] {
+    return items.filter((item) => this.isControlavel(item.nome));
+  }
+
   private isControlavel(nome: string): boolean {
     const nomeNormalizado = this.normalizeNome(nome);
     return !INSUMOS_FORA_DO_CONTROLE.has(nomeNormalizado);

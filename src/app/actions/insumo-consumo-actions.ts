@@ -3,6 +3,7 @@
 import { insumoConsumoRepository } from '@/data/insumos/InsumoConsumoRepository';
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoConsumoCoberturaCalculator } from '@/domain/insumos/insumo-consumo-cobertura-calculator';
+import { insumoControleEstoqueFilter } from '@/domain/insumos/insumo-controle-estoque-filter';
 import type {
   InsumoConsumoReceitaDetalhe,
   InsumoConsumoSemanalItem,
@@ -30,7 +31,8 @@ export async function getInsumoConsumoSemanalPageData(
   input?: InsumoConsumoPeriodoInput,
 ): Promise<InsumoConsumoSemanalPageData> {
   const periodo = resolveConsumoSemanalPeriodo(input);
-  const items = await insumoConsumoRepository.listConsumoSemanal(periodo);
+  const itemsBrutos = await insumoConsumoRepository.listConsumoSemanal(periodo);
+  const items = insumoControleEstoqueFilter.filterPorNomeControlavel(itemsBrutos);
   const saldos = await insumoEstoqueRepository.listQuantidadesByInsumoIds(
     items.map((item) => item.insumoId),
   );

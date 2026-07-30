@@ -119,4 +119,59 @@ describe('getInsumoConsumoSemanalPageData', () => {
       coberturaPicoDias: 11,
     });
   });
+
+  it('remove agua e gelo da listagem de consumo com cobertura', async () => {
+    mockListConsumoSemanal.mockResolvedValue([
+      {
+        insumoId: 'farinha',
+        nome: 'Farinha',
+        unidadeResumida: 'KG',
+        consumoPorSemana: { '2026-06-28': 10 },
+        total: 10,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+      {
+        insumoId: 'agua',
+        nome: 'Água',
+        unidadeResumida: 'L',
+        consumoPorSemana: { '2026-06-28': 100 },
+        total: 100,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+      {
+        insumoId: 'gelo',
+        nome: 'Gelo',
+        unidadeResumida: 'KG',
+        consumoPorSemana: { '2026-06-28': 20 },
+        total: 20,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+    ]);
+    mockListQuantidadesByInsumoIds.mockResolvedValue(new Map([['farinha', 50]]));
+
+    const { getInsumoConsumoSemanalPageData } = await import('./insumo-estoque-actions');
+    const result = await getInsumoConsumoSemanalPageData({
+      dataInicio: '2026-06-28',
+      dataFim: '2026-07-04',
+      visualizacao: 'semanal',
+    });
+
+    expect(result.items.map((item) => item.nome)).toEqual(['Farinha']);
+    expect(mockListQuantidadesByInsumoIds).toHaveBeenCalledWith(['farinha']);
+  });
 });

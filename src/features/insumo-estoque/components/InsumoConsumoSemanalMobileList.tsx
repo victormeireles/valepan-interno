@@ -191,12 +191,7 @@ function ReceitasMobileDetalhe({
     <div className="mt-2 space-y-2">
       {detalhes.map((receita) => (
         <div key={receita.receitaId} className="rounded-xl border border-amber-100 bg-white p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-medium text-stone-900">{receita.receitaNome}</p>
-            <p className="font-mono text-sm font-semibold tabular-nums text-stone-900">
-              {formatInsumoQuantidadeArredondada(receita.total, item.unidadeResumida)}
-            </p>
-          </div>
+          <p className="font-medium text-stone-900">{receita.receitaNome}</p>
           <dl className="mt-2 grid gap-1.5">
             {colunas.map((coluna) => (
               <div key={coluna.inicio} className="flex items-center justify-between gap-2">
