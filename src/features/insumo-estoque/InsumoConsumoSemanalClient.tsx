@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DateField } from '@/components/ui/DateField';
@@ -160,13 +161,17 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-mono text-sm tabular-nums text-stone-500" aria-live="polite">
-          {resultLabel}
-        </p>
-        <p className="text-sm text-stone-500">
-          {helperText} Valores arredondados, sem ajustes manuais ou movimentos sem lote.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="font-mono text-sm tabular-nums text-stone-500" aria-live="polite">
+            {resultLabel}
+          </p>
+          <p className="text-sm text-stone-500">
+            {helperText} Valores arredondados, sem ajustes manuais ou movimentos sem lote.
+            Unidade só no estoque.
+          </p>
+        </div>
+        <CoberturaLegend />
       </div>
 
       <Card
@@ -209,6 +214,36 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
         )}
       </Card>
     </div>
+  );
+}
+
+function CoberturaLegend() {
+  return (
+    <ul
+      className="flex flex-wrap items-center gap-1.5"
+      aria-label="Legenda de cobertura de estoque"
+    >
+      <li>
+        <Badge tone="danger" numeric pill={false}>
+          ≤7 d
+        </Badge>
+      </li>
+      <li>
+        <Badge tone="warning" numeric pill={false}>
+          8–21 d
+        </Badge>
+      </li>
+      <li>
+        <Badge tone="neutral" numeric pill={false}>
+          22–60 d
+        </Badge>
+      </li>
+      <li>
+        <Badge tone="success" numeric pill={false}>
+          &gt;60 d
+        </Badge>
+      </li>
+    </ul>
   );
 }
 
