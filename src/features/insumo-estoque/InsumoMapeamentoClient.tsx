@@ -172,7 +172,6 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     moverGruposParaIgnoradas,
     onSaved: handleSaved,
     onError: showError,
-    onRefresh: () => router.refresh(),
   });
 
   const handleRestaurar = async (grupo: InsumoPendenciaProdutoGrupo) => {

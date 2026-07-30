@@ -49,11 +49,18 @@ export class InsumoFornecedorIgnoradoManager {
     );
     const matchingIds = this.filterIdsByCnpj(pendentes, cnpjDigits);
 
-    for (const id of matchingIds) {
-      await this.deps.pendenciaRepository.marcarIgnorado(id);
+    try {
+      const pendenciasIgnoradas =
+        await this.deps.pendenciaRepository.marcarIgnoradasPorIds(matchingIds);
+      return { cnpj: cnpjDigits, pendenciasIgnoradas };
+    } catch (error) {
+      // Compensa o upsert se o batch de pendências falhar após sucesso do fornecedor.
+      await this.deps.fornecedorIgnoradoRepository.deleteByCnpj(
+        input.empresaId,
+        cnpjDigits,
+      );
+      throw error;
     }
-
-    return { cnpj: cnpjDigits, pendenciasIgnoradas: matchingIds.length };
   }
 
   async desmarcarFornecedor(
@@ -75,12 +82,10 @@ export class InsumoFornecedorIgnoradoManager {
       'ignorado',
     );
     const matchingIds = this.filterIdsByCnpj(ignoradas, cnpjDigits);
+    const pendenciasRestauradas =
+      await this.deps.pendenciaRepository.marcarPendentesPorIds(matchingIds);
 
-    for (const id of matchingIds) {
-      await this.deps.pendenciaRepository.marcarPendente(id);
-    }
-
-    return { cnpj: cnpjDigits, pendenciasRestauradas: matchingIds.length };
+    return { cnpj: cnpjDigits, pendenciasRestauradas };
   }
 
   private requireCnpjDigits(cnpj: string): string {

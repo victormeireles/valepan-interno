@@ -26,7 +26,18 @@ describe('resolverCnpjUnicoDoGrupo', () => {
     ).toBe('11725898000181');
   });
 
-  it('retorna null sem CNPJ ou com múltiplos', () => {
+  it('retorna dígitos quando máscara e só-dígitos são o mesmo CNPJ', () => {
+    expect(
+      resolverCnpjUnicoDoGrupo({
+        contexto: ctx([
+          { chave: '11.725.898/0001-81', label: 'HIG', pendenciaCount: 1 },
+          { chave: '11725898000181', label: 'HIG', pendenciaCount: 1 },
+        ]),
+      }),
+    ).toBe('11725898000181');
+  });
+
+  it('retorna null sem CNPJ ou com CNPJs distintos', () => {
     expect(
       resolverCnpjUnicoDoGrupo({
         contexto: ctx([{ chave: 'HIG E LIMP', label: 'HIG E LIMP', pendenciaCount: 1 }]),
@@ -40,5 +51,16 @@ describe('resolverCnpjUnicoDoGrupo', () => {
         ]),
       }),
     ).toBeNull();
+  });
+
+  it('retorna o CNPJ único mesmo com chave nome-only misturada', () => {
+    expect(
+      resolverCnpjUnicoDoGrupo({
+        contexto: ctx([
+          { chave: '11.725.898/0001-81', label: 'HIG', pendenciaCount: 1 },
+          { chave: 'HIG E LIMP', label: 'HIG E LIMP', pendenciaCount: 1 },
+        ]),
+      }),
+    ).toBe('11725898000181');
   });
 });

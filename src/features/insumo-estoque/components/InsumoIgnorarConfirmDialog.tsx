@@ -29,6 +29,18 @@ function rotuloBotaoSomenteProduto(produtoLabel: string): string {
     : 'Ignorar só este produto';
 }
 
+/** "Nome (CNPJ)" — mono só no trecho do CNPJ. */
+function FornecedorLabelComCnpj({ label }: { label: string }) {
+  const open = label.lastIndexOf(' (');
+  if (open < 0 || !label.endsWith(')')) return <>{label}</>;
+  return (
+    <>
+      {label.slice(0, open + 2)}
+      <span className="font-mono tabular-nums">{label.slice(open + 2, -1)}</span>)
+    </>
+  );
+}
+
 export default function InsumoIgnorarConfirmDialog({
   open,
   modo,
@@ -68,7 +80,7 @@ export default function InsumoIgnorarConfirmDialog({
         </p>
         {modo === 'produto-ou-fornecedor' && fornecedorLabel ? (
           <p className="mt-3 text-sm text-text-strong">
-            Fornecedor: <span className="font-mono tabular-nums">{fornecedorLabel}</span>
+            Fornecedor: <FornecedorLabelComCnpj label={fornecedorLabel} />
           </p>
         ) : null}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">

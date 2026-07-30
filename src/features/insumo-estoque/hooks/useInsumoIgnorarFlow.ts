@@ -41,7 +41,6 @@ type UseInsumoIgnorarFlowArgs = {
   moverGruposParaIgnoradas: (grupos: InsumoPendenciaProdutoGrupo[]) => void;
   onSaved: (message: string) => void;
   onError: (message: string) => void;
-  onRefresh: () => void;
 };
 
 const DIALOG_FECHADO: DialogState = {
@@ -88,7 +87,6 @@ export function useInsumoIgnorarFlow({
   moverGruposParaIgnoradas,
   onSaved,
   onError,
-  onRefresh,
 }: UseInsumoIgnorarFlowArgs) {
   const [dialog, setDialog] = useState<DialogState>(DIALOG_FECHADO);
   const [pending, setPending] = useState<PendingIgnorar | null>(null);
@@ -223,7 +221,6 @@ export function useInsumoIgnorarFlow({
       );
       setDialog(DIALOG_FECHADO);
       setPending(null);
-      onRefresh();
     } finally {
       setBusy(false);
     }
@@ -232,7 +229,6 @@ export function useInsumoIgnorarFlow({
     clearSelection,
     moverGruposParaIgnoradas,
     onError,
-    onRefresh,
     onSaved,
     pendenciaGrupos,
     pending,
