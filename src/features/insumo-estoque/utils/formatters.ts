@@ -8,6 +8,7 @@ export function formatInsumoQuantidade(value: number, unidade?: string): string 
 
 export function formatCoberturaDias(value: number | null): string {
   if (value == null) return '—';
+  if (value > 360) return '>360 d';
   return `${value} d`;
 }
 

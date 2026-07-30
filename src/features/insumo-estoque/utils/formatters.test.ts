@@ -18,4 +18,10 @@ describe('formatCoberturaDias', () => {
     expect(formatCoberturaDias(12)).toBe('12 d');
     expect(formatCoberturaDias(null)).toBe('—');
   });
+
+  it('compacta coberturas acima de 360 dias', () => {
+    expect(formatCoberturaDias(360)).toBe('360 d');
+    expect(formatCoberturaDias(361)).toBe('>360 d');
+    expect(formatCoberturaDias(900)).toBe('>360 d');
+  });
 });
