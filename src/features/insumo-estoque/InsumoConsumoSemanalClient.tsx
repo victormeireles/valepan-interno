@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-estoque-actions';
+import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';

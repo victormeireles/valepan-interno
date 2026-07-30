@@ -103,7 +103,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
     ]);
     mockListQuantidadesByInsumoIds.mockResolvedValue(new Map([['farinha', 42]]));
 
-    const { getInsumoConsumoSemanalPageData } = await import('./insumo-estoque-actions');
+    const { getInsumoConsumoSemanalPageData } = await import('./insumo-consumo-actions');
     const result = await getInsumoConsumoSemanalPageData({
       dataInicio: '2026-07-01',
       dataFim: '2026-07-14',
@@ -164,7 +164,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
     ]);
     mockListQuantidadesByInsumoIds.mockResolvedValue(new Map([['farinha', 50]]));
 
-    const { getInsumoConsumoSemanalPageData } = await import('./insumo-estoque-actions');
+    const { getInsumoConsumoSemanalPageData } = await import('./insumo-consumo-actions');
     const result = await getInsumoConsumoSemanalPageData({
       dataInicio: '2026-06-28',
       dataFim: '2026-07-04',

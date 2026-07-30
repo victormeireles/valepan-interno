@@ -29,12 +29,6 @@ import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
 import { insumoEntradaFatorRecalcIntegracaoService } from '@/lib/services/insumo-entrada-fator-recalc-integracao-service';
 
-export {
-  getInsumoConsumoDetalhesPorProduto,
-  getInsumoConsumoSemanalPageData,
-} from './insumo-consumo-actions';
-export type { InsumoConsumoSemanalPageData } from './insumo-consumo-actions';
-
 const REVALIDATE_PATHS = ['/estoque-insumos', '/mapeamento-insumos', '/consumo-insumos'] as const;
 
 function revalidateInsumoPages() {

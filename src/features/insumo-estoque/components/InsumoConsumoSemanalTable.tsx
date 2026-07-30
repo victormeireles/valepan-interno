@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-estoque-actions';
+import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-consumo-actions';
 import type {
   InsumoConsumoPeriodo,
   InsumoConsumoPeriodoColuna,
