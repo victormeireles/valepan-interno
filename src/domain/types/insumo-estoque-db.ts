@@ -164,3 +164,13 @@ export type IntegracaoInsumoListItem = IntegracaoInsumoListItemBase & {
   nfsDistintas: number;
   pendenciaCount: number;
 };
+
+export type InsumoFornecedorIgnoradoRow = {
+  id: string;
+  empresa_id: string;
+  fornecedor_cnpj: string;
+  fornecedor_nome: string | null;
+  fornecedor_razao_social: string | null;
+  criado_em: string;
+  criado_por: string | null;
+};
