@@ -1,0 +1,154 @@
+# Fornecedores ignorados no mapeamento de insumos
+
+Data: 2026-07-30  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+Permitir marcar fornecedores (por CNPJ) para **sempre ignorar** no mapeamento de insumos Omie → estoque interno: pendências atuais e futuras daquele fornecedor não entram na fila de mapeamento (nascem ou passam a `ignorado`).
+
+## Contexto atual
+
+Hoje **não existe** lista persistente de fornecedores a ignorar. Existe:
+
+- Ignorar por **produto/pendência** (`status = ignorado`)
+- Reaproveitamento histórico: mesmo `omie_id_produto` ou mesma descrição já ignorada → nova NF também ignora
+- Heurísticas por keyword (inclui trechos de nome de fornecedor) só como **sugestão** de IA — não são cadastro editável
+
+## Escopo
+
+Inclui:
+- Tabela `insumo_fornecedor_ignorado` com RLS
+- Marcar fornecedor a partir do fluxo “Ignorar” em Mapeamento de insumos
+- Tela em Config para listar e desmarcar (com pergunta de restaurar pendências)
+- Processor de recebimento: CNPJ na lista → pendência já nasce `ignorado`
+- Testes de domínio, manager e processor
+
+Fora de escopo (v1):
+- Adicionar fornecedor manualmente só pelo CNPJ na tela de Config
+- Ignorar fornecedor sem CNPJ (por nome)
+- Substituir keywords heurísticas ou o histórico por produto
+- Tela/aba de fornecedores dentro de Mapeamento de insumos
+
+## Decisão de abordagem
+
+Tabela dedicada `insumo_fornecedor_ignorado` + integração no processor e na UI de ignorar. Identidade estável: **somente CNPJ**.
+
+## Dados
+
+### Tabela `insumo_fornecedor_ignorado`
+
+| Coluna | Tipo | Notas |
+|--------|------|--------|
+| `id` | uuid PK | default gen_random_uuid() |
+| `empresa_id` | uuid FK | empresa do tenant |
+| `fornecedor_cnpj` | text | só dígitos, normalizado |
+| `fornecedor_nome` | text null | exibição |
+| `fornecedor_razao_social` | text null | exibição |
+| `criado_em` | timestamptz | default now() |
+| `criado_por` | uuid null | auth.uid() se disponível |
+
+Constraints:
+- Unique `(empresa_id, fornecedor_cnpj)`
+- Check: `fornecedor_cnpj` não vazio e só dígitos (ou validação no Manager)
+
+RLS (padrão do projeto):
+- ENABLE RLS
+- SELECT: autenticados (`USING (true)`)
+- INSERT: autenticados
+- UPDATE: autenticados ou admin conforme padrão das tabelas irmãs de insumos
+- DELETE: autenticados ou admin — necessário para desmarcar
+
+### Normalização de CNPJ
+
+Função de domínio: remove máscara, mantém só dígitos. Match na lista e nas pendências usa o mesmo normalizador. Pendências já guardam `fornecedor_cnpj`; comparar após normalizar ambos os lados.
+
+## Regras de negócio
+
+1. Match **somente por CNPJ**. Sem CNPJ válido → não marca fornecedor; UI não oferece “tudo deste fornecedor”.
+2. No processamento de recebimento Omie, ao criar pendência sem mapeamento: se CNPJ ∈ lista → `status = ignorado` (não `pendente`).
+3. Histórico por produto/descrição continua ativo e independente.
+4. Keywords em `insumo-ignorar-keywords.ts` seguem só como sugestão de IA; a lista persistente é a fonte de verdade para “sempre ignorar fornecedor”.
+5. Marcar fornecedor já listado: **idempotente** — reaplica ignore nas pendências `pendente` daquele CNPJ.
+6. Desmarcar: remove da tabela; se o usuário pedir, restaura só `ignorado` → `pendente` daquele `empresa_id` + CNPJ. Não altera pendências de outros fornecedores.
+
+## UI e fluxos
+
+### Config — `/config/fornecedores-insumos` (nome final alinhado ao hub)
+
+Nova entrada em `config-sections` (perto de Insumos), título operacional tipo **Fornecedores ignorados**.
+
+Conteúdo v1:
+- Lista: nome/razão + CNPJ formatado
+- Ação: desmarcar
+- Ao desmarcar: diálogo com **“Restaurar pendências ignoradas deste fornecedor para a fila?”** — Sim / Não / Cancelar
+- Sem formulário de “adicionar por CNPJ” na v1
+
+### Mapeamento de insumos — ignorar
+
+Substituir o `window.confirm` simples quando o grupo tiver **um único CNPJ**:
+
+- **Ignorar só este produto** — comportamento atual (`ignorarInsumoPendenciasEmLote` nos ids do grupo)
+- **Ignorar tudo deste fornecedor** — grava na lista + marca todas as pendências `pendente` daquele CNPJ (empresa) como `ignorado`
+
+Sem CNPJ, ou grupo com mais de um CNPJ: só a opção de produto (confirm atual ou equivalente).
+
+Após sucesso, a UI move os grupos afetados para a aba Ignorados (incluindo outros produtos do mesmo fornecedor, se aplicável).
+
+### Lote / seleção em massa
+
+Se a seleção tiver um único CNPJ compartilhado, o batch “Ignorar” pode oferecer as mesmas duas opções. Se CNPJs misturados: só ignorar produtos selecionados (sem marcar fornecedor).
+
+## Arquitetura
+
+Camadas (padrão Manager / Repository):
+
+- `InsumoFornecedorIgnoradoRepository` — list, existsByCnpj, upsert, delete
+- `InsumoFornecedorIgnoradoManager` — `marcar({ empresaId, cnpj, nome?, razao?, usuarioId? })` e `desmarcar({ empresaId, cnpj, restaurarPendencias })`
+- Server actions (ou actions em `insumo-estoque-actions`) — listar / marcar / desmarcar com revalidate de `/mapeamento-insumos` e `/config/fornecedores-insumos`
+- `InsumoRecebimentoProcessor` (ou ponto equivalente) — consulta `existsByCnpj` antes de definir status inicial da pendência
+
+### Fluxo marcar (fila)
+
+1. Normaliza CNPJ; rejeita se inválido/ausente  
+2. Upsert em `insumo_fornecedor_ignorado`  
+3. Atualiza pendências `pendente` daquele CNPJ → `ignorado`  
+4. Retorna contagens para toast/UI  
+
+Preferir a mesma operação server-side atômica o suficiente para não reportar sucesso se o ignore em lote falhar após o upsert (rollback ou compensação: se update falhar, não deixar estado inconsistente sem feedback).
+
+### Fluxo desmarcar (Config)
+
+1. Delete da tabela  
+2. Se `restaurarPendencias`: `ignorado` → `pendente` filtrado por CNPJ + empresa  
+3. Novas NFs voltam a gerar `pendente` (salvo histórico por produto/descrição)
+
+### Fluxo recebimento
+
+Ordem sugerida (compatível com o processor atual):
+
+1. Mapeamento ativo → aplica entrada  
+2. Decisão histórica (produto/descrição ignorados) → pendência `ignorado`  
+3. **Novo:** fornecedor na lista → pendência `ignorado`  
+4. Caso contrário → pendência `pendente`
+
+## Erros e edge cases
+
+- CNPJ ausente/inválido: action rejeita; botão “tudo deste fornecedor” oculto/desabilitado  
+- Grupo multi-CNPJ: não oferece marcar fornecedor  
+- Marcar já existente: idempotente  
+- Desmarcar sem restaurar: futuras NFs na fila; itens já ignorados permanecem em Ignorados até restauração manual  
+- Falha parcial: não toast de sucesso; estado coerente ou erro explícito
+
+## Testes
+
+- Domínio: normalização e match de CNPJ  
+- Manager: marcar ignora pendentes atuais; desmarcar com e sem restaurar  
+- Processor: NF com CNPJ na lista nasce `ignorado`  
+- Actions: rejeita marcar sem CNPJ  
+
+## Critérios de sucesso
+
+- Operador marca “tudo deste fornecedor” uma vez e produtos novos daquele CNPJ não voltam à fila Pendentes  
+- Em Config, vê a lista e consegue desmarcar; se quiser, restaura as pendências  
+- Sem CNPJ, o fluxo de ignorar produto permanece igual ao de hoje  
