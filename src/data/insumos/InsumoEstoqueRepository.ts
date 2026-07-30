@@ -50,6 +50,26 @@ export class InsumoEstoqueRepository {
     return data as InsumoSaldoRow | null;
   }
 
+  async listQuantidadesByInsumoIds(insumoIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (insumoIds.length === 0) return result;
+
+    const { data, error } = await this.db
+      .from('insumo_saldos')
+      .select('insumo_id, quantidade')
+      .in('insumo_id', insumoIds);
+
+    if (error) {
+      throw new Error(`Erro ao listar saldos de insumos: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      result.set(row.insumo_id, Number(row.quantidade ?? 0));
+    }
+
+    return result;
+  }
+
   async upsertSaldo(insumoId: string, quantidade: number): Promise<InsumoSaldoRow> {
     const now = new Date().toISOString();
     const { data, error } = await this.db

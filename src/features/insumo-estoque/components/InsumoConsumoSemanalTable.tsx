@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-estoque-actions';
+import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-consumo-actions';
 import type {
   InsumoConsumoPeriodo,
   InsumoConsumoPeriodoColuna,
@@ -13,8 +13,9 @@ import type {
 import {
   configTableBodyCellClass,
   configTableHeadCellClass,
-  configTableZebraRowClass,
 } from '@/components/Config/config-table-styles';
+import InsumoCoberturaBadge from '@/features/insumo-estoque/components/InsumoCoberturaBadge';
+import { insumoCoberturaVisualTone } from '@/features/insumo-estoque/insumo-cobertura-visual-tone';
 import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
@@ -22,6 +23,11 @@ type Props = {
   periodo: InsumoConsumoPeriodo;
   colunas: InsumoConsumoPeriodoColuna[];
 };
+
+const DECISION_CELL =
+  'bg-stone-50/90 border-l border-stone-200';
+const STICKY_INSUMO =
+  'sticky left-0 z-10 border-r border-stone-200 shadow-[2px_0_6px_-2px_rgb(28_25_23_/_0.08)]';
 
 export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -34,11 +40,8 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
   const toggleExpanded = (item: InsumoConsumoSemanalItem) => {
     setExpandedIds((current) => {
       const next = new Set(current);
-      if (next.has(item.insumoId)) {
-        next.delete(item.insumoId);
-      } else {
-        next.add(item.insumoId);
-      }
+      if (next.has(item.insumoId)) next.delete(item.insumoId);
+      else next.add(item.insumoId);
       return next;
     });
 
@@ -72,11 +75,17 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
 
   return (
     <div className="hidden overflow-x-auto md:block">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
+      <table className="w-full min-w-[980px] border-collapse text-sm">
         <thead className="border-b border-stone-200 bg-surface-sunken">
           <tr>
-            <th scope="col" className={`${configTableHeadCellClass} text-left`}>
+            <th
+              scope="col"
+              className={`${configTableHeadCellClass} ${STICKY_INSUMO} z-20 bg-surface-sunken text-left`}
+            >
               <HeadLabel>Insumo</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} ${DECISION_CELL} text-right`}>
+              <HeadLabel>Estoque</HeadLabel>
             </th>
             {colunas.map((coluna) => (
               <th
@@ -87,62 +96,103 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
                 <HeadLabel>{coluna.label}</HeadLabel>
               </th>
             ))}
-            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
-              <HeadLabel>Total</HeadLabel>
+            <th scope="col" className={`${configTableHeadCellClass} text-right text-stone-400`}>
+              <HeadLabel>Média</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} ${DECISION_CELL} text-right`}>
+              <HeadLabel>Cobertura</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right text-stone-400`}>
+              <HeadLabel>Pico</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} ${DECISION_CELL} text-right`}>
+              <HeadLabel>Cob. pico</HeadLabel>
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-stone-100">
-          {items.map((item, index) => (
-            <Fragment key={item.insumoId}>
-              <tr className={configTableZebraRowClass(index)}>
-                <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
-                  <button
-                    type="button"
-                    className="inline-flex min-h-8 items-center gap-2 rounded-lg text-left hover:text-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                    aria-expanded={expandedIds.has(item.insumoId)}
-                    onClick={() => toggleExpanded(item)}
-                  >
-                    <span className="material-icons text-lg text-stone-400" aria-hidden="true">
-                      {expandedIds.has(item.insumoId) ? 'expand_less' : 'expand_more'}
-                    </span>
-                    <span>{item.nome}</span>
-                  </button>
-                </td>
-                {colunas.map((coluna) => (
+        <tbody className="divide-y divide-stone-200/80">
+          {items.map((item, index) => {
+            const rowBg = index % 2 === 1 ? 'bg-stone-100/70' : 'bg-white';
+            const picoKeys = insumoCoberturaVisualTone.findPicoColunaKeys(
+              item.consumoPorSemana,
+              item.pico,
+            );
+
+            return (
+              <Fragment key={item.insumoId}>
+                <tr className={`transition-colors hover:bg-amber-50/50 ${rowBg}`}>
                   <td
-                    key={`${item.insumoId}-${coluna.inicio}`}
-                    className={`${configTableBodyCellClass} text-right font-mono tabular-nums ${
-                      item.consumoPorSemana[coluna.inicio] > 0
-                        ? 'text-stone-800'
-                        : 'text-stone-300'
+                    className={`${configTableBodyCellClass} ${STICKY_INSUMO} ${rowBg} font-medium text-stone-900`}
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg text-left hover:text-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                      aria-expanded={expandedIds.has(item.insumoId)}
+                      onClick={() => toggleExpanded(item)}
+                    >
+                      <span className="material-icons text-lg text-stone-400" aria-hidden="true">
+                        {expandedIds.has(item.insumoId) ? 'expand_less' : 'expand_more'}
+                      </span>
+                      <span>{item.nome}</span>
+                    </button>
+                  </td>
+                  <td
+                    className={`${configTableBodyCellClass} ${DECISION_CELL} text-right font-mono tabular-nums ${
+                      item.estoqueAtual < 0 ? 'font-semibold text-rose-700' : 'text-stone-800'
                     }`}
                   >
                     {formatInsumoQuantidadeArredondada(
-                      item.consumoPorSemana[coluna.inicio] ?? 0,
+                      item.estoqueAtual,
                       item.unidadeResumida,
                     )}
                   </td>
-                ))}
-                <td className={`${configTableBodyCellClass} text-right font-mono font-semibold tabular-nums text-stone-900`}>
-                  {formatInsumoQuantidadeArredondada(item.total, item.unidadeResumida)}
-                </td>
-              </tr>
-              {expandedIds.has(item.insumoId) ? (
-                <tr className="bg-amber-50/30">
-                  <td colSpan={colunas.length + 2} className="px-3 py-3">
-                    <ReceitasDetalhe
-                      item={item}
-                      colunas={colunas}
-                      detalhes={detailsByInsumo[item.insumoId] ?? []}
-                      isLoading={loadingIds.has(item.insumoId)}
-                      error={detailErrors[item.insumoId]}
-                    />
+                  {colunas.map((coluna) => {
+                    const valor = item.consumoPorSemana[coluna.inicio] ?? 0;
+                    const isPico = picoKeys.has(coluna.inicio);
+                    return (
+                      <td
+                        key={`${item.insumoId}-${coluna.inicio}`}
+                        className={`${configTableBodyCellClass} text-right font-mono tabular-nums ${
+                          isPico
+                            ? 'bg-amber-50 font-medium text-amber-900'
+                            : valor > 0
+                              ? 'text-stone-600'
+                              : 'text-stone-300'
+                        }`}
+                      >
+                        {formatInsumoQuantidadeArredondada(valor)}
+                      </td>
+                    );
+                  })}
+                  <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-500`}>
+                    {formatInsumoQuantidadeArredondada(item.media)}
+                  </td>
+                  <td className={`${configTableBodyCellClass} ${DECISION_CELL} text-right`}>
+                    <InsumoCoberturaBadge dias={item.coberturaDias} />
+                  </td>
+                  <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-500`}>
+                    {formatInsumoQuantidadeArredondada(item.pico)}
+                  </td>
+                  <td className={`${configTableBodyCellClass} ${DECISION_CELL} text-right`}>
+                    <InsumoCoberturaBadge dias={item.coberturaPicoDias} />
                   </td>
                 </tr>
-              ) : null}
-            </Fragment>
-          ))}
+                {expandedIds.has(item.insumoId) ? (
+                  <tr className="bg-amber-50/30">
+                    <td colSpan={colunas.length + 6} className="px-3 py-3">
+                      <ReceitasDetalhe
+                        item={item}
+                        colunas={colunas}
+                        detalhes={detailsByInsumo[item.insumoId] ?? []}
+                        isLoading={loadingIds.has(item.insumoId)}
+                        error={detailErrors[item.insumoId]}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -190,7 +240,7 @@ function ReceitasDetalhe({
     <div className="rounded-xl border border-amber-100 bg-white shadow-xs">
       <div className="border-b border-stone-100 px-3 py-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Consumo por produto produzido
+          Consumo por produto produzido ({item.unidadeResumida})
         </p>
       </div>
       <table className="w-full border-collapse text-sm">
@@ -205,13 +255,9 @@ function ReceitasDetalhe({
                 >
                   {formatInsumoQuantidadeArredondada(
                     receita.consumoPorSemana[coluna.inicio] ?? 0,
-                    item.unidadeResumida,
                   )}
                 </td>
               ))}
-              <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-stone-900">
-                {formatInsumoQuantidadeArredondada(receita.total, item.unidadeResumida)}
-              </td>
             </tr>
           ))}
         </tbody>

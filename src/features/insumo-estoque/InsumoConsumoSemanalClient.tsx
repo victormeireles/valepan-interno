@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-estoque-actions';
+import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { InsumoConsumoVisualizacao } from '@/domain/insumos/insumo-consumo-semanal-periodo';
+import CoberturaLegend from '@/features/insumo-estoque/components/CoberturaLegend';
 import InsumoConsumoSemanalMobileList from '@/features/insumo-estoque/components/InsumoConsumoSemanalMobileList';
 import InsumoConsumoSemanalTable from '@/features/insumo-estoque/components/InsumoConsumoSemanalTable';
 
@@ -75,14 +76,14 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
   const helperText =
     visualizacao === 'diaria'
       ? 'Colunas por dia. Padrão diário: D-7 até D-1.'
-      : 'Semanas de domingo a sábado.';
+      : '4 semanas fechadas (domingo a sábado).';
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
       <ConfigPageHeader
         title="Consumo de insumos"
         icon="query_stats"
-        description="Consumo por semana ou dia com base nas saídas de produção vinculadas a lotes."
+        description="Consumo por semana ou dia e cobertura de estoque com base nas saídas de produção vinculadas a lotes."
       />
 
       <Card>
@@ -160,13 +161,17 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-mono text-sm tabular-nums text-stone-500" aria-live="polite">
-          {resultLabel}
-        </p>
-        <p className="text-sm text-stone-500">
-          {helperText} Valores arredondados, sem ajustes manuais ou movimentos sem lote.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="font-mono text-sm tabular-nums text-stone-500" aria-live="polite">
+            {resultLabel}
+          </p>
+          <p className="text-sm text-stone-500">
+            {helperText} Valores arredondados, sem ajustes manuais ou movimentos sem lote.
+            Unidade só no estoque.
+          </p>
+        </div>
+        <CoberturaLegend />
       </div>
 
       <Card

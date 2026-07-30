@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { InsumoConsumoSemanalItem } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
+import type { InsumoConsumoPeriodo } from '@/domain/insumos/insumo-consumo-semanal-periodo';
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 
 const mockListSaldosComDetalhes = vi.fn<() => Promise<InsumoSaldoComDetalhes[]>>();
+const mockListQuantidadesByInsumoIds =
+  vi.fn<(insumoIds: string[]) => Promise<Map<string, number>>>();
+const mockListConsumoSemanal =
+  vi.fn<(periodo: InsumoConsumoPeriodo) => Promise<InsumoConsumoSemanalItem[]>>();
 const mockCountPendentes = vi.fn<() => Promise<number>>();
 
 vi.mock('next/cache', () => ({
@@ -11,8 +17,15 @@ vi.mock('next/cache', () => ({
 vi.mock('@/data/insumos/InsumoEstoqueRepository', () => ({
   insumoEstoqueRepository: {
     listSaldosComDetalhes: mockListSaldosComDetalhes,
+    listQuantidadesByInsumoIds: mockListQuantidadesByInsumoIds,
   },
   InsumoEstoqueRepository: vi.fn(),
+}));
+
+vi.mock('@/data/insumos/InsumoConsumoRepository', () => ({
+  insumoConsumoRepository: {
+    listConsumoSemanal: mockListConsumoSemanal,
+  },
 }));
 
 vi.mock('@/data/insumos/InsumoPendenciaRepository', () => ({
@@ -64,5 +77,101 @@ describe('getInsumoSaldosPageData', () => {
 
     expect(result.saldos.map((saldo) => saldo.nome)).toEqual(['Farinha', 'Fermento']);
     expect(result.pendenciasCount).toBe(2);
+  });
+});
+
+describe('getInsumoConsumoSemanalPageData', () => {
+  it('enriquece os consumos com estoque e cobertura', async () => {
+    mockListConsumoSemanal.mockResolvedValue([
+      {
+        insumoId: 'farinha',
+        nome: 'Farinha',
+        unidadeResumida: 'KG',
+        consumoPorSemana: {
+          '2026-06-28': 14,
+          '2026-07-05': 28,
+          '2026-07-12': 0,
+        },
+        total: 42,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+    ]);
+    mockListQuantidadesByInsumoIds.mockResolvedValue(new Map([['farinha', 42]]));
+
+    const { getInsumoConsumoSemanalPageData } = await import('./insumo-consumo-actions');
+    const result = await getInsumoConsumoSemanalPageData({
+      dataInicio: '2026-07-01',
+      dataFim: '2026-07-14',
+      visualizacao: 'semanal',
+    });
+
+    expect(mockListQuantidadesByInsumoIds).toHaveBeenCalledWith(['farinha']);
+    expect(result.items[0]).toMatchObject({
+      estoqueAtual: 42,
+      media: 14,
+      coberturaDias: 21,
+      pico: 28,
+      coberturaPicoDias: 11,
+    });
+  });
+
+  it('remove agua e gelo da listagem de consumo com cobertura', async () => {
+    mockListConsumoSemanal.mockResolvedValue([
+      {
+        insumoId: 'farinha',
+        nome: 'Farinha',
+        unidadeResumida: 'KG',
+        consumoPorSemana: { '2026-06-28': 10 },
+        total: 10,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+      {
+        insumoId: 'agua',
+        nome: 'Água',
+        unidadeResumida: 'L',
+        consumoPorSemana: { '2026-06-28': 100 },
+        total: 100,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+      {
+        insumoId: 'gelo',
+        nome: 'Gelo',
+        unidadeResumida: 'KG',
+        consumoPorSemana: { '2026-06-28': 20 },
+        total: 20,
+        receitas: [],
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
+      },
+    ]);
+    mockListQuantidadesByInsumoIds.mockResolvedValue(new Map([['farinha', 50]]));
+
+    const { getInsumoConsumoSemanalPageData } = await import('./insumo-consumo-actions');
+    const result = await getInsumoConsumoSemanalPageData({
+      dataInicio: '2026-06-28',
+      dataFim: '2026-07-04',
+      visualizacao: 'semanal',
+    });
+
+    expect(result.items.map((item) => item.nome)).toEqual(['Farinha']);
+    expect(mockListQuantidadesByInsumoIds).toHaveBeenCalledWith(['farinha']);
   });
 });

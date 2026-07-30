@@ -14,7 +14,7 @@ export type InsumoConsumoPeriodo = {
 };
 
 const SAO_PAULO_TIME_ZONE = 'America/Sao_Paulo';
-const DEFAULT_PREVIOUS_WEEKS = 3;
+const DEFAULT_CLOSED_WEEKS = 4;
 const WEEK_LENGTH_DAYS = 7;
 const DAILY_DEFAULT_START_OFFSET_DAYS = -7;
 const DAILY_DEFAULT_END_OFFSET_DAYS = -1;
@@ -37,8 +37,8 @@ export class InsumoConsumoSemanalPeriodoBuilder {
     }
 
     const domingoAtual = this.startOfWeek(hoje);
-    const dataInicio = this.addDays(domingoAtual, -DEFAULT_PREVIOUS_WEEKS * WEEK_LENGTH_DAYS);
-    const dataFim = this.addDays(domingoAtual, WEEK_LENGTH_DAYS - 1);
+    const dataFim = this.addDays(domingoAtual, -1); // sábado da semana anterior
+    const dataInicio = this.addDays(domingoAtual, -DEFAULT_CLOSED_WEEKS * WEEK_LENGTH_DAYS);
 
     return this.buildFromRange(
       this.formatIsoDate(dataInicio),

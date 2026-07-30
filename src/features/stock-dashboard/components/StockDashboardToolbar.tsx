@@ -14,7 +14,7 @@ export interface StockDashboardToolbarProps {
   tipos: StockTipoNode[];
   selectedTipoId: string | null;
   onSelectTipo: (id: string) => void;
-  onNewStock: () => void;
+  onManualAdjustments: () => void;
   updatedAtLabel?: string | null;
   filterResultHint?: string | null;
 }
@@ -25,7 +25,7 @@ export const StockDashboardToolbar: React.FC<StockDashboardToolbarProps> = ({
   tipos,
   selectedTipoId,
   onSelectTipo,
-  onNewStock,
+  onManualAdjustments,
   updatedAtLabel,
   filterResultHint,
 }) => {
@@ -91,12 +91,13 @@ export const StockDashboardToolbar: React.FC<StockDashboardToolbarProps> = ({
 
           <Button
             type="button"
-            variant="primary"
-            icon="add"
+            variant="secondary"
+            icon="history"
             className="shrink-0"
-            onClick={onNewStock}
+            onClick={onManualAdjustments}
+            aria-label="Ver ajustes manuais"
           >
-            Novo estoque
+            Ajustes manuais
           </Button>
         </div>
       </div>

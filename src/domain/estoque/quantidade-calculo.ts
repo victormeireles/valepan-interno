@@ -38,6 +38,20 @@ export function calcularDelta(atual: Quantidade, novo: Quantidade): Quantidade {
   };
 }
 
+export function calcularSaldoAntes(
+  saldoDepois: Quantidade,
+  delta: Quantidade,
+): Quantidade {
+  return {
+    caixas: saldoDepois.caixas - (delta.caixas || 0),
+    pacotes: saldoDepois.pacotes - (delta.pacotes || 0),
+    unidades: saldoDepois.unidades - (delta.unidades || 0),
+    kg: parseFloat(
+      ((saldoDepois.kg || 0) - (delta.kg || 0)).toFixed(3),
+    ),
+  };
+}
+
 export function aplicarDeltaComClamp(
   atual: Quantidade,
   delta: Quantidade,

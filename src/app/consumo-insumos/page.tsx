@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { getInsumoConsumoSemanalPageData } from '@/app/actions/insumo-estoque-actions';
+import { getInsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
 import InsumoConsumoSemanalClient from '@/features/insumo-estoque/InsumoConsumoSemanalClient';
 
 export const dynamic = 'force-dynamic';

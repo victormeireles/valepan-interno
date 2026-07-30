@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-estoque-actions';
+import { getInsumoConsumoDetalhesPorProduto } from '@/app/actions/insumo-consumo-actions';
 import type {
   InsumoConsumoPeriodo,
   InsumoConsumoPeriodoColuna,
@@ -11,6 +11,8 @@ import type {
   InsumoConsumoSemanalItem,
 } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
+import InsumoCoberturaBadge from '@/features/insumo-estoque/components/InsumoCoberturaBadge';
+import { insumoCoberturaVisualTone } from '@/features/insumo-estoque/insumo-cobertura-visual-tone';
 import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
@@ -66,57 +68,144 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
   };
 
   return (
-    <div className="divide-y divide-stone-100 md:hidden">
-      {items.map((item, index) => (
-        <article key={item.insumoId} className={configMobileRowClass(index)}>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate font-semibold text-stone-900">{item.nome}</h2>
-              </div>
-              <p className="shrink-0 text-right font-mono text-sm font-semibold tabular-nums text-stone-900">
-                {formatInsumoQuantidadeArredondada(item.total, item.unidadeResumida)}
-              </p>
-            </div>
-            <dl className="mt-3 grid grid-cols-1 gap-2">
-              {colunas.map((coluna) => (
-                <div
-                  key={`${item.insumoId}-${coluna.inicio}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-stone-100 bg-white/70 px-2.5 py-2"
-                >
-                  <dt className="text-xs font-medium text-stone-500">{coluna.label}</dt>
-                  <dd className="font-mono text-sm tabular-nums text-stone-800">
+    <div className="divide-y divide-stone-200/80 md:hidden">
+      {items.map((item, index) => {
+        const picoKeys = insumoCoberturaVisualTone.findPicoColunaKeys(
+          item.consumoPorSemana,
+          item.pico,
+        );
+
+        return (
+          <article key={item.insumoId} className={configMobileRowClass(index)}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate font-semibold text-stone-900">{item.nome}</h2>
+                  <p
+                    className={`mt-0.5 font-mono text-sm tabular-nums ${
+                      item.estoqueAtual < 0 ? 'font-semibold text-rose-700' : 'text-stone-600'
+                    }`}
+                  >
                     {formatInsumoQuantidadeArredondada(
-                      item.consumoPorSemana[coluna.inicio] ?? 0,
+                      item.estoqueAtual,
                       item.unidadeResumida,
                     )}
-                  </dd>
+                  </p>
                 </div>
-              ))}
-            </dl>
-            <button
-              type="button"
-              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg text-sm font-medium text-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              aria-expanded={expandedIds.has(item.insumoId)}
-              onClick={() => toggleExpanded(item)}
-            >
-              <span className="material-icons text-lg" aria-hidden="true">
-                {expandedIds.has(item.insumoId) ? 'expand_less' : 'expand_more'}
-              </span>
-              Ver consumo por produto
-            </button>
-            {expandedIds.has(item.insumoId) ? (
-              <ReceitasMobileDetalhe
-                item={item}
-                colunas={colunas}
-                detalhes={detailsByInsumo[item.insumoId] ?? []}
-                isLoading={loadingIds.has(item.insumoId)}
-                error={detailErrors[item.insumoId]}
-              />
-            ) : null}
-          </div>
-        </article>
-      ))}
+                <InsumoCoberturaBadge dias={item.coberturaDias} />
+              </div>
+
+              <dl className="mt-3 grid grid-cols-1 gap-2">
+                {colunas.map((coluna) => {
+                  const valor = item.consumoPorSemana[coluna.inicio] ?? 0;
+                  const isPico = picoKeys.has(coluna.inicio);
+                  return (
+                    <div
+                      key={`${item.insumoId}-${coluna.inicio}`}
+                      className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 ${
+                        isPico
+                          ? 'border-amber-200 bg-amber-50'
+                          : 'border-stone-100 bg-white/70'
+                      }`}
+                    >
+                      <dt
+                        className={`text-xs font-medium ${
+                          isPico ? 'text-amber-800' : 'text-stone-500'
+                        }`}
+                      >
+                        {coluna.label}
+                        {isPico ? ' · pico' : ''}
+                      </dt>
+                      <dd
+                        className={`font-mono text-sm tabular-nums ${
+                          isPico ? 'font-medium text-amber-900' : 'text-stone-800'
+                        }`}
+                      >
+                        {formatInsumoQuantidadeArredondada(valor)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+
+              <div className="mt-2 rounded-xl border border-stone-200 bg-stone-50/80 p-2.5">
+                <dl className="grid grid-cols-2 gap-2">
+                  <Metric
+                    label="Média"
+                    value={formatInsumoQuantidadeArredondada(item.media)}
+                    muted
+                  />
+                  <div className="rounded-lg border border-stone-100 bg-white px-2.5 py-2">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+                      Cobertura
+                    </dt>
+                    <dd className="mt-1">
+                      <InsumoCoberturaBadge dias={item.coberturaDias} />
+                    </dd>
+                  </div>
+                  <Metric
+                    label="Pico"
+                    value={formatInsumoQuantidadeArredondada(item.pico)}
+                    muted
+                  />
+                  <div className="rounded-lg border border-stone-100 bg-white px-2.5 py-2">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+                      Cob. pico
+                    </dt>
+                    <dd className="mt-1">
+                      <InsumoCoberturaBadge dias={item.coberturaPicoDias} />
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <button
+                type="button"
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                aria-expanded={expandedIds.has(item.insumoId)}
+                onClick={() => toggleExpanded(item)}
+              >
+                <span className="material-icons text-lg" aria-hidden="true">
+                  {expandedIds.has(item.insumoId) ? 'expand_less' : 'expand_more'}
+                </span>
+                Ver consumo por produto
+              </button>
+              {expandedIds.has(item.insumoId) ? (
+                <ReceitasMobileDetalhe
+                  item={item}
+                  colunas={colunas}
+                  detalhes={detailsByInsumo[item.insumoId] ?? []}
+                  isLoading={loadingIds.has(item.insumoId)}
+                  error={detailErrors[item.insumoId]}
+                />
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-stone-100 bg-white px-2.5 py-2">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt>
+      <dd
+        className={`mt-0.5 font-mono text-sm tabular-nums ${
+          muted ? 'text-stone-500' : 'text-stone-800'
+        }`}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
@@ -160,14 +249,12 @@ function ReceitasMobileDetalhe({
 
   return (
     <div className="mt-2 space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+        Por produto ({item.unidadeResumida})
+      </p>
       {detalhes.map((receita) => (
         <div key={receita.receitaId} className="rounded-xl border border-amber-100 bg-white p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-medium text-stone-900">{receita.receitaNome}</p>
-            <p className="font-mono text-sm font-semibold tabular-nums text-stone-900">
-              {formatInsumoQuantidadeArredondada(receita.total, item.unidadeResumida)}
-            </p>
-          </div>
+          <p className="font-medium text-stone-900">{receita.receitaNome}</p>
           <dl className="mt-2 grid gap-1.5">
             {colunas.map((coluna) => (
               <div key={coluna.inicio} className="flex items-center justify-between gap-2">
@@ -175,7 +262,6 @@ function ReceitasMobileDetalhe({
                 <dd className="font-mono text-xs tabular-nums text-stone-700">
                   {formatInsumoQuantidadeArredondada(
                     receita.consumoPorSemana[coluna.inicio] ?? 0,
-                    item.unidadeResumida,
                   )}
                 </dd>
               </div>
