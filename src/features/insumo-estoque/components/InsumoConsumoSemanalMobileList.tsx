@@ -11,7 +11,10 @@ import type {
   InsumoConsumoSemanalItem,
 } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
-import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
+import {
+  formatCoberturaDias,
+  formatInsumoQuantidadeArredondada,
+} from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
   items: InsumoConsumoSemanalItem[];
@@ -74,9 +77,14 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
               <div className="min-w-0">
                 <h2 className="truncate font-semibold text-stone-900">{item.nome}</h2>
               </div>
-              <p className="shrink-0 text-right font-mono text-sm font-semibold tabular-nums text-stone-900">
-                {formatInsumoQuantidadeArredondada(item.total, item.unidadeResumida)}
-              </p>
+              <div className="shrink-0 text-right">
+                <p className="font-mono text-sm font-semibold tabular-nums text-stone-900">
+                  {formatInsumoQuantidadeArredondada(item.estoqueAtual, item.unidadeResumida)}
+                </p>
+                <p className="font-mono text-xs tabular-nums text-stone-500">
+                  {formatCoberturaDias(item.coberturaDias)}
+                </p>
+              </div>
             </div>
             <dl className="mt-3 grid grid-cols-1 gap-2">
               {colunas.map((coluna) => (
@@ -93,6 +101,18 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
                   </dd>
                 </div>
               ))}
+            </dl>
+            <dl className="mt-2 grid grid-cols-2 gap-2">
+              <Metric
+                label="Média"
+                value={formatInsumoQuantidadeArredondada(item.media, item.unidadeResumida)}
+              />
+              <Metric label="Cobertura" value={formatCoberturaDias(item.coberturaDias)} />
+              <Metric
+                label="Pico"
+                value={formatInsumoQuantidadeArredondada(item.pico, item.unidadeResumida)}
+              />
+              <Metric label="Cob. pico" value={formatCoberturaDias(item.coberturaPicoDias)} />
             </dl>
             <button
               type="button"
@@ -117,6 +137,15 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
           </div>
         </article>
       ))}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-stone-100 bg-white/70 px-2.5 py-2">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt>
+      <dd className="mt-0.5 font-mono text-sm tabular-nums text-stone-800">{value}</dd>
     </div>
   );
 }

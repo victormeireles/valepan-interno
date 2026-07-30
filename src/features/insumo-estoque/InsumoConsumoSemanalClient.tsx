@@ -75,14 +75,14 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
   const helperText =
     visualizacao === 'diaria'
       ? 'Colunas por dia. Padrão diário: D-7 até D-1.'
-      : 'Semanas de domingo a sábado.';
+      : '4 semanas fechadas (domingo a sábado).';
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
       <ConfigPageHeader
         title="Consumo de insumos"
         icon="query_stats"
-        description="Consumo por semana ou dia com base nas saídas de produção vinculadas a lotes."
+        description="Consumo por semana ou dia e cobertura de estoque com base nas saídas de produção vinculadas a lotes."
       />
 
       <Card>
