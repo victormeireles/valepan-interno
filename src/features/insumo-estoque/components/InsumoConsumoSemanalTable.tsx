@@ -15,7 +15,10 @@ import {
   configTableHeadCellClass,
   configTableZebraRowClass,
 } from '@/components/Config/config-table-styles';
-import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
+import {
+  formatCoberturaDias,
+  formatInsumoQuantidadeArredondada,
+} from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
   items: InsumoConsumoSemanalItem[];
@@ -72,11 +75,14 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
 
   return (
     <div className="hidden overflow-x-auto md:block">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
+      <table className="w-full min-w-[980px] border-collapse text-sm">
         <thead className="border-b border-stone-200 bg-surface-sunken">
           <tr>
             <th scope="col" className={`${configTableHeadCellClass} text-left`}>
               <HeadLabel>Insumo</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <HeadLabel>Estoque</HeadLabel>
             </th>
             {colunas.map((coluna) => (
               <th
@@ -88,7 +94,16 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
               </th>
             ))}
             <th scope="col" className={`${configTableHeadCellClass} text-right`}>
-              <HeadLabel>Total</HeadLabel>
+              <HeadLabel>Média</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <HeadLabel>Cobertura</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <HeadLabel>Pico</HeadLabel>
+            </th>
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <HeadLabel>Cob. pico</HeadLabel>
             </th>
           </tr>
         </thead>
@@ -109,6 +124,9 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
                     <span>{item.nome}</span>
                   </button>
                 </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+                  {formatInsumoQuantidadeArredondada(item.estoqueAtual, item.unidadeResumida)}
+                </td>
                 {colunas.map((coluna) => (
                   <td
                     key={`${item.insumoId}-${coluna.inicio}`}
@@ -124,13 +142,22 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
                     )}
                   </td>
                 ))}
+                <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+                  {formatInsumoQuantidadeArredondada(item.media, item.unidadeResumida)}
+                </td>
                 <td className={`${configTableBodyCellClass} text-right font-mono font-semibold tabular-nums text-stone-900`}>
-                  {formatInsumoQuantidadeArredondada(item.total, item.unidadeResumida)}
+                  {formatCoberturaDias(item.coberturaDias)}
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-800`}>
+                  {formatInsumoQuantidadeArredondada(item.pico, item.unidadeResumida)}
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono font-semibold tabular-nums text-stone-900`}>
+                  {formatCoberturaDias(item.coberturaPicoDias)}
                 </td>
               </tr>
               {expandedIds.has(item.insumoId) ? (
                 <tr className="bg-amber-50/30">
-                  <td colSpan={colunas.length + 2} className="px-3 py-3">
+                  <td colSpan={colunas.length + 6} className="px-3 py-3">
                     <ReceitasDetalhe
                       item={item}
                       colunas={colunas}
@@ -209,9 +236,6 @@ function ReceitasDetalhe({
                   )}
                 </td>
               ))}
-              <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-stone-900">
-                {formatInsumoQuantidadeArredondada(receita.total, item.unidadeResumida)}
-              </td>
             </tr>
           ))}
         </tbody>
