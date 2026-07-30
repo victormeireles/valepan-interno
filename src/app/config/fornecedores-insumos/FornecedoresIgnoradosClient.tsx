@@ -44,26 +44,30 @@ export default function FornecedoresIgnoradosClient({ initialFornecedores }: Pro
   const handleConfirm = async (restaurar: boolean) => {
     if (!selected || busy) return;
     setBusy(true);
-    const result = await desmarcarFornecedorIgnorado({
-      empresaId: selected.empresa_id,
-      cnpj: selected.fornecedor_cnpj,
-      restaurarPendencias: restaurar,
-    });
-    setBusy(false);
+    try {
+      const result = await desmarcarFornecedorIgnorado({
+        empresaId: selected.empresa_id,
+        cnpj: selected.fornecedor_cnpj,
+        restaurarPendencias: restaurar,
+      });
 
-    if (!result.success) {
-      showToast({ type: 'err', text: result.error });
-      return;
+      setSelected(null);
+
+      if (!result.success) {
+        showToast({ type: 'err', text: result.error });
+        return;
+      }
+
+      showToast({
+        type: 'ok',
+        text: restaurar
+          ? 'Fornecedor desmarcado e pendências restauradas'
+          : 'Fornecedor desmarcado',
+      });
+      router.refresh();
+    } finally {
+      setBusy(false);
     }
-
-    setSelected(null);
-    showToast({
-      type: 'ok',
-      text: restaurar
-        ? 'Fornecedor desmarcado e pendências restauradas'
-        : 'Fornecedor desmarcado',
-    });
-    router.refresh();
   };
 
   return (
@@ -120,7 +124,7 @@ export default function FornecedoresIgnoradosClient({ initialFornecedores }: Pro
                         <Button
                           type="button"
                           variant="secondary"
-                          size="md"
+                          size="lg"
                           onClick={() => setSelected(row)}
                         >
                           Desmarcar
