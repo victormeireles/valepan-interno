@@ -23,6 +23,7 @@ import type {
   InsumoConsumoReceitaDetalhe,
   InsumoConsumoSemanalItem,
 } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
+import { insumoConsumoCoberturaCalculator } from '@/domain/insumos/insumo-consumo-cobertura-calculator';
 import { enrichIntegracaoInsumosComFornecedor } from '@/domain/insumos/insumo-vinculo-fornecedor';
 import {
   groupPendenciasPorProduto,
@@ -108,10 +109,34 @@ export async function getInsumoConsumoSemanalPageData(input?: {
 }): Promise<InsumoConsumoSemanalPageData> {
   const periodo = resolveConsumoSemanalPeriodo(input);
   const items = await insumoConsumoRepository.listConsumoSemanal(periodo);
+  const saldos = await insumoEstoqueRepository.listQuantidadesByInsumoIds(
+    items.map((item) => item.insumoId),
+  );
+
+  const itemsComCobertura = items.map((item) => {
+    const estoqueAtual = saldos.get(item.insumoId) ?? 0;
+    const consumos = periodo.colunas.map(
+      (coluna) => item.consumoPorSemana[coluna.inicio] ?? 0,
+    );
+    const cobertura = insumoConsumoCoberturaCalculator.calculate({
+      visualizacao: periodo.visualizacao,
+      estoqueAtual,
+      consumos,
+    });
+
+    return {
+      ...item,
+      estoqueAtual,
+      media: cobertura.media,
+      coberturaDias: cobertura.coberturaDias,
+      pico: cobertura.pico,
+      coberturaPicoDias: cobertura.coberturaPicoDias,
+    };
+  });
 
   return {
     periodo,
-    items,
+    items: itemsComCobertura,
   };
 }
 

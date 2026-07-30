@@ -30,6 +30,11 @@ export type InsumoConsumoSemanalItem = {
   consumoPorSemana: Record<string, number>;
   total: number;
   receitas: InsumoConsumoReceitaDetalhe[];
+  estoqueAtual: number;
+  media: number;
+  coberturaDias: number | null;
+  pico: number;
+  coberturaPicoDias: number | null;
 };
 
 export class InsumoConsumoSemanalAggregator {
@@ -95,6 +100,11 @@ export class InsumoConsumoSemanalAggregator {
         periodo.colunas.map((coluna) => [coluna.inicio, 0]),
       ),
       receitas: [],
+      estoqueAtual: 0,
+      media: 0,
+      coberturaDias: null,
+      pico: 0,
+      coberturaPicoDias: null,
     };
     itemsByInsumo.set(movimento.insumoId, item);
     return item;

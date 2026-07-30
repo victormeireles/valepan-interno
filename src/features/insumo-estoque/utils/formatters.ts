@@ -6,6 +6,11 @@ export function formatInsumoQuantidade(value: number, unidade?: string): string 
   return unidade ? `${formatted} ${unidade}` : formatted;
 }
 
+export function formatCoberturaDias(value: number | null): string {
+  if (value == null) return '—';
+  return `${value} d`;
+}
+
 export function formatInsumoQuantidadeArredondada(value: number, unidade?: string): string {
   if (value === 0) return '-';
 

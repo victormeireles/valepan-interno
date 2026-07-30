@@ -92,6 +92,11 @@ describe('InsumoConsumoSemanalAggregator', () => {
         nome: 'Farinha Tia Ofelia',
         unidadeResumida: 'KG',
         total: 13.5,
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
         consumoPorSemana: {
           '2026-06-28': 10,
           '2026-07-05': 3.5,
@@ -115,6 +120,11 @@ describe('InsumoConsumoSemanalAggregator', () => {
         nome: 'Sal refinado',
         unidadeResumida: 'KG',
         total: 1,
+        estoqueAtual: 0,
+        media: 0,
+        coberturaDias: null,
+        pico: 0,
+        coberturaPicoDias: null,
         consumoPorSemana: {
           '2026-06-28': 0,
           '2026-07-05': 0,
