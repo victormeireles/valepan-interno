@@ -130,6 +130,23 @@ export class InsumoPendenciaRepository {
     return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
   }
 
+  async listIdsAndCnpjByEmpresaStatus(
+    empresaId: string,
+    status: InsumoPendenciaStatus,
+  ): Promise<{ id: string; fornecedor_cnpj: string | null }[]> {
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select('id, fornecedor_cnpj')
+      .eq('empresa_id', empresaId)
+      .eq('status', status);
+
+    if (error) {
+      throw new Error(`Erro ao listar pendências por CNPJ: ${error.message}`);
+    }
+
+    return (data ?? []) as { id: string; fornecedor_cnpj: string | null }[];
+  }
+
   async listIgnoradas(): Promise<InsumoPendenciaComEmpresa[]> {
     const { data, error } = await this.db
       .from('insumo_entrada_pendencias')
