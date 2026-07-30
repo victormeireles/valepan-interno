@@ -4,19 +4,20 @@ import { InsumoConsumoSemanalPeriodoBuilder } from './insumo-consumo-semanal-per
 describe('InsumoConsumoSemanalPeriodoBuilder', () => {
   const builder = new InsumoConsumoSemanalPeriodoBuilder();
 
-  it('monta periodo padrao com semana atual e tres semanas anteriores', () => {
-    const periodo = builder.buildDefault(new Date('2026-07-15T12:00:00-03:00'));
+  it('monta periodo padrao com as ultimas quatro semanas fechadas', () => {
+    // Âncora: terça 28/07/2026 — semana corrente = 26/07–01/08 (excluída)
+    const periodo = builder.buildDefault(new Date('2026-07-28T12:00:00-03:00'));
 
     expect(periodo.visualizacao).toBe('semanal');
-    expect(periodo.dataInicio).toBe('2026-06-21');
-    expect(periodo.dataFim).toBe('2026-07-18');
+    expect(periodo.dataInicio).toBe('2026-06-28');
+    expect(periodo.dataFim).toBe('2026-07-25');
     expect(periodo.colunas.map((coluna) => coluna.inicio)).toEqual([
-      '2026-06-21',
       '2026-06-28',
       '2026-07-05',
       '2026-07-12',
+      '2026-07-19',
     ]);
-    expect(periodo.colunas.at(-1)?.fim).toBe('2026-07-18');
+    expect(periodo.colunas.at(-1)?.fim).toBe('2026-07-25');
   });
 
   it('monta periodo diario padrao de D-7 ate D-1', () => {
