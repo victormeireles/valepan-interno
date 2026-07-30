@@ -2,6 +2,7 @@ import {
   calcularCustoUnitarioEntrada,
   calcularQuantidadeEntrada,
 } from '@/domain/insumos/insumo-entrada-calculo';
+import { normalizarCnpj } from '@/domain/insumos/insumo-cnpj';
 import { converterDataOmieParaIso } from '@/domain/insumos/omie-date';
 import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
 import type { IntegracaoInsumoRow } from '@/domain/types/insumo-estoque-db';
@@ -9,6 +10,10 @@ import type {
   OmieRecebimentoCabecEnriquecido,
   OmieRecebimentoContextoNf,
 } from '@/domain/types/omie-recebimento-enriquecido';
+import {
+  insumoFornecedorIgnoradoRepository,
+  InsumoFornecedorIgnoradoRepository,
+} from '@/data/insumos/InsumoFornecedorIgnoradoRepository';
 import {
   insumoMapeamentoRepository,
   InsumoMapeamentoRepository,
@@ -56,6 +61,7 @@ export type InsumoRecebimentoProcessorDeps = {
   estoqueService: InsumoEstoqueService;
   categoriaService?: InsumoRecebimentoCategoriaService;
   decisaoHistoricaService?: InsumoRecebimentoDecisaoHistoricaService;
+  fornecedorIgnoradoRepository?: InsumoFornecedorIgnoradoRepository;
 };
 
 function montarContextoNf(
@@ -80,11 +86,14 @@ function montarContextoNf(
 export class InsumoRecebimentoProcessor {
   private readonly categoriaService: InsumoRecebimentoCategoriaService;
   private readonly decisaoHistoricaService: InsumoRecebimentoDecisaoHistoricaService;
+  private readonly fornecedorIgnoradoRepository: InsumoFornecedorIgnoradoRepository;
 
   constructor(private readonly deps: InsumoRecebimentoProcessorDeps) {
     this.categoriaService = deps.categoriaService ?? insumoRecebimentoCategoriaService;
     this.decisaoHistoricaService =
       deps.decisaoHistoricaService ?? insumoRecebimentoDecisaoHistoricaService;
+    this.fornecedorIgnoradoRepository =
+      deps.fornecedorIgnoradoRepository ?? insumoFornecedorIgnoradoRepository;
   }
 
   async processarEvento(evento: OmieWebhookEventoRow): Promise<void> {
@@ -207,6 +216,19 @@ export class InsumoRecebimentoProcessor {
       const pendencia = await this.deps.pendenciaRepository.createPendente(pendenciaInput);
       await this.deps.pendenciaRepository.marcarIgnorado(pendencia.id);
       return;
+    }
+
+    const cnpjDigits = normalizarCnpj(input.contextoNf.fornecedorCnpj);
+    if (cnpjDigits) {
+      const fornecedorIgnorado = await this.fornecedorIgnoradoRepository.existsByCnpj(
+        input.empresaId,
+        cnpjDigits,
+      );
+      if (fornecedorIgnorado) {
+        const pendencia = await this.deps.pendenciaRepository.createPendente(pendenciaInput);
+        await this.deps.pendenciaRepository.marcarIgnorado(pendencia.id);
+        return;
+      }
     }
 
     await this.deps.pendenciaRepository.createPendente(pendenciaInput);
