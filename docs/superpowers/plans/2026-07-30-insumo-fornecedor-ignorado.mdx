@@ -1,0 +1,805 @@
+# Fornecedores ignorados no mapeamento de insumos — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Permitir marcar fornecedores por CNPJ para sempre ignorar no mapeamento de insumos (pendências atuais + futuras), com tela em Config para desmarcar e opcionalmente restaurar.
+
+**Architecture:** Tabela `insumo_fornecedor_ignorado` + Repository/Manager. O processor de recebimento consulta a lista antes de criar pendência. A fila de mapeamento oferece “só este produto” vs “tudo deste fornecedor”. Config lista e desmarca. CNPJ sempre normalizado (só dígitos).
+
+**Tech Stack:** Next.js App Router, Supabase (migration + RLS), Vitest, Tailwind v4, componentes UI existentes (`Button`, `Card`, padrões de dialog do app).
+
+**Spec:** `docs/superpowers/specs/2026-07-30-insumo-fornecedor-ignorado-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400. `InsumoMapeamentoClient.tsx` (~470) e `insumo-estoque-actions.ts` (~492) estão no limite — **não** inchá-los: actions novas em arquivo dedicado; dialog/handlers em componentes/hooks novos.
+- Classes/Managers com responsabilidade única; funções < 40 linhas.
+- RLS em toda tabela nova; policies com `(SELECT auth.uid())` / `(SELECT is_admin())` quando aplicável.
+- UI em pt-BR, Material Icons, amber/stone do design system Valepan.
+- Match de fornecedor: **somente CNPJ** com 14 dígitos após normalização.
+- Não remover histórico por produto/descrição nem keywords de IA.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260730140000_insumo_fornecedor_ignorado.sql` | Tabela + índices + RLS |
+| `src/domain/insumos/insumo-cnpj.ts` | Normalizar/validar CNPJ |
+| `src/domain/insumos/insumo-cnpj.test.ts` | Testes do CNPJ |
+| `src/domain/insumos/insumo-fornecedor-cnpj-grupo.ts` | Extrair CNPJ único de um grupo de pendência |
+| `src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts` | Testes do helper de grupo |
+| `src/domain/types/insumo-estoque-db.ts` | Tipo `InsumoFornecedorIgnoradoRow` |
+| `src/data/insumos/InsumoFornecedorIgnoradoRepository.ts` | CRUD + exists |
+| `src/data/insumos/InsumoPendenciaRepository.ts` | Listar ids por empresa+status para match por CNPJ normalizado (via helper no Manager) **ou** métodos batch ignorar/restaurar por ids |
+| `src/lib/services/insumo-fornecedor-ignorado-manager.ts` | Marcar / desmarcar + side-effects em pendências |
+| `src/lib/services/insumo-fornecedor-ignorado-manager.test.ts` | Testes do Manager |
+| `src/lib/services/insumo-recebimento-processor.ts` | Checagem de fornecedor ignorado |
+| `src/lib/services/insumo-recebimento-processor.test.ts` | Caso CNPJ na lista |
+| `src/app/actions/insumo-fornecedor-ignorado-actions.ts` | Server actions (listar/marcar/desmarcar) |
+| `src/config/config-sections.ts` | Entry Config |
+| `src/config/main-nav-config.ts` | Match pathname se necessário |
+| `src/app/config/fornecedores-insumos/page.tsx` | Server page |
+| `src/app/config/fornecedores-insumos/FornecedoresIgnoradosClient.tsx` | Lista + desmarcar |
+| `src/features/insumo-estoque/components/InsumoIgnorarConfirmDialog.tsx` | Diálogo produto vs fornecedor |
+| `src/features/insumo-estoque/components/InsumoDesmarcarFornecedorDialog.tsx` | Diálogo restaurar? Sim/Não/Cancelar |
+| `src/features/insumo-estoque/InsumoMapeamentoClient.tsx` | Wire do diálogo de ignorar |
+| `types/database.ts` / `src/types/database.ts` | Regenerar após migration |
+
+---
+
+### Task 1: Migration — `insumo_fornecedor_ignorado`
+
+**Files:**
+- Create: `supabase/migrations/20260730140000_insumo_fornecedor_ignorado.sql`
+
+**Interfaces:**
+- Produces: tabela `public.insumo_fornecedor_ignorado` com unique `(empresa_id, fornecedor_cnpj)`
+
+- [ ] **Step 1: Criar migration**
+
+```sql
+-- Fornecedores sempre ignorados no mapeamento de insumos (match por CNPJ)
+
+CREATE TABLE IF NOT EXISTS public.insumo_fornecedor_ignorado (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES public.empresas(id),
+  fornecedor_cnpj text NOT NULL,
+  fornecedor_nome text,
+  fornecedor_razao_social text,
+  criado_em timestamptz NOT NULL DEFAULT now(),
+  criado_por uuid REFERENCES auth.users(id),
+  CONSTRAINT insumo_fornecedor_ignorado_cnpj_digits
+    CHECK (fornecedor_cnpj ~ '^[0-9]{14}$'),
+  CONSTRAINT insumo_fornecedor_ignorado_empresa_cnpj_unique
+    UNIQUE (empresa_id, fornecedor_cnpj)
+);
+
+CREATE INDEX IF NOT EXISTS idx_insumo_fornecedor_ignorado_empresa
+  ON public.insumo_fornecedor_ignorado (empresa_id);
+
+ALTER TABLE public.insumo_fornecedor_ignorado ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY insumo_fornecedor_ignorado_select
+  ON public.insumo_fornecedor_ignorado
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY insumo_fornecedor_ignorado_insert
+  ON public.insumo_fornecedor_ignorado
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY insumo_fornecedor_ignorado_update
+  ON public.insumo_fornecedor_ignorado
+  FOR UPDATE TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY insumo_fornecedor_ignorado_delete
+  ON public.insumo_fornecedor_ignorado
+  FOR DELETE TO authenticated
+  USING (true);
+
+COMMENT ON TABLE public.insumo_fornecedor_ignorado IS
+  'Fornecedores (CNPJ) cujas NFs devem nascer ignoradas no mapeamento de insumos';
+```
+
+Nota: se a FK `empresas(id)` no projeto usar outro schema/nome, alinhar ao padrão das migrations de `insumo_entrada_pendencias` / `integracao_insumos` (mesma FK de `empresa_id`).
+
+- [ ] **Step 2: Aplicar migration**
+
+```bash
+supabase db push
+```
+
+Expected: aplicada sem erro.
+
+- [ ] **Step 3: Regenerar tipos**
+
+```bash
+npm run gen:types
+```
+
+Expected: `insumo_fornecedor_ignorado` aparece em `types/database.ts` e/ou `src/types/database.ts`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260730140000_insumo_fornecedor_ignorado.sql types/database.ts src/types/database.ts
+git commit -m "feat(insumos): tabela insumo_fornecedor_ignorado com RLS"
+```
+
+---
+
+### Task 2: Domínio — CNPJ e CNPJ único do grupo
+
+**Files:**
+- Create: `src/domain/insumos/insumo-cnpj.ts`
+- Create: `src/domain/insumos/insumo-cnpj.test.ts`
+- Create: `src/domain/insumos/insumo-fornecedor-cnpj-grupo.ts`
+- Create: `src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts`
+- Modify: `src/domain/types/insumo-estoque-db.ts` (adicionar tipo row)
+
+**Interfaces:**
+- Produces:
+  - `normalizarCnpj(value: string | null | undefined): string | null`
+  - `isCnpjValido(digits: string | null): digits is string` (14 dígitos)
+  - `formatarCnpj(digits: string): string` (exibição `00.000.000/0000-00`)
+  - `resolverCnpjUnicoDoGrupo(grupo: Pick<InsumoPendenciaProdutoGrupo, 'contexto'>): string | null`
+  - `InsumoFornecedorIgnoradoRow` type
+
+- [ ] **Step 1: Teste CNPJ (falha)**
+
+```ts
+// src/domain/insumos/insumo-cnpj.test.ts
+import { describe, expect, it } from 'vitest';
+import { formatarCnpj, isCnpjValido, normalizarCnpj } from './insumo-cnpj';
+
+describe('normalizarCnpj', () => {
+  it('remove máscara e aceita 14 dígitos', () => {
+    expect(normalizarCnpj('11.725.898/0001-81')).toBe('11725898000181');
+  });
+
+  it('retorna null se não tiver 14 dígitos', () => {
+    expect(normalizarCnpj('123')).toBeNull();
+    expect(normalizarCnpj(null)).toBeNull();
+    expect(normalizarCnpj('CLEAN MIX')).toBeNull();
+  });
+});
+
+describe('formatarCnpj', () => {
+  it('formata para exibição', () => {
+    expect(formatarCnpj('11725898000181')).toBe('11.725.898/0001-81');
+  });
+});
+
+describe('isCnpjValido', () => {
+  it('exige 14 dígitos', () => {
+    expect(isCnpjValido('11725898000181')).toBe(true);
+    expect(isCnpjValido('1172589800018')).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste (deve falhar)**
+
+```bash
+npx vitest run src/domain/insumos/insumo-cnpj.test.ts
+```
+
+Expected: FAIL (módulo inexistente).
+
+- [ ] **Step 3: Implementar `insumo-cnpj.ts`**
+
+```ts
+export function normalizarCnpj(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 14 ? digits : null;
+}
+
+export function isCnpjValido(digits: string | null | undefined): digits is string {
+  return typeof digits === 'string' && /^[0-9]{14}$/.test(digits);
+}
+
+export function formatarCnpj(digits: string): string {
+  const d = digits.replace(/\D/g, '');
+  if (d.length !== 14) return digits;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+```
+
+- [ ] **Step 4: Teste helper de grupo (falha → passa)**
+
+```ts
+// src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts
+import { describe, expect, it } from 'vitest';
+import { resolverCnpjUnicoDoGrupo } from './insumo-fornecedor-cnpj-grupo';
+import type { InsumoPendenciaGrupoContexto } from './insumo-pendencia-grupo-contexto';
+
+function ctx(fornecedores: InsumoPendenciaGrupoContexto['fornecedores']): InsumoPendenciaGrupoContexto {
+  return {
+    fornecedores,
+    fornecedoresDistintos: fornecedores.length,
+    fornecedorTitulo: fornecedores[0]?.label ?? '—',
+    fornecedorSubtitulo: null,
+    categorias: [],
+    categoriasDistintas: 0,
+    categoriaTitulo: null,
+    categoriaSubtitulo: null,
+    cfop: null,
+    ncm: null,
+  };
+}
+
+describe('resolverCnpjUnicoDoGrupo', () => {
+  it('retorna CNPJ normalizado quando há um único fornecedor com CNPJ', () => {
+    expect(
+      resolverCnpjUnicoDoGrupo({
+        contexto: ctx([{ chave: '11.725.898/0001-81', label: 'HIG', pendenciaCount: 2 }]),
+      }),
+    ).toBe('11725898000181');
+  });
+
+  it('retorna null sem CNPJ ou com múltiplos', () => {
+    expect(
+      resolverCnpjUnicoDoGrupo({
+        contexto: ctx([{ chave: 'HIG E LIMP', label: 'HIG E LIMP', pendenciaCount: 1 }]),
+      }),
+    ).toBeNull();
+    expect(
+      resolverCnpjUnicoDoGrupo({
+        contexto: ctx([
+          { chave: '11725898000181', label: 'A', pendenciaCount: 1 },
+          { chave: '22333444000155', label: 'B', pendenciaCount: 1 },
+        ]),
+      }),
+    ).toBeNull();
+  });
+});
+```
+
+Implementação:
+
+```ts
+import { normalizarCnpj } from '@/domain/insumos/insumo-cnpj';
+
+export function resolverCnpjUnicoDoGrupo(grupo: {
+  contexto: { fornecedores: { chave: string }[] };
+}): string | null {
+  if (grupo.contexto.fornecedores.length !== 1) return null;
+  return normalizarCnpj(grupo.contexto.fornecedores[0]!.chave);
+}
+```
+
+- [ ] **Step 5: Adicionar tipo em `insumo-estoque-db.ts`**
+
+```ts
+export type InsumoFornecedorIgnoradoRow = {
+  id: string;
+  empresa_id: string;
+  fornecedor_cnpj: string;
+  fornecedor_nome: string | null;
+  fornecedor_razao_social: string | null;
+  criado_em: string;
+  criado_por: string | null;
+};
+```
+
+- [ ] **Step 6: Rodar testes**
+
+```bash
+npx vitest run src/domain/insumos/insumo-cnpj.test.ts src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/domain/insumos/insumo-cnpj.ts src/domain/insumos/insumo-cnpj.test.ts src/domain/insumos/insumo-fornecedor-cnpj-grupo.ts src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts src/domain/types/insumo-estoque-db.ts
+git commit -m "feat(insumos): normalização de CNPJ e helper de grupo"
+```
+
+---
+
+### Task 3: Repository — fornecedor ignorado + listagem de pendências por empresa
+
+**Files:**
+- Create: `src/data/insumos/InsumoFornecedorIgnoradoRepository.ts`
+- Modify: `src/data/insumos/InsumoPendenciaRepository.ts`
+
+**Interfaces:**
+- Produces (`InsumoFornecedorIgnoradoRepository`):
+  - `listAll(): Promise<InsumoFornecedorIgnoradoRow[]>`
+  - `existsByCnpj(empresaId: string, cnpjDigits: string): Promise<boolean>`
+  - `upsert(input: { empresaId; cnpjDigits; nome?; razao?; criadoPor? }): Promise<InsumoFornecedorIgnoradoRow>`
+  - `deleteByCnpj(empresaId: string, cnpjDigits: string): Promise<void>`
+- Produces (`InsumoPendenciaRepository`):
+  - `listIdsAndCnpjByEmpresaStatus(empresaId: string, status: InsumoPendenciaStatus): Promise<{ id: string; fornecedor_cnpj: string | null }[]>`
+  - (já existem) `marcarIgnorado(id)`, `marcarPendente(id)`
+
+- [ ] **Step 1: Implementar `InsumoFornecedorIgnoradoRepository`**
+
+Seguir o padrão de `InsumoMapeamentoRepository` / `InsumoPendenciaRepository` (service role via `supabaseClientFactory`).
+
+```ts
+// Métodos essenciais (esqueleto)
+async existsByCnpj(empresaId: string, cnpjDigits: string): Promise<boolean> {
+  const { count, error } = await this.db
+    .from('insumo_fornecedor_ignorado')
+    .select('id', { count: 'exact', head: true })
+    .eq('empresa_id', empresaId)
+    .eq('fornecedor_cnpj', cnpjDigits);
+  if (error) throw new Error(`Erro ao verificar fornecedor ignorado: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+async upsert(input: {
+  empresaId: string;
+  cnpjDigits: string;
+  nome?: string | null;
+  razao?: string | null;
+  criadoPor?: string | null;
+}): Promise<InsumoFornecedorIgnoradoRow> {
+  const { data, error } = await this.db
+    .from('insumo_fornecedor_ignorado')
+    .upsert(
+      {
+        empresa_id: input.empresaId,
+        fornecedor_cnpj: input.cnpjDigits,
+        fornecedor_nome: input.nome ?? null,
+        fornecedor_razao_social: input.razao ?? null,
+        criado_por: input.criadoPor ?? null,
+      },
+      { onConflict: 'empresa_id,fornecedor_cnpj' },
+    )
+    .select()
+    .single();
+  if (error) throw new Error(`Erro ao marcar fornecedor ignorado: ${error.message}`);
+  return data as InsumoFornecedorIgnoradoRow;
+}
+```
+
+Exportar singleton `insumoFornecedorIgnoradoRepository`.
+
+- [ ] **Step 2: Adicionar listagem leve em `InsumoPendenciaRepository`**
+
+```ts
+async listIdsAndCnpjByEmpresaStatus(
+  empresaId: string,
+  status: InsumoPendenciaStatus,
+): Promise<{ id: string; fornecedor_cnpj: string | null }[]> {
+  const { data, error } = await this.db
+    .from('insumo_entrada_pendencias')
+    .select('id, fornecedor_cnpj')
+    .eq('empresa_id', empresaId)
+    .eq('status', status);
+  if (error) {
+    throw new Error(`Erro ao listar pendências por CNPJ: ${error.message}`);
+  }
+  return (data ?? []) as { id: string; fornecedor_cnpj: string | null }[];
+}
+```
+
+Motivo: CNPJs nas pendências podem vir mascarados (`11.725.898/0001-81`); o Manager filtra em JS com `normalizarCnpj`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/data/insumos/InsumoFornecedorIgnoradoRepository.ts src/data/insumos/InsumoPendenciaRepository.ts
+git commit -m "feat(insumos): repository de fornecedor ignorado"
+```
+
+---
+
+### Task 4: Manager — marcar / desmarcar
+
+**Files:**
+- Create: `src/lib/services/insumo-fornecedor-ignorado-manager.ts`
+- Create: `src/lib/services/insumo-fornecedor-ignorado-manager.test.ts`
+
+**Interfaces:**
+- Consumes: repositories + `normalizarCnpj` / `isCnpjValido`
+- Produces:
+  - `marcarFornecedor(input): Promise<{ cnpj: string; pendenciasIgnoradas: number }>`
+  - `desmarcarFornecedor(input): Promise<{ cnpj: string; pendenciasRestauradas: number }>`
+
+```ts
+export type MarcarFornecedorIgnoradoInput = {
+  empresaId: string;
+  cnpj: string; // pode vir mascarado
+  nome?: string | null;
+  razao?: string | null;
+  criadoPor?: string | null;
+};
+
+export type DesmarcarFornecedorIgnoradoInput = {
+  empresaId: string;
+  cnpj: string;
+  restaurarPendencias: boolean;
+};
+```
+
+- [ ] **Step 1: Escrever testes com mocks dos repositories**
+
+```ts
+describe('InsumoFornecedorIgnoradoManager', () => {
+  it('rejeita CNPJ inválido ao marcar', async () => {
+    await expect(
+      manager.marcarFornecedor({ empresaId: 'e1', cnpj: 'abc' }),
+    ).rejects.toThrow(/CNPJ/i);
+  });
+
+  it('faz upsert e ignora pendentes com mesmo CNPJ normalizado', async () => {
+    upsert.mockResolvedValue({ id: '1', fornecedor_cnpj: '11725898000181' });
+    listIds.mockResolvedValue([
+      { id: 'p1', fornecedor_cnpj: '11.725.898/0001-81' },
+      { id: 'p2', fornecedor_cnpj: '99999999000199' },
+    ]);
+    const result = await manager.marcarFornecedor({
+      empresaId: 'e1',
+      cnpj: '11.725.898/0001-81',
+      nome: 'HIG',
+    });
+    expect(upsert).toHaveBeenCalled();
+    expect(marcarIgnorado).toHaveBeenCalledWith('p1');
+    expect(marcarIgnorado).not.toHaveBeenCalledWith('p2');
+    expect(result.pendenciasIgnoradas).toBe(1);
+  });
+
+  it('desmarcar com restaurar chama marcarPendente só do CNPJ', async () => {
+    listIds.mockResolvedValue([
+      { id: 'i1', fornecedor_cnpj: '11725898000181' },
+      { id: 'i2', fornecedor_cnpj: '00000000000191' },
+    ]);
+    await manager.desmarcarFornecedor({
+      empresaId: 'e1',
+      cnpj: '11725898000181',
+      restaurarPendencias: true,
+    });
+    expect(deleteByCnpj).toHaveBeenCalledWith('e1', '11725898000181');
+    expect(marcarPendente).toHaveBeenCalledWith('i1');
+    expect(marcarPendente).not.toHaveBeenCalledWith('i2');
+  });
+
+  it('desmarcar sem restaurar não chama marcarPendente', async () => {
+    await manager.desmarcarFornecedor({
+      empresaId: 'e1',
+      cnpj: '11725898000181',
+      restaurarPendencias: false,
+    });
+    expect(marcarPendente).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar (deve falhar)**
+
+```bash
+npx vitest run src/lib/services/insumo-fornecedor-ignorado-manager.test.ts
+```
+
+- [ ] **Step 3: Implementar Manager**
+
+Ordem em `marcarFornecedor`:
+1. `normalizarCnpj` → throw se inválido  
+2. `upsert`  
+3. `listIdsAndCnpjByEmpresaStatus(empresaId, 'pendente')`  
+4. Filtrar ids onde `normalizarCnpj(row.fornecedor_cnpj) === cnpjDigits`  
+5. `marcarIgnorado` em cada id  
+6. Retornar contagem  
+
+Ordem em `desmarcarFornecedor`:
+1. Normalizar CNPJ  
+2. `deleteByCnpj`  
+3. Se `restaurarPendencias`: listar `ignorado`, filtrar, `marcarPendente`  
+
+Injetar deps no constructor (igual `InsumoRecebimentoDecisaoHistoricaService`).
+
+- [ ] **Step 4: Rodar testes — PASS**
+
+```bash
+npx vitest run src/lib/services/insumo-fornecedor-ignorado-manager.test.ts
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/insumo-fornecedor-ignorado-manager.ts src/lib/services/insumo-fornecedor-ignorado-manager.test.ts
+git commit -m "feat(insumos): manager marcar/desmarcar fornecedor ignorado"
+```
+
+---
+
+### Task 5: Processor — NF de fornecedor na lista nasce ignorada
+
+**Files:**
+- Modify: `src/lib/services/insumo-recebimento-processor.ts`
+- Modify: `src/lib/services/insumo-recebimento-processor.test.ts`
+
+**Interfaces:**
+- Consumes: `InsumoFornecedorIgnoradoRepository.existsByCnpj` (ou Manager só para exists — preferir repository direto no processor para evitar side-effects)
+- Ordem no `processarItem` (após falha de mapeamento):
+
+1. histórico produto/descrição → ignorado  
+2. **novo:** CNPJ na lista → createPendente + marcarIgnorado  
+3. senão → createPendente  
+
+- [ ] **Step 1: Estender deps**
+
+```ts
+export type InsumoRecebimentoProcessorDeps = {
+  // ... existentes
+  fornecedorIgnoradoRepository?: InsumoFornecedorIgnoradoRepository;
+};
+```
+
+Default no constructor: `insumoFornecedorIgnoradoRepository`.
+
+- [ ] **Step 2: Após `foiIgnorado` histórico, adicionar**
+
+```ts
+const cnpjDigits = normalizarCnpj(input.contextoNf.fornecedorCnpj);
+if (cnpjDigits) {
+  const fornecedorIgnorado = await this.fornecedorIgnoradoRepository.existsByCnpj(
+    input.empresaId,
+    cnpjDigits,
+  );
+  if (fornecedorIgnorado) {
+    const pendencia = await this.deps.pendenciaRepository.createPendente(pendenciaInput);
+    await this.deps.pendenciaRepository.marcarIgnorado(pendencia.id);
+    return;
+  }
+}
+```
+
+- [ ] **Step 3: Teste**
+
+No `insumo-recebimento-processor.test.ts`, mock `existsByCnpj`:
+- Quando `true` e sem mapeamento/histórico: espera `createPendente` + `marcarIgnorado`
+- Quando `false`: só `createPendente`
+
+```bash
+npx vitest run src/lib/services/insumo-recebimento-processor.test.ts
+```
+
+Expected: PASS (incluir novo caso).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/insumo-recebimento-processor.ts src/lib/services/insumo-recebimento-processor.test.ts
+git commit -m "feat(insumos): processor ignora NF de fornecedor na lista"
+```
+
+---
+
+### Task 6: Server actions
+
+**Files:**
+- Create: `src/app/actions/insumo-fornecedor-ignorado-actions.ts`
+
+**Interfaces:**
+- Produces:
+  - `listarFornecedoresIgnorados(): Promise<InsumoFornecedorIgnoradoRow[]>`
+  - `marcarFornecedorIgnorado(input): Promise<{ success; pendenciasIgnoradas?; error? }>`
+  - `desmarcarFornecedorIgnorado(input): Promise<{ success; pendenciasRestauradas?; error? }>`
+
+- [ ] **Step 1: Criar actions com `'use server'`**
+
+```ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { insumoFornecedorIgnoradoRepository } from '@/data/insumos/InsumoFornecedorIgnoradoRepository';
+import { insumoFornecedorIgnoradoManager } from '@/lib/services/insumo-fornecedor-ignorado-manager';
+
+const REVALIDATE = ['/mapeamento-insumos', '/config/fornecedores-insumos', '/estoque-insumos'] as const;
+
+function revalidate() {
+  for (const path of REVALIDATE) revalidatePath(path);
+}
+
+export async function listarFornecedoresIgnorados() {
+  return insumoFornecedorIgnoradoRepository.listAll();
+}
+
+export async function marcarFornecedorIgnorado(input: {
+  empresaId: string;
+  cnpj: string;
+  nome?: string | null;
+  razao?: string | null;
+}) {
+  try {
+    const result = await insumoFornecedorIgnoradoManager.marcarFornecedor(input);
+    revalidate();
+    return { success: true as const, ...result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro ao marcar fornecedor';
+    return { success: false as const, error: message };
+  }
+}
+
+export async function desmarcarFornecedorIgnorado(input: {
+  empresaId: string;
+  cnpj: string;
+  restaurarPendencias: boolean;
+}) {
+  try {
+    const result = await insumoFornecedorIgnoradoManager.desmarcarFornecedor(input);
+    revalidate();
+    return { success: true as const, ...result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro ao desmarcar fornecedor';
+    return { success: false as const, error: message };
+  }
+}
+```
+
+Não editar `insumo-estoque-actions.ts` (já ~492 linhas).
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/app/actions/insumo-fornecedor-ignorado-actions.ts
+git commit -m "feat(insumos): actions de fornecedor ignorado"
+```
+
+---
+
+### Task 7: Config — tela `/config/fornecedores-insumos`
+
+**Files:**
+- Modify: `src/config/config-sections.ts`
+- Create: `src/app/config/fornecedores-insumos/page.tsx`
+- Create: `src/app/config/fornecedores-insumos/FornecedoresIgnoradosClient.tsx`
+- Create: `src/features/insumo-estoque/components/InsumoDesmarcarFornecedorDialog.tsx`
+
+**Interfaces:**
+- Consumes: `listarFornecedoresIgnorados`, `desmarcarFornecedorIgnorado`, `formatarCnpj`
+- Dialog: `open`, `fornecedorLabel`, `onCancel`, `onConfirm(restaurar: boolean)`
+
+- [ ] **Step 1: Entry em Config**
+
+Em `CONFIG_SECTIONS`, após Insumos:
+
+```ts
+{
+  href: '/config/fornecedores-insumos',
+  label: 'Fornecedores ignorados',
+  icon: 'block',
+  description: 'Fornecedores Omie sempre ignorados no mapeamento',
+},
+```
+
+- [ ] **Step 2: Dialog de desmarcar**
+
+Padrão visual de `EtapaContinuidadeConfirmDialog` (overlay stone, card white, botões ≥44px):
+
+- Título: `Desmarcar fornecedor`
+- Texto: `Parar de ignorar {nome} ({cnpj formatado})?`
+- Botões: `Cancelar` | `Desmarcar sem restaurar` | `Desmarcar e restaurar pendências`  
+  (variant: ghost / secondary / primary amber)
+
+- [ ] **Step 3: Client da lista**
+
+- Card com tabela (desktop) / lista (mobile): razão/nome, CNPJ formatado, botão `Desmarcar`
+- Empty state: `Nenhum fornecedor ignorado. Use “Ignorar tudo deste fornecedor” no mapeamento.`
+- Toast de sucesso/erro curto
+
+- [ ] **Step 4: Page server**
+
+```tsx
+export const dynamic = 'force-dynamic';
+
+export default async function FornecedoresIgnoradosPage() {
+  const fornecedores = await listarFornecedoresIgnorados();
+  return (
+    <Suspense fallback={<div className="p-8 text-stone-500">Carregando…</div>}>
+      <FornecedoresIgnoradosClient initialFornecedores={fornecedores} />
+    </Suspense>
+  );
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/config/config-sections.ts src/app/config/fornecedores-insumos src/features/insumo-estoque/components/InsumoDesmarcarFornecedorDialog.tsx
+git commit -m "feat(config): tela de fornecedores ignorados no mapeamento"
+```
+
+---
+
+### Task 8: UI mapeamento — diálogo Ignorar produto vs fornecedor
+
+**Files:**
+- Create: `src/features/insumo-estoque/components/InsumoIgnorarConfirmDialog.tsx`
+- Modify: `src/features/insumo-estoque/InsumoMapeamentoClient.tsx` (só wire fino; extrair se passar de ~480 linhas)
+
+**Interfaces:**
+- Dialog props:
+  - `open: boolean`
+  - `modo: 'produto' | 'produto-ou-fornecedor'`
+  - `produtoLabel: string`
+  - `fornecedorLabel: string | null`
+  - `pendenciaCount: number`
+  - `onCancel`, `onIgnorarProduto`, `onIgnorarFornecedor`
+
+- [ ] **Step 1: Criar dialog**
+
+- `modo === 'produto'`: texto atual + botões Cancelar / Ignorar  
+- `modo === 'produto-ou-fornecedor'`:  
+  - `Ignorar só este produto`  
+  - `Ignorar tudo deste fornecedor` (mostra nome + CNPJ formatado)  
+  - `Cancelar`
+
+- [ ] **Step 2: Wire em `InsumoMapeamentoClient`**
+
+Substituir `window.confirm` em `handleIgnorar` e no batch secundário (quando aplicável):
+
+1. Calcular `cnpj = resolverCnpjUnicoDoGrupo(grupo)` (batch: só se **todos** os selecionados compartilham o mesmo CNPJ único)  
+2. Abrir dialog  
+3. Produto → `ignorarInsumoPendenciasEmLote` (existente)  
+4. Fornecedor → `marcarFornecedorIgnorado({ empresaId: grupo.empresaId, cnpj, nome, razao })`  
+5. Após fornecedor: remover da lista local **todos** os grupos pendentes cujo `resolverCnpjUnicoDoGrupo` == cnpj (ou refetch via `router.refresh()` se mais simples e confiável)
+
+Preferir `router.refresh()` + toast se atualizar vários grupos for frágil — mas manter UX responsiva: no mínimo mover o grupo atual e refresh.
+
+Para batch com CNPJs mistos: só ignorar produtos selecionados (sem opção fornecedor).
+
+**Não** deixar o client passar de 500 linhas: se necessário, extrair hook `useInsumoIgnorarFlow.ts` nesta task.
+
+- [ ] **Step 3: Smoke manual**
+
+- Abrir `/mapeamento-insumos`, ignorar com CNPJ → opções aparecem  
+- Sem CNPJ → só produto  
+- Config lista o fornecedor; desmarcar com restaurar devolve à fila  
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/features/insumo-estoque/components/InsumoIgnorarConfirmDialog.tsx src/features/insumo-estoque/InsumoMapeamentoClient.tsx src/features/insumo-estoque/hooks/useInsumoIgnorarFlow.ts
+git commit -m "feat(insumos): ignorar produto ou fornecedor inteiro na fila"
+```
+
+---
+
+### Task 9: Verificação final
+
+- [ ] **Step 1: Suite relevante**
+
+```bash
+npx vitest run src/domain/insumos/insumo-cnpj.test.ts src/domain/insumos/insumo-fornecedor-cnpj-grupo.test.ts src/lib/services/insumo-fornecedor-ignorado-manager.test.ts src/lib/services/insumo-recebimento-processor.test.ts
+```
+
+Expected: all PASS.
+
+- [ ] **Step 2: Lint nos arquivos tocados** (IDE / `npm run lint` se o projeto usar)
+
+- [ ] **Step 3: Checklist vs spec**
+
+| Requisito | Task |
+|-----------|------|
+| Tabela + RLS | 1 |
+| Match só CNPJ | 2, 4 |
+| Marcar ignora atuais + futuras | 4, 5 |
+| Desmarcar pergunta restaurar | 7 |
+| Tela Config | 7 |
+| Dialog na fila | 8 |
+| Histórico produto intacto | 5 (ordem) |
+| Sem add manual CNPJ na Config | 7 (fora) |
+
+- [ ] **Step 4: Commit vazio só se houver leftovers; senão encerrar**
+
+---
+
+## Self-review do plano
+
+1. **Spec coverage:** Todos os itens da spec têm task (migration, domínio, manager, processor, actions, config, dialog fila, testes). Add manual CNPJ e match por nome ficam fora, como na spec.
+2. **Placeholders:** Nenhum TBD; assinaturas e snippets concretos.
+3. **Types:** `cnpjDigits` / `fornecedor_cnpj` consistentes; normalização única em `insumo-cnpj.ts`.
+4. **File limits:** Actions e dialogs fora dos arquivos no limite.
