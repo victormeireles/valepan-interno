@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { InsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DateField } from '@/components/ui/DateField';
@@ -12,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { InsumoConsumoVisualizacao } from '@/domain/insumos/insumo-consumo-semanal-periodo';
+import CoberturaLegend from '@/features/insumo-estoque/components/CoberturaLegend';
 import InsumoConsumoSemanalMobileList from '@/features/insumo-estoque/components/InsumoConsumoSemanalMobileList';
 import InsumoConsumoSemanalTable from '@/features/insumo-estoque/components/InsumoConsumoSemanalTable';
 
@@ -214,36 +214,6 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
         )}
       </Card>
     </div>
-  );
-}
-
-function CoberturaLegend() {
-  return (
-    <ul
-      className="flex flex-wrap items-center gap-1.5"
-      aria-label="Legenda de cobertura de estoque"
-    >
-      <li>
-        <Badge tone="danger" numeric pill={false}>
-          ≤7 d
-        </Badge>
-      </li>
-      <li>
-        <Badge tone="warning" numeric pill={false}>
-          8–21 d
-        </Badge>
-      </li>
-      <li>
-        <Badge tone="neutral" numeric pill={false}>
-          22–60 d
-        </Badge>
-      </li>
-      <li>
-        <Badge tone="success" numeric pill={false}>
-          &gt;60 d
-        </Badge>
-      </li>
-    </ul>
   );
 }
 
