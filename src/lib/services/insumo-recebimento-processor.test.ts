@@ -12,6 +12,10 @@ vi.mock('@/data/insumos/InsumoPendenciaRepository', () => ({
   insumoPendenciaRepository: {},
   InsumoPendenciaRepository: class {},
 }));
+vi.mock('@/data/insumos/InsumoFornecedorIgnoradoRepository', () => ({
+  insumoFornecedorIgnoradoRepository: {},
+  InsumoFornecedorIgnoradoRepository: class {},
+}));
 vi.mock('@/data/omie/OmieWebhookEventoRepository', () => ({
   omieWebhookEventoRepository: {},
   OmieWebhookEventoRepository: class {},
@@ -32,6 +36,8 @@ const consultarRecebimento = vi.fn();
 const findEmpresaByAppKey = vi.fn();
 const findByEmpresaProduto = vi.fn();
 const createPendente = vi.fn();
+const marcarIgnorado = vi.fn();
+const existsByCnpj = vi.fn();
 const registrarEntrada = vi.fn();
 const resolverCategoriaRecebimento = vi.fn();
 const resolverCategoriaItem = vi.fn();
@@ -48,14 +54,19 @@ const decisaoHistoricaService = {
   resolverMapeamentoPorDescricao,
 };
 
+const fornecedorIgnoradoRepository = {
+  existsByCnpj,
+};
+
 const processor = new InsumoRecebimentoProcessor({
   client: { consultarRecebimento },
   webhookRepository: { findEmpresaByAppKey } as never,
   mapeamentoRepository: { findByEmpresaProduto } as never,
-  pendenciaRepository: { createPendente, marcarIgnorado: vi.fn() } as never,
+  pendenciaRepository: { createPendente, marcarIgnorado } as never,
   estoqueService: { registrarEntrada } as never,
   categoriaService: categoriaService as never,
   decisaoHistoricaService: decisaoHistoricaService as never,
+  fornecedorIgnoradoRepository: fornecedorIgnoradoRepository as never,
 });
 
 const eventoBase: OmieWebhookEventoRow = {
@@ -114,7 +125,11 @@ describe('InsumoRecebimentoProcessor', () => {
       app_secret: 'secret-1',
     });
     consultarRecebimento.mockResolvedValue({
-      cabec: { cNumeroNF: '12345', dDataEmissao: '2026-06-18' },
+      cabec: {
+        cNumeroNF: '12345',
+        dDataEmissao: '2026-06-18',
+        fornecedorCnpj: '11.725.898/0001-81',
+      },
       infoAdicionais: { cCategCompra: '2.01.01' },
       itensCabec: [itemBase],
     });
@@ -128,6 +143,8 @@ describe('InsumoRecebimentoProcessor', () => {
     });
     findByEmpresaProduto.mockResolvedValue(mapeamentoBase);
     createPendente.mockResolvedValue({ id: 'pend-1' });
+    marcarIgnorado.mockResolvedValue(undefined);
+    existsByCnpj.mockResolvedValue(false);
     registrarEntrada.mockResolvedValue(undefined);
     produtoFoiIgnoradoAnteriormente.mockResolvedValue(false);
     resolverMapeamentoPorDescricao.mockResolvedValue(null);
@@ -170,21 +187,36 @@ describe('InsumoRecebimentoProcessor', () => {
   it('sem mapeamento mas com histórico ignorado cria pendência já ignorada', async () => {
     findByEmpresaProduto.mockResolvedValue(null);
     produtoFoiIgnoradoAnteriormente.mockResolvedValue(true);
-    const marcarIgnorado = vi.fn().mockResolvedValue(undefined);
-    const processorComIgnorado = new InsumoRecebimentoProcessor({
-      client: { consultarRecebimento },
-      webhookRepository: { findEmpresaByAppKey } as never,
-      mapeamentoRepository: { findByEmpresaProduto } as never,
-      pendenciaRepository: { createPendente, marcarIgnorado } as never,
-      estoqueService: { registrarEntrada } as never,
-      categoriaService: categoriaService as never,
-      decisaoHistoricaService: decisaoHistoricaService as never,
-    });
 
-    await processorComIgnorado.processarEvento(eventoBase);
+    await processor.processarEvento(eventoBase);
 
     expect(createPendente).toHaveBeenCalledTimes(1);
     expect(marcarIgnorado).toHaveBeenCalledWith('pend-1');
+    expect(existsByCnpj).not.toHaveBeenCalled();
+    expect(registrarEntrada).not.toHaveBeenCalled();
+  });
+
+  it('sem mapeamento/histórico e CNPJ na lista cria pendência já ignorada', async () => {
+    findByEmpresaProduto.mockResolvedValue(null);
+    existsByCnpj.mockResolvedValue(true);
+
+    await processor.processarEvento(eventoBase);
+
+    expect(existsByCnpj).toHaveBeenCalledWith('emp-1', '11725898000181');
+    expect(createPendente).toHaveBeenCalledTimes(1);
+    expect(marcarIgnorado).toHaveBeenCalledWith('pend-1');
+    expect(registrarEntrada).not.toHaveBeenCalled();
+  });
+
+  it('sem mapeamento/histórico e CNPJ fora da lista só cria pendência', async () => {
+    findByEmpresaProduto.mockResolvedValue(null);
+    existsByCnpj.mockResolvedValue(false);
+
+    await processor.processarEvento(eventoBase);
+
+    expect(existsByCnpj).toHaveBeenCalledWith('emp-1', '11725898000181');
+    expect(createPendente).toHaveBeenCalledTimes(1);
+    expect(marcarIgnorado).not.toHaveBeenCalled();
     expect(registrarEntrada).not.toHaveBeenCalled();
   });
 
@@ -228,10 +260,11 @@ describe('InsumoRecebimentoProcessor', () => {
       client: { consultarRecebimento },
       webhookRepository: { findEmpresaByAppKey } as never,
       mapeamentoRepository: { findByEmpresaProduto } as never,
-      pendenciaRepository: { createPendente } as never,
+      pendenciaRepository: { createPendente, marcarIgnorado } as never,
       estoqueService: serviceIdempotente,
       categoriaService: categoriaService as never,
       decisaoHistoricaService: decisaoHistoricaService as never,
+      fornecedorIgnoradoRepository: fornecedorIgnoradoRepository as never,
     });
 
     await processorIdempotente.processarEvento(eventoBase);

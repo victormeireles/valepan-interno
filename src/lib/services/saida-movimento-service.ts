@@ -70,18 +70,20 @@ export class SaidaMovimentoService {
       kg: Math.abs(movimento.delta.kg || 0),
     };
 
-    const tipoEstoque = await estoqueService.obterTipoEstoqueCliente(
-      movimento.clienteDestino ?? '',
-    );
+    const tipoEstoqueOriginal = movimento.tipoEstoqueNome.trim();
+    const tipoEstoqueResolvido = !tipoEstoqueOriginal && movimento.clienteDestino
+      ? await estoqueService.obterTipoEstoqueCliente(movimento.clienteDestino)
+      : null;
+    const clienteEstoque = tipoEstoqueOriginal || tipoEstoqueResolvido;
 
-    if (tipoEstoque && movimento.clienteDestino) {
+    if (clienteEstoque) {
       await estoqueService.aplicarDelta({
-        cliente: tipoEstoque,
+        cliente: clienteEstoque,
         produto: movimento.produtoNome,
         delta: quantidade,
         allowNegative: true,
         origem: 'saida',
-        clienteDestino: movimento.clienteDestino,
+        clienteDestino: movimento.clienteDestino ?? undefined,
       });
     }
 

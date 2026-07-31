@@ -130,6 +130,23 @@ export class InsumoPendenciaRepository {
     return (data as unknown as PendenciaWithEmpresa[] ?? []).map(mapPendenciaComEmpresa);
   }
 
+  async listIdsAndCnpjByEmpresaStatus(
+    empresaId: string,
+    status: InsumoPendenciaStatus,
+  ): Promise<{ id: string; fornecedor_cnpj: string | null }[]> {
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .select('id, fornecedor_cnpj')
+      .eq('empresa_id', empresaId)
+      .eq('status', status);
+
+    if (error) {
+      throw new Error(`Erro ao listar pendências por CNPJ: ${error.message}`);
+    }
+
+    return (data ?? []) as { id: string; fornecedor_cnpj: string | null }[];
+  }
+
   async listIgnoradas(): Promise<InsumoPendenciaComEmpresa[]> {
     const { data, error } = await this.db
       .from('insumo_entrada_pendencias')
@@ -194,6 +211,27 @@ export class InsumoPendenciaRepository {
     }
   }
 
+  async marcarPendentesPorIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .update({
+        status: 'pendente',
+        resolvido_em: null,
+        integracao_insumo_id: null,
+      })
+      .in('id', ids)
+      .eq('status', 'ignorado')
+      .select('id');
+
+    if (error) {
+      throw new Error(`Erro ao restaurar pendências de insumo: ${error.message}`);
+    }
+
+    return data?.length ?? 0;
+  }
+
   async existsIgnoradoPorProdutoOmie(
     empresaId: string,
     omieIdProduto: number,
@@ -246,6 +284,26 @@ export class InsumoPendenciaRepository {
     if (error) {
       throw new Error(`Erro ao ignorar pendência de insumo: ${error.message}`);
     }
+  }
+
+  async marcarIgnoradasPorIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+
+    const { data, error } = await this.db
+      .from('insumo_entrada_pendencias')
+      .update({
+        status: 'ignorado',
+        resolvido_em: new Date().toISOString(),
+      })
+      .in('id', ids)
+      .eq('status', 'pendente')
+      .select('id');
+
+    if (error) {
+      throw new Error(`Erro ao ignorar pendências de insumo: ${error.message}`);
+    }
+
+    return data?.length ?? 0;
   }
 
   async marcarResolvido(id: string, integracaoInsumoId: string): Promise<void> {

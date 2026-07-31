@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { InsumoMapeamentoPageData } from '@/app/actions/insumo-estoque-actions';
 import {
   excluirIntegracaoInsumoVinculo,
-  ignorarInsumoPendenciasEmLote,
   restaurarInsumoPendenciasEmLote,
 } from '@/app/actions/insumo-estoque-actions';
 import {
@@ -22,12 +21,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
 import { Toast } from '@/components/ui/Toast';
+import InsumoIgnorarConfirmDialog from '@/features/insumo-estoque/components/InsumoIgnorarConfirmDialog';
 import InsumoMapeamentoPendenciaSection from '@/features/insumo-estoque/components/InsumoMapeamentoPendenciaSection';
 import InsumoResolverPendenciaModal from '@/features/insumo-estoque/components/InsumoResolverPendenciaModal';
 import InsumoEditarVinculoModal from '@/features/insumo-estoque/components/InsumoEditarVinculoModal';
 import InsumoVinculoMobileList from '@/features/insumo-estoque/components/InsumoVinculoMobileList';
 import InsumoVinculoTable from '@/features/insumo-estoque/components/InsumoVinculoTable';
 import InsumoVinculoIaRevisaoModal from '@/features/insumo-estoque/components/InsumoVinculoIaRevisaoModal';
+import { useInsumoIgnorarFlow } from '@/features/insumo-estoque/hooks/useInsumoIgnorarFlow';
 import { useInsumoPendenciaGrupoSelecao } from '@/features/insumo-estoque/hooks/useInsumoPendenciaGrupoSelecao';
 
 type TabId = 'pendencias' | 'ignorados' | 'vinculos';
@@ -115,14 +116,25 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     handleRefresh();
   };
 
-  const moverGrupoParaIgnoradas = (grupo: InsumoPendenciaProdutoGrupo) => {
-    setPendenciaGrupos((current) => current.filter((item) => item.chave !== grupo.chave));
+  const moverGruposParaIgnoradas = (grupos: InsumoPendenciaProdutoGrupo[]) => {
+    if (grupos.length === 0) return;
+    const chaves = new Set(grupos.map((grupo) => grupo.chave));
+    const totalMovido = grupos.reduce((sum, grupo) => sum + grupo.pendenciaCount, 0);
+    setPendenciaGrupos((current) => current.filter((item) => !chaves.has(item.chave)));
     setIgnoradaGrupos((current) => [
-      { ...grupo, ignoradoEm: new Date().toISOString(), pendencias: [] },
+      ...grupos.map((grupo) => ({
+        ...grupo,
+        ignoradoEm: new Date().toISOString(),
+        pendencias: [],
+      })),
       ...current,
     ]);
-    setPendenciasCount((count) => Math.max(0, count - grupo.pendenciaCount));
-    setIgnoradasCount((count) => count + grupo.pendenciaCount);
+    setPendenciasCount((count) => Math.max(0, count - totalMovido));
+    setIgnoradasCount((count) => count + totalMovido);
+  };
+
+  const moverGrupoParaIgnoradas = (grupo: InsumoPendenciaProdutoGrupo) => {
+    moverGruposParaIgnoradas([grupo]);
   };
 
   const moverGrupoParaPendencias = (grupo: InsumoPendenciaProdutoGrupo) => {
@@ -135,29 +147,32 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     setPendenciasCount((count) => count + grupo.pendenciaCount);
   };
 
-  const handleIgnorar = async (grupo: InsumoPendenciaProdutoGrupo) => {
-    const confirmed = window.confirm(
-      grupo.pendenciaCount === 1
-        ? 'Ignorar esta pendência? Ela não aparecerá mais na fila.'
-        : `Ignorar ${grupo.pendenciaCount} pendências deste produto Omie? Elas não aparecerão mais na fila.`,
-    );
-    if (!confirmed) return;
-
-    const result = await ignorarInsumoPendenciasEmLote(grupo.pendenciaIds);
-    if (!result.success) {
-      setToast(result.error);
-      setTimeout(() => setToast(null), 4000);
-      return;
-    }
-
-    moverGrupoParaIgnoradas(grupo);
-    removeFromSelection([grupo.chave]);
-    handleSaved(
-      grupo.pendenciaCount === 1
-        ? 'Pendência ignorada'
-        : `${result.ignoradas ?? grupo.pendenciaCount} pendências ignoradas`,
-    );
+  const showError = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
   };
+
+  const {
+    dialog: ignorarDialog,
+    busy: ignorarBusy,
+    fechar: fecharIgnorarDialog,
+    solicitarIgnorarGrupo,
+    solicitarIgnorarBatch,
+    confirmarProduto: confirmarIgnorarProduto,
+    confirmarFornecedor: confirmarIgnorarFornecedor,
+  } = useInsumoIgnorarFlow({
+    pendenciaGrupos,
+    selectionGrupos,
+    selectedKeys,
+    selectedGrupoCount,
+    selectedPendenciaCount,
+    clearSelection,
+    removeFromSelection,
+    moverGrupoParaIgnoradas,
+    moverGruposParaIgnoradas,
+    onSaved: handleSaved,
+    onError: showError,
+  });
 
   const handleRestaurar = async (grupo: InsumoPendenciaProdutoGrupo) => {
     const confirmed = window.confirm(
@@ -186,72 +201,41 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
   const handleBatchSecundario = async () => {
     if (selectedGrupoCount === 0) return;
 
-    const isIgnorado = activeTab === 'ignorados';
+    if (activeTab !== 'ignorados') {
+      solicitarIgnorarBatch();
+      return;
+    }
+
     const confirmed = window.confirm(
-      isIgnorado
-        ? `Restaurar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`
-        : `Ignorar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`,
+      `Restaurar ${selectedPendenciaCount} pendência${selectedPendenciaCount === 1 ? '' : 's'} de ${selectedGrupoCount} produto${selectedGrupoCount === 1 ? '' : 's'}?`,
     );
     if (!confirmed) return;
 
     setBatchLoading(true);
     const ids = collectPendenciaIdsFromGrupos(selectionGrupos, selectedKeys);
     const gruposAfetados = selectionGrupos.filter((grupo) => selectedKeys.has(grupo.chave));
+    const result = await restaurarInsumoPendenciasEmLote(ids);
+    setBatchLoading(false);
 
-    if (isIgnorado) {
-      const result = await restaurarInsumoPendenciasEmLote(ids);
-      setBatchLoading(false);
-
-      if (!result.success) {
-        setToast(result.error);
-        setTimeout(() => setToast(null), 4000);
-        return;
-      }
-
-      const chavesAfetadas = new Set(gruposAfetados.map((grupo) => grupo.chave));
-      const totalMovido = gruposAfetados.reduce((sum, grupo) => sum + grupo.pendenciaCount, 0);
-      setIgnoradaGrupos((current) => current.filter((grupo) => !chavesAfetadas.has(grupo.chave)));
-      setPendenciaGrupos((current) => [
-        ...gruposAfetados.map((grupo) => ({ ...grupo, ignoradoEm: null, pendencias: [] })),
-        ...current,
-      ]);
-      setIgnoradasCount((count) => Math.max(0, count - totalMovido));
-      setPendenciasCount((count) => count + totalMovido);
-      handleSaved(
-        (result.restauradas ?? ids.length) === 1
-          ? '1 pendência restaurada'
-          : `${result.restauradas ?? ids.length} pendências restauradas`,
-      );
-    } else {
-      const result = await ignorarInsumoPendenciasEmLote(ids);
-      setBatchLoading(false);
-
-      if (!result.success) {
-        setToast(result.error);
-        setTimeout(() => setToast(null), 4000);
-        return;
-      }
-
-      const chavesAfetadas = new Set(gruposAfetados.map((grupo) => grupo.chave));
-      const totalMovido = gruposAfetados.reduce((sum, grupo) => sum + grupo.pendenciaCount, 0);
-      setPendenciaGrupos((current) => current.filter((grupo) => !chavesAfetadas.has(grupo.chave)));
-      setIgnoradaGrupos((current) => [
-        ...gruposAfetados.map((grupo) => ({
-          ...grupo,
-          ignoradoEm: new Date().toISOString(),
-          pendencias: [],
-        })),
-        ...current,
-      ]);
-      setPendenciasCount((count) => Math.max(0, count - totalMovido));
-      setIgnoradasCount((count) => count + totalMovido);
-      handleSaved(
-        (result.ignoradas ?? ids.length) === 1
-          ? '1 pendência ignorada'
-          : `${result.ignoradas ?? ids.length} pendências ignoradas`,
-      );
+    if (!result.success) {
+      showError(result.error);
+      return;
     }
 
+    const chavesAfetadas = new Set(gruposAfetados.map((grupo) => grupo.chave));
+    const totalMovido = gruposAfetados.reduce((sum, grupo) => sum + grupo.pendenciaCount, 0);
+    setIgnoradaGrupos((current) => current.filter((grupo) => !chavesAfetadas.has(grupo.chave)));
+    setPendenciaGrupos((current) => [
+      ...gruposAfetados.map((grupo) => ({ ...grupo, ignoradoEm: null, pendencias: [] })),
+      ...current,
+    ]);
+    setIgnoradasCount((count) => Math.max(0, count - totalMovido));
+    setPendenciasCount((count) => count + totalMovido);
+    handleSaved(
+      (result.restauradas ?? ids.length) === 1
+        ? '1 pendência restaurada'
+        : `${result.restauradas ?? ids.length} pendências restauradas`,
+    );
     clearSelection();
   };
 
@@ -415,7 +399,7 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
             onToggleSelectAll={toggleSelectAllVisible}
             onClearSelection={clearSelection}
             onVincular={setResolverGrupo}
-            onIgnorar={activeTab === 'pendencias' ? handleIgnorar : undefined}
+            onIgnorar={activeTab === 'pendencias' ? solicitarIgnorarGrupo : undefined}
             onRestaurar={activeTab === 'ignorados' ? handleRestaurar : undefined}
             onBatchSecundario={handleBatchSecundario}
             batchLoading={batchLoading}
@@ -464,6 +448,18 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
           setIaRevisaoOpen(false);
           handleSaved(message);
         }}
+      />
+
+      <InsumoIgnorarConfirmDialog
+        open={ignorarDialog.open}
+        modo={ignorarDialog.modo}
+        produtoLabel={ignorarDialog.produtoLabel}
+        fornecedorLabel={ignorarDialog.fornecedorLabel}
+        pendenciaCount={ignorarDialog.pendenciaCount}
+        busy={ignorarBusy}
+        onCancel={fecharIgnorarDialog}
+        onIgnorarProduto={confirmarIgnorarProduto}
+        onIgnorarFornecedor={confirmarIgnorarFornecedor}
       />
     </div>
   );

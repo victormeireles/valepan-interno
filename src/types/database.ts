@@ -72,6 +72,7 @@ export type Database = {
           pedido_id: string | null
           raw_json: Json | null
           seu_numero: string | null
+          status_cobranca: string
           status_pagamento: string | null
           updated_at: string
           url_boleto: string | null
@@ -95,6 +96,7 @@ export type Database = {
           pedido_id?: string | null
           raw_json?: Json | null
           seu_numero?: string | null
+          status_cobranca?: string
           status_pagamento?: string | null
           updated_at?: string
           url_boleto?: string | null
@@ -118,6 +120,7 @@ export type Database = {
           pedido_id?: string | null
           raw_json?: Json | null
           seu_numero?: string | null
+          status_cobranca?: string
           status_pagamento?: string | null
           updated_at?: string
           url_boleto?: string | null
@@ -1895,6 +1898,44 @@ export type Database = {
           },
         ]
       }
+      insumo_fornecedor_ignorado: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          fornecedor_cnpj: string
+          fornecedor_nome: string | null
+          fornecedor_razao_social: string | null
+          id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          fornecedor_cnpj: string
+          fornecedor_nome?: string | null
+          fornecedor_razao_social?: string | null
+          id?: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          fornecedor_cnpj?: string
+          fornecedor_nome?: string | null
+          fornecedor_razao_social?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_fornecedor_ignorado_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insumo_movimentos: {
         Row: {
           created_at: string
@@ -2172,6 +2213,91 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vw_produtos_com_receitas"
             referencedColumns: ["produto_id"]
+          },
+        ]
+      }
+      metas_diarias: {
+        Row: {
+          caixas_proprias_meta: number
+          data: string
+          faturamento_meta: number
+          id: string
+          is_feriado_nacional: boolean
+          meta_mensal_id: string
+          peso: number
+        }
+        Insert: {
+          caixas_proprias_meta: number
+          data: string
+          faturamento_meta: number
+          id?: string
+          is_feriado_nacional?: boolean
+          meta_mensal_id: string
+          peso: number
+        }
+        Update: {
+          caixas_proprias_meta?: number
+          data?: string
+          faturamento_meta?: number
+          id?: string
+          is_feriado_nacional?: boolean
+          meta_mensal_id?: string
+          peso?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_diarias_meta_mensal_id_fkey"
+            columns: ["meta_mensal_id"]
+            isOneToOne: false
+            referencedRelation: "metas_mensais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metas_mensais: {
+        Row: {
+          ano_mes: string
+          caixas_proprias: number
+          caixas_terceirizadas: number
+          caixas_total: number
+          created_at: string
+          faturamento_meta: number
+          id: string
+          margem_bruta_pct: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ano_mes: string
+          caixas_proprias: number
+          caixas_terceirizadas: number
+          caixas_total: number
+          created_at?: string
+          faturamento_meta: number
+          id?: string
+          margem_bruta_pct: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ano_mes?: string
+          caixas_proprias?: number
+          caixas_terceirizadas?: number
+          caixas_total?: number
+          created_at?: string
+          faturamento_meta?: number
+          id?: string
+          margem_bruta_pct?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_mensais_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2774,6 +2900,72 @@ export type Database = {
           },
         ]
       }
+      pedido_consignado_decisoes: {
+        Row: {
+          created_at: string
+          decidido_por: string
+          id: string
+          motivo: string | null
+          pedido_destino_id: string | null
+          pedido_id: string
+          tipo_decisao: string
+        }
+        Insert: {
+          created_at?: string
+          decidido_por: string
+          id?: string
+          motivo?: string | null
+          pedido_destino_id?: string | null
+          pedido_id: string
+          tipo_decisao: string
+        }
+        Update: {
+          created_at?: string
+          decidido_por?: string
+          id?: string
+          motivo?: string | null
+          pedido_destino_id?: string | null
+          pedido_id?: string
+          tipo_decisao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedido_consignado_decisoes_decidido_por_fkey"
+            columns: ["decidido_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_consignado_decisoes_pedido_destino_id_fkey"
+            columns: ["pedido_destino_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_consignado_decisoes_pedido_destino_id_fkey"
+            columns: ["pedido_destino_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_consignado_decisoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: true
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_consignado_decisoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: true
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_itens: {
         Row: {
           created_at: string | null
@@ -2881,6 +3073,7 @@ export type Database = {
       pedidos: {
         Row: {
           atualizado_por: string
+          boletos_abertos_count: number
           cliente_id: string
           codigo_erp: number | null
           comissao_distribuidor_valor: number
@@ -2895,15 +3088,23 @@ export type Database = {
           id: string
           is_bonificacao: boolean
           is_remessa_consignacao: boolean
+          motivo_bonificacao:
+            | Database["public"]["Enums"]["motivo_bonificacao_enum"]
+            | null
           observacoes: string | null
           prazo_aprovacao: string | null
           prioridade: string
           status: string
+          status_cobranca: string
+          tipo_operacao_pedido: Database["public"]["Enums"]["tipo_operacao_pedido_enum"]
           tipo_pedido: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at: string | null
+          valor_boletos_pago: number | null
+          valor_boletos_total: number | null
         }
         Insert: {
           atualizado_por: string
+          boletos_abertos_count?: number
           cliente_id: string
           codigo_erp?: number | null
           comissao_distribuidor_valor?: number
@@ -2918,15 +3119,23 @@ export type Database = {
           id?: string
           is_bonificacao?: boolean
           is_remessa_consignacao?: boolean
+          motivo_bonificacao?:
+            | Database["public"]["Enums"]["motivo_bonificacao_enum"]
+            | null
           observacoes?: string | null
           prazo_aprovacao?: string | null
           prioridade?: string
           status?: string
+          status_cobranca?: string
+          tipo_operacao_pedido?: Database["public"]["Enums"]["tipo_operacao_pedido_enum"]
           tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
+          valor_boletos_pago?: number | null
+          valor_boletos_total?: number | null
         }
         Update: {
           atualizado_por?: string
+          boletos_abertos_count?: number
           cliente_id?: string
           codigo_erp?: number | null
           comissao_distribuidor_valor?: number
@@ -2941,12 +3150,19 @@ export type Database = {
           id?: string
           is_bonificacao?: boolean
           is_remessa_consignacao?: boolean
+          motivo_bonificacao?:
+            | Database["public"]["Enums"]["motivo_bonificacao_enum"]
+            | null
           observacoes?: string | null
           prazo_aprovacao?: string | null
           prioridade?: string
           status?: string
+          status_cobranca?: string
+          tipo_operacao_pedido?: Database["public"]["Enums"]["tipo_operacao_pedido_enum"]
           tipo_pedido?: Database["public"]["Enums"]["tipo_pedido_enum"]
           updated_at?: string | null
+          valor_boletos_pago?: number | null
+          valor_boletos_total?: number | null
         }
         Relationships: [
           {
@@ -4047,6 +4263,7 @@ export type Database = {
           id: string
           nome: string
           updated_at: string | null
+          usuario_id: string | null
         }
         Insert: {
           ativo?: boolean
@@ -4055,6 +4272,7 @@ export type Database = {
           id?: string
           nome: string
           updated_at?: string | null
+          usuario_id?: string | null
         }
         Update: {
           ativo?: boolean
@@ -4063,8 +4281,17 @@ export type Database = {
           id?: string
           nome?: string
           updated_at?: string | null
+          usuario_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vendedores_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       verification_tokens: {
         Row: {
@@ -4326,15 +4553,20 @@ export type Database = {
       }
       relatorio_script_consignados_v: {
         Row: {
-          d14: number | null
-          d21: number | null
-          d7: number | null
           distribuidor: string | null
           distribuidor_id: string | null
           estoque_atual: number | null
           media_quantidade: number | null
           min_quantidade: number | null
           produto: string | null
+          semana_1_label: string | null
+          semana_1_quantidade: number | null
+          semana_2_label: string | null
+          semana_2_quantidade: number | null
+          semana_3_label: string | null
+          semana_3_quantidade: number | null
+          semana_4_label: string | null
+          semana_4_quantidade: number | null
         }
         Relationships: []
       }
@@ -4475,8 +4707,17 @@ export type Database = {
         | "producao_forno"
         | "producao_embalagem"
       insumo_pendencia_status: "pendente" | "resolvido" | "ignorado"
+      motivo_bonificacao_enum:
+        | "troca_produtos"
+        | "pagamento_comissao"
+        | "verba_marketing"
       producao_lote_modo: "parcial" | "substituicao"
       tipo_cliente_enum: "distribuidor" | "hamburgueria"
+      tipo_operacao_pedido_enum:
+        | "venda"
+        | "bonificacao"
+        | "amostra"
+        | "remessa_consignacao"
       tipo_pedido_enum: "valepan" | "hamburgueria"
       tipo_receita:
         | "massa"
@@ -4660,8 +4901,19 @@ export const Constants = {
         "producao_embalagem",
       ],
       insumo_pendencia_status: ["pendente", "resolvido", "ignorado"],
+      motivo_bonificacao_enum: [
+        "troca_produtos",
+        "pagamento_comissao",
+        "verba_marketing",
+      ],
       producao_lote_modo: ["parcial", "substituicao"],
       tipo_cliente_enum: ["distribuidor", "hamburgueria"],
+      tipo_operacao_pedido_enum: [
+        "venda",
+        "bonificacao",
+        "amostra",
+        "remessa_consignacao",
+      ],
       tipo_pedido_enum: ["valepan", "hamburgueria"],
       tipo_receita: [
         "massa",

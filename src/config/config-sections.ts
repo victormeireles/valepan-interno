@@ -37,6 +37,12 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     description: 'Matérias-primas e custos unitários',
   },
   {
+    href: '/config/fornecedores-insumos',
+    label: 'Fornecedores ignorados',
+    icon: 'block',
+    description: 'Fornecedores Omie sempre ignorados no mapeamento',
+  },
+  {
     href: '/config/receitas',
     label: 'Receitas',
     icon: 'menu_book',
