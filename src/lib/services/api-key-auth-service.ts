@@ -5,7 +5,7 @@ export class ApiKeyAuthService {
   private readonly validApiKey: string | undefined;
 
   constructor() {
-    this.validApiKey = process.env.API_KEY;
+    this.validApiKey = process.env.VALEPAN_INTERNO_API_KEY ?? process.env.API_KEY;
   }
 
   /**
@@ -15,7 +15,7 @@ export class ApiKeyAuthService {
    */
   public isValid(apiKey: string | null | undefined): boolean {
     if (!this.validApiKey) {
-      // Se não houver API_KEY configurada, rejeita todas as requisições
+      // Se não houver API key configurada, rejeita todas as requisições.
       return false;
     }
 
