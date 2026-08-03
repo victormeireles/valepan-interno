@@ -14,6 +14,8 @@ import type { InsumoConsumoVisualizacao } from '@/domain/insumos/insumo-consumo-
 import CoberturaLegend from '@/features/insumo-estoque/components/CoberturaLegend';
 import InsumoConsumoSemanalMobileList from '@/features/insumo-estoque/components/InsumoConsumoSemanalMobileList';
 import InsumoConsumoSemanalTable from '@/features/insumo-estoque/components/InsumoConsumoSemanalTable';
+import { useInsumoConsumoViewport } from '@/features/insumo-estoque/hooks/useInsumoConsumoViewport';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 type Props = {
   initialData: InsumoConsumoSemanalPageData;
@@ -29,6 +31,7 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
     initialData.periodo.visualizacao,
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const viewport = useInsumoConsumoViewport();
 
   useEffect(() => {
     setDataInicio(initialData.periodo.dataInicio);
@@ -198,19 +201,27 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
               ) : undefined
             }
           />
+        ) : viewport === null ? (
+          <div className="space-y-0 p-1" aria-busy="true">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className="flex items-center gap-3 border-b border-stone-100 px-3 py-3">
+                <Skeleton width="45%" height="0.875rem" />
+                <Skeleton width="3rem" height="0.875rem" style={{ marginLeft: 'auto' }} />
+              </div>
+            ))}
+          </div>
+        ) : viewport === 'desktop' ? (
+          <InsumoConsumoSemanalTable
+            items={filteredItems}
+            periodo={initialData.periodo}
+            colunas={initialData.periodo.colunas}
+          />
         ) : (
-          <>
-            <InsumoConsumoSemanalTable
-              items={filteredItems}
-              periodo={initialData.periodo}
-              colunas={initialData.periodo.colunas}
-            />
-            <InsumoConsumoSemanalMobileList
-              items={filteredItems}
-              periodo={initialData.periodo}
-              colunas={initialData.periodo.colunas}
-            />
-          </>
+          <InsumoConsumoSemanalMobileList
+            items={filteredItems}
+            periodo={initialData.periodo}
+            colunas={initialData.periodo.colunas}
+          />
         )}
       </Card>
     </div>

@@ -4669,6 +4669,20 @@ export type Database = {
       get_user_cliente_id: { Args: { user_id: string }; Returns: string }
       get_user_tipo: { Args: { user_id: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      list_insumo_consumo_agregado: {
+        Args: {
+          p_end: string
+          p_start: string
+          p_visualizacao?: string
+        }
+        Returns: {
+          coluna_inicio: string
+          consumo: number
+          insumo_id: string
+          nome: string
+          unidade_resumida: string
+        }[]
+      }
     }
     Enums: {
       clube_beneficio_tipo:

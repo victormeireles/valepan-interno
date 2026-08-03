@@ -68,7 +68,7 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
   };
 
   return (
-    <div className="divide-y divide-stone-200/80 md:hidden">
+    <div className="divide-y divide-stone-200/80">
       {items.map((item, index) => {
         const picoKeys = insumoCoberturaVisualTone.findPicoColunaKeys(
           item.consumoPorSemana,

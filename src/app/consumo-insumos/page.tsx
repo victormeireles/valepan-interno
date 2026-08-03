@@ -1,18 +1,29 @@
 import { Suspense } from 'react';
 import { getInsumoConsumoSemanalPageData } from '@/app/actions/insumo-consumo-actions';
+import { ConsumoInsumosLoadingSkeleton } from '@/app/consumo-insumos/ConsumoInsumosLoadingSkeleton';
 import InsumoConsumoSemanalClient from '@/features/insumo-estoque/InsumoConsumoSemanalClient';
 
 export const dynamic = 'force-dynamic';
 
+type SearchParams = Promise<{
+  dataInicio?: string;
+  dataFim?: string;
+  visualizacao?: string;
+}>;
+
 type Props = {
-  searchParams: Promise<{
-    dataInicio?: string;
-    dataFim?: string;
-    visualizacao?: string;
-  }>;
+  searchParams: SearchParams;
 };
 
-export default async function InsumoConsumoPage({ searchParams }: Props) {
+export default function InsumoConsumoPage({ searchParams }: Props) {
+  return (
+    <Suspense fallback={<ConsumoInsumosLoadingSkeleton />}>
+      <InsumoConsumoPageContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function InsumoConsumoPageContent({ searchParams }: Props) {
   const { dataInicio, dataFim, visualizacao } = await searchParams;
   const data = await getInsumoConsumoSemanalPageData({
     dataInicio,
@@ -20,9 +31,5 @@ export default async function InsumoConsumoPage({ searchParams }: Props) {
     visualizacao,
   });
 
-  return (
-    <Suspense fallback={<div className="p-8 text-stone-500">Carregando...</div>}>
-      <InsumoConsumoSemanalClient initialData={data} />
-    </Suspense>
-  );
+  return <InsumoConsumoSemanalClient initialData={data} />;
 }

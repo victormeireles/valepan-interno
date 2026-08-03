@@ -1,4 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import {
+  insumoConsumoAgregadoMapper,
+} from '@/domain/insumos/insumo-consumo-agregado-mapper';
 import type {
   InsumoConsumoPeriodo,
 } from '@/domain/insumos/insumo-consumo-semanal-periodo';
@@ -27,6 +30,14 @@ export type ConsumoMovimentoWithInsumo = {
   } | null;
 };
 
+type ConsumoAgregadoRpcRow = {
+  insumo_id: string;
+  nome: string;
+  unidade_resumida: string;
+  coluna_inicio: string;
+  consumo: number | string;
+};
+
 export class InsumoConsumoRepository {
   constructor(
     private readonly supabase: SupabaseClient<Database> =
@@ -40,30 +51,31 @@ export class InsumoConsumoRepository {
   async listConsumoSemanal(
     periodo: InsumoConsumoPeriodo,
   ): Promise<InsumoConsumoSemanalItem[]> {
-    const rows = await this.fetchConsumoMovimentosForPeriodo(periodo);
+    const { startIso, endIso } = insumoConsumoSemanalPeriodoBuilder.getSaoPauloDayRange(
+      periodo.dataInicio,
+      periodo.dataFim,
+    );
 
-    return insumoConsumoSemanalAggregator.aggregate(
+    const { data, error } = await this.db.rpc('list_insumo_consumo_agregado', {
+      p_start: startIso,
+      p_end: endIso,
+      p_visualizacao: periodo.visualizacao,
+    });
+
+    if (error) {
+      throw new Error(`Erro ao listar consumo de insumos: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as ConsumoAgregadoRpcRow[];
+    return insumoConsumoAgregadoMapper.toSemanalItems(
       periodo,
-      rows.map((row) => {
-        const unidades = row.insumos?.unidades;
-        const unidadeResumida = Array.isArray(unidades)
-          ? unidades[0]?.nome_resumido ?? ''
-          : unidades?.nome_resumido ?? '';
-
-        return {
-          insumoId: row.insumo_id,
-          nome: row.insumos?.nome ?? '',
-          unidadeResumida,
-          dataMovimento: insumoConsumoSemanalPeriodoBuilder.getSaoPauloDateFromTimestamp(
-            row.created_at,
-          ),
-          deltaQuantidade: Number(row.delta_quantidade),
-          origem: row.origem,
-          fermentacaoLoteId: row.fermentacao_lote_id,
-          fornoLoteId: row.forno_lote_id,
-          embalagemLoteId: row.embalagem_lote_id,
-        };
-      }),
+      rows.map((row) => ({
+        insumoId: row.insumo_id,
+        nome: row.nome ?? '',
+        unidadeResumida: row.unidade_resumida ?? '',
+        colunaInicio: String(row.coluna_inicio).slice(0, 10),
+        consumo: Number(row.consumo),
+      })),
     );
   }
 
@@ -128,6 +140,13 @@ export class InsumoConsumoRepository {
         )
         .lt('delta_quantidade', 0)
         .in('origem', ['producao_fermentacao', 'producao_forno', 'producao_embalagem'])
+        .or(
+          [
+            'and(origem.eq.producao_fermentacao,fermentacao_lote_id.not.is.null)',
+            'and(origem.eq.producao_forno,forno_lote_id.not.is.null)',
+            'and(origem.eq.producao_embalagem,embalagem_lote_id.not.is.null)',
+          ].join(','),
+        )
         .gte('created_at', startIso)
         .lt('created_at', endIso)
         .order('created_at', { ascending: true })

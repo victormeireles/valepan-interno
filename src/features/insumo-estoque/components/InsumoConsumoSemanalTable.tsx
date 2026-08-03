@@ -74,7 +74,7 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
   };
 
   return (
-    <div className="hidden overflow-x-auto md:block">
+    <div className="overflow-x-auto">
       <table className="w-full min-w-[980px] border-collapse text-sm">
         <thead className="border-b border-stone-200 bg-surface-sunken">
           <tr>
