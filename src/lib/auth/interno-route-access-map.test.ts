@@ -94,4 +94,20 @@ describe('InternoRouteAccessMap', () => {
       minimo: 'ler',
     });
   });
+
+  it('api/produtos é leitura para ordens e config (não só administrar)', () => {
+    expect(map.resolve('/api/produtos/Bolinho/assadeiras')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_ordens', 'interno_config'],
+      minimo: 'ler',
+    });
+  });
+
+  it('options/embalagem também serve o formulário de ordens', () => {
+    expect(map.resolve('/api/options/embalagem')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_embalagem', 'interno_ordens'],
+      minimo: 'ler',
+    });
+  });
 });

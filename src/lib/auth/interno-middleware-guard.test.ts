@@ -215,4 +215,48 @@ describe('InternoMiddlewareGuard', () => {
       }),
     ).toBe('allow');
   });
+
+  it('Operações (ordens:editar, config:editar) lê /api/produtos/.../assadeiras', () => {
+    const operacoes = {
+      sub: 'user-operacoes',
+      isSystemOwner: false,
+      modulosEfetivos: {
+        interno_ordens: 'editar' as const,
+        interno_config: 'editar' as const,
+        interno_embalagem: 'editar' as const,
+      },
+    };
+    expect(
+      guard.decide({
+        pathname: '/api/produtos/Bolinho/assadeiras',
+        token: operacoes,
+        method: 'GET',
+      }),
+    ).toBe('allow');
+  });
+
+  it('interno_config:editar sem ordens ainda lê /api/produtos', () => {
+    const configEditar = {
+      sub: 'user-config',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_config: 'editar' as const },
+    };
+    expect(
+      guard.decide({
+        pathname: '/api/produtos/Bolinho',
+        token: configEditar,
+        method: 'GET',
+      }),
+    ).toBe('allow');
+  });
+
+  it('tablet fermentação não lê /api/produtos', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/produtos/Bolinho/assadeiras',
+        token: tabletFermentacao,
+        method: 'GET',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
 });

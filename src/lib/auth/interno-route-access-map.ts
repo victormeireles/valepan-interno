@@ -103,7 +103,8 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/options/embalagem',
-    requirement: modulo('interno_embalagem', 'ler'),
+    // Formulário de ordens reutiliza este endpoint para tipos/produtos.
+    requirement: anyModulo(['interno_embalagem', 'interno_ordens'], 'ler'),
   },
   {
     match: 'prefix',
@@ -186,7 +187,8 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/produtos',
-    requirement: modulo('interno_config', 'administrar'),
+    // Leitura de produto/assadeiras no modal de ordens; config admin também consulta.
+    requirement: anyModulo(['interno_ordens', 'interno_config'], 'ler'),
   },
   // Flags de etiqueta por cliente (legado EtiquetaModal) — módulo etiquetas.
   {
