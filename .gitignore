@@ -8,7 +8,7 @@
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
-!.yarn/versionsimage.png
+!.yarn/versions
 
 # testing
 /coverage
@@ -24,17 +24,21 @@
 .DS_Store
 *.pem
 
-# debug
+# debug / logs locais
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
 # env files (can opt-in for committing if needed)
 .env*
 
 # credenciais locais (nunca commitar)
 .supabase.credentials.local
+
+# supabase CLI (estado local: project-ref, pooler-url, versões)
+supabase/.temp/
 
 # vercel
 .vercel
@@ -43,8 +47,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# cursor
+# cursor / agent local
 .cursor/
+.superpowers/
+.worktrees/
+
+# protótipos / handoff de design (não fazem parte do app)
+/design-system/
 
 # markdown files
 *.md
