@@ -3,8 +3,11 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { solicitarCodigoWhatsApp } from '@/app/actions/whatsapp-auth-actions';
+import { LoginErrorMessageResolver } from '@/lib/auth/login-error-message-resolver';
 
 type Step = 'phone' | 'code';
+
+const errorResolver = new LoginErrorMessageResolver();
 
 function formatPhoneInput(value: string): string {
   const numbers = value.replace(/\D/g, '').slice(0, 11);
@@ -67,17 +70,20 @@ export function WhatsAppLoginForm() {
         callbackUrl: '/',
       });
 
+      // NextAuth coloca o error na query e zera `url` quando há erro.
       if (result?.error) {
-        setErrorMessage('Código incorreto ou expirado. Tente novamente.');
+        setErrorMessage(
+          errorResolver.resolve(result.error) ??
+            'Código incorreto ou expirado. Tente novamente.',
+        );
         return;
       }
 
       if (result?.url) {
         const url = new URL(result.url, window.location.origin);
-        if (url.searchParams.get('error') === 'SemPermissao') {
-          setErrorMessage(
-            'Sem permissão para o Sistema de Produção. Solicite acesso ao administrador.',
-          );
+        const mapped = errorResolver.resolve(url.searchParams.get('error'));
+        if (mapped) {
+          setErrorMessage(mapped);
           return;
         }
       }

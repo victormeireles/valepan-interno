@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from 'react';
 import { signIn } from 'next-auth/react';
+import { LoginErrorMessageResolver } from '@/lib/auth/login-error-message-resolver';
 import { WhatsAppLoginForm } from './whatsapp-login-form';
 
 type LoginMethod = 'whatsapp' | 'email';
@@ -11,31 +12,14 @@ type LoginFormProps = {
   email?: string;
 };
 
-function resolveLoginErrorMessage(errorCode: string | null | undefined): string | null {
-  if (errorCode === 'SemPermissao') {
-    return 'Sem permissão para o Sistema de Produção. Solicite acesso ao administrador.';
-  }
-  if (errorCode === 'UserNotFound') {
-    return 'Usuário não encontrado. Solicite acesso ao administrador.';
-  }
-  if (errorCode === 'UserInactive') {
-    return 'Conta desativada. Entre em contato com o administrador.';
-  }
-  if (errorCode === 'DatabaseError') {
-    return 'Erro ao conectar. Tente novamente.';
-  }
-  if (errorCode === 'Configuration') {
-    return 'Login temporariamente indisponível. Tente mais tarde.';
-  }
-  return null;
-}
+const errorResolver = new LoginErrorMessageResolver();
 
 export function LoginForm({ error, email }: LoginFormProps) {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('whatsapp');
   const [emailValue, setEmailValue] = useState(email ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    resolveLoginErrorMessage(error),
+    errorResolver.resolve(error),
   );
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
@@ -52,7 +36,7 @@ export function LoginForm({ error, email }: LoginFormProps) {
 
       if (result?.error) {
         setErrorMessage(
-          resolveLoginErrorMessage(result.error) ??
+          errorResolver.resolve(result.error) ??
             'Erro ao enviar link de acesso. Tente novamente.',
         );
         return;
@@ -60,8 +44,7 @@ export function LoginForm({ error, email }: LoginFormProps) {
 
       if (result?.url) {
         const url = new URL(result.url, window.location.origin);
-        const errorParam = url.searchParams.get('error');
-        const mapped = resolveLoginErrorMessage(errorParam);
+        const mapped = errorResolver.resolve(url.searchParams.get('error'));
         if (mapped) {
           setErrorMessage(mapped);
           return;
@@ -78,6 +61,15 @@ export function LoginForm({ error, email }: LoginFormProps) {
 
   return (
     <div className="space-y-5">
+      {errorMessage ? (
+        <p
+          role="alert"
+          className="rounded-[var(--radius-control)] border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg"
+        >
+          {errorMessage}
+        </p>
+      ) : null}
+
       <div className="flex gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1">
         <button
           type="button"
@@ -123,15 +115,6 @@ export function LoginForm({ error, email }: LoginFormProps) {
         <WhatsAppLoginForm />
       ) : (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
-          {errorMessage ? (
-            <p
-              role="alert"
-              className="rounded-[var(--radius-control)] border border-danger-border bg-danger-bg px-3 py-2 text-sm text-danger-fg"
-            >
-              {errorMessage}
-            </p>
-          ) : null}
-
           <div className="space-y-2">
             <label
               htmlFor="email"

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { getAuthSecret } from '@/lib/auth/auth-secret';
+import {
+  getAuthSecret,
+  getAuthTokenCookieName,
+} from '@/lib/auth/auth-secret';
 import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
 import { InternoMiddlewareGuard } from '@/lib/auth/interno-middleware-guard';
 import { InternoRouteAccessMap } from '@/lib/auth/interno-route-access-map';
@@ -25,7 +28,15 @@ function clearAuthCookies(response: NextResponse): void {
 }
 
 export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: getAuthSecret() });
+  const secureCookie = req.nextUrl.protocol === 'https:';
+  const tokenCookieName = getAuthTokenCookieName(req.nextUrl.protocol);
+  const token = await getToken({
+    req,
+    secret: getAuthSecret(),
+    cookieName: tokenCookieName,
+    salt: tokenCookieName,
+    secureCookie,
+  });
   const decision = guard.decide({
     pathname: req.nextUrl.pathname,
     token,
