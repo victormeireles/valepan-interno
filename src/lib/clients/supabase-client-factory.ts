@@ -68,8 +68,30 @@ export class SupabaseClientFactory {
   }
 }
 
-export const supabaseClientFactory = new SupabaseClientFactory();
+let sharedFactory: SupabaseClientFactory | undefined;
 
+export function getSupabaseClientFactory(): SupabaseClientFactory {
+  if (!sharedFactory) {
+    sharedFactory = new SupabaseClientFactory();
+  }
+  return sharedFactory;
+}
 
+/** Lazy proxy — evita exigir env no import de módulos. */
+export const supabaseClientFactory: SupabaseClientFactory = new Proxy(
+  {} as SupabaseClientFactory,
+  {
+    get(_target, prop) {
+      const factory = getSupabaseClientFactory();
+      const value = Reflect.get(factory, prop, factory);
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(factory)
+        : value;
+    },
+  },
+);
 
-
+/** Atalho tipado para fluxos server-side que precisam bypass de RLS. */
+export function createServiceRoleClient(): SupabaseClient<Database> {
+  return getSupabaseClientFactory().createServiceRoleClient();
+}
