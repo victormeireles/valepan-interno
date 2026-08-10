@@ -16,6 +16,7 @@ export async function middleware(req: NextRequest) {
   const decision = guard.decide({
     pathname: req.nextUrl.pathname,
     token,
+    method: req.method,
   });
 
   if (decision === 'allow') {

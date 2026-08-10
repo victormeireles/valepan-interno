@@ -114,4 +114,55 @@ describe('InternoMiddlewareGuard', () => {
       guard.decide({ pathname: '/api/upload/photo', token: ordensOnly }),
     ).toEqual({ redirect: '/?erro=sem-permissao' });
   });
+
+  const planejamentoOrdens = {
+    sub: 'user-planejamento',
+    isSystemOwner: false,
+    modulosEfetivos: { interno_ordens: 'ler' as const },
+  };
+
+  it('interno_ordens:ler + GET /api/ordens-producao permite', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/ordens-producao',
+        token: planejamentoOrdens,
+        method: 'GET',
+      }),
+    ).toBe('allow');
+  });
+
+  it('interno_ordens:ler + POST /api/ordens-producao redireciona sem-permissao', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/ordens-producao',
+        token: planejamentoOrdens,
+        method: 'POST',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
+
+  it('interno_config:editar + GET /api/config/whatsapp exige administrar', () => {
+    const configEditar = {
+      sub: 'user-config',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_config: 'editar' as const },
+    };
+    expect(
+      guard.decide({
+        pathname: '/api/config/whatsapp',
+        token: configEditar,
+        method: 'GET',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
+
+  it('tablet fermentação GET /api/painel/fermentacao permite (ler)', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/painel/fermentacao',
+        token: tabletFermentacao,
+        method: 'GET',
+      }),
+    ).toBe('allow');
+  });
 });
