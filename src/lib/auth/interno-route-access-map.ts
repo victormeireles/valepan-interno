@@ -133,6 +133,14 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/api/options/generic',
+    requirement: anyModulo(
+      ['interno_config', 'interno_etiquetas', 'interno_insumos'],
+      'ler',
+    ),
+  },
+  {
+    match: 'prefix',
     prefix: '/api/painel/saidas',
     requirement: modulo('interno_saidas', 'ler'),
   },
@@ -196,6 +204,12 @@ const ROUTE_RULES: RouteRule[] = [
     match: 'prefix',
     prefix: '/api/upload/photo',
     requirement: anyModulo(PRODUCAO_AREA_MODULOS, 'editar'),
+  },
+  // Limpeza administrativa de fotos — antes do prefixo genérico /api/photo.
+  {
+    match: 'prefix',
+    prefix: '/api/photo/cleanup',
+    requirement: modulo('interno_config', 'administrar'),
   },
   {
     match: 'prefix',

@@ -94,6 +94,7 @@ export type ReceitaSaveFailure = {
 export type ReceitaSaveResult = ReceitaSaveSuccess | ReceitaSaveFailure;
 
 export async function getReceitas(includeInactive = false) {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   let query = supabase
@@ -152,6 +153,7 @@ export async function getReceitas(includeInactive = false) {
 }
 
 export async function getReceitaDetalhes(id: string) {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data, error } = await supabase

@@ -41,22 +41,26 @@ function revalidateProdutoConfigPaths() {
 export async function getProdutosComAssadeiras(): Promise<
   ProdutoComAssadeirasResumo[]
 > {
+  await requireInternoModulo('interno_config', 'ler');
   return produtoAssadeiraResumoManager.loadAll();
 }
 
 export async function getProdutoAssadeiraResumo(
   produtoId: string,
 ): Promise<ProdutoComAssadeirasResumo | null> {
+  await requireInternoModulo('interno_config', 'ler');
   return produtoAssadeiraResumoManager.loadOne(produtoId);
 }
 
 export async function getProdutoAssadeiraRegraPreview(
   produtoId: string,
 ): Promise<AssadeiraVinculoResolvido[]> {
+  await requireInternoModulo('interno_config', 'ler');
   return produtoAssadeiraResumoManager.loadRegraPreview(produtoId);
 }
 
 export async function getAssadeirasAtivas(): Promise<Assadeira[]> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('assadeiras')
@@ -75,6 +79,7 @@ export async function getAssadeirasAtivas(): Promise<Assadeira[]> {
 export async function getProdutoAssadeiraLinks(
   produtoId: string,
 ): Promise<ProdutoAssadeiraLink[]> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('produto_assadeiras')

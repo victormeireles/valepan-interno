@@ -42,6 +42,7 @@ interface UpdateInsumoParams {
 }
 
 export async function getInsumos(includeInactive = false) {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   let query = supabase
@@ -72,6 +73,7 @@ export async function getInsumos(includeInactive = false) {
 }
 
 export async function getIntegracoesInsumo(insumoId: string) {
+  await requireInternoModulo('interno_config', 'ler');
   try {
     return await insumoMapeamentoRepository.listByInsumo(insumoId);
   } catch (error) {
@@ -83,6 +85,7 @@ export async function getIntegracoesInsumo(insumoId: string) {
 export async function getVinculosOmieAssociadosPorInsumos(): Promise<
   Record<string, IntegracaoInsumoComEmpresa[]>
 > {
+  await requireInternoModulo('interno_config', 'ler');
   try {
     return await insumoMapeamentoRepository.listVinculosAgrupadosPorInsumo();
   } catch (error) {
@@ -94,6 +97,7 @@ export async function getVinculosOmieAssociadosPorInsumos(): Promise<
 export async function getReceitasAssociadasPorInsumos(): Promise<
   Record<string, InsumoReceitaAssociacao[]>
 > {
+  await requireInternoModulo('interno_config', 'ler');
   try {
     return await receitaIngredienteRepository.listAssociacoesAgrupadasPorInsumo();
   } catch (error) {
@@ -103,6 +107,7 @@ export async function getReceitasAssociadasPorInsumos(): Promise<
 }
 
 export async function getReceitasPorInsumo(insumoId: string): Promise<InsumoReceitaAssociacao[]> {
+  await requireInternoModulo('interno_config', 'ler');
   try {
     return await receitaIngredienteRepository.listAssociacoesPorInsumo(insumoId);
   } catch (error) {
@@ -112,6 +117,7 @@ export async function getReceitasPorInsumo(insumoId: string): Promise<InsumoRece
 }
 
 export async function getInsumoById(id: string) {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data, error } = await supabase

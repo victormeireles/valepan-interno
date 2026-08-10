@@ -78,4 +78,20 @@ describe('InternoRouteAccessMap', () => {
     expect(map.resolve('/api/upload/producao-photo')).toEqual(expected);
     expect(map.resolve('/api/photo/raw/1')).toEqual(expected);
   });
+
+  it('photo/cleanup exige administrar em config (não chão)', () => {
+    expect(map.resolve('/api/photo/cleanup')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_config',
+      minimo: 'administrar',
+    });
+  });
+
+  it('options/generic exige anyModulo dos consumidores de catálogo', () => {
+    expect(map.resolve('/api/options/generic')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_config', 'interno_etiquetas', 'interno_insumos'],
+      minimo: 'ler',
+    });
+  });
 });

@@ -165,4 +165,54 @@ describe('InternoMiddlewareGuard', () => {
       }),
     ).toBe('allow');
   });
+
+  it('tablet fermentação não limpa fotos (cleanup é config)', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/photo/cleanup',
+        token: tabletFermentacao,
+        method: 'POST',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
+
+  it('interno_config:administrar + POST /api/photo/cleanup permite', () => {
+    const configAdmin = {
+      sub: 'user-config-admin',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_config: 'administrar' as const },
+    };
+    expect(
+      guard.decide({
+        pathname: '/api/photo/cleanup',
+        token: configAdmin,
+        method: 'POST',
+      }),
+    ).toBe('allow');
+  });
+
+  it('tablet fermentação não chama options/generic', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/options/generic',
+        token: tabletFermentacao,
+        method: 'GET',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
+
+  it('interno_etiquetas:ler + GET /api/options/generic permite', () => {
+    const etiquetas = {
+      sub: 'user-etiquetas',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_etiquetas: 'ler' as const },
+    };
+    expect(
+      guard.decide({
+        pathname: '/api/options/generic',
+        token: etiquetas,
+        method: 'GET',
+      }),
+    ).toBe('allow');
+  });
 });

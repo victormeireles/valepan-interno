@@ -116,6 +116,7 @@ async function findDuplicateRegra(
 }
 
 export async function getCategoriasAtivas(): Promise<CategoriaOption[]> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('categorias')
@@ -134,6 +135,7 @@ export async function getCategoriasAtivas(): Promise<CategoriaOption[]> {
 export async function getCategoriaAssadeiraRegras(
   includeInactive = true,
 ): Promise<CategoriaAssadeiraRegra[]> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   let query = supabase
     .from('categoria_assadeira_regras')

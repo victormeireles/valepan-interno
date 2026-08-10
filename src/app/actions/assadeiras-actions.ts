@@ -29,6 +29,7 @@ type ActionResult<T = Assadeira> =
 export async function getAssadeiras(
   includeInactive = true,
 ): Promise<Assadeira[]> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   let query = supabase
     .from('assadeiras')

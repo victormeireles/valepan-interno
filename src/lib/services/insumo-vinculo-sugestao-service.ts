@@ -12,7 +12,7 @@ import type {
 } from '@/domain/insumos/insumo-vinculo-sugestao';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
-import { getInsumos } from '@/app/actions/insumos-actions';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { insumoVinculoIaClient } from '@/lib/services/insumo-vinculo-ia-client';
 
 const FUZZY_AUTO_THRESHOLD = 0.82;
@@ -106,14 +106,41 @@ function toGrupo(
 }
 
 async function loadCatalogo(): Promise<InsumoCatalogoItem[]> {
-  const insumos = await getInsumos(false);
-  return insumos.map((insumo) => ({
-    id: insumo.id,
-    nome: insumo.nome,
-    unidadeCodigo: insumo.unidades?.codigo ?? '',
-    unidadeNome: insumo.unidades?.nome_resumido ?? insumo.unidades?.nome ?? '',
-    custoUnitario: insumo.custo_unitario,
-  }));
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('insumos')
+    .select(
+      `
+      id,
+      nome,
+      custo_unitario,
+      unidades (
+        nome,
+        nome_resumido,
+        codigo
+      )
+    `,
+    )
+    .eq('ativo', true)
+    .order('nome', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao carregar catálogo de insumos:', error);
+    return [];
+  }
+
+  return (data ?? []).map((insumo) => {
+    const unidades = Array.isArray(insumo.unidades)
+      ? insumo.unidades[0]
+      : insumo.unidades;
+    return {
+      id: insumo.id,
+      nome: insumo.nome,
+      unidadeCodigo: unidades?.codigo ?? '',
+      unidadeNome: unidades?.nome_resumido ?? unidades?.nome ?? '',
+      custoUnitario: insumo.custo_unitario,
+    };
+  });
 }
 
 export class InsumoVinculoSugestaoService {

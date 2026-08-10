@@ -17,6 +17,7 @@ export type CategoriaVisibilidadeConfig = CategoriaVisibilidadeRow;
 export async function getCategoriasVisibilidadeEmbalagem(): Promise<
   CategoriaVisibilidadeConfig[]
 > {
+  await requireInternoModulo('interno_config', 'ler');
   return categoriaVisibilidadeManager.listCategoriasAtivasComVisibilidade();
 }
 

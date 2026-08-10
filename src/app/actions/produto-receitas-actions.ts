@@ -33,6 +33,7 @@ export interface ProdutoResumoComReceitas {
 }
 
 export async function getProdutosComReceitas() {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data: produtos, error: produtosError } = await supabase
@@ -98,6 +99,7 @@ export async function getProdutosComReceitas() {
 export async function getProdutoReceitasVinculadas(
   produtoId: string,
 ): Promise<ProdutoResumoComReceitas['receitas_vinculadas']> {
+  await requireInternoModulo('interno_config', 'ler');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data: vinculos, error } = await supabase
