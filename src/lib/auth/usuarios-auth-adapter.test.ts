@@ -181,6 +181,39 @@ describe('createUsuariosAuthAdapter', () => {
     await expect(adapter.getUserByEmail!('x@valepan.com')).resolves.toBeNull();
   });
 
+  it('createVerificationToken persiste token.expires do Auth.js', async () => {
+    const authExpires = new Date('2026-08-10T18:00:00.000Z');
+    let insertedExpires: string | undefined;
+
+    const adapter = createUsuariosAuthAdapter({
+      createClient: () =>
+        asClient(
+          new FakeSupabase({
+            verification_tokens: ({ insertPayload }) => {
+              insertedExpires = (insertPayload as { expires: string }).expires;
+              return {
+                data: insertPayload,
+                error: null,
+              };
+            },
+          }),
+        ),
+    });
+
+    const created = await adapter.createVerificationToken!({
+      identifier: 'ops@valepan.com',
+      token: 'tok-1',
+      expires: authExpires,
+    });
+
+    expect(insertedExpires).toBe(authExpires.toISOString());
+    expect(created).toEqual({
+      identifier: 'ops@valepan.com',
+      token: 'tok-1',
+      expires: authExpires,
+    });
+  });
+
   it('useVerificationToken remove token válido e retorna dados', async () => {
     const deleteSpy = vi.fn();
     const expires = new Date(Date.now() + 60_000).toISOString();

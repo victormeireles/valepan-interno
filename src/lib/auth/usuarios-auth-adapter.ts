@@ -145,7 +145,10 @@ export function createUsuariosAuthAdapter(
 
     async createVerificationToken(token) {
       const supabase = asLoose(createClient());
-      const expiresDate = new Date(Date.now() + 60 * 60 * 1000);
+      const expiresDate =
+        token.expires instanceof Date
+          ? token.expires
+          : new Date(token.expires);
 
       const { data, error } = await supabase
         .from('verification_tokens')
