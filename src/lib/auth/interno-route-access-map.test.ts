@@ -62,4 +62,20 @@ describe('InternoRouteAccessMap', () => {
   it('rotas de UI não mapeadas exigem só porta do app', () => {
     expect(map.resolve('/pagina-nova')).toEqual({ kind: 'app' });
   });
+
+  it('APIs de foto exigem anyModulo das áreas de produção', () => {
+    const expected = {
+      kind: 'anyModulo',
+      modulos: [
+        'interno_fermentacao',
+        'interno_forno',
+        'interno_embalagem',
+        'interno_saidas',
+      ],
+      minimo: 'editar',
+    };
+    expect(map.resolve('/api/upload/photo')).toEqual(expected);
+    expect(map.resolve('/api/upload/producao-photo')).toEqual(expected);
+    expect(map.resolve('/api/photo/raw/1')).toEqual(expected);
+  });
 });

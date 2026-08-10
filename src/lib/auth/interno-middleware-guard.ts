@@ -57,6 +57,15 @@ export class InternoMiddlewareGuard {
       }
     }
 
+    if (requirement.kind === 'anyModulo') {
+      const temAlgum = requirement.modulos.some((modulo) =>
+        this.accessManager.temModulo(snap, modulo, requirement.minimo),
+      );
+      if (!temAlgum) {
+        return { redirect: '/?erro=sem-permissao' };
+      }
+    }
+
     return 'allow';
   }
 

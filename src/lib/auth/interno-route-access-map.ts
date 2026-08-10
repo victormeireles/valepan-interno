@@ -2,6 +2,7 @@ import type { InternoModuloId, NivelModulo } from './interno-modulos-catalog';
 
 export type InternoRouteRequirement =
   | { kind: 'modulo'; modulo: InternoModuloId; minimo: NivelModulo }
+  | { kind: 'anyModulo'; modulos: InternoModuloId[]; minimo: NivelModulo }
   | { kind: 'app' }
   | { kind: 'public' };
 
@@ -9,6 +10,18 @@ type ModuloRequirement = Extract<
   InternoRouteRequirement,
   { kind: 'modulo' }
 >;
+
+type AnyModuloRequirement = Extract<
+  InternoRouteRequirement,
+  { kind: 'anyModulo' }
+>;
+
+const PRODUCAO_AREA_MODULOS: InternoModuloId[] = [
+  'interno_fermentacao',
+  'interno_forno',
+  'interno_embalagem',
+  'interno_saidas',
+];
 
 type RouteRule =
   | { match: 'prefix'; prefix: string; requirement: InternoRouteRequirement }
@@ -19,6 +32,13 @@ function modulo(
   minimo: NivelModulo,
 ): ModuloRequirement {
   return { kind: 'modulo', modulo: moduloId, minimo };
+}
+
+function anyModulo(
+  modulos: InternoModuloId[],
+  minimo: NivelModulo,
+): AnyModuloRequirement {
+  return { kind: 'anyModulo', modulos, minimo };
 }
 
 /**
@@ -170,17 +190,17 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/upload/producao-photo',
-    requirement: modulo('interno_embalagem', 'editar'),
+    requirement: anyModulo(PRODUCAO_AREA_MODULOS, 'editar'),
   },
   {
     match: 'prefix',
     prefix: '/api/upload/photo',
-    requirement: modulo('interno_saidas', 'editar'),
+    requirement: anyModulo(PRODUCAO_AREA_MODULOS, 'editar'),
   },
   {
     match: 'prefix',
     prefix: '/api/photo',
-    requirement: modulo('interno_saidas', 'editar'),
+    requirement: anyModulo(PRODUCAO_AREA_MODULOS, 'editar'),
   },
 
   // —— Páginas UI ——

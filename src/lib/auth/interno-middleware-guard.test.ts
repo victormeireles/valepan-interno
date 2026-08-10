@@ -68,4 +68,50 @@ describe('InternoMiddlewareGuard', () => {
       }),
     ).toEqual({ redirect: '/?erro=sem-permissao' });
   });
+
+  it('tablet fermentação faz upload de foto de produção', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/upload/photo',
+        token: tabletFermentacao,
+      }),
+    ).toBe('allow');
+    expect(
+      guard.decide({
+        pathname: '/api/upload/producao-photo',
+        token: tabletFermentacao,
+      }),
+    ).toBe('allow');
+    expect(
+      guard.decide({
+        pathname: '/api/photo/abc',
+        token: tabletFermentacao,
+      }),
+    ).toBe('allow');
+  });
+
+  it('sem token em upload de foto redireciona para login', () => {
+    expect(
+      guard.decide({ pathname: '/api/upload/photo', token: null }),
+    ).toEqual({
+      redirect: `/login?callbackUrl=${encodeURIComponent('/api/upload/photo')}`,
+    });
+  });
+
+  it('token sem módulos em upload de foto redireciona para sem-acesso', () => {
+    expect(
+      guard.decide({ pathname: '/api/upload/photo', token: semModulos }),
+    ).toEqual({ redirect: '/sem-acesso' });
+  });
+
+  it('usuário só com ordens não faz upload de foto de produção', () => {
+    const ordensOnly = {
+      sub: 'user-ordens',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_ordens: 'editar' as const },
+    };
+    expect(
+      guard.decide({ pathname: '/api/upload/photo', token: ordensOnly }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
 });
