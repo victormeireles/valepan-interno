@@ -1,0 +1,170 @@
+# Design: controle de acesso — Valepan Interno
+
+**Data:** 2026-08-10  
+**Status:** aprovado em brainstorming; aguardando review do arquivo  
+**Repo:** Valepan Interno (este)  
+**Pré-requisito (Pedidos, feito):** módulos `interno_*`, seeds de tablet/planejamento, docs em `docs/auth/modulos-e-perfis.md` e runbook de tablet no repo valepan-pedidos
+
+## 1. Objetivo
+
+Fechar o Sistema Interno de Produção, hoje aberto na UI, com:
+
+1. Login (mesma identidade do Pedidos)
+2. Porta de entrada (≥1 módulo `interno_*` ou owner)
+3. Gates por área (rota/action ↔ módulo × nível)
+
+Admin de usuários/perfis permanece **somente no Pedidos**. O Interno só consome `modulosEfetivos`.
+
+### Sucesso da v1
+
+- Sem sessão → não acessa telas do app
+- Cliente/portal ou interno sem módulo `interno_*` → `/sem-acesso`
+- Tablet Fermentação acessa fermentação (e painel em ler) e **não** acessa `/config`
+- Escritório com perfil adequado vê hub filtrado e rotas permitidas
+- APIs máquina (`/api/public/*`, cron) continuam com API key / `CRON_SECRET`
+
+## 2. Contexto e decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Quem acessa | Equipe interna + tablets por área; não clientes; operadores de chão sem usuário individual |
+| Granularidade v1 | Porta + papéis por área (não ACL por botão) |
+| Identidade | Mesma conta do ecossistema Pedidos (`usuarios` + identidades/perfis) |
+| Onde admin ACL | Só Pedidos (`/admin/usuarios`, `/admin/perfis`) |
+| Onde login/sessão/gates | Este app (Interno) |
+| Entrega v1 | **A**: login + middleware + hub filtrado + gates por módulo |
+| Auth stack | NextAuth (Auth.js) fino; não copiar monólito `lib/auth` do Pedidos |
+| Login v1 | Magic link (e-mail), alinhado ao Pedidos (não há senha em `usuarios`) |
+| Sessão tablet | Sessão longa aceitável; PIN/senha = fase 2 |
+| Dados após gate | Continua service role no servidor; RLS fino = fase 2 |
+| SSO Pedidos↔Interno | Fora da v1 |
+| `types/database.ts` | Atualizar no Interno na implementação (está desatualizado vs banco compartilhado) |
+
+## 3. Arquitetura
+
+```text
+Browser → middleware (sessão?)
+        → /login (magic link) | app
+             ↓
+        Session JWT: userId, nome, isSystemOwner, modulosEfetivos (interno_*)
+             ↓
+        InternoAccessManager.temModulo / requireModulo
+             ↓
+        Server Action / page → service role → Supabase
+```
+
+- Cookie/sessão **próprios** do domínio do Interno (não compartilham cookie com Pedidos na v1).
+- Authz carregada nos callbacks JWT/session (mesmo espírito de `loadUsuarioAuthz` do Pedidos).
+- Mudança de perfil no Pedidos exige **novo login** no Interno para refletir (igual Pedidos).
+
+### Fora de escopo (v1)
+
+- Painel de usuários/perfis no Interno
+- Endpoint opcional de authz no Pedidos
+- WhatsApp OTP (opcional depois, se útil)
+- PIN kiosk, SSO cross-domain
+- Substituir service role por RLS em todas as tabelas de produção
+
+## 4. Componentes (Interno)
+
+| Unidade | Responsabilidade |
+|---------|------------------|
+| Config NextAuth + route handlers | Providers (magic link/Resend), secret, pages |
+| `UsuariosAuthAdapter` | Mapear `usuarios` ↔ NextAuth (cópia mínima do padrão Pedidos) |
+| `UsuarioAuthzLoader` | Identidade `interno`, `modulosEfetivos`, `isSystemOwner`, `ativo` |
+| `InternoAccessManager` | `podeAcessarApp`, `temModulo`, `requireModulo`, owner bypass |
+| `InternoRouteAccessMap` | Prefixo de rota → módulo + nível mínimo |
+| `middleware` | Redirect login / sem-acesso; ignora public/cron/static |
+| UI `/login`, `/sem-acesso` | pt-BR operacional |
+| Hub | Filtra cards pelos módulos da sessão |
+
+Convenções do repo: classes com SRP; arquivos &lt; 500 linhas; sem misturar UI e regra de negócio.
+
+## 5. Catálogo de módulos (contrato Pedidos)
+
+IDs já no banco/catálogo Pedidos. O Interno declara o mesmo conjunto `interno_*` (constantes locais ou espelho mínimo — **sem** depender de import cross-repo na v1).
+
+| id | Rotas principais | Nível mín. v1 |
+|----|------------------|---------------|
+| `interno_fermentacao` | `/realizado/fermentacao` | editar |
+| `interno_forno` | `/realizado/forno` | editar |
+| `interno_embalagem` | `/realizado/embalagem` | editar |
+| `interno_saidas` | `/realizado/saidas` | editar |
+| `interno_painel` | `/realizado/painel-producao` | ler |
+| `interno_ordens` | `/ordens-producao` | ler (mutações exigem editar/administrar na action) |
+| `interno_etiquetas` | `/etiquetas` | ler (gerar/reimprimir exigem editar na action) |
+| `interno_insumos` | `/estoque-insumos`, `/mapeamento-insumos`, `/consumo-insumos` | ler (ajustes/mapeamento write exigem editar) |
+| `interno_estoque` | `/painel/dashboard-estoque`, `/estoque/auditoria` | ler |
+| `interno_config` | `/config` e filhos | administrar |
+
+Áreas de chão (`fermentacao` / `forno` / `embalagem` / `saidas`): página exige **editar** (tablet seed já vem com editar; evita só “espiar” a fila operacional sem perfil de operação).
+
+Regras:
+
+- Hub `/`: autenticado + (`isSystemOwner` **ou** ≥1 `interno_*`)
+- Níveis: `ler` &lt; `editar` &lt; `administrar` (quem tem nível maior passa no menor)
+- Owner (`usuarios.is_system_owner`): bypassa matriz
+- Identidade: perfis só resolvem com identidade `interno` (igual Pedidos); sem módulo `interno_*` → sem acesso ao app
+- Alinhamento com seeds Pedidos: Planejamento tem `interno_insumos`/`ordens` em ler ou acima — por isso o gate de **página** nessas rotas é `ler`, não `editar`
+
+### Exceções sem sessão de usuário
+
+| Rota | Auth |
+|------|------|
+| `/api/public/*` | API key (como hoje) |
+| `/api/cron/*` | `CRON_SECRET` (como hoje) |
+
+## 6. Fluxo, erros e sessão
+
+| Caso | Comportamento |
+|------|----------------|
+| Não logado | Redirect `/login?callbackUrl=...` |
+| Logado sem acesso ao app | `/sem-acesso` + logout |
+| Logado sem módulo da rota | Bloqueio amigável (redirect hub ou 403 com mensagem) |
+| Magic link inválido/expirado | Erro de login Auth.js |
+| `usuarios.ativo = false` | Negar no `signIn` |
+
+Sessão JWT carrega: `userId`, `nome`, `isSystemOwner`, `modulosEfetivos` (foco `interno_*`).
+
+Server Actions e handlers internos **repetem** o gate (não confiar só no middleware).
+
+## 7. Dependências de ambiente
+
+Novas/confirmadas no Interno:
+
+- `AUTH_SECRET` (ou equivalente já usado pelo Auth.js)
+- `RESEND_API_KEY` / `RESEND_FROM_EMAIL` (magic link)
+- Já existentes: `SUPABASE_URL`, `SERVICE_ROLE`, `SUPABASE_ANON_KEY` (anon não é a base do gate)
+
+Atualizar `env.example`.
+
+## 8. Testes
+
+- Unit: `InternoAccessManager` (owner, sem módulo, nível curto, nível ok)
+- Unit: `InternoRouteAccessMap` (prefixes + exclusões public/cron)
+- Smoke: persona tablet fermentação → fermentação ok, config negado
+- Middleware: redirect login vs sem-acesso (leve)
+
+## 9. Ordem de implementação (alto nível)
+
+1. Regenerar/atualizar `types/database.ts` (campos authz: `is_system_owner`, tabelas de perfis/módulos se faltarem)
+2. NextAuth + adapter + login magic link
+3. `UsuarioAuthzLoader` + sessão com `modulosEfetivos`
+4. Middleware (porta) + `/sem-acesso`
+5. `InternoRouteAccessMap` + gates em pages/actions + hub filtrado
+6. Testes + `env.example`
+7. Operacional (paralelo/humano): criar usuários tablet no Pedidos via runbook
+
+## 10. Fase 2 (explícita, não implementar agora)
+
+- PIN/senha para tablet
+- SSO entre Pedidos e Interno
+- WhatsApp OTP no Interno
+- RLS/`auth_tem_modulo` nas tabelas de produção no lugar do bypass amplo por service role
+- Refresh de authz sem re-login
+
+## 11. Referências
+
+- Pedidos: `docs/auth/modulos-e-perfis.md`, `docs/auth/runbook-usuario-tablet-interno.md`
+- Pedidos: `apps/valepan/lib/auth/modulos-catalog.ts`, `load-usuario-modulos.ts`, `perfis-seeds.ts`
+- Brief original Pedidos: `tmp/permissoes sistema interno/PRD.md` (repo Pedidos)
