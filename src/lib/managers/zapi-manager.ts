@@ -116,6 +116,28 @@ export class ZApiManager {
   }
 
   /**
+   * Envia OTP de login do Sistema de Produção.
+   */
+  async sendVerificationCode(
+    phone: string,
+    code: string,
+  ): Promise<ZApiSendMessageResponse> {
+    const message = [
+      '*Valepan — Sistema de Produção*',
+      '',
+      'Seu código de verificação é:',
+      '',
+      `*${code}*`,
+      '',
+      'Este código expira em 10 minutos.',
+      '',
+      'Não compartilhe este código com ninguém.',
+    ].join('\n');
+
+    return this.sendMessage(phone, message);
+  }
+
+  /**
    * Envia mensagem de texto via WhatsApp
    * 
    * @param phone - Número de telefone no formato +5511999999999

@@ -48,6 +48,7 @@ async function getProdutoData(nomeProduto: string) {
 
   return {
     nome: product.nome,
+    codigo: product.codigo,
     unidade: product.unidadeNomeResumido || '',
     codigoBarras: product.unitBarcode || '',
     unPorCaixa: product.boxUnits ?? 0,
@@ -126,6 +127,7 @@ function getLogoSVG(): string {
 
 function generateEtiquetaHTML(data: {
   nomeEtiqueta: string;
+  codigoProduto: string;
   dataFabricacao: string;
   dataValidade: string;
   mostrarTextoCongelado: boolean;
@@ -183,18 +185,32 @@ function generateEtiquetaHTML(data: {
     
     .logo-section {
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
+      flex-direction: row;
+      align-items: center;
+      gap: 28px;
+      flex-shrink: 0;
+      max-width: 52%;
     }
     
     .logo-container {
       width: 220px;
       height: 160px;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: flex-start;
       overflow: visible;
       position: relative;
+    }
+    
+    .produto-codigo {
+      font-size: 72px;
+      font-weight: bold;
+      color: #000;
+      line-height: 1;
+      letter-spacing: 1px;
+      white-space: nowrap;
+      text-transform: uppercase;
     }
     
     .logo-container svg {
@@ -220,7 +236,9 @@ function generateEtiquetaHTML(data: {
     
     .produto-section {
       flex: 1;
+      min-width: 0;
       text-align: right;
+      padding-left: 16px;
     }
     
     .produto-nome {
@@ -230,6 +248,7 @@ function generateEtiquetaHTML(data: {
       line-height: 1.3;
       margin-bottom: 10px;
       text-transform: uppercase;
+      overflow-wrap: anywhere;
     }
     
     .congelado-text {
@@ -412,6 +431,7 @@ function generateEtiquetaHTML(data: {
     <div class="header">
       <div class="logo-section">
         ${logoSVG ? `<div class="logo-container">${logoSVG}</div>` : '<div class="brand-name">VALEPAN</div>'}
+        ${data.codigoProduto ? `<div class="produto-codigo">${data.codigoProduto}</div>` : ''}
       </div>
       <div class="produto-section">
         <div class="produto-nome">${data.nomeEtiqueta}</div>
@@ -538,6 +558,7 @@ export async function POST(request: Request) {
     // Gerar HTML da etiqueta
     const html = generateEtiquetaHTML({
       nomeEtiqueta,
+      codigoProduto: (produtoData.codigo ?? "").trim().toUpperCase(),
       dataFabricacao: formatDate(body.dataFabricacao),
       dataValidade: formatDate(dataValidade),
       mostrarTextoCongelado: body.mostrarTextoCongelado,

@@ -67,7 +67,7 @@ export class InternoMiddlewareGuard {
     const snap = this.toSnapshot(input.token);
 
     if (!this.accessManager.podeAcessarApp(snap)) {
-      return { redirect: '/sem-acesso' };
+      return { redirect: '/login?error=SemPermissao' };
     }
 
     if (requirement.kind === 'modulo') {

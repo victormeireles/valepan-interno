@@ -11,6 +11,19 @@ const guard = new InternoMiddlewareGuard(
   new InternoAccessManager(),
 );
 
+const AUTH_COOKIE_NAMES = [
+  'authjs.session-token',
+  '__Secure-authjs.session-token',
+  'next-auth.session-token',
+  '__Secure-next-auth.session-token',
+];
+
+function clearAuthCookies(response: NextResponse): void {
+  for (const name of AUTH_COOKIE_NAMES) {
+    response.cookies.delete(name);
+  }
+}
+
 export async function middleware(req: NextRequest) {
   const token = await getToken({ req, secret: getAuthSecret() });
   const decision = guard.decide({
@@ -23,7 +36,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  return NextResponse.redirect(new URL(decision.redirect, req.url));
+  const response = NextResponse.redirect(new URL(decision.redirect, req.url));
+
+  // Sem permissão de app: encerra sessão e manda para o login.
+  if (decision.redirect.includes('error=SemPermissao')) {
+    clearAuthCookies(response);
+  }
+
+  return response;
 }
 
 export const config = {

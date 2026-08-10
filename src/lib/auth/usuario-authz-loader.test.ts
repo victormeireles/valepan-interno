@@ -20,6 +20,7 @@ class ChainableQuery {
   ) {}
 
   select(_columns: string): this {
+    void _columns;
     return this;
   }
 
@@ -29,6 +30,8 @@ class ChainableQuery {
   }
 
   order(_column: string, _options?: { ascending?: boolean }): this {
+    void _column;
+    void _options;
     return this;
   }
 

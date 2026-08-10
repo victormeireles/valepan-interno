@@ -24,7 +24,7 @@ export async function requireInternoModulo(
   const manager = new InternoAccessManager();
 
   if (!manager.podeAcessarApp(snap)) {
-    redirect('/sem-acesso');
+    redirect('/login?error=SemPermissao');
   }
 
   try {

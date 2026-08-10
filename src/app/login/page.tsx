@@ -17,7 +17,7 @@ export default async function LoginPage({
           Sistema de Produção
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          Digite seu e-mail para receber o link de acesso
+          Acesse com WhatsApp ou e-mail
         </p>
       </div>
 

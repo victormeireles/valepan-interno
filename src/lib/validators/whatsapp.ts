@@ -64,3 +64,18 @@ export const whatsappPhoneSchema = z.string()
     message: "Telefone inválido. Use o formato: (11) 99999-9999",
   });
 
+export const whatsappCodeSchema = z
+  .string()
+  .length(6, 'O código deve ter exatamente 6 dígitos')
+  .regex(/^\d{6}$/, 'O código deve conter apenas números');
+
+/** Código numérico de 6 dígitos para OTP WhatsApp. */
+export function generateVerificationCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+export function getMinutesUntilExpiration(expiresAt: Date): number {
+  const ms = expiresAt.getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 60000));
+}
+

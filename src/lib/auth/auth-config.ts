@@ -2,18 +2,22 @@ import type { NextAuthConfig } from 'next-auth';
 import { createServiceRoleClient } from '@/lib/clients/supabase-client-factory';
 import type { DatabaseComAuthz } from '@/types/database-authz';
 import { AuthSignInGate } from './auth-sign-in-gate';
+import { InternoAccessManager } from './interno-access-manager';
 import { JwtAuthzEnricher } from './jwt-authz-enricher';
 import { createMagicLinkProvider } from './magic-link-provider';
+import { UsuarioAuthzLoader } from './usuario-authz-loader';
+import { createWhatsAppProvider } from './whatsapp-provider';
 
 const signInGate = new AuthSignInGate();
 const jwtEnricher = new JwtAuthzEnricher();
+const accessManager = new InternoAccessManager();
 
 function serviceClient() {
   return createServiceRoleClient() as unknown as import('@supabase/supabase-js').SupabaseClient<DatabaseComAuthz>;
 }
 
 export const authConfig: NextAuthConfig = {
-  providers: [createMagicLinkProvider()],
+  providers: [createMagicLinkProvider(), createWhatsAppProvider()],
   pages: {
     signIn: '/login',
     verifyRequest: '/login/verify',
@@ -54,7 +58,16 @@ export const authConfig: NextAuthConfig = {
           row = data;
         }
 
-        return signInGate.decide(row);
+        const gateResult = signInGate.decide(row);
+        if (gateResult !== true) return gateResult;
+        if (!row) return '/login?error=UserNotFound';
+
+        const snap = await new UsuarioAuthzLoader(supabase).load(row.id);
+        if (!snap || !accessManager.podeAcessarApp(snap)) {
+          return '/login?error=SemPermissao';
+        }
+
+        return true;
       } catch (error) {
         console.error('[AUTH] signIn callback:', error);
         return '/login?error=DatabaseError';

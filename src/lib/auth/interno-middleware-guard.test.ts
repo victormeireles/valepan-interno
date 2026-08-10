@@ -32,9 +32,9 @@ describe('InternoMiddlewareGuard', () => {
     });
   });
 
-  it('token sem módulos no hub redireciona para /sem-acesso', () => {
+  it('token sem módulos no hub redireciona para login', () => {
     expect(guard.decide({ pathname: '/', token: semModulos })).toEqual({
-      redirect: '/sem-acesso',
+      redirect: '/login?error=SemPermissao',
     });
   });
 
@@ -98,10 +98,10 @@ describe('InternoMiddlewareGuard', () => {
     });
   });
 
-  it('token sem módulos em upload de foto redireciona para sem-acesso', () => {
+  it('token sem módulos em upload de foto redireciona para login', () => {
     expect(
       guard.decide({ pathname: '/api/upload/photo', token: semModulos }),
-    ).toEqual({ redirect: '/sem-acesso' });
+    ).toEqual({ redirect: '/login?error=SemPermissao' });
   });
 
   it('usuário só com ordens não faz upload de foto de produção', () => {

@@ -26,6 +26,7 @@ class ChainableQuery {
   ) {}
 
   select(_columns?: string): this {
+    void _columns;
     return this;
   }
 

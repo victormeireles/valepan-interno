@@ -7,7 +7,7 @@ export type UsuarioSignInRow = {
 
 /**
  * Decide se o sign-in do Interno deve prosseguir.
- * Inativo/inexistente → URL de erro; ativo sem módulos → permite (middleware → /sem-acesso).
+ * Inativo/inexistente → URL de erro; ativo → permite (módulos checados no middleware/JWT).
  */
 export class AuthSignInGate {
   decide(usuario: UsuarioSignInRow | null): true | string {
