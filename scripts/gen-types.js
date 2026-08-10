@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- script Node.js CommonJS */
 const { execSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
 
@@ -23,20 +24,21 @@ if (!projectIdMatch) {
 const projectId = projectIdMatch[1];
 console.log(`🔄 Gerando tipos do Supabase para o projeto: ${projectId}`);
 
+const canonicalPath = path.join(__dirname, '..', 'src', 'types', 'database.ts');
+const mirrorPath = path.join(__dirname, '..', 'types', 'database.ts');
+
 try {
-  const outputPath = path.join(__dirname, '..', 'types', 'database.ts');
-  const command = `npx supabase gen types typescript --project-id ${projectId} > "${outputPath}"`;
-  
-  execSync(command, { stdio: 'inherit', shell: true });
-  console.log(`✅ Tipos gerados com sucesso em: ${outputPath}`);
+  const command = `npx supabase gen types typescript --project-id ${projectId}`;
+  const generatedTypes = execSync(command, { encoding: 'utf8', shell: true });
+
+  fs.mkdirSync(path.dirname(canonicalPath), { recursive: true });
+  fs.mkdirSync(path.dirname(mirrorPath), { recursive: true });
+  fs.writeFileSync(canonicalPath, generatedTypes, 'utf8');
+  fs.writeFileSync(mirrorPath, generatedTypes, 'utf8');
+
+  console.log(`✅ Tipos gerados com sucesso em: ${canonicalPath}`);
+  console.log(`✅ Espelho gravado em: ${mirrorPath}`);
 } catch (error) {
   console.error('❌ Erro ao gerar tipos:', error.message);
   process.exit(1);
 }
-
-
-
-
-
-
-
