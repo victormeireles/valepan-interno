@@ -5,6 +5,7 @@ import { AuthSignInGate } from './auth-sign-in-gate';
 import { InternoAccessManager } from './interno-access-manager';
 import { JwtAuthzEnricher } from './jwt-authz-enricher';
 import { createMagicLinkProvider } from './magic-link-provider';
+import { createQrProvider } from './qr-provider';
 import { UsuarioAuthzLoader } from './usuario-authz-loader';
 import { createWhatsAppProvider } from './whatsapp-provider';
 
@@ -17,7 +18,11 @@ function serviceClient() {
 }
 
 export const authConfig: NextAuthConfig = {
-  providers: [createMagicLinkProvider(), createWhatsAppProvider()],
+  providers: [
+    createMagicLinkProvider(),
+    createWhatsAppProvider(),
+    createQrProvider(),
+  ],
   pages: {
     signIn: '/login',
     verifyRequest: '/login/verify',

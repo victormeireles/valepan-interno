@@ -2216,6 +2216,47 @@ export type Database = {
           },
         ]
       }
+      login_qr_requests: {
+        Row: {
+          approved_at: string | null
+          consumed_at: string | null
+          created_at: string
+          exchange_token_hash: string | null
+          expires_at: string
+          id: string
+          status: string
+          usuario_id: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          exchange_token_hash?: string | null
+          expires_at: string
+          id?: string
+          status?: string
+          usuario_id?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          exchange_token_hash?: string | null
+          expires_at?: string
+          id?: string
+          status?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "login_qr_requests_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metas_diarias: {
         Row: {
           caixas_proprias_meta: number

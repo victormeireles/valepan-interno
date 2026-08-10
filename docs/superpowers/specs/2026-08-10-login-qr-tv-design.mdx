@@ -1,0 +1,29 @@
+# Login por QR (TV) — Sistema Interno
+
+Data: 2026-08-10  
+Status: implementado (portado de valepan-pedidos)
+
+## Objetivo
+
+Na tela de login de TV/PC/tablet, mostrar QR. Celular já autenticado com acesso ao Sistema de Produção escaneia e o dispositivo grande entra na mesma conta.
+
+## Fluxo
+
+1. TV: `POST /api/auth/qr/create` → pedido `pending` (~90s)
+2. QR aponta para `/login/qr/aprovar?id=<uuid>`
+3. TV faz polling `GET /api/auth/qr/status?id=` a cada ~1,5s
+4. Celular logado abre URL → aprova (sem botão extra)
+5. Poll pós-aprovação gera `exchangeToken` (uso único; só hash no banco)
+6. TV: `signIn('qr', { exchangeToken })` → sessão JWT NextAuth
+
+## Diferenças vs pedidos
+
+- Provider: `createQrProvider` (mesmo padrão do WhatsApp credentials)
+- Aprovação exige `InternoAccessManager.podeAcessarApp` (além de ativo)
+- RLS admin: `(SELECT is_admin())` (convenção do interno)
+- UI: design system Valepan (Material Icons, stone/amber)
+- Tabela compartilhada no mesmo Supabase (`login_qr_requests`)
+
+## Critério de pronto
+
+TV no browser: celular logado escaneia → TV entra na mesma conta em poucos segundos; QR expirado/reusado não autentica; WhatsApp/e-mail intactos.

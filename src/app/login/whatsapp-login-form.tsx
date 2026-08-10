@@ -18,7 +18,11 @@ function formatPhoneInput(value: string): string {
   return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
 }
 
-export function WhatsAppLoginForm() {
+type WhatsAppLoginFormProps = {
+  callbackUrl?: string;
+};
+
+export function WhatsAppLoginForm({ callbackUrl = '/' }: WhatsAppLoginFormProps) {
   const [step, setStep] = useState<Step>('phone');
   const [telefone, setTelefone] = useState('');
   const [codigo, setCodigo] = useState('');
@@ -67,7 +71,7 @@ export function WhatsAppLoginForm() {
         telefone,
         codigo,
         redirect: false,
-        callbackUrl: '/',
+        callbackUrl,
       });
 
       // NextAuth coloca o error na query e zera `url` quando há erro.
@@ -89,7 +93,7 @@ export function WhatsAppLoginForm() {
       }
 
       if (result?.ok) {
-        window.location.href = '/';
+        window.location.href = callbackUrl;
       }
     } catch {
       setErrorMessage('Erro inesperado. Tente novamente.');

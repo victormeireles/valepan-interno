@@ -3,7 +3,7 @@ import { LoginForm } from './login-form';
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; email?: string }>;
+  searchParams: Promise<{ error?: string; email?: string; callbackUrl?: string }>;
 }) {
   const params = await searchParams;
 
@@ -17,12 +17,16 @@ export default async function LoginPage({
           Sistema de Produção
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          Acesse com WhatsApp ou e-mail
+          Acesse com WhatsApp, e-mail ou QR
         </p>
       </div>
 
       <div className="rounded-xl border border-border-default bg-surface p-6 shadow-sm">
-        <LoginForm error={params.error} email={params.email} />
+        <LoginForm
+          error={params.error}
+          email={params.email}
+          callbackUrl={params.callbackUrl}
+        />
       </div>
 
       <p className="mt-6 text-center text-sm text-text-muted">

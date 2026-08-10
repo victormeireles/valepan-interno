@@ -2,19 +2,24 @@
 
 import { type FormEvent, useState } from 'react';
 import { signIn } from 'next-auth/react';
+import { LoginCallbackUrlResolver } from '@/lib/auth/login-callback-url-resolver';
 import { LoginErrorMessageResolver } from '@/lib/auth/login-error-message-resolver';
+import { LoginQrCodePanel } from './login-qr-code-panel';
 import { WhatsAppLoginForm } from './whatsapp-login-form';
 
-type LoginMethod = 'whatsapp' | 'email';
+type LoginMethod = 'whatsapp' | 'email' | 'qr';
 
 type LoginFormProps = {
   error?: string;
   email?: string;
+  callbackUrl?: string;
 };
 
 const errorResolver = new LoginErrorMessageResolver();
+const callbackResolver = new LoginCallbackUrlResolver();
 
-export function LoginForm({ error, email }: LoginFormProps) {
+export function LoginForm({ error, email, callbackUrl }: LoginFormProps) {
+  const resolvedCallback = callbackResolver.resolve(callbackUrl, '/');
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('whatsapp');
   const [emailValue, setEmailValue] = useState(email ?? '');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +36,7 @@ export function LoginForm({ error, email }: LoginFormProps) {
       const result = await signIn('email', {
         email: emailValue.trim(),
         redirect: false,
-        callbackUrl: '/',
+        callbackUrl: resolvedCallback,
       });
 
       if (result?.error) {
@@ -109,11 +114,31 @@ export function LoginForm({ error, email }: LoginFormProps) {
           </span>
           E-mail
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setLoginMethod('qr');
+            setErrorMessage(null);
+          }}
+          className={[
+            'inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[calc(var(--radius-control)-2px)] text-sm font-semibold transition',
+            loginMethod === 'qr'
+              ? 'bg-surface text-text-strong shadow-sm'
+              : 'text-text-muted hover:text-text-strong',
+          ].join(' ')}
+          aria-pressed={loginMethod === 'qr'}
+        >
+          <span className="material-icons text-base" aria-hidden>
+            qr_code_2
+          </span>
+          QR
+        </button>
       </div>
 
       {loginMethod === 'whatsapp' ? (
-        <WhatsAppLoginForm />
-      ) : (
+        <WhatsAppLoginForm callbackUrl={resolvedCallback} />
+      ) : null}
+      {loginMethod === 'email' ? (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           <div className="space-y-2">
             <label
@@ -154,7 +179,8 @@ export function LoginForm({ error, email }: LoginFormProps) {
             {isLoading ? 'Enviando…' : 'Enviar link de acesso'}
           </button>
         </form>
-      )}
+      ) : null}
+      {loginMethod === 'qr' ? <LoginQrCodePanel /> : null}
     </div>
   );
 }
