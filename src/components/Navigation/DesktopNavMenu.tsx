@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { MainNavGroup, MainNavLink } from '@/config/main-nav-config';
-import { MAIN_NAV_ENTRIES } from '@/config/main-nav-config';
+import type {
+  MainNavEntry,
+  MainNavGroup,
+  MainNavLink,
+} from '@/config/main-nav-config';
 import {
   DESKTOP_NAV_TRIGGER_CLASS,
   DROPDOWN_MENU_CLASS,
@@ -16,6 +19,7 @@ import {
 
 type DesktopNavMenuProps = {
   pathname: string;
+  entries: MainNavEntry[];
 };
 
 function DesktopNavLink({ item, active }: { item: MainNavLink; active: boolean }) {
@@ -108,7 +112,10 @@ function DesktopNavDropdown({
   );
 }
 
-export default function DesktopNavMenu({ pathname }: DesktopNavMenuProps) {
+export default function DesktopNavMenu({
+  pathname,
+  entries,
+}: DesktopNavMenuProps) {
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
 
@@ -141,7 +148,7 @@ export default function DesktopNavMenu({ pathname }: DesktopNavMenuProps) {
       aria-label="Principal"
       className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex"
     >
-      {MAIN_NAV_ENTRIES.map((entry) => {
+      {entries.map((entry) => {
         if (entry.type === 'link') {
           return (
             <DesktopNavLink

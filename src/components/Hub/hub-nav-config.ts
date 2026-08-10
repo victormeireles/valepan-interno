@@ -1,8 +1,11 @@
+import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+
 export interface HubNavItem {
   href: string;
   title: string;
   description: string;
   icon: string;
+  moduloId: InternoModuloId;
 }
 
 export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
@@ -11,30 +14,35 @@ export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
     title: 'Fermentação',
     description: 'Registro de produção da fermentação',
     icon: 'bakery_dining',
+    moduloId: 'interno_fermentacao',
   },
   {
     href: '/realizado/forno',
     title: 'Forno',
     description: 'Registro de produção do forno',
     icon: 'local_fire_department',
+    moduloId: 'interno_forno',
   },
   {
     href: '/realizado/embalagem',
     title: 'Embalagem',
     description: 'Registro de produção da embalagem',
     icon: 'inventory_2',
+    moduloId: 'interno_embalagem',
   },
   {
     href: '/realizado/saidas',
     title: 'Saídas',
     description: 'Controle de saídas com meta e foto',
     icon: 'local_shipping',
+    moduloId: 'interno_saidas',
   },
   {
     href: '/realizado/painel-producao',
     title: 'Painel',
     description: 'Visão unificada de fermentação, forno e embalagem',
     icon: 'monitor',
+    moduloId: 'interno_painel',
   },
 ];
 
@@ -44,41 +52,48 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     title: 'Ordens de Produção',
     description: 'Fila e planejamento do dia',
     icon: 'list_alt',
+    moduloId: 'interno_ordens',
   },
   {
     href: '/etiquetas',
     title: 'Etiquetas',
     description: 'Fila de etiquetas e reimpressão',
     icon: 'label',
+    moduloId: 'interno_etiquetas',
   },
   {
     href: '/estoque-insumos',
     title: 'Estoque de insumos',
     description: 'Saldos, histórico e ajustes manuais',
     icon: 'grain',
+    moduloId: 'interno_insumos',
   },
   {
     href: '/mapeamento-insumos',
     title: 'Mapeamento de insumos',
     description: 'Vínculos Omie, pendências de NF e sugestões com IA',
     icon: 'link',
+    moduloId: 'interno_insumos',
   },
   {
     href: '/consumo-insumos',
     title: 'Consumo de insumos',
     description: 'Tabela semanal de saídas do estoque de insumos',
     icon: 'query_stats',
+    moduloId: 'interno_insumos',
   },
   {
     href: '/painel/dashboard-estoque',
     title: 'Estoque',
     description: 'Dashboards em TV e monitor',
     icon: 'inventory',
+    moduloId: 'interno_estoque',
   },
   {
     href: '/config',
     title: 'Configurações',
     description: 'Assadeiras, produtos, insumos e mais',
     icon: 'settings',
+    moduloId: 'interno_config',
   },
 ];

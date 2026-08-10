@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import {
   parseCategoriaAssadeiraRegraForm,
@@ -217,6 +219,7 @@ async function persistRegra(
 export async function createCategoriaAssadeiraRegra(
   input: unknown,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseCategoriaAssadeiraRegraForm(input);
   if (!parsed.success) {
     return {
@@ -232,6 +235,7 @@ export async function updateCategoriaAssadeiraRegra(
   id: string,
   input: unknown,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseCategoriaAssadeiraRegraForm(input);
   if (!parsed.success) {
     return {
@@ -246,6 +250,7 @@ export async function updateCategoriaAssadeiraRegra(
 export async function deactivateCategoriaAssadeiraRegra(
   id: string,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('categoria_assadeira_regras')

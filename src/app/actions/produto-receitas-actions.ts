@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
 
@@ -138,6 +140,7 @@ export async function getProdutoReceitasVinculadas(
 }
 
 export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -212,6 +215,7 @@ export async function updateProdutoReceita(
   id: string,
   quantidade: number,
 ) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -235,6 +239,7 @@ export async function updateProdutoReceita(
 }
 
 export async function unlinkProdutoReceita(id: string) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {

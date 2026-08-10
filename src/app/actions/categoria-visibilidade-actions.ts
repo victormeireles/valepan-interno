@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import {
   categoriaVisibilidadeManager,
@@ -22,6 +24,7 @@ export async function updateCategoriaVisivelEmbalagem(
   categoriaId: string,
   visivel: boolean,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   try {
     await categoriaVisibilidadeManager.updateVisivelEmbalagem(categoriaId, visivel);
     revalidatePath('/realizado/embalagem');

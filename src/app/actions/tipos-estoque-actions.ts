@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import {
   parseTipoEstoqueForm,
@@ -41,6 +43,7 @@ function mapRecord(record: TipoEstoqueAdminRecord): TipoEstoqueAdmin {
 export async function listTiposEstoqueAdmin(
   includeInactive = true,
 ): Promise<TipoEstoqueAdmin[]> {
+  await requireInternoModulo('interno_config', 'administrar');
   try {
     const records = await tiposEstoqueAdminService.list(includeInactive);
     return records.map(mapRecord);
@@ -76,6 +79,7 @@ async function persistTipoEstoque(
 }
 
 export async function createTipoEstoque(input: unknown): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseTipoEstoqueForm(input);
   if (!parsed.success) {
     return {
@@ -91,6 +95,7 @@ export async function updateTipoEstoque(
   id: string,
   input: unknown,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseTipoEstoqueForm(input);
   if (!parsed.success) {
     return {
@@ -103,6 +108,7 @@ export async function updateTipoEstoque(
 }
 
 export async function deactivateTipoEstoque(id: string): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   try {
     const record = await tiposEstoqueAdminService.deactivate(id);
     revalidatePath('/config/tipos-estoque');

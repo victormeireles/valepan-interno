@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { insumoConsumoRepository } from '@/data/insumos/InsumoConsumoRepository';
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoConsumoCoberturaCalculator } from '@/domain/insumos/insumo-consumo-cobertura-calculator';
@@ -30,6 +32,7 @@ export type InsumoConsumoSemanalPageData = {
 export async function getInsumoConsumoSemanalPageData(
   input?: InsumoConsumoPeriodoInput,
 ): Promise<InsumoConsumoSemanalPageData> {
+  await requireInternoModulo('interno_insumos', 'ler');
   const periodo = resolveConsumoSemanalPeriodo(input);
   const itemsBrutos = await insumoConsumoRepository.listConsumoSemanal(periodo);
   const items = insumoControleEstoqueFilter.filterPorNomeControlavel(itemsBrutos);
@@ -67,6 +70,7 @@ export async function getInsumoConsumoSemanalPageData(
 export async function getInsumoConsumoDetalhesPorProduto(
   input: InsumoConsumoPeriodoInput & { insumoId: string },
 ): Promise<InsumoConsumoReceitaDetalhe[]> {
+  await requireInternoModulo('interno_insumos', 'ler');
   const periodo = resolveConsumoSemanalPeriodo(input);
   return insumoConsumoRepository.listConsumoDetalhesPorProduto({
     insumoId: input.insumoId,

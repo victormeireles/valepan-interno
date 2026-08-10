@@ -1,16 +1,25 @@
-'use client';
+import { auth } from '@/lib/auth';
+import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
+import { sessionToAuthzSnapshot } from '@/lib/auth/session-authz-snapshot';
+import { filterMainNavEntries } from '@/config/filter-main-nav-entries';
+import { MAIN_NAV_ENTRIES } from '@/config/main-nav-config';
+import ConditionalNavigationClient from '@/components/ConditionalNavigationClient';
 
-import { usePathname } from 'next/navigation';
-import Navigation from './Navigation';
+export default async function ConditionalNavigation() {
+  const session = await auth();
+  const snap = session?.user?.id
+    ? sessionToAuthzSnapshot(session)
+    : {
+        isSystemOwner: false,
+        identidades: [] as string[],
+        modulosEfetivos: {},
+      };
 
-const AUTH_PATH_PREFIXES = ['/login', '/sem-acesso'];
-
-export default function ConditionalNavigation() {
-  const pathname = usePathname();
-  const hideNav = AUTH_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  const entries = filterMainNavEntries(
+    MAIN_NAV_ENTRIES,
+    snap,
+    new InternoAccessManager(),
   );
 
-  if (hideNav) return null;
-  return <Navigation />;
+  return <ConditionalNavigationClient entries={entries} />;
 }

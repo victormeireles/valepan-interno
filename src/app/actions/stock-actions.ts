@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { estoqueService } from '@/lib/services/estoque-service';
@@ -56,6 +58,7 @@ export type RegisterOutflowInput = z.infer<typeof registerOutflowSchema>;
 export type CreateStockInput = z.infer<typeof createStockSchema>;
 
 export async function adjustStockAction(input: AdjustStockInput) {
+  await requireInternoModulo('interno_estoque', 'editar');
   const payload = adjustStockSchema.parse(input);
   const estoqueAtual = await estoqueService.obterEstoqueCliente(
     payload.estoqueNome,
@@ -79,6 +82,7 @@ export async function adjustStockAction(input: AdjustStockInput) {
 }
 
 export async function registerOutflowAction(input: RegisterOutflowInput) {
+  await requireInternoModulo('interno_estoque', 'editar');
   const payload = registerOutflowSchema.parse(input);
 
   await saidaMovimentoService.registrarSaida({
@@ -108,6 +112,7 @@ export async function registerOutflowAction(input: RegisterOutflowInput) {
 export async function getClientsForStockLocationAction(
   estoqueNome: string,
 ) {
+  await requireInternoModulo('interno_estoque', 'ler');
   const { estoqueNome: nomeValidado } = stockLocationSchema.parse({
     estoqueNome,
   });
@@ -136,6 +141,7 @@ export async function checkStockExistsAction(
   estoqueNome: string,
   produto: string,
 ): Promise<{ exists: boolean; currentQuantity: Quantidade | null }> {
+  await requireInternoModulo('interno_estoque', 'ler');
   const { estoqueNome: nomeValidado } = stockLocationSchema.parse({
     estoqueNome,
   });
@@ -157,6 +163,7 @@ export async function checkStockExistsAction(
 }
 
 export async function createStockAction(input: CreateStockInput) {
+  await requireInternoModulo('interno_estoque', 'editar');
   const payload = createStockSchema.parse(input);
   const produtoNormalizado = payload.produto.trim();
 
@@ -180,11 +187,13 @@ export async function createStockAction(input: CreateStockInput) {
 }
 
 export async function getStockTypesAction(): Promise<Array<{ nome: string }>> {
+  await requireInternoModulo('interno_estoque', 'ler');
   const tipos = await tiposEstoqueService.listTiposEstoque();
   return tipos.map((tipo) => ({ nome: tipo.nome }));
 }
 
 export async function getProductsAction(): Promise<Array<{ nome: string }>> {
+  await requireInternoModulo('interno_estoque', 'ler');
   const productService = new SupabaseProductService();
   const produtos = await productService.listProducts();
   return produtos.map((produto) => ({ nome: produto.nome }));

@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import { insumoFornecedorIgnoradoRepository } from '@/data/insumos/InsumoFornecedorIgnoradoRepository';
 import { insumoFornecedorIgnoradoManager } from '@/lib/services/insumo-fornecedor-ignorado-manager';
@@ -11,6 +13,7 @@ function revalidate() {
 }
 
 export async function listarFornecedoresIgnorados() {
+  await requireInternoModulo('interno_insumos', 'ler');
   return insumoFornecedorIgnoradoRepository.listAll();
 }
 
@@ -20,6 +23,7 @@ export async function marcarFornecedorIgnorado(input: {
   nome?: string | null;
   razao?: string | null;
 }) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     const result = await insumoFornecedorIgnoradoManager.marcarFornecedor(input);
     revalidate();
@@ -35,6 +39,7 @@ export async function desmarcarFornecedorIgnorado(input: {
   cnpj: string;
   restaurarPendencias: boolean;
 }) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     const result = await insumoFornecedorIgnoradoManager.desmarcarFornecedor(input);
     revalidate();

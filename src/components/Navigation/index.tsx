@@ -6,10 +6,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import DesktopNavMenu from '@/components/Navigation/DesktopNavMenu';
 import MobileNavMenu from '@/components/Navigation/MobileNavMenu';
+import type { MainNavEntry } from '@/config/main-nav-config';
 
 const SIDE_ZONE_CLASS = 'w-[5.5rem] shrink-0 sm:w-[6.5rem] lg:w-[7.5rem]';
 
-export default function Navigation() {
+type NavigationProps = {
+  entries: MainNavEntry[];
+};
+
+export default function Navigation({ entries }: NavigationProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname() ?? '';
 
@@ -52,7 +57,7 @@ export default function Navigation() {
             </Link>
           </div>
 
-          <DesktopNavMenu pathname={pathname} />
+          <DesktopNavMenu pathname={pathname} entries={entries} />
 
           <div
             className={`hidden items-center justify-end lg:flex ${SIDE_ZONE_CLASS}`}
@@ -89,7 +94,11 @@ export default function Navigation() {
         ].join(' ')}
         aria-hidden={!mobileOpen}
       >
-        <MobileNavMenu pathname={pathname} onNavigate={closeMobile} />
+        <MobileNavMenu
+          pathname={pathname}
+          entries={entries}
+          onNavigate={closeMobile}
+        />
       </aside>
     </>
   );

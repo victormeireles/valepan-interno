@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import type { MainNavGroup, MainNavLink } from '@/config/main-nav-config';
-import { MAIN_NAV_ENTRIES } from '@/config/main-nav-config';
+import type {
+  MainNavEntry,
+  MainNavGroup,
+  MainNavLink,
+} from '@/config/main-nav-config';
 
 type MobileNavMenuProps = {
   pathname: string;
+  entries: MainNavEntry[];
   onNavigate: () => void;
 };
 
@@ -108,11 +112,15 @@ function MobileNavGroup({
   );
 }
 
-export default function MobileNavMenu({ pathname, onNavigate }: MobileNavMenuProps) {
+export default function MobileNavMenu({
+  pathname,
+  entries,
+  onNavigate,
+}: MobileNavMenuProps) {
   return (
     <nav aria-label="Principal mobile" className="flex-1 overflow-y-auto p-3">
       <ul className="space-y-1">
-        {MAIN_NAV_ENTRIES.map((entry) => {
+        {entries.map((entry) => {
           if (entry.type === 'link') {
             return (
               <li key={entry.href}>

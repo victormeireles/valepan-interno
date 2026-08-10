@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import {
@@ -49,6 +51,7 @@ export async function getAssadeiras(
 export async function createAssadeira(
   input: AssadeiraFormData,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseAssadeiraForm(input);
   if (!parsed.success) {
     return {
@@ -85,6 +88,7 @@ export async function updateAssadeira(
   id: string,
   input: AssadeiraFormData,
 ): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseAssadeiraForm(input);
   if (!parsed.success) {
     return {
@@ -122,6 +126,7 @@ export async function updateAssadeira(
 export async function deactivateAssadeira(
   id: string,
 ): Promise<ActionResult<Assadeira>> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('assadeiras')

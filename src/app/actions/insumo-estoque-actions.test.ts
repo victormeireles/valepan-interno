@@ -14,6 +14,14 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/auth/require-interno-modulo', () => ({
+  requireInternoModulo: vi.fn(async () => ({
+    isSystemOwner: true,
+    identidades: ['interno'],
+    modulosEfetivos: {},
+  })),
+}));
+
 vi.mock('@/data/insumos/InsumoEstoqueRepository', () => ({
   insumoEstoqueRepository: {
     listSaldosComDetalhes: mockListSaldosComDetalhes,

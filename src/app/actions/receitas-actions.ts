@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { receitaGramaturaVinculosSyncManager } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
 import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
 import { receitaMassaVinculosSyncManager } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
@@ -203,6 +205,7 @@ export async function getReceitaDetalhes(id: string) {
 }
 
 export async function createReceita(payload: ReceitaInput): Promise<ReceitaSaveResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -235,6 +238,7 @@ export async function createReceita(payload: ReceitaInput): Promise<ReceitaSaveR
 }
 
 export async function updateReceita(payload: ReceitaUpdateInput): Promise<ReceitaSaveResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -317,6 +321,7 @@ export async function updateReceita(payload: ReceitaUpdateInput): Promise<Receit
 }
 
 export async function deleteReceita(id: string) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {

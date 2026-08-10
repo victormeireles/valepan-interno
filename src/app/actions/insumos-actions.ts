@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { receitaIngredienteRepository } from '@/data/receitas/ReceitaIngredienteRepository';
@@ -135,6 +137,7 @@ export async function getInsumoById(id: string) {
 }
 
 export async function createInsumo(params: CreateInsumoParams) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -179,6 +182,7 @@ export async function createInsumo(params: CreateInsumoParams) {
 }
 
 export async function updateInsumo(params: UpdateInsumoParams) {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
@@ -230,6 +234,7 @@ export async function updateInsumo(params: UpdateInsumoParams) {
 }
 
 export async function deleteInsumo(id: string) {
+  await requireInternoModulo('interno_config', 'administrar');
   const result = await insumoDeleteManager.delete(id);
 
   if (result.success) {

@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import {
   calcularCustoUnitarioEntrada,
@@ -53,6 +55,7 @@ export type InsumoMapeamentoPageData = {
 export type InsumoEstoqueDashboardData = InsumoSaldosPageData & InsumoMapeamentoPageData;
 
 export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
+  await requireInternoModulo('interno_insumos', 'ler');
   const [saldos, pendenciasCount] = await Promise.all([
     insumoEstoqueRepository.listSaldosComDetalhes(),
     insumoPendenciaRepository.countPendentes(),
@@ -65,6 +68,7 @@ export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
 }
 
 export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
+  await requireInternoModulo('interno_insumos', 'ler');
   const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos] = await Promise.all([
     insumoPendenciaRepository.listPendentes(),
     insumoPendenciaRepository.listIgnoradas(),
@@ -89,6 +93,7 @@ export async function getIntegracaoInsumoPorProdutoOmie(input: {
   empresaId: string;
   omieIdProduto: number;
 }) {
+  await requireInternoModulo('interno_insumos', 'ler');
   const integracao = await insumoMapeamentoRepository.findByEmpresaProduto(
     input.empresaId,
     input.omieIdProduto,
@@ -109,10 +114,12 @@ export async function getInsumoPendenciasPorProdutoOmie(input: {
   omieIdProduto: number;
   statuses: InsumoPendenciaStatus[];
 }): Promise<InsumoPendenciaComEmpresa[]> {
+  await requireInternoModulo('interno_insumos', 'ler');
   return insumoPendenciaRepository.listPorProdutoOmie(input);
 }
 
 export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboardData> {
+  await requireInternoModulo('interno_insumos', 'ler');
   const [saldosPage, mapeamentoPage] = await Promise.all([
     getInsumoSaldosPageData(),
     getInsumoMapeamentoPageData(),
@@ -122,10 +129,12 @@ export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboar
 }
 
 export async function getInsumoMovimentos(insumoId: string) {
+  await requireInternoModulo('interno_insumos', 'ler');
   return insumoEstoqueRepository.listMovimentos(insumoId);
 }
 
 export async function getInsumoPendencias() {
+  await requireInternoModulo('interno_insumos', 'ler');
   return insumoPendenciaRepository.listPendentes();
 }
 
@@ -134,6 +143,7 @@ export async function ajustarInsumoSaldo(
   novoSaldo: number,
   observacao: string,
 ) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     if (!observacao.trim()) {
       return { success: false as const, error: 'Observação é obrigatória' };
@@ -163,6 +173,7 @@ export async function resolverInsumoPendencia(
   insumoId: string,
   fatorConversao: number,
 ) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     if (!insumoId) {
       return { success: false as const, error: 'Insumo é obrigatório' };
@@ -243,6 +254,7 @@ export async function resolverInsumoPendenciaGrupo(
   insumoId: string,
   fatorConversao: number,
 ) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     const ids = [...new Set(pendenciaIds.filter(Boolean))];
     if (ids.length === 0) {
@@ -294,6 +306,7 @@ export async function resolverInsumoPendenciaGrupo(
 }
 
 export async function ignorarInsumoPendencia(pendenciaId: string) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     await insumoPendenciaRepository.marcarIgnorado(pendenciaId);
     revalidateInsumoPages();
@@ -307,6 +320,7 @@ export async function ignorarInsumoPendencia(pendenciaId: string) {
 }
 
 export async function ignorarInsumoPendenciasEmLote(pendenciaIds: string[]) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     const ids = [...new Set(pendenciaIds.filter(Boolean))];
     if (ids.length === 0) {
@@ -346,6 +360,7 @@ export async function ignorarInsumoPendenciasEmLote(pendenciaIds: string[]) {
 }
 
 export async function restaurarInsumoPendenciasEmLote(pendenciaIds: string[]) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     const ids = [...new Set(pendenciaIds.filter(Boolean))];
     if (ids.length === 0) {
@@ -388,6 +403,7 @@ export async function previewRecalcEntradasVinculo(
   integracaoId: string,
   fatorConversao: number,
 ) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     if (!integracaoId) {
       return { success: false as const, error: 'Vínculo não informado' };
@@ -420,6 +436,7 @@ export async function atualizarIntegracaoInsumoVinculo(
   fatorConversao: number,
   options?: { recalcularEntradasAnteriores?: boolean },
 ) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     if (!integracaoId) {
       return { success: false as const, error: 'Vínculo não informado' };
@@ -470,6 +487,7 @@ export async function atualizarIntegracaoInsumoVinculo(
 }
 
 export async function excluirIntegracaoInsumoVinculo(integracaoId: string) {
+  await requireInternoModulo('interno_insumos', 'editar');
   try {
     if (!integracaoId) {
       return { success: false as const, error: 'Vínculo não informado' };

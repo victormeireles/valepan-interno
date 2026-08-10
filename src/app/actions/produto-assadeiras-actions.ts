@@ -1,5 +1,7 @@
 'use server';
 
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+
 import { revalidatePath } from 'next/cache';
 import type { Assadeira } from '@/app/actions/assadeiras-actions';
 import { mapProdutoAssadeiraLinkRow } from '@/domain/assadeiras/produto-assadeira-link-mapper';
@@ -92,6 +94,7 @@ export async function getProdutoAssadeiraLinks(
 export async function createProdutoAssadeiraLink(
   input: ProdutoAssadeiraLinkFormInput,
 ): Promise<LinkMutationResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const parsed = parseProdutoAssadeiraLinkForm(input);
   if (!parsed.success) {
     return {
@@ -143,6 +146,7 @@ export async function updateProdutoAssadeiraLink(
     'usar_padrao' | 'unidades_por_assadeira' | 'ordem'
   >,
 ): Promise<LinkMutationResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const usarPadrao = input.usar_padrao ?? true;
   const unidades = usarPadrao ? null : (input.unidades_por_assadeira ?? null);
 
@@ -187,6 +191,7 @@ export async function updateProdutoAssadeiraLink(
 export async function deleteAllProdutoAssadeiraLinks(
   produtoId: string,
 ): Promise<ProdutoMutationResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await supabase
     .from('produto_assadeiras')
@@ -215,6 +220,7 @@ export async function deleteAllProdutoAssadeiraLinks(
 export async function deleteProdutoAssadeiraLink(
   id: string,
 ): Promise<ProdutoMutationResult> {
+  await requireInternoModulo('interno_config', 'administrar');
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   const { data: existing, error: existingError } = await supabase
