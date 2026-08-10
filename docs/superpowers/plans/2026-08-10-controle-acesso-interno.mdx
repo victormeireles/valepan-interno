@@ -1,0 +1,750 @@
+# Controle de Acesso Interno Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Fechar o Valepan Interno com login (magic link / NextAuth), porta de entrada por módulos `interno_*` e gates por área, consumindo a ACL já existente no Pedidos.
+
+**Architecture:** NextAuth fino no Interno (sessão/cookie próprios); `UsuarioAuthzLoader` lê `usuarios` + identidades + perfis no banco compartilhado; `InternoAccessManager` + `InternoRouteAccessMap` protegem middleware, páginas e server actions; admin de usuários continua só no Pedidos.
+
+**Tech Stack:** Next.js 15, React 19, NextAuth v5 (`next-auth@5`), `@auth/supabase-adapter`, Resend (magic link), Supabase JS (service role), Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-08-10-controle-acesso-interno-design.mdx`
+
+## Global Constraints
+
+- Arquivos &lt; 500 linhas; classes com SRP; pt-BR na UI.
+- Não copiar o monólito `lib/auth/*` do Pedidos (cobranças, vendedor, etc.).
+- Não criar painel de usuários/ACL no Interno.
+- APIs `/api/public/*` e `/api/cron/*` permanecem com API key / `CRON_SECRET` (sem sessão).
+- Service role após gate de app; RLS fino = fora deste plano.
+- PIN/SSO/WhatsApp OTP = fora deste plano.
+- Testes com Vitest: `npm test -- <path>`.
+- Spec de níveis de página: chão = `editar`; painel/estoque TV = `ler`; config = `administrar`; ordens/etiquetas/insumos página = `ler` (writes nas actions = `editar`).
+
+---
+
+## File Structure (alvo)
+
+```text
+src/lib/auth/
+  interno-modulos-catalog.ts      # IDs interno_* + nivelAtende
+  perfil-modulos-resolver.ts      # max por módulo
+  usuario-authz-loader.ts         # load do banco
+  interno-access-manager.ts       # podeAcessarApp / temModulo / requireModulo
+  interno-route-access-map.ts     # pathname → módulo+nível
+  require-interno-page.ts         # helper server components
+  require-interno-modulo.ts       # helper server actions
+  usuarios-auth-adapter.ts        # adapter NextAuth → usuarios
+  magic-link-provider.ts          # Resend email provider
+  auth-config.ts                  # NextAuthConfig callbacks
+  index.ts                        # handlers, auth, signIn, signOut
+  auth-secret.ts                  # AUTH_SECRET
+src/types/
+  database-authz.ts               # extensão tipada se gen types não trouxer perfis
+  next-auth.d.ts                  # session/jwt types
+src/middleware.ts
+src/app/api/auth/[...nextauth]/route.ts
+src/app/login/page.tsx
+src/app/login/login-form.tsx
+src/app/login/verify/page.tsx
+src/app/sem-acesso/page.tsx
+src/components/Hub/hub-nav-config.ts  # + moduloId por item
+src/components/Hub/filter-hub-nav-items.ts
+```
+
+Referência Pedidos (ler, não importar cross-repo):  
+`valepan-pedidos/apps/valepan/lib/auth/{adapter,config,load-usuario-modulos,modulos-catalog,perfil-modulos-resolver}.ts`
+
+---
+
+### Task 1: Catálogo `interno_*` + `nivelAtende` + tipos authz
+
+**Files:**
+- Create: `src/lib/auth/interno-modulos-catalog.ts`
+- Create: `src/lib/auth/interno-modulos-catalog.test.ts`
+- Create: `src/types/database-authz.ts`
+- Modify: `scripts/gen-types.js` (output canônico em `src/types/database.ts`)
+- Modify: `src/types/database.ts` e espelho `types/database.ts` via `npm run gen:types` **ou** extensão manual se CLI falhar
+
+**Interfaces:**
+- Consumes: nada
+- Produces: `MODULOS_INTERNO`, `InternoModuloId`, `NivelModulo`, `NIVEL_ORDEM`, `nivelAtende()`, `isModuloInterno()`, tipo `DatabaseComAuthz`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// src/lib/auth/interno-modulos-catalog.test.ts
+import { describe, expect, it } from 'vitest';
+import {
+  MODULOS_INTERNO,
+  isModuloInterno,
+  nivelAtende,
+} from './interno-modulos-catalog';
+
+describe('interno-modulos-catalog', () => {
+  it('lista exatamente os 10 módulos interno_*', () => {
+    expect(MODULOS_INTERNO).toHaveLength(10);
+    expect(MODULOS_INTERNO.every((m) => m.startsWith('interno_'))).toBe(true);
+  });
+
+  it('isModuloInterno distingue catálogo', () => {
+    expect(isModuloInterno('interno_fermentacao')).toBe(true);
+    expect(isModuloInterno('pedidos')).toBe(false);
+  });
+
+  it('nivelAtende respeita ordem ler < editar < administrar', () => {
+    expect(nivelAtende('administrar', 'ler')).toBe(true);
+    expect(nivelAtende('ler', 'editar')).toBe(false);
+    expect(nivelAtende(undefined, 'ler')).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm test -- src/lib/auth/interno-modulos-catalog.test.ts`  
+Expected: FAIL (módulo não encontrado)
+
+- [ ] **Step 3: Implement catalog**
+
+```ts
+// src/lib/auth/interno-modulos-catalog.ts
+export const MODULOS_INTERNO = [
+  'interno_fermentacao',
+  'interno_forno',
+  'interno_embalagem',
+  'interno_saidas',
+  'interno_painel',
+  'interno_ordens',
+  'interno_etiquetas',
+  'interno_insumos',
+  'interno_estoque',
+  'interno_config',
+] as const;
+
+export type InternoModuloId = (typeof MODULOS_INTERNO)[number];
+
+export const NIVEIS = ['ler', 'editar', 'administrar'] as const;
+export type NivelModulo = (typeof NIVEIS)[number];
+
+export const NIVEL_ORDEM: Record<NivelModulo, number> = {
+  ler: 1,
+  editar: 2,
+  administrar: 3,
+};
+
+export function isModuloInterno(value: string): value is InternoModuloId {
+  return (MODULOS_INTERNO as readonly string[]).includes(value);
+}
+
+export function nivelAtende(
+  atual: NivelModulo | undefined,
+  minimo: NivelModulo,
+): boolean {
+  if (!atual) return false;
+  return NIVEL_ORDEM[atual] >= NIVEL_ORDEM[minimo];
+}
+```
+
+- [ ] **Step 4: Tipos authz**
+
+Criar `src/types/database-authz.ts` no padrão Pedidos (`PerfisTables` + `is_system_owner` em `usuarios`) exportando `DatabaseComAuthz`.
+
+Atualizar `scripts/gen-types.js` para gravar em `src/types/database.ts` (e copiar/espelhar para `types/database.ts` se o repo ainda mantém os dois). Rodar `npm run gen:types` com `.env.local` válido. Se `usuario_perfis` / `is_system_owner` não aparecerem, manter a extensão `database-authz.ts` como fonte para o loader.
+
+- [ ] **Step 5: Run tests**
+
+Run: `npm test -- src/lib/auth/interno-modulos-catalog.test.ts`  
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/auth/interno-modulos-catalog.ts src/lib/auth/interno-modulos-catalog.test.ts src/types/database-authz.ts scripts/gen-types.js src/types/database.ts types/database.ts
+git commit -m "feat(auth): catálogo interno_* e tipos authz"
+```
+
+---
+
+### Task 2: `PerfilModulosResolver` + `InternoAccessManager`
+
+**Files:**
+- Create: `src/lib/auth/perfil-modulos-resolver.ts`
+- Create: `src/lib/auth/interno-access-manager.ts`
+- Create: `src/lib/auth/interno-access-manager.test.ts`
+
+**Interfaces:**
+- Consumes: `InternoModuloId`, `NivelModulo`, `nivelAtende`, `isModuloInterno`, `MODULOS_INTERNO`
+- Produces:
+  - `PerfilModulosResolver.resolve(rows): Partial<Record<InternoModuloId, NivelModulo>>`
+  - `UsuarioAuthzSnapshot { isSystemOwner, identidades, modulosEfetivos }`
+  - `InternoAccessManager.podeAcessarApp(snap): boolean`
+  - `InternoAccessManager.temModulo(snap, modulo, minimo): boolean`
+  - `InternoAccessManager.requireModulo(snap, modulo, minimo): void` (throws `InternoAccessError`)
+
+- [ ] **Step 1: Write failing tests**
+
+```ts
+// src/lib/auth/interno-access-manager.test.ts
+import { describe, expect, it } from 'vitest';
+import { InternoAccessManager } from './interno-access-manager';
+import { PerfilModulosResolver } from './perfil-modulos-resolver';
+
+describe('PerfilModulosResolver', () => {
+  it('mantém o nível máximo por módulo e ignora não-interno', () => {
+    const resolved = new PerfilModulosResolver().resolve([
+      { modulo: 'interno_fermentacao', nivel: 'ler' },
+      { modulo: 'interno_fermentacao', nivel: 'editar' },
+      { modulo: 'pedidos', nivel: 'administrar' },
+    ]);
+    expect(resolved).toEqual({ interno_fermentacao: 'editar' });
+  });
+});
+
+describe('InternoAccessManager', () => {
+  const manager = new InternoAccessManager();
+
+  it('owner acessa app e qualquer módulo', () => {
+    const snap = { isSystemOwner: true, identidades: ['interno'], modulosEfetivos: {} };
+    expect(manager.podeAcessarApp(snap)).toBe(true);
+    expect(manager.temModulo(snap, 'interno_config', 'administrar')).toBe(true);
+  });
+
+  it('sem módulo interno_* não acessa app', () => {
+    const snap = {
+      isSystemOwner: false,
+      identidades: ['interno'],
+      modulosEfetivos: {},
+    };
+    expect(manager.podeAcessarApp(snap)).toBe(false);
+  });
+
+  it('tablet fermentação edita fermentação e não administra config', () => {
+    const snap = {
+      isSystemOwner: false,
+      identidades: ['interno'],
+      modulosEfetivos: {
+        interno_fermentacao: 'editar' as const,
+        interno_painel: 'ler' as const,
+      },
+    };
+    expect(manager.podeAcessarApp(snap)).toBe(true);
+    expect(manager.temModulo(snap, 'interno_fermentacao', 'editar')).toBe(true);
+    expect(manager.temModulo(snap, 'interno_config', 'administrar')).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+Run: `npm test -- src/lib/auth/interno-access-manager.test.ts`
+
+- [ ] **Step 3: Implement**
+
+```ts
+// perfil-modulos-resolver.ts — resolve max; descartar módulos !isModuloInterno
+// interno-access-manager.ts
+export class InternoAccessError extends Error {
+  readonly code = 'INTERNO_FORBIDDEN' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'InternoAccessError';
+  }
+}
+
+export type UsuarioAuthzSnapshot = {
+  isSystemOwner: boolean;
+  identidades: string[];
+  modulosEfetivos: Partial<Record<InternoModuloId, NivelModulo>>;
+};
+
+export class InternoAccessManager {
+  podeAcessarApp(snap: UsuarioAuthzSnapshot): boolean {
+    if (snap.isSystemOwner) return true;
+    return Object.keys(snap.modulosEfetivos).some((k) => isModuloInterno(k));
+  }
+
+  temModulo(
+    snap: UsuarioAuthzSnapshot,
+    modulo: InternoModuloId,
+    minimo: NivelModulo,
+  ): boolean {
+    if (snap.isSystemOwner) return true;
+    return nivelAtende(snap.modulosEfetivos[modulo], minimo);
+  }
+
+  requireModulo(
+    snap: UsuarioAuthzSnapshot,
+    modulo: InternoModuloId,
+    minimo: NivelModulo,
+  ): void {
+    if (!this.temModulo(snap, modulo, minimo)) {
+      throw new InternoAccessError(`Sem permissão: ${modulo} (${minimo})`);
+    }
+  }
+}
+```
+
+- [ ] **Step 4: Run — expect PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/auth/perfil-modulos-resolver.ts src/lib/auth/interno-access-manager.ts src/lib/auth/interno-access-manager.test.ts
+git commit -m "feat(auth): InternoAccessManager e resolver de módulos"
+```
+
+---
+
+### Task 3: `InternoRouteAccessMap`
+
+**Files:**
+- Create: `src/lib/auth/interno-route-access-map.ts`
+- Create: `src/lib/auth/interno-route-access-map.test.ts`
+
+**Interfaces:**
+- Consumes: `InternoModuloId`, `NivelModulo`
+- Produces:
+  - `InternoRouteRequirement { kind: 'modulo', modulo, minimo } | { kind: 'app' } | { kind: 'public' }`
+  - `InternoRouteAccessMap.resolve(pathname): InternoRouteRequirement`
+
+- [ ] **Step 1: Write failing tests**
+
+Cobrir: `/realizado/fermentacao` → fermentacao/editar; `/config/produtos` → config/administrar; `/` → app; `/api/public/saidas` → public; `/api/cron/x` → public; `/login` → public; pathname desconhecido autenticado → `app` (só porta) **ou** deny — **decisão do plano: rotas de UI não mapeadas exigem `podeAcessarApp` apenas (`kind: 'app'`)** para não quebrar páginas novas sem módulo dedicado.
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { InternoRouteAccessMap } from './interno-route-access-map';
+
+describe('InternoRouteAccessMap', () => {
+  const map = new InternoRouteAccessMap();
+
+  it('mapeia fermentação e config', () => {
+    expect(map.resolve('/realizado/fermentacao')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_fermentacao',
+      minimo: 'editar',
+    });
+    expect(map.resolve('/config/produtos')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_config',
+      minimo: 'administrar',
+    });
+  });
+
+  it('libera login e APIs máquina', () => {
+    expect(map.resolve('/login').kind).toBe('public');
+    expect(map.resolve('/api/public/saidas').kind).toBe('public');
+    expect(map.resolve('/api/cron/processar-recebimentos-omie').kind).toBe('public');
+  });
+
+  it('hub exige só porta do app', () => {
+    expect(map.resolve('/')).toEqual({ kind: 'app' });
+  });
+});
+```
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement** com lista ordenada de prefixes (mais específico primeiro):
+
+| prefix | requirement |
+|--------|-------------|
+| `/api/auth` | public |
+| `/api/public` | public |
+| `/api/cron` | public |
+| `/login` | public |
+| `/sem-acesso` | public |
+| `/realizado/fermentacao` | fermentacao/editar |
+| `/realizado/forno` | forno/editar |
+| `/realizado/embalagem` | embalagem/editar |
+| `/realizado/saidas` | saidas/editar |
+| `/realizado/painel-producao` | painel/ler |
+| `/ordens-producao` | ordens/ler |
+| `/etiquetas` | etiquetas/ler |
+| `/estoque-insumos` | insumos/ler |
+| `/mapeamento-insumos` | insumos/ler |
+| `/consumo-insumos` | insumos/ler |
+| `/painel/dashboard-estoque` | estoque/ler |
+| `/estoque/auditoria` | estoque/ler |
+| `/config` | config/administrar |
+| `/` exact | app |
+| default UI | app |
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/auth/interno-route-access-map.ts src/lib/auth/interno-route-access-map.test.ts
+git commit -m "feat(auth): mapa rota → módulo interno"
+```
+
+---
+
+### Task 4: `UsuarioAuthzLoader`
+
+**Files:**
+- Create: `src/lib/auth/usuario-authz-loader.ts`
+- Create: `src/lib/auth/usuario-authz-loader.test.ts`
+
+**Interfaces:**
+- Consumes: `SupabaseClient<DatabaseComAuthz>`, `PerfilModulosResolver`
+- Produces: `UsuarioAuthzLoader.load(usuarioId): Promise<UsuarioAuthzSnapshot | null>`  
+  (`null` se usuário inexistente ou `ativo === false`)
+
+Comportamento (igual espírito Pedidos):
+1. Buscar `usuarios`: `ativo`, `is_system_owner`, `nome`, `email`
+2. Se `!ativo` → `null`
+3. Buscar `usuario_papeis` → `identidades`
+4. Se não tem identidade `interno` e não é owner → `modulosEfetivos = {}` (não resolve perfis)
+5. Se `interno` ou owner: join `usuario_perfis` → `perfis` (ativo) → `perfil_modulos`; resolver e filtrar só `interno_*`
+
+- [ ] **Step 1: Write failing test com mock supabase** (padrão do teste Pedidos `load-usuario-modulos.test.ts`: fake client por tabela). Casos: inativo → null; interno + tablet fermentação; sem identidade interno → módulos vazios mesmo com perfil órfão.
+
+- [ ] **Step 2: Run — FAIL**
+
+- [ ] **Step 3: Implement `UsuarioAuthzLoader`**
+
+Usar `createServiceRoleClient()` do factory existente em queries reais; testes injetam client mock no construtor:
+
+```ts
+export class UsuarioAuthzLoader {
+  constructor(private readonly supabase: SupabaseClient<DatabaseComAuthz>) {}
+  async load(usuarioId: string): Promise<UsuarioAuthzSnapshot | null> { /* ... */ }
+}
+```
+
+- [ ] **Step 4: Run — PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/auth/usuario-authz-loader.ts src/lib/auth/usuario-authz-loader.test.ts
+git commit -m "feat(auth): UsuarioAuthzLoader a partir de perfis do Pedidos"
+```
+
+---
+
+### Task 5: NextAuth (magic link) + páginas de login
+
+**Files:**
+- Modify: `package.json` (deps)
+- Create: `src/lib/auth/auth-secret.ts`
+- Create: `src/lib/auth/usuarios-auth-adapter.ts`
+- Create: `src/lib/auth/magic-link-provider.ts`
+- Create: `src/lib/auth/auth-config.ts`
+- Create: `src/lib/auth/index.ts`
+- Create: `src/types/next-auth.d.ts`
+- Create: `src/app/api/auth/[...nextauth]/route.ts`
+- Create: `src/app/login/page.tsx`
+- Create: `src/app/login/login-form.tsx`
+- Create: `src/app/login/verify/page.tsx`
+- Create: `src/app/sem-acesso/page.tsx`
+- Modify: `env.example`
+
+**Interfaces:**
+- Consumes: `UsuarioAuthzLoader`, `InternoAccessManager`, adapter pattern Pedidos
+- Produces: `handlers`, `auth`, `signIn`, `signOut`; session user com `id`, `name`, `email`, `isSystemOwner`, `modulosEfetivos`
+
+- [ ] **Step 1: Install deps**
+
+```bash
+npm install next-auth@5 @auth/core @auth/supabase-adapter resend
+```
+
+(Versões alinhadas ao Pedidos: `next-auth@^5.0.0-beta.29` se necessário para peer deps.)
+
+- [ ] **Step 2: `auth-secret.ts`**
+
+```ts
+export function getAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error('Missing AUTH_SECRET');
+  return secret;
+}
+```
+
+- [ ] **Step 3: Adapter**
+
+Portar o mínimo de `createSupabaseAdapter` do Pedidos (`getUserByEmail`, `getUser`, `updateUser`, verification tokens).  
+**`createUser` deve lançar erro** (`Usuários são criados apenas no Pedidos`) — Interno não provisiona conta.
+
+Usar `createServiceRoleClient()` do Interno.
+
+- [ ] **Step 4: Magic link provider**
+
+Provider `type: 'email'` com Resend; subject: `Acesso ao Sistema de Produção Valepan`; HTML/texto simples (sem emoji estrutural na UI do app; subject pode ser plain). `maxAge: 3600`.
+
+- [ ] **Step 5: `auth-config.ts`**
+
+- `session.strategy: 'jwt'`
+- `session.maxAge: 60 * 60 * 24 * 30` (30 dias — tablet)
+- `pages.signIn: '/login'`, `verifyRequest: '/login/verify'`
+- `trustHost: true`
+- `callbacks.signIn`: usuário deve existir, `ativo`, e após load authz `podeAcessarApp` **ou** permitir login e deixar `/sem-acesso` tratar — **decisão: negar no signIn se `ativo === false`; se ativo mas sem módulo, permitir sessão e redirecionar `/sem-acesso` no middleware** (melhor UX/mensagem).
+- `callbacks.jwt`: na primeira vez (`user`) carregar `UsuarioAuthzLoader` e gravar `token.sub`, `isSystemOwner`, `modulosEfetivos`, `name`
+- `callbacks.session`: espelhar no `session.user`
+
+- [ ] **Step 6: `index.ts` + route**
+
+```ts
+import NextAuth from 'next-auth';
+import { authConfig } from './auth-config';
+import { createUsuariosAuthAdapter } from './usuarios-auth-adapter';
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+  adapter: createUsuariosAuthAdapter(),
+});
+```
+
+```ts
+// src/app/api/auth/[...nextauth]/route.ts
+import { handlers } from '@/lib/auth';
+export const { GET, POST } = handlers;
+```
+
+- [ ] **Step 7: UI login / verify / sem-acesso**
+
+Design system Valepan: stone/amber, Material Icons, pt-BR.  
+`login-form.tsx`: input e-mail + submit chama `signIn('email', { email, callbackUrl })`.  
+`sem-acesso`: texto “Sem permissão para o Sistema de Produção.” + botão sair (`signOut`).
+
+- [ ] **Step 8: `env.example`**
+
+Adicionar:
+
+```env
+AUTH_SECRET=gere-um-segredo-longo
+# opcional alias:
+# NEXTAUTH_SECRET=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=Sistema Produção <noreply@seudominio.com>
+# URL canônica do app (Auth.js):
+AUTH_URL=http://localhost:3001
+```
+
+- [ ] **Step 9: Types session**
+
+```ts
+// src/types/next-auth.d.ts
+import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
+
+declare module 'next-auth' {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      isSystemOwner: boolean;
+      modulosEfetivos: Partial<Record<InternoModuloId, NivelModulo>>;
+    };
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    isSystemOwner?: boolean;
+    modulosEfetivos?: Partial<Record<InternoModuloId, NivelModulo>>;
+  }
+}
+```
+
+- [ ] **Step 10: Smoke manual local** (se tiver Resend + usuário interno com módulo): `npm run dev`, abrir `/login`. Sem credenciais, ao menos `npm run build` não quebra types auth.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add package.json package-lock.json src/lib/auth src/app/login src/app/sem-acesso src/app/api/auth src/types/next-auth.d.ts env.example
+git commit -m "feat(auth): NextAuth magic link e páginas de login"
+```
+
+---
+
+### Task 6: Middleware (porta + gates de rota)
+
+**Files:**
+- Create: `src/middleware.ts`
+- Create: `src/lib/auth/interno-middleware-guard.ts`
+- Create: `src/lib/auth/interno-middleware-guard.test.ts`
+
+**Interfaces:**
+- Consumes: `InternoRouteAccessMap`, `InternoAccessManager`, snapshot do JWT
+- Produces: `InternoMiddlewareGuard.decide({ pathname, token }): 'allow' | { redirect: string }`
+
+- [ ] **Step 1: Testes do guard (puro, sem Next)**
+
+```ts
+const guard = new InternoMiddlewareGuard(
+  new InternoRouteAccessMap(),
+  new InternoAccessManager(),
+);
+
+// sem token + /ordens-producao → redirect /login?callbackUrl=...
+// token sem módulos + / → redirect /sem-acesso
+// tablet fermentação + /config → redirect /?erro=sem-permissao (ou /sem-acesso-rota)
+// tablet + /realizado/fermentacao → allow
+// sem token + /api/public/x → allow
+```
+
+Decisão UX rota sem módulo: **redirect para `/?erro=sem-permissao`** (hub).
+
+- [ ] **Step 2: Implement guard + middleware**
+
+```ts
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+import { getAuthSecret } from '@/lib/auth/auth-secret';
+import { InternoMiddlewareGuard } from '@/lib/auth/interno-middleware-guard';
+// ...
+
+export async function middleware(req: NextRequest) {
+  const token = await getToken({ req, secret: getAuthSecret() });
+  const decision = guard.decide({ pathname: req.nextUrl.pathname, token });
+  if (decision === 'allow') return NextResponse.next();
+  return NextResponse.redirect(new URL(decision.redirect, req.url));
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+};
+```
+
+Mapear `token.modulosEfetivos` / `token.isSystemOwner` / `token.sub` para `UsuarioAuthzSnapshot`.
+
+- [ ] **Step 3: Run unit tests — PASS**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/middleware.ts src/lib/auth/interno-middleware-guard.ts src/lib/auth/interno-middleware-guard.test.ts
+git commit -m "feat(auth): middleware de porta e gates por rota"
+```
+
+---
+
+### Task 7: Hub filtrado + helpers server + gates em actions
+
+**Files:**
+- Modify: `src/components/Hub/hub-nav-config.ts` (campo `moduloId: InternoModuloId` por item)
+- Create: `src/components/Hub/filter-hub-nav-items.ts`
+- Create: `src/components/Hub/filter-hub-nav-items.test.ts`
+- Modify: `src/app/page.tsx` (passar sessão → filtrar)
+- Create: `src/lib/auth/require-interno-modulo.ts`
+- Create: `src/lib/auth/require-interno-page.ts`
+- Modify: server actions de escrita representativas (mínimo obrigatório abaixo)
+- Modify: `src/components/ConditionalNavigation.tsx` (ocultar links sem módulo, se houver nav global)
+
+**Interfaces:**
+- `filterHubNavItems(items, snap): HubNavItem[]` — owner vê tudo; senão `temModulo(item.moduloId, 'ler')` (card aparece se tem qualquer nível ≥ ler)
+- `requireInternoModulo(modulo, minimo): Promise<UsuarioAuthzSnapshot>` — usa `auth()` + manager; throw/`redirect`
+- `requireInternoPage(pathname): Promise<void>` — resolve map + require
+
+**Actions/páginas — wiring mínimo obrigatório neste plano:**
+
+| Área | Gate |
+|------|------|
+| Qualquer server action de fermentação/forno/embalagem/saídas que muta | `requireInternoModulo(..., 'editar')` no início |
+| Actions de config admin | `interno_config` / `administrar` |
+| Actions de etiqueta gerar/reimprimir | `interno_etiquetas` / `editar` |
+| Actions de ajuste insumos | `interno_insumos` / `editar` |
+| Actions ordens mutação | `interno_ordens` / `editar` |
+
+Se o número de actions for grande: criar helper e aplicar em **todas** as actions sob `src/app/actions/` que mutam dados — não deixar “só algumas” sem lista. Inventário: `rg "use server" src/app/actions` e marcar cada arquivo.
+
+- [ ] **Step 1: Testes filter hub + smoke persona**
+
+```ts
+// filter-hub-nav-items.test.ts + estender interno-access-manager.test.ts
+// persona tablet: só fermentação + painel cards
+```
+
+- [ ] **Step 2: Implement filter + page.tsx**
+
+```ts
+import { auth } from '@/lib/auth';
+import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
+import { filterHubNavItems } from '@/components/Hub/filter-hub-nav-items';
+// ...
+const session = await auth();
+const snap = { /* from session.user */ };
+const producao = filterHubNavItems(HUB_PRODUCAO_ITEMS, snap, manager);
+const operacao = filterHubNavItems(HUB_OPERACAO_ITEMS, snap, manager);
+```
+
+- [ ] **Step 3: Helpers + wire actions**
+
+```ts
+// require-interno-modulo.ts
+export async function requireInternoModulo(
+  modulo: InternoModuloId,
+  minimo: NivelModulo,
+): Promise<UsuarioAuthzSnapshot> {
+  const session = await auth();
+  if (!session?.user?.id) redirect('/login');
+  const snap: UsuarioAuthzSnapshot = {
+    isSystemOwner: session.user.isSystemOwner,
+    identidades: ['interno'],
+    modulosEfetivos: session.user.modulosEfetivos,
+  };
+  new InternoAccessManager().requireModulo(snap, modulo, minimo);
+  return snap;
+}
+```
+
+- [ ] **Step 4: Run `npm test` (auth + hub) e `npm run build`**
+
+Expected: tests PASS; build OK (env de build pode mockar `AUTH_SECRET` no CI/local).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/Hub src/app/page.tsx src/lib/auth/require-interno-modulo.ts src/lib/auth/require-interno-page.ts src/app/actions src/components/ConditionalNavigation.tsx
+git commit -m "feat(auth): hub filtrado e gates nas server actions"
+```
+
+- [ ] **Step 6: Atualizar status da spec**
+
+Em `docs/superpowers/specs/2026-08-10-controle-acesso-interno-design.mdx`, status → `implementado (plano 2026-08-10)`. Commit docs.
+
+- [ ] **Step 7: Checklist operacional (humano, não código)**
+
+Seguir runbook Pedidos: criar 4 usuários tablet + atribuir seeds; testar magic link em staging.
+
+---
+
+## Self-Review (plano × spec)
+
+| Requisito spec | Task |
+|----------------|------|
+| Login magic link / NextAuth fino | 5 |
+| Mesma identidade `usuarios` / adapter | 5 |
+| Authz `modulosEfetivos` + owner | 4, 5 |
+| Porta ≥1 `interno_*` | 2, 6 |
+| Gates por área / mapa rotas | 3, 6 |
+| Hub filtrado | 7 |
+| Actions repetem gate | 7 |
+| public/cron fora | 3, 6 |
+| types database / authz | 1 |
+| env.example | 5 |
+| Testes unit + smoke tablet | 2, 3, 7 |
+| Sem ACL admin no Interno | — respeitado |
+| Fase 2 PIN/SSO/RLS | — fora |
+
+Placeholders: nenhum TBD deixado; UX rota negada = `/?erro=sem-permissao`; `createUser` proibido no adapter.
+
+---
+
+## Execution Handoff
+
+Plan complete and saved to `docs/superpowers/plans/2026-08-10-controle-acesso-interno.mdx`.
+
+**Two execution options:**
+
+1. **Subagent-Driven (recommended)** — subagente novo por task, review entre tasks  
+2. **Inline Execution** — executar neste chat com `executing-plans`, checkpoints
+
+**Which approach?**
