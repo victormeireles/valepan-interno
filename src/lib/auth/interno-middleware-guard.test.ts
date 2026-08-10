@@ -59,4 +59,13 @@ describe('InternoMiddlewareGuard', () => {
     ).toBe('allow');
     expect(guard.decide({ pathname: '/login', token: null })).toBe('allow');
   });
+
+  it('tablet fermentação não chama API de forno', () => {
+    expect(
+      guard.decide({
+        pathname: '/api/producao/forno/x',
+        token: tabletFermentacao,
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
 });

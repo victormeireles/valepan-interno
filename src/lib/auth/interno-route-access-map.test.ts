@@ -23,6 +23,36 @@ describe('InternoRouteAccessMap', () => {
     expect(map.resolve('/api/cron/processar-recebimentos-omie').kind).toBe(
       'public',
     );
+    expect(map.resolve('/api/webhooks/omie/recebimento').kind).toBe('public');
+    expect(map.resolve('/api/health').kind).toBe('public');
+  });
+
+  it('mapeia APIs de produção por módulo (mais específico primeiro)', () => {
+    expect(map.resolve('/api/producao/fermentacao/ordem/1/lote')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_fermentacao',
+      minimo: 'editar',
+    });
+    expect(map.resolve('/api/producao/forno/ordem/1/lote')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_forno',
+      minimo: 'editar',
+    });
+    expect(map.resolve('/api/painel/fermentacao')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_fermentacao',
+      minimo: 'ler',
+    });
+    expect(map.resolve('/api/ordens-producao')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_ordens',
+      minimo: 'editar',
+    });
+    expect(map.resolve('/api/etiquetas/fila')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_etiquetas',
+      minimo: 'editar',
+    });
   });
 
   it('hub exige só porta do app', () => {
