@@ -115,7 +115,8 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     match: (pathname) =>
       pathname.startsWith('/estoque-insumos') ||
       pathname.startsWith('/mapeamento-insumos') ||
-      pathname.startsWith('/consumo-insumos'),
+      pathname.startsWith('/consumo-insumos') ||
+      pathname.startsWith('/sugestao-compras'),
     children: [
       {
         type: 'link',
@@ -140,6 +141,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'query_stats',
         moduloId: 'interno_insumos',
         match: (pathname) => pathname.startsWith('/consumo-insumos'),
+      },
+      {
+        type: 'link',
+        href: '/sugestao-compras',
+        label: 'Sugestão de compra',
+        icon: 'shopping_cart',
+        moduloId: 'interno_insumos',
+        match: (pathname) => pathname.startsWith('/sugestao-compras'),
       },
     ],
   },

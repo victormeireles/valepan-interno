@@ -1,0 +1,93 @@
+import { Badge } from '@/components/ui/Badge';
+import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
+import {
+  formatCoberturaDias,
+  formatInsumoQuantidadeArredondada,
+} from '@/features/insumo-estoque/utils/formatters';
+import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
+
+type Props = {
+  items: InsumoCompraSugestaoLinha[];
+  embedded?: boolean;
+};
+
+export default function InsumoCompraSugestaoMobileList({ items, embedded = false }: Props) {
+  return (
+    <div className={embedded ? 'divide-y divide-stone-100 md:hidden' : 'divide-y divide-stone-100 md:hidden'}>
+      {items.map((item) => {
+        const visual = insumoCompraSugestaoStatusTone.resolve(item.status);
+        return (
+          <article key={item.insumoId} className={`p-4 ${visual.rowClassName}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-semibold text-stone-900">{item.nome}</h2>
+                <p className="mt-1 text-xs leading-relaxed text-stone-600">{item.motivo}</p>
+              </div>
+              <Badge tone={visual.badgeTone} icon={visual.icon} className="shrink-0">
+                {visual.label}
+              </Badge>
+            </div>
+
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+              <Metrica
+                label="Sugestão"
+                value={
+                  item.quantidadeSugerida == null
+                    ? '—'
+                    : formatInsumoQuantidadeArredondada(
+                        item.quantidadeSugerida,
+                        item.unidade,
+                      )
+                }
+                strong
+              />
+              <Metrica
+                label="Estoque"
+                value={formatInsumoQuantidadeArredondada(item.estoque, item.unidade)}
+              />
+              <Metrica label="Cobertura" value={formatCoberturaDias(item.coberturaAtualDias)} />
+              <Metrica label="Lead time" value={`${item.leadTimeDias} d`} />
+            </dl>
+
+            <div className="mt-4 flex items-start gap-2 border-t border-stone-200/80 pt-3 text-sm text-stone-600">
+              <span className="material-icons text-lg text-stone-400" aria-hidden="true">
+                local_shipping
+              </span>
+              <div>
+                <p>{item.distribuidorPreferencial ?? 'Sem fornecedor'}</p>
+                {item.distribuidoresAlternativos.length > 0 ? (
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    Alternativos: {item.distribuidoresAlternativos.join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function Metrica({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt>
+      <dd
+        className={`mt-0.5 font-mono text-sm tabular-nums ${
+          strong ? 'font-semibold text-stone-900' : 'text-stone-700'
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
