@@ -11,7 +11,7 @@ type Props = {
   isOpen: boolean;
   item: InsumoSaldoComDetalhes | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (novoSaldo: number) => void;
 };
 
 export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Props) {
@@ -55,7 +55,7 @@ export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Pr
       return;
     }
 
-    onSaved();
+    onSaved(parsed);
     onClose();
     setLoading(false);
   };
