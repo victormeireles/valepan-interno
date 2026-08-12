@@ -112,12 +112,20 @@ Por insumo com regra ativa (e elegível ao controle de estoque — excluir água
 
 ```
 cobertura_atual_dias = estoque / consumo_diario   // se consumo_diario > 0
-estoque_na_entrega   = estoque - consumo_diario * L
-meta_na_entrega      = consumo_diario * L * 1.5
-qtd_bruta            = max(0, meta_na_entrega - estoque_na_entrega)
+meta_estoque         = consumo_diario * L * 1.5   // estoque-alvo (dias de cobertura = L×1,5)
+qtd_bruta            = max(0, meta_estoque - estoque)
 ```
 
-Interpretação kanban: na data do recebimento a meta de cobertura é **L × 1,5** dias. Com L=7, meta ≈ 10,5 dias ao receber; no ciclo seguinte a folga típica é ≈ 0,5×L (≈ 3,5 dias), e a recompra típica aproxima L dias de consumo.
+Interpretação kanban (order-up-to): estoque-alvo = **L × 1,5** dias de consumo. Ex.: L=7 → meta 10,5 dias; com 3,5 dias em estoque, `qtd_bruta` ≈ 7 dias de consumo. O fator 1,5 já embute a folga de segurança; **não** subtrair o consumo do lead time de novo na quantidade.
+
+Projeção para janela / segurança ao adiar:
+
+```
+dias_ate_proximo_pedido_permitido = W   // 0 se hoje está na janela
+cobertura_necessaria_se_esperar   = W + L
+```
+
+Se `cobertura_atual < W + L`, esperar a janela (ou adiar lote mínimo) coloca em risco de ruptura antes do recebimento.
 
 ### Mínimo e máximo
 
@@ -138,7 +146,7 @@ Interpretação kanban: na data do recebimento a meta de cobertura é **L × 1,5
 | Status | Condição | Quantidade na UI |
 |--------|----------|------------------|
 | `urgente` | `consumo_diario > 0` e `cobertura_atual_dias < L` | fórmula; se &lt; min e risco, lote mínimo; aplica max |
-| `pedir_fora_janela` | fora da janela **e** esperar até o próximo dia permitido faria falhar a meta na entrega (`estoque_na_entrega` projetado &lt; meta, considerando o atraso até o próximo dia da janela + L) | idem |
+| `pedir_fora_janela` | fora da janela **e** `cobertura_atual < W + L` (W = dias até o próximo dia permitido) | idem |
 | `pedir_hoje` | dentro da janela **e** `qtd_bruta > 0` **e** (sem min **ou** `qtd_bruta >= min`) | qtd com max |
 | `adiar_lote_minimo` | `qtd_bruta > 0` e min existe e `qtd_bruta < min` e ainda seguro esperar | bruta + min sugerido futuro |
 | `ok` | não precisa comprar | — |
@@ -224,7 +232,7 @@ Nav: grupo Insumos → Sugestão de compra; Config → Regras de compra.
 
 Unitários no domínio:
 
-- Kanban L×1,5 (ex.: L=7 → meta 10,5 dias de cobertura na entrega)
+- Kanban L×1,5 (ex.: L=7, estoque=3,5 dias → qtd ≈ 7 dias de consumo; estoque=10,5 → qtd 0)
 - Min: adiar vs forçar lote mínimo sob risco
 - Janela: dentro / fora seguro / fora com `pedir_fora_janela` / `urgente`
 - Max como teto

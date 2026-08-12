@@ -1,0 +1,793 @@
+# Sugestão de compra de insumos — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Entregar tela operacional `/sugestao-compras` e config `/config/regras-compra-insumos` que sugerem o que comprar com base em saldo, consumo (4 semanas) e regras kanban (meta = L × 1,5).
+
+**Architecture:** Regras em `insumo_regra_compra` + `insumo_distribuidor`. Motor puro `InsumoCompraSugestaoCalculator` (efêmero). Service monta DTO com saldo + consumo semanal padrão + regras. UI operacional (Lista / Por fornecedor) e config CRUD. Sem pedidos na v1.
+
+**Tech Stack:** Next.js App Router, Supabase (migration + RLS), Vitest, Tailwind v4, Material Icons, design system Valepan (stone/amber).
+
+**Spec:** `docs/superpowers/specs/2026-08-12-sugestao-compra-insumos-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400; classes com SRP; funções < 40 linhas.
+- RLS em toda tabela nova; policies com `(SELECT auth.uid())` / `(SELECT is_admin())` quando aplicável (padrão das tabelas irmãs de insumos para SELECT/INSERT/UPDATE).
+- UI pt-BR, Material Icons (sem emoji estrutural), amber/stone, alvos ≥44px, Geist Mono/`tabular-nums` em quantidades.
+- Fórmula de quantidade: `qtd_bruta = max(0, consumo_diario * L * 1.5 - estoque)` (order-up-to). **Não** usar `meta - (estoque - L*consumo)`.
+- Dias da semana: `0=domingo … 6=sábado` (`Date.getDay()`).
+- Timezone de “hoje”: `America/Sao_Paulo` (reutilizar helpers de `insumo-consumo-semanal-periodo.ts`).
+- Consumo: 4 semanas fechadas, `consumo_diario = media_semana / 7` via `InsumoConsumoCoberturaCalculator` + período default semanal.
+- Excluir água/gelo com `insumoControleEstoqueFilter`.
+- Fora de escopo v1: pedidos, Omie compra, WhatsApp, trava, snapshot diário.
+- Módulo auth: `interno_insumos` (ler operação; editar/config conforme rotas existentes de config).
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260812120000_insumo_regra_compra.sql` | Tabelas + índices + RLS |
+| `src/domain/types/insumo-compra-db.ts` | Rows/tipos DB das regras |
+| `src/domain/insumos/insumo-compra-janela.ts` | Dentro da janela? / dias até próximo dia |
+| `src/domain/insumos/insumo-compra-janela.test.ts` | Testes da janela |
+| `src/domain/insumos/insumo-compra-sugestao-types.ts` | Status, input/output do calculator |
+| `src/domain/insumos/insumo-compra-sugestao-calculator.ts` | Motor kanban |
+| `src/domain/insumos/insumo-compra-sugestao-calculator.test.ts` | Testes do motor |
+| `src/domain/insumos/insumo-compra-regra-validator.ts` | Validação min≤max, janela, 1 preferencial |
+| `src/domain/insumos/insumo-compra-regra-validator.test.ts` | Testes validator |
+| `src/domain/insumos/insumo-compra-seed-planilha.ts` | Dados da planilha (nomes + regras) |
+| `src/data/insumos/InsumoRegraCompraRepository.ts` | CRUD regras |
+| `src/data/insumos/InsumoDistribuidorRepository.ts` | CRUD distribuidores |
+| `src/lib/services/insumo-compra-sugestao-service.ts` | Monta page DTO |
+| `src/lib/services/insumo-compra-regra-manager.ts` | Upsert regra + distribuidores |
+| `src/app/actions/insumo-compra-sugestao-actions.ts` | get page data |
+| `src/app/actions/insumo-compra-regra-actions.ts` | list/save/seed regras |
+| `src/app/sugestao-compras/page.tsx` | Server page |
+| `src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx` | Client operacional |
+| `src/features/insumo-compra-sugestao/components/*` | Tabela, mobile, grupos, resumo, filtros |
+| `src/app/config/regras-compra-insumos/page.tsx` | Config server |
+| `src/app/config/regras-compra-insumos/RegrasCompraInsumosClient.tsx` | Lista + form |
+| `src/config/main-nav-config.ts` | Link Sugestão de compra |
+| `src/config/config-sections.ts` | Entry Regras de compra |
+| `src/lib/auth/interno-route-access-map.ts` | Prefix `/sugestao-compras` |
+| `types/database.ts` / `src/types/database.ts` | Regenerar |
+
+---
+
+### Task 1: Migration — regras e distribuidores
+
+**Files:**
+- Create: `supabase/migrations/20260812120000_insumo_regra_compra.sql`
+
+**Interfaces:**
+- Produces: `public.insumo_regra_compra`, `public.insumo_distribuidor`
+
+- [ ] **Step 1: Criar migration**
+
+```sql
+-- Regras de compra de insumos (sugestão automática)
+
+CREATE TABLE IF NOT EXISTS public.insumo_regra_compra (
+  insumo_id uuid PRIMARY KEY REFERENCES public.insumos(id) ON DELETE CASCADE,
+  lead_time_dias integer NOT NULL CHECK (lead_time_dias > 0),
+  janela_tipo text NOT NULL DEFAULT 'qualquer'
+    CHECK (janela_tipo IN ('qualquer', 'dias_semana')),
+  dias_semana smallint[] NULL,
+  quantidade_minima numeric NULL,
+  quantidade_maxima numeric NULL,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT insumo_regra_compra_janela_dias_check
+    CHECK (
+      (janela_tipo = 'qualquer' AND dias_semana IS NULL)
+      OR (
+        janela_tipo = 'dias_semana'
+        AND dias_semana IS NOT NULL
+        AND cardinality(dias_semana) > 0
+      )
+    ),
+  CONSTRAINT insumo_regra_compra_min_max_check
+    CHECK (
+      quantidade_minima IS NULL
+      OR quantidade_maxima IS NULL
+      OR quantidade_minima <= quantidade_maxima
+    )
+);
+
+CREATE TABLE IF NOT EXISTS public.insumo_distribuidor (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  insumo_id uuid NOT NULL REFERENCES public.insumos(id) ON DELETE CASCADE,
+  nome text NOT NULL CHECK (length(trim(nome)) > 0),
+  preferencial boolean NOT NULL DEFAULT false,
+  ordem integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_insumo_distribuidor_preferencial
+  ON public.insumo_distribuidor (insumo_id)
+  WHERE preferencial = true;
+
+CREATE INDEX IF NOT EXISTS idx_insumo_distribuidor_insumo
+  ON public.insumo_distribuidor (insumo_id);
+
+ALTER TABLE public.insumo_regra_compra ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.insumo_distribuidor ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY insumo_regra_compra_select ON public.insumo_regra_compra
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_regra_compra_insert ON public.insumo_regra_compra
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_regra_compra_update ON public.insumo_regra_compra
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_regra_compra_delete ON public.insumo_regra_compra
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+CREATE POLICY insumo_distribuidor_select ON public.insumo_distribuidor
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_distribuidor_insert ON public.insumo_distribuidor
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_distribuidor_update ON public.insumo_distribuidor
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_distribuidor_delete ON public.insumo_distribuidor
+  FOR DELETE TO authenticated USING (true);
+
+COMMENT ON TABLE public.insumo_regra_compra IS
+  'Parâmetros de reposição (lead time, janela, min/max) para sugestão de compra';
+COMMENT ON TABLE public.insumo_distribuidor IS
+  'Distribuidores de compra por insumo (um preferencial)';
+```
+
+- [ ] **Step 2: Aplicar migration**
+
+Run: `npx supabase db push` (ou fluxo padrão do repo)
+
+Expected: aplicada sem erro.
+
+- [ ] **Step 3: Regenerar tipos**
+
+Run: `npm run gen:types`
+
+Expected: tabelas em `types/database.ts` e `src/types/database.ts`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260812120000_insumo_regra_compra.sql types/database.ts src/types/database.ts
+git commit -m "feat(insumos): tabelas insumo_regra_compra e insumo_distribuidor"
+```
+
+---
+
+### Task 2: Domínio — tipos, janela e validator
+
+**Files:**
+- Create: `src/domain/types/insumo-compra-db.ts`
+- Create: `src/domain/insumos/insumo-compra-sugestao-types.ts`
+- Create: `src/domain/insumos/insumo-compra-janela.ts`
+- Create: `src/domain/insumos/insumo-compra-janela.test.ts`
+- Create: `src/domain/insumos/insumo-compra-regra-validator.ts`
+- Create: `src/domain/insumos/insumo-compra-regra-validator.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `InsumoRegraCompraRow`, `InsumoDistribuidorRow`
+  - `InsumoCompraSugestaoStatus = 'urgente' | 'pedir_fora_janela' | 'pedir_hoje' | 'adiar_lote_minimo' | 'ok' | 'sem_consumo' | 'sem_regra'`
+  - `InsumoCompraJanela.estaNaJanela(tipo, diasSemana, dayOfWeek): boolean`
+  - `InsumoCompraJanela.diasAteProximoPermitido(tipo, diasSemana, dayOfWeek): number` // 0 se hoje ok
+  - `InsumoCompraRegraValidator.validate(input): { ok: true } | { ok: false; erros: string[] }`
+
+- [ ] **Step 1: Escrever testes da janela (falham)**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { InsumoCompraJanela } from './insumo-compra-janela';
+
+describe('InsumoCompraJanela', () => {
+  const janela = new InsumoCompraJanela();
+
+  it('qualquer: sempre na janela e W=0', () => {
+    expect(janela.estaNaJanela('qualquer', null, 3)).toBe(true);
+    expect(janela.diasAteProximoPermitido('qualquer', null, 3)).toBe(0);
+  });
+
+  it('segunda (1): terça → W=6; segunda → W=0', () => {
+    expect(janela.estaNaJanela('dias_semana', [1], 1)).toBe(true);
+    expect(janela.diasAteProximoPermitido('dias_semana', [1], 1)).toBe(0);
+    expect(janela.estaNaJanela('dias_semana', [1], 2)).toBe(false);
+    expect(janela.diasAteProximoPermitido('dias_semana', [1], 2)).toBe(6);
+  });
+
+  it('seg–qua (1,2,3): quinta → W=4', () => {
+    expect(janela.diasAteProximoPermitido('dias_semana', [1, 2, 3], 4)).toBe(4);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar testes (expect FAIL)**
+
+Run: `npm test -- src/domain/insumos/insumo-compra-janela.test.ts`
+
+Expected: FAIL (módulo ausente).
+
+- [ ] **Step 3: Implementar janela + types + validator**
+
+`insumo-compra-janela.ts`:
+
+```ts
+export type InsumoCompraJanelaTipo = 'qualquer' | 'dias_semana';
+
+export class InsumoCompraJanela {
+  estaNaJanela(
+    tipo: InsumoCompraJanelaTipo,
+    diasSemana: number[] | null,
+    dayOfWeek: number,
+  ): boolean {
+    if (tipo === 'qualquer') return true;
+    return (diasSemana ?? []).includes(dayOfWeek);
+  }
+
+  diasAteProximoPermitido(
+    tipo: InsumoCompraJanelaTipo,
+    diasSemana: number[] | null,
+    dayOfWeek: number,
+  ): number {
+    if (this.estaNaJanela(tipo, diasSemana, dayOfWeek)) return 0;
+    const dias = diasSemana ?? [];
+    let min = 7;
+    for (const d of dias) {
+      const delta = (d - dayOfWeek + 7) % 7;
+      if (delta > 0 && delta < min) min = delta;
+    }
+    return min === 7 ? 0 : min;
+  }
+}
+
+export const insumoCompraJanela = new InsumoCompraJanela();
+```
+
+Validator: rejeitar min > max; `dias_semana` vazio se tipo `dias_semana`; mais de um `preferencial`; nome vazio.
+
+Types DB espelhando colunas; status union como na spec.
+
+- [ ] **Step 4: Rodar testes (expect PASS)**
+
+Run: `npm test -- src/domain/insumos/insumo-compra-janela.test.ts src/domain/insumos/insumo-compra-regra-validator.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/types/insumo-compra-db.ts src/domain/insumos/insumo-compra-*.ts
+git commit -m "feat(insumos): domínio de janela e validação de regra de compra"
+```
+
+---
+
+### Task 3: Motor — `InsumoCompraSugestaoCalculator`
+
+**Files:**
+- Create: `src/domain/insumos/insumo-compra-sugestao-calculator.ts`
+- Create: `src/domain/insumos/insumo-compra-sugestao-calculator.test.ts`
+- Modify (se ainda não existir completo): `src/domain/insumos/insumo-compra-sugestao-types.ts`
+
+**Interfaces:**
+- Consumes: `InsumoCompraJanela`, types de status
+- Produces:
+
+```ts
+export type InsumoCompraSugestaoInput = {
+  estoque: number;
+  consumoDiario: number;
+  leadTimeDias: number;
+  quantidadeMinima: number | null;
+  quantidadeMaxima: number | null;
+  janelaTipo: 'qualquer' | 'dias_semana';
+  diasSemana: number[] | null;
+  dayOfWeek: number; // 0–6 SP
+  temRegraAtiva: boolean;
+};
+
+export type InsumoCompraSugestaoResult = {
+  status: InsumoCompraSugestaoStatus;
+  quantidadeSugerida: number | null;
+  coberturaAtualDias: number | null;
+  metaEstoque: number | null;
+  motivo: string;
+};
+```
+
+- [ ] **Step 1: Escrever testes do motor (falham)**
+
+Casos obrigatórios:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { InsumoCompraSugestaoCalculator } from './insumo-compra-sugestao-calculator';
+
+describe('InsumoCompraSugestaoCalculator', () => {
+  const calc = new InsumoCompraSugestaoCalculator();
+
+  it('kanban: L=7, estoque=3.5*consumo → qtd ≈ 7*consumo e pedir_hoje', () => {
+    const consumo = 100;
+    const result = calc.calculate({
+      estoque: 3.5 * consumo,
+      consumoDiario: consumo,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('pedir_hoje');
+    expect(result.quantidadeSugerida).toBeCloseTo(7 * consumo, 5);
+  });
+
+  it('kanban: estoque na meta → ok', () => {
+    const consumo = 100;
+    const result = calc.calculate({
+      estoque: 10.5 * consumo,
+      consumoDiario: consumo,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('ok');
+    expect(result.quantidadeSugerida).toBeNull();
+  });
+
+  it('cobertura < L → urgente', () => {
+    const result = calc.calculate({
+      estoque: 200,
+      consumoDiario: 100,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('urgente');
+    expect(result.coberturaAtualDias).toBeCloseTo(2, 5);
+  });
+
+  it('fora da janela com cobertura suficiente → ok (não pedir)', () => {
+    const consumo = 100;
+    const result = calc.calculate({
+      estoque: 20 * consumo,
+      consumoDiario: consumo,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'dias_semana',
+      diasSemana: [1],
+      dayOfWeek: 2,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('ok');
+  });
+
+  it('fora da janela e cobertura < W+L → pedir_fora_janela', () => {
+    // terça, janela só segunda; W=6; L=3; W+L=9; cobertura=8
+    const result = calc.calculate({
+      estoque: 800,
+      consumoDiario: 100,
+      leadTimeDias: 3,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'dias_semana',
+      diasSemana: [1],
+      dayOfWeek: 2,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('pedir_fora_janela');
+  });
+
+  it('adiar quando qtd < min e cobertura >= L', () => {
+    // L=7, consumo=100, meta=1050, estoque=900 → qtd=150 < min 300; cobertura=9 >= 7
+    const result = calc.calculate({
+      estoque: 900,
+      consumoDiario: 100,
+      leadTimeDias: 7,
+      quantidadeMinima: 300,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('adiar_lote_minimo');
+    expect(result.quantidadeSugerida).toBeCloseTo(150, 5);
+  });
+
+  it('aplica máximo como teto', () => {
+    const result = calc.calculate({
+      estoque: 0,
+      consumoDiario: 100,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: 200,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('urgente');
+    expect(result.quantidadeSugerida).toBe(200);
+  });
+
+  it('sem consumo → sem_consumo', () => {
+    const result = calc.calculate({
+      estoque: 100,
+      consumoDiario: 0,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('sem_consumo');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar (expect FAIL)**
+
+Run: `npm test -- src/domain/insumos/insumo-compra-sugestao-calculator.test.ts`
+
+- [ ] **Step 3: Implementar calculator**
+
+Algoritmo (prioridade):
+
+1. Se `!temRegraAtiva` → `sem_regra`
+2. Se `consumoDiario <= 0` → `sem_consumo`
+3. `cobertura = estoque / consumoDiario` (se estoque<=0 → 0)
+4. `metaEstoque = consumoDiario * leadTimeDias * 1.5`
+5. `qtdBruta = max(0, metaEstoque - estoque)`
+6. `aplicarMax(q) = max==null ? q : min(q, max)`
+7. `W = janela.diasAteProximoPermitido(...)`
+8. `naJanela = W === 0`
+9. Se `cobertura < leadTimeDias` → `urgente` com qtd = `aplicarMax(max(qtdBruta, min ?? qtdBruta))` se min e risco; se `qtdBruta < min` sob urgente, usar `min` (após max)
+10. Senão se `!naJanela && cobertura < W + leadTimeDias` → `pedir_fora_janela` (mesma qtd)
+11. Senão se `qtdBruta <= 0` → `ok`
+12. Senão se `min != null && qtdBruta < min`:
+    - dias até atingir min: `t = (min - qtdBruta) / consumoDiario`
+    - se `cobertura >= t + leadTimeDias` (e se fora da janela, considerar W) → `adiar_lote_minimo` com `quantidadeSugerida = qtdBruta` e motivo citando min
+    - senão → pedir agora com lote `aplicarMax(min)` (`pedir_hoje` ou `pedir_fora_janela`)
+13. Senão se `naJanela` → `pedir_hoje` com `aplicarMax(qtdBruta)`
+14. Senão → `ok` (precisa repor mas janela longe e cobertura ok — raro se qtd>0; se qtd>0 e naJanela false e cobertura >= W+L → `ok` / monitorar: status `ok` com motivo “aguardar janela”)
+
+Motivos curtos pt-BR, ex.: `"Cobertura abaixo do lead time"`, `"Aguardar lote mínimo de X"`.
+
+- [ ] **Step 4: Rodar (expect PASS)**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-compra-sugestao-calculator.ts src/domain/insumos/insumo-compra-sugestao-calculator.test.ts src/domain/insumos/insumo-compra-sugestao-types.ts
+git commit -m "feat(insumos): motor de sugestão de compra kanban L×1,5"
+```
+
+---
+
+### Task 4: Repositories
+
+**Files:**
+- Create: `src/data/insumos/InsumoRegraCompraRepository.ts`
+- Create: `src/data/insumos/InsumoDistribuidorRepository.ts`
+
+**Interfaces:**
+- Produces:
+  - `listAllWithInsumo(): Promise<Array<Regra + nome + unidade>>`
+  - `getByInsumoId(id)` / `upsert(regra)`
+  - `listByInsumoIds(ids)` / `replaceForInsumo(insumoId, distribuidores[])`
+
+Padrão: `supabaseClientFactory.createServiceRoleClient()` como em `InsumoFornecedorIgnoradoRepository`.
+
+- [ ] **Step 1: Implementar repositories**
+
+Métodos mínimos:
+
+```ts
+// InsumoRegraCompraRepository
+listAtivas(): Promise<InsumoRegraCompraRow[]>
+listAll(): Promise<InsumoRegraCompraRow[]>
+upsert(row: Omit<InsumoRegraCompraRow, 'created_at' | 'updated_at'> & { updated_at?: string }): Promise<InsumoRegraCompraRow>
+
+// InsumoDistribuidorRepository
+listByInsumoIds(ids: string[]): Promise<InsumoDistribuidorRow[]>
+replaceForInsumo(insumoId: string, items: Array<{ nome: string; preferencial: boolean; ordem: number }>): Promise<void>
+// implement: delete where insumo_id then insert
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/data/insumos/InsumoRegraCompraRepository.ts src/data/insumos/InsumoDistribuidorRepository.ts
+git commit -m "feat(insumos): repositories de regra de compra e distribuidores"
+```
+
+---
+
+### Task 5: Service de sugestão + actions de leitura
+
+**Files:**
+- Create: `src/lib/services/insumo-compra-sugestao-service.ts`
+- Create: `src/app/actions/insumo-compra-sugestao-actions.ts`
+
+**Interfaces:**
+- Consumes: calculator, janela, repos, `insumoConsumoRepository`, `insumoEstoqueRepository`, `insumoConsumoSemanalPeriodoBuilder`, `insumoConsumoCoberturaCalculator`, `insumoControleEstoqueFilter`
+- Produces:
+
+```ts
+export type InsumoCompraSugestaoLinha = {
+  insumoId: string;
+  nome: string;
+  unidade: string;
+  estoque: number;
+  consumoDiario: number;
+  coberturaAtualDias: number | null;
+  leadTimeDias: number;
+  quantidadeSugerida: number | null;
+  status: InsumoCompraSugestaoStatus;
+  motivo: string;
+  distribuidorPreferencial: string | null;
+  distribuidoresAlternativos: string[];
+};
+
+export type InsumoCompraSugestaoPageData = {
+  dataReferencia: string; // YYYY-MM-DD SP
+  resumo: { urgentes: number; pedirHoje: number; foraJanela: number; adiarMin: number };
+  itens: InsumoCompraSugestaoLinha[];
+  gruposPorFornecedor: Array<{ fornecedor: string; itens: InsumoCompraSugestaoLinha[] }>;
+};
+```
+
+- [ ] **Step 1: Implementar service**
+
+Fluxo:
+
+1. `periodo = insumoConsumoSemanalPeriodoBuilder.buildDefault(anchor, 'semanal')`
+2. `items = filter controláveis(listConsumoSemanal(periodo))`
+3. Cruzar com regras **ativas** (insumos só com regra; incluir também regras cujo insumo não teve consumo? Spec: sem consumo → status `sem_consumo` — incluir insumos com regra ativa mesmo sem linha de consumo, estoque via saldo, consumoDiario=0)
+4. Para cada: `media` semanal → `consumoDiario = media / 7`
+5. `dayOfWeek` da data ref em SP
+6. `calculate(...)`
+7. Montar grupos: preferencial ou `"Sem fornecedor"`; ordenar status por prioridade urgente → … → ok
+8. Resumo conta status do filtro atenção
+
+Prioridade sort: `urgente=0, pedir_fora_janela=1, pedir_hoje=2, adiar_lote_minimo=3, sem_consumo=4, ok=5, sem_regra=6`
+
+- [ ] **Step 2: Action**
+
+```ts
+'use server';
+export async function getInsumoCompraSugestaoPageData(dataReferencia?: string): Promise<InsumoCompraSugestaoPageData> {
+  await requireInternoModulo('interno_insumos', 'ler');
+  return insumoCompraSugestaoService.buildPageData(dataReferencia);
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/lib/services/insumo-compra-sugestao-service.ts src/app/actions/insumo-compra-sugestao-actions.ts
+git commit -m "feat(insumos): service e action da sugestão de compra"
+```
+
+---
+
+### Task 6: Manager + actions de config + seed da planilha
+
+**Files:**
+- Create: `src/lib/services/insumo-compra-regra-manager.ts`
+- Create: `src/app/actions/insumo-compra-regra-actions.ts`
+- Create: `src/domain/insumos/insumo-compra-seed-planilha.ts`
+
+**Interfaces:**
+- Produces: `listarRegrasParaConfig()`, `salvarRegra(input)`, `aplicarSeedPlanilha(): { atualizados: number; naoEncontrados: string[] }`
+
+- [ ] **Step 1: Seed data**
+
+Arquivo com array da planilha (nome normalizado → lead, janela, min, max, distribuidores). Exemplos:
+
+| Nome | L | Janela | Min | Max | Preferencial (+ alts) |
+|------|---|--------|-----|-----|------------------------|
+| Farinha de trigo | 7 | [1] | 30000 | 30000 | DOUGLAS |
+| Glúten | 3 | qualquer | | | DAXIA pref, PANTEC |
+| Açúcar cristal | 3 | qualquer | 3000 | | PANTEC |
+| Álcool | 1 | qualquer | | 300 | ALZIRA |
+| … | | | | | |
+
+Normalizar nomes como `insumoControleEstoqueFilter` (NFD + lower) para match com `insumos.nome`.
+
+- [ ] **Step 2: Manager**
+
+`salvarRegra`: validator → upsert regra → `replaceForInsumo` distribuidores.
+
+`aplicarSeedPlanilha`: listar insumos ativos, match por nome, upsert; retornar não encontrados (não criar insumos novos).
+
+- [ ] **Step 3: Actions**
+
+`requireInternoModulo('interno_config', 'administrar')` ou o mesmo gate das outras pages de `/config` (alinhar a `fornecedores-insumos` / `insumos`).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/insumo-compra-regra-manager.ts src/app/actions/insumo-compra-regra-actions.ts src/domain/insumos/insumo-compra-seed-planilha.ts
+git commit -m "feat(insumos): config manager, actions e seed da planilha de compra"
+```
+
+---
+
+### Task 7: UI Config — `/config/regras-compra-insumos`
+
+**Files:**
+- Create: `src/app/config/regras-compra-insumos/page.tsx`
+- Create: `src/app/config/regras-compra-insumos/RegrasCompraInsumosClient.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoRegraCompraFormModal.tsx` (se form > ~150 linhas, manter no feature)
+- Modify: `src/config/config-sections.ts`
+
+**Interfaces:**
+- Consumes: actions de regra
+
+- [ ] **Step 1: Entry em config-sections**
+
+```ts
+{
+  href: '/config/regras-compra-insumos',
+  label: 'Regras de compra',
+  icon: 'shopping_cart',
+  description: 'Lead time, janela, min/max e distribuidores',
+},
+```
+
+Colocar após Insumos / perto de Fornecedores ignorados.
+
+- [ ] **Step 2: Page + client**
+
+Lista: nome, L, janela (label), min/max, preferencial, ativo.  
+Ações: Editar (modal), botão **Importar planilha inicial** (chama seed, toast com não encontrados).
+
+Form modal campos: lead time, janela tipo + checkboxes dias, min, max, ativo, lista distribuidores (nome + radio preferencial + add/remove).
+
+- [ ] **Step 3: Smoke manual**
+
+Abrir `/config/regras-compra-insumos`, salvar uma regra, seed dry-run.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/config/regras-compra-insumos src/config/config-sections.ts src/features/insumo-compra-sugestao/components/InsumoRegraCompraFormModal.tsx
+git commit -m "feat(insumos): tela config de regras de compra"
+```
+
+---
+
+### Task 8: UI Operacional + nav + auth
+
+**Files:**
+- Create: `src/app/sugestao-compras/page.tsx`
+- Create: `src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoResumo.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoTable.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoMobileList.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoFornecedorGroups.tsx`
+- Create: `src/features/insumo-compra-sugestao/insumo-compra-sugestao-status-tone.ts`
+- Modify: `src/config/main-nav-config.ts`
+- Modify: `src/lib/auth/interno-route-access-map.ts`
+- Modify: `src/lib/auth/interno-route-access-map.test.ts` (se cobrir prefixes)
+
+**Interfaces:**
+- Consumes: `getInsumoCompraSugestaoPageData`
+
+- [ ] **Step 1: Auth + nav**
+
+Em `main-nav-config` grupo Insumos, adicionar:
+
+```ts
+{
+  type: 'link',
+  href: '/sugestao-compras',
+  label: 'Sugestão de compra',
+  icon: 'shopping_cart',
+  moduloId: 'interno_insumos',
+  match: (pathname) => pathname.startsWith('/sugestao-compras'),
+},
+```
+
+Atualizar `match` do group para incluir `/sugestao-compras`.
+
+Em `interno-route-access-map.ts`:
+
+```ts
+{
+  match: 'prefix',
+  prefix: '/sugestao-compras',
+  requirement: modulo('interno_insumos', 'ler'),
+},
+```
+
+- [ ] **Step 2: Page server**
+
+`force-dynamic`; carregar `getInsumoCompraSugestaoPageData()`; passar ao client.
+
+- [ ] **Step 3: Client**
+
+Toolbar: título, `DateField` data ref, busca, chips **Precisa atenção** | **Todos**, toggle **Lista** | **Por fornecedor**.  
+Resumo uma linha.  
+Filtro atenção: status ∈ urgente | pedir_fora_janela | pedir_hoje | adiar_lote_minimo.  
+Empty: “Nenhuma compra sugerida hoje.” + Ver todos.  
+Tons: urgente rose, pedir amber, adiar stone; ícone + texto.  
+Números com `tabular-nums` / formatter existente de insumos.
+
+- [ ] **Step 4: Atualizar testes de route map se existirem asserts de lista**
+
+Run: `npm test -- src/lib/auth/interno-route-access-map.test.ts`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/sugestao-compras src/features/insumo-compra-sugestao src/config/main-nav-config.ts src/lib/auth/interno-route-access-map.ts src/lib/auth/interno-route-access-map.test.ts
+git commit -m "feat(insumos): tela sugestão de compra e navegação"
+```
+
+---
+
+### Task 9: Verificação ponta a ponta
+
+**Files:** nenhum novo (só validação)
+
+- [ ] **Step 1: Testes unitários**
+
+Run: `npm test -- src/domain/insumos/insumo-compra`
+
+Expected: todos PASS.
+
+- [ ] **Step 2: Seed + tela**
+
+1. Aplicar migration se ainda não  
+2. Config → Importar planilha → conferir matches  
+3. `/sugestao-compras` com data numa segunda e numa terça  
+4. Conferir farinha (janela seg), item urgente artificial (se possível com ajuste de saldo em staging)
+
+- [ ] **Step 3: Commit final só se houver fixes**
+
+```bash
+git commit -m "fix(insumos): ajustes pós-smoke da sugestão de compra"
+```
+
+---
+
+## Spec coverage (self-review)
+
+| Requisito spec | Task |
+|----------------|------|
+| Tabelas + RLS | 1 |
+| Fórmula order-up-to L×1,5 | 3 (corrigida vs versão inicial da spec) |
+| Min adiar / forçar sob risco | 3 |
+| Max teto | 3 |
+| Janela preferencial + fora urgente | 2–3 |
+| Preferencial + Sem fornecedor | 5, 8 |
+| Filtro atenção / Todos | 8 |
+| Config regras | 6–7 |
+| Seed planilha | 6–7 |
+| Nav + auth | 8 |
+| Sem pedidos v1 | — respeitado |
+| Sem trava | — respeitado |
+| Testes domínio | 2–3, 9 |
+
+**Correção documentada:** a spec foi ajustada para `qtd = max(0, consumo*L*1.5 - estoque)`, alinhada ao exemplo verbal (3,5 dias → comprar ~7 dias). A fórmula antiga `meta − (estoque − L·consumo)` gerava o dobro e foi descartada.
