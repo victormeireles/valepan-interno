@@ -19,6 +19,12 @@ describe('formatCoberturaDias', () => {
     expect(formatCoberturaDias(null)).toBe('—');
   });
 
+  it('arredonda dias para inteiro', () => {
+    expect(formatCoberturaDias(12.4)).toBe('12 d');
+    expect(formatCoberturaDias(12.6)).toBe('13 d');
+    expect(formatCoberturaDias(0.4)).toBe('0 d');
+  });
+
   it('compacta coberturas acima de 360 dias', () => {
     expect(formatCoberturaDias(360)).toBe('360 d');
     expect(formatCoberturaDias(361)).toBe('>360 d');
