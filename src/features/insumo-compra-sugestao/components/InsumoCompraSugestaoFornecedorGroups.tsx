@@ -1,13 +1,22 @@
 import { Card } from '@/components/ui/Card';
-import type { InsumoCompraSugestaoPageData } from '@/lib/services/insumo-compra-sugestao-service';
+import type {
+  InsumoCompraSugestaoLinha,
+  InsumoCompraSugestaoPageData,
+} from '@/lib/services/insumo-compra-sugestao-service';
 import InsumoCompraSugestaoMobileList from './InsumoCompraSugestaoMobileList';
 import InsumoCompraSugestaoTable from './InsumoCompraSugestaoTable';
 
 type Props = {
   grupos: InsumoCompraSugestaoPageData['gruposPorFornecedor'];
+  onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
+  onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
 };
 
-export default function InsumoCompraSugestaoFornecedorGroups({ grupos }: Props) {
+export default function InsumoCompraSugestaoFornecedorGroups({
+  grupos,
+  onCadastrarRegra,
+  onAjustarEstoque,
+}: Props) {
   return (
     <div className="space-y-4">
       {grupos.map((grupo) => (
@@ -23,8 +32,18 @@ export default function InsumoCompraSugestaoFornecedorGroups({ grupos }: Props) 
               {grupo.itens.length} {grupo.itens.length === 1 ? 'item' : 'itens'}
             </span>
           </header>
-          <InsumoCompraSugestaoTable items={grupo.itens} embedded />
-          <InsumoCompraSugestaoMobileList items={grupo.itens} embedded />
+          <InsumoCompraSugestaoTable
+            items={grupo.itens}
+            embedded
+            onCadastrarRegra={onCadastrarRegra}
+            onAjustarEstoque={onAjustarEstoque}
+          />
+          <InsumoCompraSugestaoMobileList
+            items={grupo.itens}
+            embedded
+            onCadastrarRegra={onCadastrarRegra}
+            onAjustarEstoque={onAjustarEstoque}
+          />
         </Card>
       ))}
     </div>

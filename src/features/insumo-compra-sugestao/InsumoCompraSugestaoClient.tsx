@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState, useTransition } from 'react';
+import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
 import { Button } from '@/components/ui/Button';
@@ -9,15 +9,20 @@ import { Chip } from '@/components/ui/Chip';
 import { DateField } from '@/components/ui/DateField';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { Toast } from '@/components/ui/Toast';
 import type { InsumoCompraSugestaoStatus } from '@/domain/insumos/insumo-compra-sugestao-types';
+import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
+import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
 import type {
   InsumoCompraSugestaoLinha,
   InsumoCompraSugestaoPageData,
 } from '@/lib/services/insumo-compra-sugestao-service';
+import InsumoAjusteModal from '@/features/insumo-estoque/components/InsumoAjusteModal';
 import InsumoCompraSugestaoFornecedorGroups from './components/InsumoCompraSugestaoFornecedorGroups';
 import InsumoCompraSugestaoMobileList from './components/InsumoCompraSugestaoMobileList';
 import InsumoCompraSugestaoResumo from './components/InsumoCompraSugestaoResumo';
 import InsumoCompraSugestaoTable from './components/InsumoCompraSugestaoTable';
+import InsumoRegraCompraFormModal from './components/InsumoRegraCompraFormModal';
 
 type Props = {
   initialData: InsumoCompraSugestaoPageData;
@@ -40,10 +45,18 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<AtencaoFilter>('atencao');
   const [layout, setLayout] = useState<LayoutMode>('lista');
+  const [itens, setItens] = useState(initialData.itens);
+  const [toast, setToast] = useState<string | null>(null);
+  const [regraTarget, setRegraTarget] = useState<InsumoCompraRegraConfig | null>(null);
+  const [ajusteTarget, setAjusteTarget] = useState<InsumoSaldoComDetalhes | null>(null);
+
+  useEffect(() => {
+    setItens(initialData.itens);
+  }, [initialData.itens]);
 
   const filteredItems = useMemo(
-    () => filterItems(initialData.itens, filter, searchTerm),
-    [filter, initialData.itens, searchTerm],
+    () => filterItems(itens, filter, searchTerm),
+    [filter, itens, searchTerm],
   );
 
   const filteredGroups = useMemo(() => {
@@ -51,15 +64,48 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
     return initialData.gruposPorFornecedor
       .map((group) => ({
         ...group,
-        itens: group.itens.filter((item) => visibleIds.has(item.insumoId)),
+        itens: group.itens
+          .filter((item) => visibleIds.has(item.insumoId))
+          .map((item) => itens.find((linha) => linha.insumoId === item.insumoId) ?? item),
       }))
       .filter((group) => group.itens.length > 0);
-  }, [filteredItems, initialData.gruposPorFornecedor]);
+  }, [filteredItems, initialData.gruposPorFornecedor, itens]);
 
   const handleDateSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const params = new URLSearchParams({ dataReferencia });
     startTransition(() => router.replace(`/sugestao-compras?${params.toString()}`));
+  };
+
+  const handleCadastrarRegra = (item: InsumoCompraSugestaoLinha) => {
+    setRegraTarget(toRegraConfig(item));
+  };
+
+  const handleAjustarEstoque = (item: InsumoCompraSugestaoLinha) => {
+    setAjusteTarget(toSaldoDetalhes(item));
+  };
+
+  const handleRegraSaved = () => {
+    setRegraTarget(null);
+    setToast('Regra salva.');
+    router.refresh();
+    window.setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleAjusteSaved = (novoSaldo: number) => {
+    if (ajusteTarget) {
+      setItens((atuais) =>
+        atuais.map((linha) =>
+          linha.insumoId === ajusteTarget.insumoId
+            ? { ...linha, estoque: novoSaldo }
+            : linha,
+        ),
+      );
+    }
+    setAjusteTarget(null);
+    setToast('Saldo ajustado com sucesso');
+    router.refresh();
+    window.setTimeout(() => setToast(null), 4000);
   };
 
   const resultLabel =
@@ -187,13 +233,45 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
           />
         </Card>
       ) : layout === 'fornecedor' ? (
-        <InsumoCompraSugestaoFornecedorGroups grupos={filteredGroups} />
+        <InsumoCompraSugestaoFornecedorGroups
+          grupos={filteredGroups}
+          onCadastrarRegra={handleCadastrarRegra}
+          onAjustarEstoque={handleAjustarEstoque}
+        />
       ) : (
         <Card padding="none" className="overflow-hidden">
-          <InsumoCompraSugestaoTable items={filteredItems} />
-          <InsumoCompraSugestaoMobileList items={filteredItems} />
+          <InsumoCompraSugestaoTable
+            items={filteredItems}
+            onCadastrarRegra={handleCadastrarRegra}
+            onAjustarEstoque={handleAjustarEstoque}
+          />
+          <InsumoCompraSugestaoMobileList
+            items={filteredItems}
+            onCadastrarRegra={handleCadastrarRegra}
+            onAjustarEstoque={handleAjustarEstoque}
+          />
         </Card>
       )}
+
+      {toast ? (
+        <Toast tone="success" onClose={() => setToast(null)}>
+          {toast}
+        </Toast>
+      ) : null}
+
+      <InsumoRegraCompraFormModal
+        open={Boolean(regraTarget)}
+        regra={regraTarget}
+        onClose={() => setRegraTarget(null)}
+        onSaved={handleRegraSaved}
+      />
+
+      <InsumoAjusteModal
+        isOpen={Boolean(ajusteTarget)}
+        item={ajusteTarget}
+        onClose={() => setAjusteTarget(null)}
+        onSaved={handleAjusteSaved}
+      />
     </div>
   );
 }
@@ -218,4 +296,25 @@ function filterItems(
       );
     return matchesAttention && matchesSearch;
   });
+}
+
+function toRegraConfig(item: InsumoCompraSugestaoLinha): InsumoCompraRegraConfig {
+  return {
+    insumoId: item.insumoId,
+    nome: item.nome,
+    unidade: item.unidade,
+    regra: null,
+    distribuidores: [],
+  };
+}
+
+function toSaldoDetalhes(item: InsumoCompraSugestaoLinha): InsumoSaldoComDetalhes {
+  return {
+    insumoId: item.insumoId,
+    nome: item.nome,
+    unidadeResumida: item.unidade,
+    quantidade: item.estoque,
+    custoUnitario: 0,
+    ultimaEntradaEm: null,
+  };
 }
