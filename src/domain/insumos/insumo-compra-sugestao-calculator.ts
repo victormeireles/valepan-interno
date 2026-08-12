@@ -25,7 +25,7 @@ export class InsumoCompraSugestaoCalculator {
     const contexto = this.createContext(input);
     const quantidadeComRisco = this.applyRiskLimits(input, contexto.quantidadeBruta);
 
-    if (contexto.cobertura < input.leadTimeDias / 2) {
+    if (contexto.cobertura < input.leadTimeDias) {
       return this.createResult('urgente', quantidadeComRisco, contexto, 'Cobertura crítica');
     }
     if (!contexto.naJanela && contexto.cobertura < contexto.diasAteJanela + input.leadTimeDias) {

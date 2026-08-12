@@ -4,7 +4,7 @@ import { InsumoCompraSugestaoCalculator } from './insumo-compra-sugestao-calcula
 describe('InsumoCompraSugestaoCalculator', () => {
   const calc = new InsumoCompraSugestaoCalculator();
 
-  it('kanban: L=7, estoque=3.5*consumo → qtd ≈ 7*consumo e pedir_hoje', () => {
+  it('kanban: L=7, estoque=3.5*consumo → qtd ≈ 7*consumo e urgente', () => {
     const consumo = 100;
     const result = calc.calculate({
       estoque: 3.5 * consumo,
@@ -17,8 +17,25 @@ describe('InsumoCompraSugestaoCalculator', () => {
       dayOfWeek: 1,
       temRegraAtiva: true,
     });
-    expect(result.status).toBe('pedir_hoje');
+    expect(result.status).toBe('urgente');
     expect(result.quantidadeSugerida).toBeCloseTo(7 * consumo, 5);
+  });
+
+  it('cobertura >= L com reposição necessária → pedir_hoje', () => {
+    const result = calc.calculate({
+      estoque: 800,
+      consumoDiario: 100,
+      leadTimeDias: 7,
+      quantidadeMinima: null,
+      quantidadeMaxima: null,
+      janelaTipo: 'qualquer',
+      diasSemana: null,
+      dayOfWeek: 1,
+      temRegraAtiva: true,
+    });
+    expect(result.status).toBe('pedir_hoje');
+    expect(result.coberturaAtualDias).toBeCloseTo(8, 5);
+    expect(result.quantidadeSugerida).toBeCloseTo(250, 5);
   });
 
   it('kanban: estoque na meta → ok', () => {
