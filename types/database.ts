@@ -406,6 +406,7 @@ export type Database = {
           faz_fechamento: boolean
           foto_fachada_url: string | null
           frequencia_pedido: Database["public"]["Enums"]["frequencia_pedido_enum"]
+          grupo_comercial: string | null
           grupo_whatsapp: string | null
           id: string
           indicador_id: string | null
@@ -468,6 +469,7 @@ export type Database = {
           faz_fechamento?: boolean
           foto_fachada_url?: string | null
           frequencia_pedido?: Database["public"]["Enums"]["frequencia_pedido_enum"]
+          grupo_comercial?: string | null
           grupo_whatsapp?: string | null
           id?: string
           indicador_id?: string | null
@@ -530,6 +532,7 @@ export type Database = {
           faz_fechamento?: boolean
           foto_fachada_url?: string | null
           frequencia_pedido?: Database["public"]["Enums"]["frequencia_pedido_enum"]
+          grupo_comercial?: string | null
           grupo_whatsapp?: string | null
           id?: string
           indicador_id?: string | null
@@ -649,6 +652,99 @@ export type Database = {
             columns: ["vendedor_padrao_hamburguerias_id"]
             isOneToOne: false
             referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clientes_migracao_faturamento: {
+        Row: {
+          cliente_id: string
+          codigo_cenario_imposto_erp_destino: number | null
+          codigo_cenario_imposto_erp_origem: number | null
+          created_at: string
+          empresa_id_destino: string
+          empresa_id_origem: string
+          erp_codigo_destino: string | null
+          erp_codigo_origem: string | null
+          erro_mensagem: string | null
+          id: string
+          migrado_em: string | null
+          motivo: string
+          parcela_padrao_id_origem: string | null
+          revertido_em: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cliente_id: string
+          codigo_cenario_imposto_erp_destino?: number | null
+          codigo_cenario_imposto_erp_origem?: number | null
+          created_at?: string
+          empresa_id_destino: string
+          empresa_id_origem: string
+          erp_codigo_destino?: string | null
+          erp_codigo_origem?: string | null
+          erro_mensagem?: string | null
+          id?: string
+          migrado_em?: string | null
+          motivo?: string
+          parcela_padrao_id_origem?: string | null
+          revertido_em?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cliente_id?: string
+          codigo_cenario_imposto_erp_destino?: number | null
+          codigo_cenario_imposto_erp_origem?: number | null
+          created_at?: string
+          empresa_id_destino?: string
+          empresa_id_origem?: string
+          erp_codigo_destino?: string | null
+          erp_codigo_origem?: string | null
+          erro_mensagem?: string | null
+          id?: string
+          migrado_em?: string | null
+          motivo?: string
+          parcela_padrao_id_origem?: string | null
+          revertido_em?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_migracao_faturamento_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_migracao_faturamento_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
+            foreignKeyName: "clientes_migracao_faturamento_empresa_id_destino_fkey"
+            columns: ["empresa_id_destino"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_migracao_faturamento_empresa_id_origem_fkey"
+            columns: ["empresa_id_origem"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_migracao_faturamento_parcela_padrao_id_origem_fkey"
+            columns: ["parcela_padrao_id_origem"]
+            isOneToOne: false
+            referencedRelation: "parcelas"
             referencedColumns: ["id"]
           },
         ]
@@ -1273,6 +1369,8 @@ export type Database = {
           id: string
           is_padrao: boolean
           is_retirada_fabrica: boolean
+          latitude: number | null
+          longitude: number | null
           nome: string
           numero: string | null
           rua: string | null
@@ -1290,6 +1388,8 @@ export type Database = {
           id?: string
           is_padrao?: boolean
           is_retirada_fabrica?: boolean
+          latitude?: number | null
+          longitude?: number | null
           nome: string
           numero?: string | null
           rua?: string | null
@@ -1307,6 +1407,8 @@ export type Database = {
           id?: string
           is_padrao?: boolean
           is_retirada_fabrica?: boolean
+          latitude?: number | null
+          longitude?: number | null
           nome?: string
           numero?: string | null
           rua?: string | null
@@ -1786,6 +1888,41 @@ export type Database = {
           },
         ]
       }
+      insumo_distribuidor: {
+        Row: {
+          created_at: string
+          id: string
+          insumo_id: string
+          nome: string
+          ordem: number
+          preferencial: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          insumo_id: string
+          nome: string
+          ordem?: number
+          preferencial?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          insumo_id?: string
+          nome?: string
+          ordem?: number
+          preferencial?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_distribuidor_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insumo_entrada_pendencias: {
         Row: {
           categoria_compra_codigo: string | null
@@ -2042,6 +2179,50 @@ export type Database = {
             columns: ["pendencia_id"]
             isOneToOne: false
             referencedRelation: "insumo_entrada_pendencias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insumo_regra_compra: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          dias_semana: number[] | null
+          insumo_id: string
+          janela_tipo: string
+          lead_time_dias: number
+          quantidade_maxima: number | null
+          quantidade_minima: number | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          dias_semana?: number[] | null
+          insumo_id: string
+          janela_tipo?: string
+          lead_time_dias: number
+          quantidade_maxima?: number | null
+          quantidade_minima?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          dias_semana?: number[] | null
+          insumo_id?: string
+          janela_tipo?: string
+          lead_time_dias?: number
+          quantidade_maxima?: number | null
+          quantidade_minima?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_regra_compra_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: true
+            referencedRelation: "insumos"
             referencedColumns: ["id"]
           },
         ]
@@ -3264,6 +3445,62 @@ export type Database = {
           },
         ]
       }
+      perfil_modulos: {
+        Row: {
+          modulo: string
+          nivel: string
+          perfil_id: string
+        }
+        Insert: {
+          modulo: string
+          nivel: string
+          perfil_id: string
+        }
+        Update: {
+          modulo?: string
+          nivel?: string
+          perfil_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfil_modulos_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      perfis: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao: string | null
+          id: string
+          is_sistema: boolean
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          is_sistema?: boolean
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          is_sistema?: boolean
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       produto_assadeiras: {
         Row: {
           assadeira_id: string
@@ -3749,35 +3986,65 @@ export type Database = {
       }
       roteiro_paradas: {
         Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
           created_at: string | null
           descricao: string | null
+          estado: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           manual_categoria: string | null
+          numero: string | null
           ordem: number
           pedido_id: string | null
           roteiro_veiculo_id: string
+          rua: string | null
+          tempo_parada_minutos: number | null
           tipo: string
           titulo: string | null
         }
         Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           created_at?: string | null
           descricao?: string | null
+          estado?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           manual_categoria?: string | null
+          numero?: string | null
           ordem: number
           pedido_id?: string | null
           roteiro_veiculo_id: string
+          rua?: string | null
+          tempo_parada_minutos?: number | null
           tipo?: string
           titulo?: string | null
         }
         Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           created_at?: string | null
           descricao?: string | null
+          estado?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           manual_categoria?: string | null
+          numero?: string | null
           ordem?: number
           pedido_id?: string | null
           roteiro_veiculo_id?: string
+          rua?: string | null
+          tempo_parada_minutos?: number | null
           tipo?: string
           titulo?: string | null
         }
@@ -3811,13 +4078,19 @@ export type Database = {
           custo_fixo_snapshot: number | null
           custo_percentual_snapshot: number | null
           custos_congelados_em: string | null
+          distancia_km: number | null
           id: string
+          minutos_por_100_cx: number | null
           motorista_alocado_em: string | null
           motorista_alocado_por: string | null
           motorista_usuario_id: string | null
           ordem_exibicao: number
           propriedade_snapshot: string | null
+          rota_calculada_em: string | null
           roteiro_id: string
+          tempo_direcao_minutos: number | null
+          tempo_paradas_minutos: number | null
+          tempo_total_minutos: number | null
           transportadora_nome_snapshot: string | null
           updated_at: string | null
           veiculo_logistica_id: string
@@ -3827,13 +4100,19 @@ export type Database = {
           custo_fixo_snapshot?: number | null
           custo_percentual_snapshot?: number | null
           custos_congelados_em?: string | null
+          distancia_km?: number | null
           id?: string
+          minutos_por_100_cx?: number | null
           motorista_alocado_em?: string | null
           motorista_alocado_por?: string | null
           motorista_usuario_id?: string | null
           ordem_exibicao?: number
           propriedade_snapshot?: string | null
+          rota_calculada_em?: string | null
           roteiro_id: string
+          tempo_direcao_minutos?: number | null
+          tempo_paradas_minutos?: number | null
+          tempo_total_minutos?: number | null
           transportadora_nome_snapshot?: string | null
           updated_at?: string | null
           veiculo_logistica_id: string
@@ -3843,13 +4122,19 @@ export type Database = {
           custo_fixo_snapshot?: number | null
           custo_percentual_snapshot?: number | null
           custos_congelados_em?: string | null
+          distancia_km?: number | null
           id?: string
+          minutos_por_100_cx?: number | null
           motorista_alocado_em?: string | null
           motorista_alocado_por?: string | null
           motorista_usuario_id?: string | null
           ordem_exibicao?: number
           propriedade_snapshot?: string | null
+          rota_calculada_em?: string | null
           roteiro_id?: string
+          tempo_direcao_minutos?: number | null
+          tempo_paradas_minutos?: number | null
+          tempo_total_minutos?: number | null
           transportadora_nome_snapshot?: string | null
           updated_at?: string | null
           veiculo_logistica_id?: string
@@ -4042,6 +4327,7 @@ export type Database = {
         Row: {
           ativo: boolean
           created_at: string
+          grupo_whatsapp: string | null
           id: string
           nome: string
           updated_at: string
@@ -4049,6 +4335,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           created_at?: string
+          grupo_whatsapp?: string | null
           id?: string
           nome: string
           updated_at?: string
@@ -4056,6 +4343,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           created_at?: string
+          grupo_whatsapp?: string | null
           id?: string
           nome?: string
           updated_at?: string
@@ -4164,6 +4452,39 @@ export type Database = {
           },
         ]
       }
+      usuario_perfis: {
+        Row: {
+          created_at: string
+          perfil_id: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          perfil_id: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          perfil_id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuario_perfis_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuario_perfis_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           ativo: boolean
@@ -4177,6 +4498,7 @@ export type Database = {
           id: string
           inativado_em: string | null
           inativado_por: string | null
+          is_system_owner: boolean
           nome: string
           telefone: string | null
           telefone_verificado: boolean | null
@@ -4195,6 +4517,7 @@ export type Database = {
           id?: string
           inativado_em?: string | null
           inativado_por?: string | null
+          is_system_owner?: boolean
           nome: string
           telefone?: string | null
           telefone_verificado?: boolean | null
@@ -4213,6 +4536,7 @@ export type Database = {
           id?: string
           inativado_em?: string | null
           inativado_por?: string | null
+          is_system_owner?: boolean
           nome?: string
           telefone?: string | null
           telefone_verificado?: boolean | null
@@ -4675,6 +4999,10 @@ export type Database = {
       }
     }
     Functions: {
+      auth_tem_modulo: {
+        Args: { p_modulo: string; p_nivel: string }
+        Returns: boolean
+      }
       auth_tem_papel: { Args: { p_papel: string }; Returns: boolean }
       claim_next_whatsapp_pedido_mensagem: {
         Args: never
@@ -4711,11 +5039,7 @@ export type Database = {
       get_user_tipo: { Args: { user_id: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       list_insumo_consumo_agregado: {
-        Args: {
-          p_end: string
-          p_start: string
-          p_visualizacao?: string
-        }
+        Args: { p_end: string; p_start: string; p_visualizacao?: string }
         Returns: {
           coluna_inicio: string
           consumo: number
