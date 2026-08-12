@@ -49,11 +49,18 @@ export default function InsumoCompraSugestaoMobileList({ items, embedded = false
               <Metrica label="Lead time" value={`${item.leadTimeDias} d`} />
             </dl>
 
-            <div className="mt-4 flex items-center gap-2 border-t border-stone-200/80 pt-3 text-sm text-stone-600">
+            <div className="mt-4 flex items-start gap-2 border-t border-stone-200/80 pt-3 text-sm text-stone-600">
               <span className="material-icons text-lg text-stone-400" aria-hidden="true">
                 local_shipping
               </span>
-              <span>{item.distribuidorPreferencial ?? 'Sem fornecedor'}</span>
+              <div>
+                <p>{item.distribuidorPreferencial ?? 'Sem fornecedor'}</p>
+                {item.distribuidoresAlternativos.length > 0 ? (
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    Alternativos: {item.distribuidoresAlternativos.join(', ')}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </article>
         );

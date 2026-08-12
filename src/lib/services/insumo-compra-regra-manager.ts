@@ -5,7 +5,6 @@ import {
 } from '@/data/insumos/InsumoDistribuidorRepository';
 import {
   insumoRegraCompraRepository,
-  type InsumoRegraCompraComInsumo,
   type InsumoRegraCompraRepository,
 } from '@/data/insumos/InsumoRegraCompraRepository';
 import {
@@ -35,11 +34,21 @@ export type SalvarInsumoCompraRegraInput = {
   distribuidores: InsumoCompraRegraDistribuidorInput[];
 };
 
-export type InsumoCompraRegraConfig = InsumoRegraCompraComInsumo & {
+export type InsumoCompraRegraConfig = {
+  insumoId: string;
+  nome: string;
+  unidade: string;
+  regra: InsumoRegraCompraRow | null;
   distribuidores: InsumoDistribuidorRow[];
 };
 
-type InsumoAtivo = { id: string; nome: string };
+type InsumoAtivo = { id: string; nome: string; unidade: string };
+
+type InsumoAtivoRow = {
+  id: string;
+  nome: string;
+  unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
+};
 
 type RegraRepository = Pick<
   InsumoRegraCompraRepository,
@@ -62,13 +71,21 @@ class InsumoCompraInsumoAtivoLoader {
     const { data, error } = await supabaseClientFactory
       .createServiceRoleClient()
       .from('insumos')
-      .select('id, nome')
-      .eq('ativo', true);
+      .select('id, nome, unidades(nome_resumido)')
+      .eq('ativo', true)
+      .order('nome');
 
     if (error) {
       throw new Error(`Erro ao listar insumos ativos: ${error.message}`);
     }
-    return data ?? [];
+    return ((data as InsumoAtivoRow[]) ?? []).map((row) => ({
+      id: row.id,
+      nome: row.nome,
+      unidade:
+        (Array.isArray(row.unidades)
+          ? row.unidades[0]?.nome_resumido
+          : row.unidades?.nome_resumido) ?? '',
+    }));
   }
 }
 
@@ -76,15 +93,22 @@ export class InsumoCompraRegraManager {
   constructor(private readonly deps: InsumoCompraRegraManagerDeps) {}
 
   async listarRegrasParaConfig(): Promise<InsumoCompraRegraConfig[]> {
-    const regras = await this.deps.regraRepository.listAllWithInsumo();
+    const [insumos, regras] = await Promise.all([
+      this.deps.listarInsumosAtivos(),
+      this.deps.regraRepository.listAllWithInsumo(),
+    ]);
     const distribuidores = await this.deps.distribuidorRepository.listByInsumoIds(
-      regras.map((regra) => regra.insumo_id),
+      insumos.map((insumo) => insumo.id),
     );
+    const regrasPorInsumo = new Map(regras.map((regra) => [regra.insumo_id, regra]));
 
-    return regras.map((regra) => ({
-      ...regra,
+    return insumos.map((insumo) => ({
+      insumoId: insumo.id,
+      nome: insumo.nome,
+      unidade: insumo.unidade,
+      regra: regrasPorInsumo.get(insumo.id) ?? null,
       distribuidores: distribuidores.filter(
-        (distribuidor) => distribuidor.insumo_id === regra.insumo_id,
+        (distribuidor) => distribuidor.insumo_id === insumo.id,
       ),
     }));
   }

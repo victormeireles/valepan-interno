@@ -60,7 +60,12 @@ export default function InsumoCompraSugestaoTable({ items, embedded = false }: P
                   {formatQuantidadeSugerida(item)}
                 </CelulaNumerica>
                 <td className={`${configTableBodyCellClass} min-w-40 text-stone-700`}>
-                  {item.distribuidorPreferencial ?? 'Sem fornecedor'}
+                  <p>{item.distribuidorPreferencial ?? 'Sem fornecedor'}</p>
+                  {item.distribuidoresAlternativos.length > 0 ? (
+                    <p className="mt-0.5 text-xs text-stone-500">
+                      Alternativos: {item.distribuidoresAlternativos.join(', ')}
+                    </p>
+                  ) : null}
                 </td>
               </tr>
             );

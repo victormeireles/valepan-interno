@@ -33,8 +33,9 @@ const DIA_LABEL: Record<number, string> = {
 };
 
 function janelaLabel(regra: InsumoCompraRegraConfig): string {
-  if (regra.janela_tipo === 'qualquer') return 'Qualquer dia';
-  return (regra.dias_semana ?? []).map((dia) => DIA_LABEL[dia] ?? dia).join(', ');
+  if (!regra.regra) return 'Sem regra';
+  if (regra.regra.janela_tipo === 'qualquer') return 'Qualquer dia';
+  return (regra.regra.dias_semana ?? []).map((dia) => DIA_LABEL[dia] ?? dia).join(', ');
 }
 
 function quantidadeLabel(valor: number | null, unidade: string): string {
@@ -162,24 +163,24 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {initialRegras.map((regra) => (
-                    <tr key={regra.insumo_id} className="hover:bg-amber-50/60">
+                    <tr key={regra.insumoId} className="hover:bg-amber-50/60">
                       <td className="px-4 py-3 font-medium text-stone-900">{regra.nome}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums text-stone-700">
-                        {regra.lead_time_dias} d
+                        {regra.regra ? `${regra.regra.lead_time_dias} d` : '—'}
                       </td>
                       <td className="px-3 py-3 text-stone-700">{janelaLabel(regra)}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums text-stone-700">
-                        {quantidadeLabel(regra.quantidade_minima, regra.unidade)}
+                        {quantidadeLabel(regra.regra?.quantidade_minima ?? null, regra.unidade)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums text-stone-700">
-                        {quantidadeLabel(regra.quantidade_maxima, regra.unidade)}
+                        {quantidadeLabel(regra.regra?.quantidade_maxima ?? null, regra.unidade)}
                       </td>
                       <td className="px-3 py-3 text-stone-700">
                         {preferencialLabel(regra)}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={regra.ativo ? 'success' : 'neutral'}>
-                          {regra.ativo ? 'Ativa' : 'Inativa'}
+                        <Badge tone={regra.regra?.ativo ? 'success' : 'neutral'}>
+                          {regra.regra ? (regra.regra.ativo ? 'Ativa' : 'Inativa') : 'Sem regra'}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -187,10 +188,10 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
                           type="button"
                           variant="secondary"
                           size="lg"
-                          icon="edit"
+                          icon={regra.regra ? 'edit' : 'add'}
                           onClick={() => setEditing(regra)}
                         >
-                          Editar
+                          {regra.regra ? 'Editar' : 'Nova regra'}
                         </Button>
                       </td>
                     </tr>
@@ -201,14 +202,14 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
 
             <ul className="divide-y divide-stone-100 lg:hidden">
               {initialRegras.map((regra) => (
-                <li key={regra.insumo_id} className="space-y-3 px-4 py-4">
+                <li key={regra.insumoId} className="space-y-3 px-4 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-stone-900">{regra.nome}</p>
                       <p className="mt-0.5 text-sm text-stone-600">{janelaLabel(regra)}</p>
                     </div>
-                    <Badge tone={regra.ativo ? 'success' : 'neutral'}>
-                      {regra.ativo ? 'Ativa' : 'Inativa'}
+                    <Badge tone={regra.regra?.ativo ? 'success' : 'neutral'}>
+                      {regra.regra ? (regra.regra.ativo ? 'Ativa' : 'Inativa') : 'Sem regra'}
                     </Badge>
                   </div>
 
@@ -216,7 +217,7 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
                     <div>
                       <dt className="text-xs uppercase tracking-wide text-stone-500">Lead time</dt>
                       <dd className="font-mono tabular-nums text-stone-800">
-                        {regra.lead_time_dias} d
+                        {regra.regra ? `${regra.regra.lead_time_dias} d` : '—'}
                       </dd>
                     </div>
                     <div>
@@ -228,13 +229,13 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
                     <div>
                       <dt className="text-xs uppercase tracking-wide text-stone-500">Mínimo</dt>
                       <dd className="font-mono tabular-nums text-stone-800">
-                        {quantidadeLabel(regra.quantidade_minima, regra.unidade)}
+                        {quantidadeLabel(regra.regra?.quantidade_minima ?? null, regra.unidade)}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-xs uppercase tracking-wide text-stone-500">Máximo</dt>
                       <dd className="font-mono tabular-nums text-stone-800">
-                        {quantidadeLabel(regra.quantidade_maxima, regra.unidade)}
+                        {quantidadeLabel(regra.regra?.quantidade_maxima ?? null, regra.unidade)}
                       </dd>
                     </div>
                   </dl>
@@ -243,11 +244,11 @@ export default function RegrasCompraInsumosClient({ initialRegras }: Props) {
                     type="button"
                     variant="secondary"
                     size="lg"
-                    icon="edit"
+                    icon={regra.regra ? 'edit' : 'add'}
                     fullWidth
                     onClick={() => setEditing(regra)}
                   >
-                    Editar regra
+                    {regra.regra ? 'Editar regra' : 'Nova regra'}
                   </Button>
                 </li>
               ))}

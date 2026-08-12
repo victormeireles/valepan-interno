@@ -5048,6 +5048,10 @@ export type Database = {
           unidade_resumida: string
         }[]
       }
+      replace_insumo_distribuidores: {
+        Args: { p_insumo_id: string; p_items: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       clube_beneficio_tipo:

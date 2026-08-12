@@ -37,30 +37,13 @@ export class InsumoDistribuidorRepository {
   }
 
   async replaceForInsumo(insumoId: string, items: InsumoDistribuidorInput[]): Promise<void> {
-    const { error: deleteError } = await this.db
-      .from('insumo_distribuidor')
-      .delete()
-      .eq('insumo_id', insumoId);
+    const { error } = await this.db.rpc('replace_insumo_distribuidores', {
+      p_insumo_id: insumoId,
+      p_items: items,
+    });
 
-    if (deleteError) {
-      throw new Error(`Erro ao remover distribuidores do insumo: ${deleteError.message}`);
-    }
-
-    if (items.length === 0) {
-      return;
-    }
-
-    const { error: insertError } = await this.db.from('insumo_distribuidor').insert(
-      items.map((item) => ({
-        insumo_id: insumoId,
-        nome: item.nome,
-        preferencial: item.preferencial,
-        ordem: item.ordem,
-      })),
-    );
-
-    if (insertError) {
-      throw new Error(`Erro ao inserir distribuidores do insumo: ${insertError.message}`);
+    if (error) {
+      throw new Error(`Erro ao substituir distribuidores do insumo: ${error.message}`);
     }
   }
 }

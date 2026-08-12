@@ -43,7 +43,7 @@ export default function InsumoRegraCompraFormModal({
   onClose,
   onSaved,
 }: Props) {
-  const [leadTimeDias, setLeadTimeDias] = useState('0');
+  const [leadTimeDias, setLeadTimeDias] = useState('7');
   const [janelaTipo, setJanelaTipo] = useState<InsumoCompraJanelaTipo>('qualquer');
   const [diasSemana, setDiasSemana] = useState<number[]>([]);
   const [quantidadeMinima, setQuantidadeMinima] = useState('');
@@ -55,12 +55,12 @@ export default function InsumoRegraCompraFormModal({
 
   useEffect(() => {
     if (!open || !regra) return;
-    setLeadTimeDias(String(regra.lead_time_dias));
-    setJanelaTipo(regra.janela_tipo);
-    setDiasSemana(regra.dias_semana ?? []);
-    setQuantidadeMinima(regra.quantidade_minima?.toString() ?? '');
-    setQuantidadeMaxima(regra.quantidade_maxima?.toString() ?? '');
-    setAtivo(regra.ativo);
+    setLeadTimeDias(String(regra.regra?.lead_time_dias ?? 7));
+    setJanelaTipo(regra.regra?.janela_tipo ?? 'qualquer');
+    setDiasSemana(regra.regra?.dias_semana ?? []);
+    setQuantidadeMinima(regra.regra?.quantidade_minima?.toString() ?? '');
+    setQuantidadeMaxima(regra.regra?.quantidade_maxima?.toString() ?? '');
+    setAtivo(regra.regra?.ativo ?? true);
     setDistribuidores(
       [...regra.distribuidores]
         .sort((a, b) => a.ordem - b.ordem)
@@ -108,7 +108,7 @@ export default function InsumoRegraCompraFormModal({
 
     try {
       await salvarRegra({
-        insumoId: regra.insumo_id,
+        insumoId: regra.insumoId,
         leadTimeDias: Number(leadTimeDias),
         janelaTipo,
         diasSemana: janelaTipo === 'dias_semana' ? diasSemana : null,
@@ -146,7 +146,7 @@ export default function InsumoRegraCompraFormModal({
         <header className="flex items-start justify-between gap-4 border-b border-stone-100 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
-              Regra de compra
+              {regra.regra ? 'Editar regra de compra' : 'Nova regra de compra'}
             </p>
             <h2
               id="regra-compra-modal-title"

@@ -38,6 +38,59 @@ describe('InsumoCompraRegraManager', () => {
     });
   });
 
+  it('lista todos os insumos ativos com regra opcional e distribuidores', async () => {
+    listarInsumosAtivos.mockResolvedValue([
+      { id: 'insumo-1', nome: 'Farinha', unidade: 'kg' },
+      { id: 'insumo-2', nome: 'Fermento', unidade: 'kg' },
+    ]);
+    listAllWithInsumo.mockResolvedValue([
+      {
+        insumo_id: 'insumo-1',
+        lead_time_dias: 3,
+        janela_tipo: 'qualquer',
+        dias_semana: null,
+        quantidade_minima: 10,
+        quantidade_maxima: 50,
+        ativo: true,
+        created_at: '2026-08-12T12:00:00.000Z',
+        updated_at: '2026-08-12T12:00:00.000Z',
+        nome: 'Farinha',
+        unidade: 'kg',
+      },
+    ]);
+    listByInsumoIds.mockResolvedValue([
+      {
+        id: 'distribuidor-1',
+        insumo_id: 'insumo-1',
+        nome: 'Fornecedor A',
+        preferencial: true,
+        ordem: 0,
+        created_at: '2026-08-12T12:00:00.000Z',
+      },
+    ]);
+
+    await expect(manager.listarRegrasParaConfig()).resolves.toEqual([
+      {
+        insumoId: 'insumo-1',
+        nome: 'Farinha',
+        unidade: 'kg',
+        regra: expect.objectContaining({
+          insumo_id: 'insumo-1',
+          lead_time_dias: 3,
+        }),
+        distribuidores: [expect.objectContaining({ nome: 'Fornecedor A' })],
+      },
+      {
+        insumoId: 'insumo-2',
+        nome: 'Fermento',
+        unidade: 'kg',
+        regra: null,
+        distribuidores: [],
+      },
+    ]);
+    expect(listByInsumoIds).toHaveBeenCalledWith(['insumo-1', 'insumo-2']);
+  });
+
   it('salva regra validada e substitui distribuidores na ordem informada', async () => {
     await manager.salvarRegra({
       insumoId: 'insumo-1',
