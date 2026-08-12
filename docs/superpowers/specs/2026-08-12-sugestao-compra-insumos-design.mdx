@@ -1,0 +1,244 @@
+# Sugestão automática de compra de insumos
+
+Data: 2026-08-12  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+Dar ao comprador uma tela operacional diária que diga **o que pedir hoje**, **quanto** e **para qual fornecedor preferencial**, com base em:
+
+- saldo atual (`insumo_saldos`)
+- consumo médio (mesma base da cobertura — 4 semanas fechadas)
+- regras de compra cadastradas (lead time, janela de pedido, min/max, distribuidores)
+
+## Contexto atual
+
+Já existem estoque de insumos, movimentos, consumo agregado e cobertura em dias (`/consumo-insumos`). **Não existem** lead time de compra, janela de pedido, min/max de reposição, distribuidores de insumos nem tela de sugestão de compra.
+
+A coluna “TRAVA” da planilha operacional antiga foi **descartada** (campo legado). Pedidos/histórico de compra ficam para uma fase posterior.
+
+## Escopo
+
+Inclui (v1):
+
+- Tabelas `insumo_regra_compra` e `insumo_distribuidor` com RLS
+- Motor de domínio que calcula status + quantidade sugerida (cálculo efêmero, sem snapshot)
+- Tela operacional `/sugestao-compras` (Lista + Por fornecedor)
+- Tela de config `/config/regras-compra-insumos`
+- Item no menu Insumos + entrada em Config
+- Seed/cadastro inicial a partir da planilha de regras (na implementação)
+- Testes unitários do motor e validações de config
+
+Fora de escopo (v1):
+
+- Histórico / rascunho / status de pedidos (“já pedi”)
+- Integração Omie de pedido de compra
+- WhatsApp automático / notificações push
+- Campo trava
+- Alterar responsabilidade da tela de Consumo (só link opcional, se útil)
+- CNPJ/contato rico de distribuidores
+
+## Decisão de abordagem
+
+**Abordagem 2:** regras persistidas + sugestão calculada ao abrir a tela.
+
+- Duas telas: operação (`/sugestao-compras`) e config (`/config/regras-compra-insumos`)
+- Visões na operação: Lista e Por fornecedor (mesmo filtro)
+- Pedidos/snapshot: fase 2
+
+## Dados
+
+### `insumo_regra_compra` (1:1 com `insumos`)
+
+| Coluna | Tipo | Notas |
+|--------|------|--------|
+| `insumo_id` | uuid PK/FK → `insumos` | |
+| `lead_time_dias` | int | obrigatório quando regra ativa; &gt; 0 |
+| `janela_tipo` | text/enum | `qualquer` \| `dias_semana` |
+| `dias_semana` | smallint[] null | Convenção fixa: `0=domingo … 6=sábado` (igual `Date.getDay()`); null se `qualquer` |
+| `quantidade_minima` | numeric null | mesma unidade do insumo |
+| `quantidade_maxima` | numeric null | mesma unidade do insumo |
+| `ativo` | boolean | default true |
+| `created_at` / `updated_at` | timestamptz | |
+
+Constraints:
+
+- Se `janela_tipo = dias_semana`, `dias_semana` não vazio
+- Se ambos min e max preenchidos: `quantidade_minima <= quantidade_maxima`
+- Check `lead_time_dias > 0` quando ativo
+
+RLS (padrão do projeto):
+
+- ENABLE RLS
+- SELECT: autenticados `USING (true)`
+- INSERT/UPDATE: autenticados (ou padrão das tabelas irmãs de insumos)
+- Desativar regra na UI via `ativo = false` (sem hard delete no fluxo normal)
+- DELETE físico: apenas admin `(SELECT is_admin())`, se necessário em manutenção
+
+### `insumo_distribuidor` (N por insumo)
+
+| Coluna | Tipo | Notas |
+|--------|------|--------|
+| `id` | uuid PK | |
+| `insumo_id` | uuid FK → `insumos` | |
+| `nome` | text | ex.: PANTEC, DOUGLAS |
+| `preferencial` | boolean | no máximo um `true` por `insumo_id` |
+| `ordem` | int | ordenação dos alternativos |
+| `created_at` | timestamptz | |
+
+Constraints:
+
+- Unique parcial / exclusão: apenas um preferencial por insumo
+- `nome` trim não vazio
+
+RLS: mesmo padrão das tabelas de insumos.
+
+### O que não cria na v1
+
+Tabelas de pedido, snapshot diário, trava, vínculo Omie de compra.
+
+## Regras de negócio (motor)
+
+### Inputs
+
+Por insumo com regra ativa (e elegível ao controle de estoque — excluir água/gelo como hoje):
+
+- `estoque` ← `insumo_saldos.quantidade`
+- `consumo_diario` ← média das 4 semanas fechadas convertida para dia (mesma base da cobertura semanal: `media_semana / 7`)
+- `L` ← `lead_time_dias`
+- min / max / janela / data de referência (default hoje, `America/Sao_Paulo`)
+
+### Fórmulas
+
+```
+cobertura_atual_dias = estoque / consumo_diario   // se consumo_diario > 0
+estoque_na_entrega   = estoque - consumo_diario * L
+meta_na_entrega      = consumo_diario * L * 1.5
+qtd_bruta            = max(0, meta_na_entrega - estoque_na_entrega)
+```
+
+Interpretação kanban: na data do recebimento a meta de cobertura é **L × 1,5** dias. Com L=7, meta ≈ 10,5 dias ao receber; no ciclo seguinte a folga típica é ≈ 0,5×L (≈ 3,5 dias), e a recompra típica aproxima L dias de consumo.
+
+### Mínimo e máximo
+
+- **Máximo:** teto ao pedir → `qtd = min(qtd_bruta, max)` quando status de compra efetiva
+- **Mínimo:** **não** arredonda automaticamente para o mínimo
+  - Se `0 < qtd_bruta < min` e ainda é seguro esperar → status `adiar_lote_minimo` (mostra bruta + “pedir min a partir de …”)
+  - Se esperar o lote mínimo colocaria em risco (mesma lógica de urgência / pedir fora da janela) → sugere **lote mínimo** agora
+
+### Janela de pedido
+
+- `qualquer` → sempre “dentro da janela”
+- `dias_semana` → preferência de agenda
+  - Dentro da janela + precisa repor com qtd válida → `pedir_hoje`
+  - Fora da janela → só aparece ação se urgente ou `pedir_fora_janela` (não some o item do “Todos”, mas não entra como pedido rotineiro)
+
+### Status (prioridade alta → baixa)
+
+| Status | Condição | Quantidade na UI |
+|--------|----------|------------------|
+| `urgente` | `consumo_diario > 0` e `cobertura_atual_dias < L` | fórmula; se &lt; min e risco, lote mínimo; aplica max |
+| `pedir_fora_janela` | fora da janela **e** esperar até o próximo dia permitido faria falhar a meta na entrega (`estoque_na_entrega` projetado &lt; meta, considerando o atraso até o próximo dia da janela + L) | idem |
+| `pedir_hoje` | dentro da janela **e** `qtd_bruta > 0` **e** (sem min **ou** `qtd_bruta >= min`) | qtd com max |
+| `adiar_lote_minimo` | `qtd_bruta > 0` e min existe e `qtd_bruta < min` e ainda seguro esperar | bruta + min sugerido futuro |
+| `ok` | não precisa comprar | — |
+| `sem_consumo` | regra ativa, estoque ≥ 0, consumo 0 | sem qtd |
+| `sem_regra` | sem regra ativa | fora do dataset operacional padrão |
+
+Filtro padrão da tela **Precisa atenção:**  
+`urgente` | `pedir_fora_janela` | `pedir_hoje` | `adiar_lote_minimo`.
+
+### Distribuidores
+
+- Cadastro: preferencial + alternativos
+- Visão Por fornecedor: agrupa pelo **preferencial**
+- Sem preferencial → grupo **Sem fornecedor**
+- Alternativos aparecem só como texto auxiliar no item
+
+### Bordas
+
+- `consumo_diario = 0` e estoque &gt; 0 → `sem_consumo`
+- Estoque ≤ 0 → cobertura 0; com regra e L &gt; 0 tende a `urgente`
+- Max &lt; min → validação na config (não salva)
+- Dois preferenciais → validação (não salva)
+- Janela `dias_semana` sem dias → não salva
+
+## Arquitetura
+
+### Domain
+
+- `InsumoCompraSugestaoCalculator` — puro: inputs → status + qtd + motivo
+- Tipos: status enum, DTO de linha, motivo curto pt-BR
+- Helpers: próximo dia da janela, projeção com atraso, elegibilidade min/adiar
+
+### Data
+
+- `InsumoRegraCompraRepository`
+- `InsumoDistribuidorRepository`
+
+### Application / Service
+
+- `InsumoCompraSugestaoService` (ou Manager): carrega saldo + consumo + regras + distribuidores; chama calculator; monta DTO da página (lista + grupos)
+
+### UI
+
+- Feature `insumo-compra-sugestao/` (client, tabela, mobile list, grupos por fornecedor)
+- Config reutiliza padrões de `/config/insumos` (lista + modal/form)
+
+### Auth
+
+- Módulo `interno_insumos` (mesma família de estoque/consumo/mapeamento)
+
+## UI e fluxos
+
+### Operação — `/sugestao-compras`
+
+Toolbar: título **Sugestão de compra**, data de referência, busca, chips **Precisa atenção** | **Todos**, toggle **Lista** | **Por fornecedor**.
+
+Resumo: `N urgentes • N pedir hoje • N fora da janela • N adiar mín.`
+
+Lista (desktop tabela / mobile rows): Insumo · Estoque · Cobertura · Lead · Qtd sugerida · Status · Fornecedor · Motivo.  
+Status com ícone Material + texto (não só cor). Tons alinhados ao Warm Industrial (urgente rose/âmbar, pedir amber, adiar stone).
+
+Por fornecedor: seções pelo preferencial; itens do filtro atual.
+
+Empty state: “Nenhuma compra sugerida hoje.” + Ver todos.
+
+Sem CTA de criar pedido na v1.
+
+### Config — `/config/regras-compra-insumos`
+
+Lista de insumos com resumo da regra; edição de lead time, janela, min/max, distribuidores (um preferencial).
+
+Nav: grupo Insumos → Sugestão de compra; Config → Regras de compra.
+
+### Fluxo do comprador
+
+1. Abre sugestão  
+2. Resolve urgentes  
+3. Trata pedir hoje / fora da janela  
+4. Alterna Por fornecedor para executar a compra manualmente  
+5. Ajusta regras em Config quando a realidade mudar  
+
+## Testes
+
+Unitários no domínio:
+
+- Kanban L×1,5 (ex.: L=7 → meta 10,5 dias de cobertura na entrega)
+- Min: adiar vs forçar lote mínimo sob risco
+- Janela: dentro / fora seguro / fora com `pedir_fora_janela` / `urgente`
+- Max como teto
+- Agrupamento por preferencial e “Sem fornecedor”
+- Validação min≤max e um preferencial
+
+## Critérios de sucesso
+
+- Comprador abre a tela e vê, sem planilha, o que precisa de atenção hoje
+- Quantidades batem com a regra mental kanban (cobertura na entrega = L×1,5)
+- Minimo não gera pedido miúdo desnecessário; adia quando seguro
+- Farinha/itens com janela respeitam agenda, mas urgência fura a janela
+- Config permite cadastrar a planilha atual sem campo trava
+
+## Fase 2 (não implementar agora)
+
+Pedidos: marcar “já pedi”, histórico/rascunho por fornecedor, possível snapshot diário — reutiliza o mesmo motor.
