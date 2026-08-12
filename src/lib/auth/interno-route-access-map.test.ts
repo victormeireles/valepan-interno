@@ -17,6 +17,19 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
+  it('protege sugestão de compras com leitura de insumos', () => {
+    expect(map.resolve('/sugestao-compras')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_insumos',
+      minimo: 'ler',
+    });
+    expect(map.resolve('/sugestao-compras/detalhe')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_insumos',
+      minimo: 'ler',
+    });
+  });
+
   it('libera login e APIs máquina', () => {
     expect(map.resolve('/login').kind).toBe('public');
     expect(map.resolve('/api/public/saidas').kind).toBe('public');
