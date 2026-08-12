@@ -1,0 +1,507 @@
+# Sugestão de compras — ações na linha Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Na `/sugestao-compras`, permitir cadastrar regra ao clicar em insumos `sem_regra`, ajustar estoque com o modal existente em qualquer linha, e exibir cobertura em dias inteiros.
+
+**Architecture:** Estado e modais ficam em `InsumoCompraSugestaoClient`. Tabela/lista/mobile recebem callbacks. Reutiliza `InsumoRegraCompraFormModal` e `InsumoAjusteModal`. Cobertura arredondada em `formatCoberturaDias`. Sem novos endpoints.
+
+**Tech Stack:** Next.js App Router, React client components, Vitest, Tailwind v4, Material Icons, design system Valepan.
+
+**Spec:** `docs/superpowers/specs/2026-08-12-sugestao-compras-acoes-linha-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400; classes/componentes com SRP; funções < 40 linhas.
+- UI pt-BR, Material Icons (sem emoji estrutural), amber/stone, alvos ≥44px, Geist Mono/`tabular-nums` em quantidades.
+- Focus ring amber-500; press feedback 120–180ms; não depender só de hover.
+- Nome clicável **somente** quando `status === 'sem_regra'`; estoque clicável **sempre**.
+- Sem coluna nova de ações; sem editar regra já existente nesta tela; sem histórico nesta tela.
+- Após salvar: toast + `router.refresh()`; no ajuste, atualizar estoque da linha no estado local antes do refresh.
+- Não alterar contratos de API além do necessário em `InsumoAjusteModal.onSaved` (passar `novoSaldo`).
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/features/insumo-estoque/utils/formatters.ts` | Arredondar cobertura |
+| `src/features/insumo-estoque/utils/formatters.test.ts` | Testes do arredondamento |
+| `src/features/insumo-estoque/components/InsumoAjusteModal.tsx` | `onSaved(novoSaldo: number)` |
+| `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoEstoqueButton.tsx` | Botão de estoque com affordance |
+| `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoRegraTrigger.tsx` | Nome/badge clicáveis quando `sem_regra` |
+| `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoTable.tsx` | Wire dos triggers |
+| `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoMobileList.tsx` | Wire dos triggers |
+| `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoFornecedorGroups.tsx` | Propagar callbacks |
+| `src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx` | Estado, modais, toast, refresh |
+| `src/features/insumo-estoque/InsumoSaldosClient.tsx` | Compatível com nova assinatura `onSaved` (ignora arg) |
+
+---
+
+### Task 1: Arredondar cobertura em `formatCoberturaDias`
+
+**Files:**
+- Modify: `src/features/insumo-estoque/utils/formatters.ts`
+- Modify: `src/features/insumo-estoque/utils/formatters.test.ts`
+
+**Interfaces:**
+- Produces: `formatCoberturaDias(value: number | null): string` com `Math.round` para valores ≤ 360
+
+- [ ] **Step 1: Escrever testes que falham para o arredondamento**
+
+Em `formatters.test.ts`, dentro de `describe('formatCoberturaDias')`, adicionar:
+
+```ts
+it('arredonda dias para inteiro', () => {
+  expect(formatCoberturaDias(12.4)).toBe('12 d');
+  expect(formatCoberturaDias(12.6)).toBe('13 d');
+  expect(formatCoberturaDias(0.4)).toBe('0 d');
+});
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar falha**
+
+Run: `npm test -- src/features/insumo-estoque/utils/formatters.test.ts`
+
+Expected: FAIL — recebe algo como `12.4 d` em vez de `12 d`.
+
+- [ ] **Step 3: Implementar arredondamento**
+
+Substituir o corpo de `formatCoberturaDias` em `formatters.ts` por:
+
+```ts
+export function formatCoberturaDias(value: number | null): string {
+  if (value == null) return '—';
+  if (value > 360) return '>360 d';
+  return `${Math.round(value)} d`;
+}
+```
+
+- [ ] **Step 4: Rodar testes e confirmar sucesso**
+
+Run: `npm test -- src/features/insumo-estoque/utils/formatters.test.ts`
+
+Expected: PASS (incluindo casos `null`, `360`, `>360`).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/features/insumo-estoque/utils/formatters.ts src/features/insumo-estoque/utils/formatters.test.ts
+git commit -m "fix(insumos): arredonda cobertura em dias inteiros"
+```
+
+---
+
+### Task 2: `InsumoAjusteModal` passa o novo saldo em `onSaved`
+
+**Files:**
+- Modify: `src/features/insumo-estoque/components/InsumoAjusteModal.tsx`
+- Modify: `src/features/insumo-estoque/InsumoSaldosClient.tsx` (apenas se TypeScript exigir — a assinatura `(novoSaldo: number) => void` aceita callbacks que ignoram o arg)
+
+**Interfaces:**
+- Consumes: `ajustarInsumoSaldo(insumoId, novoSaldo, observacao)`
+- Produces: `onSaved: (novoSaldo: number) => void`
+
+- [ ] **Step 1: Atualizar o tipo de `onSaved`**
+
+Em `InsumoAjusteModal.tsx`, alterar Props:
+
+```ts
+type Props = {
+  isOpen: boolean;
+  item: InsumoSaldoComDetalhes | null;
+  onClose: () => void;
+  onSaved: (novoSaldo: number) => void;
+};
+```
+
+- [ ] **Step 2: Passar o saldo parseado no sucesso**
+
+No `handleSubmit`, após `result.success`, trocar `onSaved()` por:
+
+```ts
+onSaved(parsed);
+onClose();
+setLoading(false);
+```
+
+- [ ] **Step 3: Verificar que `InsumoSaldosClient` continua válido**
+
+O callback atual:
+
+```ts
+onSaved={() => handleSaved('Saldo ajustado com sucesso')}
+```
+
+permanece válido (ignora o parâmetro). Não precisa mudar a menos que o linter reclame.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/features/insumo-estoque/components/InsumoAjusteModal.tsx
+git commit -m "refactor(insumos): InsumoAjusteModal informa novo saldo ao salvar"
+```
+
+---
+
+### Task 3: Componentes de affordance (estoque + regra)
+
+**Files:**
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoEstoqueButton.tsx`
+- Create: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoRegraTrigger.tsx`
+
+**Interfaces:**
+- Consumes: `InsumoCompraSugestaoLinha`, `formatInsumoQuantidadeArredondada`
+- Produces:
+  - `InsumoCompraSugestaoEstoqueButton({ item, onAjustar })`
+  - `InsumoCompraSugestaoRegraTrigger({ item, onCadastrarRegra, children? })` — quando `sem_regra`, envolve conteúdo clicável; senão renderiza estático
+
+- [ ] **Step 1: Criar botão de estoque**
+
+```tsx
+'use client';
+
+import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
+import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
+
+type Props = {
+  item: InsumoCompraSugestaoLinha;
+  onAjustar: (item: InsumoCompraSugestaoLinha) => void;
+  className?: string;
+};
+
+export default function InsumoCompraSugestaoEstoqueButton({
+  item,
+  onAjustar,
+  className = '',
+}: Props) {
+  return (
+    <button
+      type="button"
+      onClick={() => onAjustar(item)}
+      aria-label={`Ajustar saldo de ${item.nome}`}
+      className={[
+        'inline-flex min-h-11 items-center justify-end gap-1 rounded-xl px-2',
+        'font-mono text-sm tabular-nums text-stone-700',
+        'transition-colors duration-150 hover:bg-amber-50 hover:text-amber-900',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
+        className,
+      ].join(' ')}
+    >
+      <span>{formatInsumoQuantidadeArredondada(item.estoque, item.unidade)}</span>
+      <span className="material-icons text-base text-stone-400" aria-hidden="true">
+        tune
+      </span>
+    </button>
+  );
+}
+```
+
+- [ ] **Step 2: Criar trigger de regra**
+
+```tsx
+'use client';
+
+import type { ReactNode } from 'react';
+import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
+
+type Props = {
+  item: InsumoCompraSugestaoLinha;
+  onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
+  children: ReactNode;
+  className?: string;
+};
+
+export default function InsumoCompraSugestaoRegraTrigger({
+  item,
+  onCadastrarRegra,
+  children,
+  className = '',
+}: Props) {
+  if (item.status !== 'sem_regra') {
+    return <div className={className}>{children}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onCadastrarRegra(item)}
+      aria-label={`Cadastrar regra de ${item.nome}`}
+      className={[
+        'inline-flex min-h-11 w-full items-start gap-1.5 rounded-xl text-left',
+        'transition-colors duration-150 hover:bg-amber-50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
+        className,
+      ].join(' ')}
+    >
+      <span className="material-icons mt-0.5 text-base text-amber-700" aria-hidden="true">
+        rule
+      </span>
+      <span className="min-w-0 flex-1 text-amber-900">{children}</span>
+    </button>
+  );
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoEstoqueButton.tsx src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoRegraTrigger.tsx
+git commit -m "feat(insumos): affordances de regra e estoque na sugestão"
+```
+
+---
+
+### Task 4: Wire tabela, mobile e grupos
+
+**Files:**
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoTable.tsx`
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoMobileList.tsx`
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoFornecedorGroups.tsx`
+
+**Interfaces:**
+- Consumes: `onCadastrarRegra`, `onAjustarEstoque` dos botões da Task 3
+- Produces: mesma API de props em table/mobile/groups
+
+- [ ] **Step 1: Atualizar props da Table**
+
+```ts
+type Props = {
+  items: InsumoCompraSugestaoLinha[];
+  embedded?: boolean;
+  onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
+  onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
+};
+```
+
+Na célula do nome, envolver nome + motivo com `InsumoCompraSugestaoRegraTrigger`. No badge, se `item.status === 'sem_regra'`, tornar o badge um botão que chama `onCadastrarRegra(item)` (ou envolver o `Badge` num `button` com o mesmo `aria-label`).
+
+Na célula de estoque, substituir o texto por:
+
+```tsx
+<CelulaNumerica>
+  <InsumoCompraSugestaoEstoqueButton item={item} onAjustar={onAjustarEstoque} />
+</CelulaNumerica>
+```
+
+- [ ] **Step 2: Atualizar MobileList com as mesmas props e wires**
+
+- Nome: `InsumoCompraSugestaoRegraTrigger`
+- Badge “Sem regra”: clicável com o mesmo handler
+- Métrica Estoque: `InsumoCompraSugestaoEstoqueButton` (alinhado à esquerda no mobile: `className="justify-start px-0"`)
+
+- [ ] **Step 3: Propagar callbacks em FornecedorGroups**
+
+```ts
+type Props = {
+  grupos: InsumoCompraSugestaoPageData['gruposPorFornecedor'];
+  onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
+  onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
+};
+```
+
+Passar as props para `InsumoCompraSugestaoTable` e `InsumoCompraSugestaoMobileList`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoTable.tsx src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoMobileList.tsx src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoFornecedorGroups.tsx
+git commit -m "feat(insumos): conecta cliques de regra e estoque na lista"
+```
+
+---
+
+### Task 5: Orquestração no Client (estado, modais, toast)
+
+**Files:**
+- Modify: `src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx`
+
+**Interfaces:**
+- Consumes: `InsumoRegraCompraFormModal`, `InsumoAjusteModal`, `Toast`, linha → `InsumoCompraRegraConfig` / `InsumoSaldoComDetalhes`
+- Produces: handlers `onCadastrarRegra` / `onAjustarEstoque` para lista e grupos
+
+- [ ] **Step 1: Adicionar imports e estado**
+
+```tsx
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
+import { Toast } from '@/components/ui/Toast';
+import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
+import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
+import InsumoAjusteModal from '@/features/insumo-estoque/components/InsumoAjusteModal';
+import InsumoRegraCompraFormModal from './components/InsumoRegraCompraFormModal';
+```
+
+Estado:
+
+```tsx
+const [itens, setItens] = useState(initialData.itens);
+const [toast, setToast] = useState<string | null>(null);
+const [regraTarget, setRegraTarget] = useState<InsumoCompraRegraConfig | null>(null);
+const [ajusteTarget, setAjusteTarget] = useState<InsumoSaldoComDetalhes | null>(null);
+
+useEffect(() => {
+  setItens(initialData.itens);
+}, [initialData.itens]);
+```
+
+Usar `itens` (não `initialData.itens`) em `filterItems` / grupos.
+
+- [ ] **Step 2: Helpers de mapeamento e handlers**
+
+```tsx
+function toRegraConfig(item: InsumoCompraSugestaoLinha): InsumoCompraRegraConfig {
+  return {
+    insumoId: item.insumoId,
+    nome: item.nome,
+    unidade: item.unidade,
+    regra: null,
+    distribuidores: [],
+  };
+}
+
+function toSaldoDetalhes(item: InsumoCompraSugestaoLinha): InsumoSaldoComDetalhes {
+  return {
+    insumoId: item.insumoId,
+    nome: item.nome,
+    unidadeResumida: item.unidade,
+    quantidade: item.estoque,
+    custoUnitario: 0,
+    ultimaEntradaEm: null,
+  };
+}
+
+const handleCadastrarRegra = (item: InsumoCompraSugestaoLinha) => {
+  setRegraTarget(toRegraConfig(item));
+};
+
+const handleAjustarEstoque = (item: InsumoCompraSugestaoLinha) => {
+  setAjusteTarget(toSaldoDetalhes(item));
+};
+
+const handleRegraSaved = () => {
+  setRegraTarget(null);
+  setToast('Regra salva.');
+  router.refresh();
+};
+
+const handleAjusteSaved = (novoSaldo: number) => {
+  if (ajusteTarget) {
+    setItens((atuais) =>
+      atuais.map((linha) =>
+        linha.insumoId === ajusteTarget.insumoId
+          ? { ...linha, estoque: novoSaldo }
+          : linha,
+      ),
+    );
+  }
+  setAjusteTarget(null);
+  setToast('Saldo ajustado com sucesso');
+  router.refresh();
+};
+```
+
+- [ ] **Step 3: Passar callbacks e montar modais + toast**
+
+Na renderização da lista / grupos:
+
+```tsx
+<InsumoCompraSugestaoFornecedorGroups
+  grupos={filteredGroups}
+  onCadastrarRegra={handleCadastrarRegra}
+  onAjustarEstoque={handleAjustarEstoque}
+/>
+// ...
+<InsumoCompraSugestaoTable
+  items={filteredItems}
+  onCadastrarRegra={handleCadastrarRegra}
+  onAjustarEstoque={handleAjustarEstoque}
+/>
+<InsumoCompraSugestaoMobileList
+  items={filteredItems}
+  onCadastrarRegra={handleCadastrarRegra}
+  onAjustarEstoque={handleAjustarEstoque}
+/>
+```
+
+Ao final do JSX:
+
+```tsx
+{toast ? (
+  <Toast tone="success" onClose={() => setToast(null)}>
+    {toast}
+  </Toast>
+) : null}
+
+<InsumoRegraCompraFormModal
+  open={Boolean(regraTarget)}
+  regra={regraTarget}
+  onClose={() => setRegraTarget(null)}
+  onSaved={handleRegraSaved}
+/>
+
+<InsumoAjusteModal
+  isOpen={Boolean(ajusteTarget)}
+  item={ajusteTarget}
+  onClose={() => setAjusteTarget(null)}
+  onSaved={handleAjusteSaved}
+/>
+```
+
+Auto-dismiss do toast (opcional, alinhado ao estoque): `setTimeout(() => setToast(null), 4000)` no handler ou no efeito.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx
+git commit -m "feat(insumos): modais de regra e ajuste na sugestão de compras"
+```
+
+---
+
+### Task 6: Verificação manual
+
+**Files:** nenhum (smoke checklist)
+
+- [ ] **Step 1: Rodar testes unitários relevantes**
+
+Run: `npm test -- src/features/insumo-estoque/utils/formatters.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 2: Smoke na UI (`/sugestao-compras`)**
+
+Checklist:
+
+1. Filtro “Todos” → achar linha `Sem regra` → clicar no nome → modal de regra abre
+2. Clicar no badge “Sem regra” → mesmo modal
+3. Salvar regra mínima válida → toast “Regra salva.” → após refresh, status muda
+4. Em qualquer linha, clicar no estoque (ícone `tune`) → modal de ajuste
+5. Confirmar novo saldo → toast + valor da linha atualiza; cobertura/status recalculam após refresh
+6. Cobertura sem casas longas (ex.: `12 d`, não `12.345…`)
+7. Visão “Por fornecedor” com os mesmos cliques
+8. Mobile: alvos ≥44px, focus/press visíveis
+
+- [ ] **Step 3: Commit final se houver ajustes de polish**
+
+```bash
+git add -A
+git commit -m "fix(insumos): polish affordances da sugestão de compras"
+```
+
+(Só se houver mudanças; senão pular.)
+
+---
+
+## Self-review (plan vs spec)
+
+| Requisito do spec | Task |
+|-------------------|------|
+| Clique nome/badge quando `sem_regra` → modal regra | 3, 4, 5 |
+| Clique estoque sempre → `InsumoAjusteModal` | 3, 4, 5 |
+| Atualiza estoque da linha + refresh | 2, 5 |
+| Toast de feedback | 5 |
+| Cobertura arredondada | 1 |
+| Lista + mobile + por fornecedor | 4, 5 |
+| Affordance ≥44px / aria-label / amber focus | 3 |
+| Sem editar regra existente / sem coluna ações | respeitado (fora do plano) |
