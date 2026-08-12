@@ -1,0 +1,105 @@
+# Sugestão de compras — ações na linha (regra + ajuste de estoque)
+
+Data: 2026-08-12  
+Status: aprovado em brainstorming  
+Complementa: `2026-08-12-sugestao-compra-insumos-design.mdx`
+
+## Objetivo
+
+Na tela operacional `/sugestao-compras`, permitir:
+
+1. Cadastrar regra de compra ao clicar em insumos **sem regra**
+2. Ajustar estoque de qualquer insumo com o mesmo modal da tela de estoque de insumos
+3. Exibir cobertura em dias **arredondada** (sem casas decimais excessivas)
+
+## Decisão de abordagem
+
+**Abordagem 2 — clique no alvo + affordance explícita** (não texto “morto” clicável).
+
+- Nome (e badge “Sem regra”) clicáveis **somente** quando `status === 'sem_regra'`
+- Valor de estoque clicável **sempre**, com ícone `tune` discreto
+- Reutiliza `InsumoRegraCompraFormModal` e `InsumoAjusteModal` existentes
+- Sem nova coluna de ações (evita poluir a tabela operacional)
+
+Descartado:
+
+- Clique sem affordance (falha no mobile / descoberta)
+- Coluna extra de IconButtons (mais ruído visual)
+
+## UX / affordance (ui-ux-pro-max + Valepan)
+
+| Alvo | Quando | Comportamento |
+|------|--------|----------------|
+| Nome do insumo | `sem_regra` | Botão ≥44px, ícone `rule` ou `add`, texto amber acionável, `aria-label` “Cadastrar regra de {nome}” |
+| Badge “Sem regra” | `sem_regra` | Mesmo handler do nome (affordance redundante) |
+| Célula / valor de estoque | Sempre | Botão ≥44px com quantidade + ícone `tune`, hover/press `amber-50`, `aria-label` “Ajustar saldo de {nome}” |
+| Nome com regra ativa | Demais status | Texto estático (não parece link) |
+
+Regras:
+
+- Feedback de press em 120–180ms; focus ring amber-500
+- Não depender só de hover (mobile-first)
+- Material Icons; sem emoji
+- Mesmos alvos em desktop (tabela), mobile (lista) e visão “Por fornecedor”
+
+## Fluxos
+
+### Cadastrar regra (sem regra)
+
+1. Usuário clica no nome ou no badge “Sem regra”
+2. Abre `InsumoRegraCompraFormModal` com `InsumoCompraRegraConfig` mínima (`insumoId`, `nome`, `unidade`, `regra: null`, `distribuidores: []`)
+3. Ao salvar com sucesso: fecha modal, toast “Regra salva.”, `router.refresh()` para recalcular status/sugestão
+
+### Ajustar estoque
+
+1. Usuário clica no valor de estoque (qualquer linha)
+2. Abre `InsumoAjusteModal` mapeando a linha para `InsumoSaldoComDetalhes` (`insumoId`, `nome`, `unidadeResumida`, `quantidade` = estoque atual; `custoUnitario` / `ultimaEntradaEm` podem ser neutros se o modal não depender deles)
+3. Ao confirmar: fecha modal, toast “Saldo ajustado com sucesso”, atualiza o estoque da linha no estado local imediatamente, depois `router.refresh()` para recalcular cobertura, status e sugestão
+
+## Formatação de cobertura
+
+Em `formatCoberturaDias` (`src/features/insumo-estoque/utils/formatters.ts`):
+
+- `null` → `—`
+- `value > 360` → `>360 d`
+- caso contrário → `${Math.round(value)} d`
+
+Atualizar testes em `formatters.test.ts` (ex.: `12.4` → `12 d`, `12.6` → `13 d`).
+
+Efeito colateral aceito: telas que já usam o formatter (ex.: consumo/cobertura) passam a mostrar dias inteiros.
+
+## Arquitetura de UI
+
+Estado e modais ficam em `InsumoCompraSugestaoClient`:
+
+- `itens` em estado local (sincronizado com `initialData.itens`)
+- `regraTarget` / `ajusteTarget` controlam os modais
+- Callbacks `onCadastrarRegra` e `onAjustarEstoque` descem para:
+  - `InsumoCompraSugestaoTable`
+  - `InsumoCompraSugestaoMobileList`
+  - (indiretamente) `InsumoCompraSugestaoFornecedorGroups`
+
+Sem novos endpoints: reutiliza `salvarRegra` e `ajustarInsumoSaldo`.
+
+## Escopo
+
+Inclui:
+
+- Affordance + handlers na lista/tabela/fornecedor
+- Modais reutilizados no client da sugestão
+- Arredondamento de cobertura + testes do formatter
+- Toast de feedback
+
+Fora de escopo:
+
+- Editar regra já existente a partir desta tela (só cadastro quando `sem_regra`)
+- Histórico de movimentos nesta tela
+- Recálculo client-side do motor de sugestão (refresh do servidor)
+
+## Critérios de aceite
+
+- Em linha `sem_regra`, clique no nome ou badge abre modal de regra; após salvar, status deixa de ser `sem_regra` (após refresh)
+- Em qualquer linha, clique no estoque abre modal de ajuste; após salvar, estoque da linha atualiza e cobertura/status refletem o novo saldo
+- Cobertura exibida sem casas decimais longas (dias inteiros)
+- Alvos ≥44px, com `aria-label`, usáveis no mobile
+- Visão Lista e Por fornecedor se comportam igual
