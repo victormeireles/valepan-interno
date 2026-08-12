@@ -8,18 +8,20 @@ import {
   type SalvarInsumoCompraRegraInput,
 } from '@/lib/services/insumo-compra-regra-manager';
 
-const CONFIG_PATH = '/config/regras-compra-insumos';
+const INSUMOS_PATH = '/config/insumos';
 const SUGESTAO_PATH = '/sugestao-compras';
 
-export async function listarRegrasParaConfig() {
+export async function listarRegrasParaConfig(
+  options: { incluirInativos?: boolean } = {},
+) {
   await requireInternoModulo('interno_config', 'ler');
-  return insumoCompraRegraManager.listarRegrasParaConfig();
+  return insumoCompraRegraManager.listarRegrasParaConfig(options);
 }
 
 export async function salvarRegra(input: SalvarInsumoCompraRegraInput) {
   await requireInternoModulo('interno_config', 'administrar');
   const regra = await insumoCompraRegraManager.salvarRegra(input);
-  revalidatePath(CONFIG_PATH);
+  revalidatePath(INSUMOS_PATH);
   revalidatePath(SUGESTAO_PATH);
   return regra;
 }
@@ -27,7 +29,7 @@ export async function salvarRegra(input: SalvarInsumoCompraRegraInput) {
 export async function aplicarSeedPlanilha() {
   await requireInternoModulo('interno_config', 'administrar');
   const resultado = await insumoCompraRegraManager.aplicarSeedPlanilha();
-  revalidatePath(CONFIG_PATH);
+  revalidatePath(INSUMOS_PATH);
   revalidatePath(SUGESTAO_PATH);
   return resultado;
 }

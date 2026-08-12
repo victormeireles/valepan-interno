@@ -6,21 +6,46 @@ import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-d
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
 import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
+import InsumoRegraCompraButton from '@/components/Insumos/InsumoRegraCompraButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
+import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
 
 type Props = {
   items: Insumo[];
   receitasPorInsumo: Record<string, InsumoReceitaAssociacao[]>;
   vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
+  regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>;
   onRowClick: (item: Insumo) => void;
+  onRegraCompraSaved: () => void;
 };
+
+function unidadeLabel(insumo: Insumo) {
+  return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '—';
+}
+
+function regraConfigFor(
+  item: Insumo,
+  regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>,
+): InsumoCompraRegraConfig {
+  return (
+    regrasCompraPorInsumo[item.id] ?? {
+      insumoId: item.id,
+      nome: item.nome,
+      unidade: unidadeLabel(item),
+      regra: null,
+      distribuidores: [],
+    }
+  );
+}
 
 export default function InsumosConfigMobileList({
   items,
   receitasPorInsumo,
   vinculosOmiePorInsumo,
+  regrasCompraPorInsumo,
   onRowClick,
+  onRegraCompraSaved,
 }: Props) {
   if (items.length === 0) return null;
 
@@ -38,15 +63,13 @@ export default function InsumosConfigMobileList({
           >
             <div className="min-w-0">
               <p className="truncate font-semibold text-stone-900">{item.nome}</p>
-              <p className="mt-1 text-sm text-stone-600">
-                {item.unidades?.nome_resumido || item.unidades?.nome || '—'}
-              </p>
+              <p className="mt-1 text-sm text-stone-600">{unidadeLabel(item)}</p>
               <div className="mt-1">
                 <InsumoCustoBadge custoUnitario={item.custo_unitario} />
               </div>
             </div>
           </button>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <InsumoReceitasButton
               insumoNome={item.nome}
               receitas={receitasPorInsumo[item.id] ?? []}
@@ -54,6 +77,10 @@ export default function InsumosConfigMobileList({
             <InsumoVinculosOmieButton
               insumoNome={item.nome}
               vinculos={vinculosOmiePorInsumo[item.id] ?? []}
+            />
+            <InsumoRegraCompraButton
+              config={regraConfigFor(item, regrasCompraPorInsumo)}
+              onSaved={onRegraCompraSaved}
             />
             <ConfigAtivoBadge ativo={item.ativo} />
             <button

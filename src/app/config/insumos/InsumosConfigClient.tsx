@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Insumo } from '@/app/actions/insumos-actions';
+import { aplicarSeedPlanilha } from '@/app/actions/insumo-compra-regra-actions';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
@@ -16,13 +17,20 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Toast } from '@/components/ui/Toast';
+import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
 
 type StatusFilter = 'todos' | 'ativos' | 'inativos';
+
+type ToastState = {
+  tone: 'success' | 'error' | 'warning';
+  text: string;
+};
 
 type Props = {
   initialInsumos: Insumo[];
   receitasPorInsumo: Record<string, InsumoReceitaAssociacao[]>;
   vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
+  regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>;
 };
 
 function compareValues(a: unknown, b: unknown): number {
@@ -49,6 +57,7 @@ export default function InsumosConfigClient({
   initialInsumos,
   receitasPorInsumo,
   vinculosOmiePorInsumo,
+  regrasCompraPorInsumo,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,7 +67,8 @@ export default function InsumosConfigClient({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Insumo | undefined>();
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const statusParam = searchParams.get('status');
   const statusFilter: StatusFilter =
@@ -70,6 +80,11 @@ export default function InsumosConfigClient({
     else params.set('status', status);
     const query = params.toString();
     router.replace(query ? `/config/insumos?${query}` : '/config/insumos');
+  };
+
+  const showToast = (next: ToastState) => {
+    setToast(next);
+    setTimeout(() => setToast(null), 5000);
   };
 
   const unidadesUnicas = useMemo(() => {
@@ -121,15 +136,45 @@ export default function InsumosConfigClient({
   };
 
   const handleSaved = () => {
-    setToast('Insumo salvo com sucesso');
+    showToast({ tone: 'success', text: 'Insumo salvo com sucesso' });
     router.refresh();
-    setTimeout(() => setToast(null), 4000);
   };
 
   const handleDeleted = () => {
-    setToast('Insumo excluído com sucesso');
+    showToast({ tone: 'success', text: 'Insumo excluído com sucesso' });
     router.refresh();
-    setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleRegraCompraSaved = () => {
+    showToast({ tone: 'success', text: 'Regra de compra salva' });
+    router.refresh();
+  };
+
+  const handleSeed = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const result = await aplicarSeedPlanilha();
+      const naoEncontrados =
+        result.naoEncontrados.length > 0
+          ? ` Não encontrados: ${result.naoEncontrados.join(', ')}.`
+          : '';
+      showToast({
+        tone: result.naoEncontrados.length > 0 ? 'warning' : 'success',
+        text: `${result.atualizados} regras importadas.${naoEncontrados}`,
+      });
+      router.refresh();
+    } catch (caughtError) {
+      showToast({
+        tone: 'error',
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : 'Erro ao importar planilha inicial.',
+      });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const statusOptions: { value: StatusFilter; label: string }[] = [
@@ -149,17 +194,29 @@ export default function InsumosConfigClient({
       <ConfigPageHeader
         title="Insumos"
         icon="inventory"
-        description="Matérias-primas usadas nas receitas, com custo e unidade de medida."
+        description="Matérias-primas, custo, unidade e regras de compra."
         action={
-          <Button icon="add" onClick={openCreate} className="w-full sm:w-auto">
-            Novo insumo
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button
+              type="button"
+              variant="secondary"
+              icon="upload_file"
+              disabled={importing}
+              onClick={() => void handleSeed()}
+              className="w-full sm:w-auto"
+            >
+              {importing ? 'Importando…' : 'Importar regras'}
+            </Button>
+            <Button icon="add" onClick={openCreate} className="w-full sm:w-auto">
+              Novo insumo
+            </Button>
+          </div>
         }
       />
 
       {toast ? (
-        <Toast tone="success" onClose={() => setToast(null)}>
-          {toast}
+        <Toast tone={toast.tone} onClose={() => setToast(null)}>
+          {toast.text}
         </Toast>
       ) : null}
 
@@ -254,17 +311,21 @@ export default function InsumosConfigClient({
               items={filtered}
               receitasPorInsumo={receitasPorInsumo}
               vinculosOmiePorInsumo={vinculosOmiePorInsumo}
+              regrasCompraPorInsumo={regrasCompraPorInsumo}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
               onRowClick={openEdit}
+              onRegraCompraSaved={handleRegraCompraSaved}
               embedded
             />
             <InsumosConfigMobileList
               items={filtered}
               receitasPorInsumo={receitasPorInsumo}
               vinculosOmiePorInsumo={vinculosOmiePorInsumo}
+              regrasCompraPorInsumo={regrasCompraPorInsumo}
               onRowClick={openEdit}
+              onRegraCompraSaved={handleRegraCompraSaved}
             />
           </>
         )}

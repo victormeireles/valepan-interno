@@ -6,6 +6,7 @@ import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-d
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
 import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
+import InsumoRegraCompraButton from '@/components/Insumos/InsumoRegraCompraButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
 import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
 import {
@@ -14,6 +15,7 @@ import {
   configTableHeadCellClass,
   configTableRowClass,
 } from '@/components/Config/config-table-styles';
+import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
 
 export type InsumoSortKey = 'nome' | 'unidade' | 'custo_unitario' | 'ativo';
 
@@ -21,10 +23,12 @@ type Props = {
   items: Insumo[];
   receitasPorInsumo: Record<string, InsumoReceitaAssociacao[]>;
   vinculosOmiePorInsumo: Record<string, IntegracaoInsumoComEmpresa[]>;
+  regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>;
   sortKey: InsumoSortKey;
   sortDir: 'asc' | 'desc';
   onSort: (key: InsumoSortKey) => void;
   onRowClick: (item: Insumo) => void;
+  onRegraCompraSaved: () => void;
   embedded?: boolean;
 };
 
@@ -37,14 +41,31 @@ function unidadeLabel(insumo: Insumo) {
   return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '—';
 }
 
+function regraConfigFor(
+  item: Insumo,
+  regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>,
+): InsumoCompraRegraConfig {
+  return (
+    regrasCompraPorInsumo[item.id] ?? {
+      insumoId: item.id,
+      nome: item.nome,
+      unidade: unidadeLabel(item),
+      regra: null,
+      distribuidores: [],
+    }
+  );
+}
+
 export default function InsumosConfigTable({
   items,
   receitasPorInsumo,
   vinculosOmiePorInsumo,
+  regrasCompraPorInsumo,
   sortKey,
   sortDir,
   onSort,
   onRowClick,
+  onRegraCompraSaved,
   embedded = false,
 }: Props) {
   const headers: { key: InsumoSortKey | null; label: string; align?: 'left' | 'right' }[] = [
@@ -53,6 +74,7 @@ export default function InsumosConfigTable({
     { key: 'custo_unitario', label: 'Custo unitário', align: 'right' },
     { key: null, label: 'Receitas', align: 'right' },
     { key: null, label: 'Omie', align: 'right' },
+    { key: null, label: 'Compra', align: 'right' },
     { key: 'ativo', label: 'Status' },
   ];
 
@@ -124,6 +146,14 @@ export default function InsumosConfigTable({
                   insumoNome={item.nome}
                   vinculos={vinculosOmiePorInsumo[item.id] ?? []}
                 />
+              </td>
+              <td className={`${configTableBodyCellClass} text-right`}>
+                <div className="flex justify-end">
+                  <InsumoRegraCompraButton
+                    config={regraConfigFor(item, regrasCompraPorInsumo)}
+                    onSaved={onRegraCompraSaved}
+                  />
+                </div>
               </td>
               <td className={configTableBodyCellClass}>
                 <ConfigAtivoBadge ativo={item.ativo} />

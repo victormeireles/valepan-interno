@@ -34,13 +34,7 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     href: '/config/insumos',
     label: 'Insumos',
     icon: 'inventory',
-    description: 'Matérias-primas e custos unitários',
-  },
-  {
-    href: '/config/regras-compra-insumos',
-    label: 'Regras de compra',
-    icon: 'shopping_cart',
-    description: 'Lead time, janela, min/max e distribuidores',
+    description: 'Matérias-primas, custo e regras de compra',
   },
   {
     href: '/config/fornecedores-insumos',
