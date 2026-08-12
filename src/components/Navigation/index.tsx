@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import DesktopNavMenu from '@/components/Navigation/DesktopNavMenu';
+import LogoutNavigationAction from '@/components/Navigation/LogoutNavigationAction';
 import MobileNavMenu from '@/components/Navigation/MobileNavMenu';
 import type { MainNavEntry } from '@/config/main-nav-config';
 
@@ -61,8 +62,9 @@ export default function Navigation({ entries }: NavigationProps) {
 
           <div
             className={`hidden items-center justify-end lg:flex ${SIDE_ZONE_CLASS}`}
-            aria-hidden="true"
-          />
+          >
+            <LogoutNavigationAction variant="desktop" />
+          </div>
 
           <button
             type="button"
@@ -99,6 +101,9 @@ export default function Navigation({ entries }: NavigationProps) {
           entries={entries}
           onNavigate={closeMobile}
         />
+        <div className="border-t border-border-default p-3">
+          <LogoutNavigationAction variant="mobile" />
+        </div>
       </aside>
     </>
   );
