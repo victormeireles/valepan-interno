@@ -367,6 +367,24 @@ export class EmbalagemLoteRepository {
     }
     return [...ids];
   }
+
+  async listByProduzidoEmRange(
+    startIso: string,
+    endIsoExclusive: string,
+  ): Promise<EmbalagemLoteRecord[]> {
+    const { data, error } = await this.supabase
+      .from('embalagem_lotes')
+      .select()
+      .gte('produzido_em', startIso)
+      .lt('produzido_em', endIsoExclusive)
+      .order('produzido_em', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar lotes de embalagem por período: ${error.message}`);
+    }
+
+    return (data ?? []).map(fromDbRow);
+  }
 }
 
 export const embalagemLoteRepository = new EmbalagemLoteRepository();

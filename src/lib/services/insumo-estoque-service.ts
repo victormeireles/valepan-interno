@@ -28,6 +28,8 @@ type AplicarDeltaInput = {
   fornoLoteId?: string | null;
   embalagemLoteId?: string | null;
   observacao?: string | null;
+  /** Data histórica do movimento (ex.: produzido_em do lote no backfill). */
+  createdAt?: string | null;
 };
 
 function isUniqueViolation(error: unknown): boolean {
@@ -131,6 +133,7 @@ export class InsumoEstoqueService {
       fornoLoteId: input.fornoLoteId ?? null,
       embalagemLoteId: input.embalagemLoteId ?? null,
       observacao: input.observacao ?? null,
+      createdAt: input.createdAt ?? null,
     });
   }
 }

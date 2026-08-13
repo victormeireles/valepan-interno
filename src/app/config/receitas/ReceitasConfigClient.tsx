@@ -111,6 +111,7 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
   const handleSaved = (info?: {
     vinculosMassa?: { atualizados: number; ignorados: Array<{ produtoNome: string }> };
     vinculosGramatura?: { atualizados: number; ignorados: Array<{ produtoNome: string }> };
+    backfillMessage?: string;
   }) => {
     let message = 'Receita salva com sucesso';
     const massaAtualizados = info?.vinculosMassa?.atualizados ?? 0;
@@ -128,6 +129,9 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
       (info?.vinculosGramatura?.ignorados.length ?? 0);
     if (ignorados > 0) {
       message += ` ${ignorados} produto(s) não atualizado(s) (sem gramatura ou sem cadastro).`;
+    }
+    if (info?.backfillMessage) {
+      message += ` ${info.backfillMessage}`;
     }
 
     setToast(message);

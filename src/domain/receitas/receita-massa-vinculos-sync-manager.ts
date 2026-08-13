@@ -11,11 +11,13 @@ export type { VinculoMassaParaSync } from '@/domain/receitas/receita-massa-vincu
 export type ReceitaMassaVinculoSyncResult = {
   atualizados: number;
   ignorados: Array<{ produtoNome: string; motivo: string }>;
+  mudancas: ReceitaMassaBackfillItem[];
 };
 
 export type ReceitaMassaBackfillItem = {
   receitaId: string;
   receitaNome: string;
+  produtoId: string;
   produtoNome: string;
   vinculoId: string;
   quantidadeAtual: number;
@@ -40,7 +42,7 @@ type IngredienteDbRow = {
 type VinculoDbRow = {
   id: string;
   quantidade_por_produto: number;
-  produtos: { nome: string; unit_weight: number | null } | null;
+  produtos: { id: string; nome: string; unit_weight: number | null } | null;
 };
 
 type ReceitaMassaRow = {
@@ -74,7 +76,7 @@ function mapIngredientesDb(rows: IngredienteDbRow[]): ReceitaMassaIngrediente[] 
 }
 
 function mapVinculosDb(rows: VinculoDbRow[]): Array<
-  VinculoMassaParaSync & { quantidadeAtual: number }
+  VinculoMassaParaSync & { quantidadeAtual: number; produtoId: string }
 > {
   return rows
     .map((row) => {
@@ -82,12 +84,16 @@ function mapVinculosDb(rows: VinculoDbRow[]): Array<
       if (!produto) return null;
       return {
         vinculoId: row.id,
+        produtoId: produto.id,
         produtoNome: produto.nome,
         unit_weight: produto.unit_weight,
         quantidadeAtual: row.quantidade_por_produto,
       };
     })
-    .filter((item): item is VinculoMassaParaSync & { quantidadeAtual: number } => item != null);
+    .filter(
+      (item): item is VinculoMassaParaSync & { quantidadeAtual: number; produtoId: string } =>
+        item != null,
+    );
 }
 
 export class ReceitaMassaVinculosSyncManager {
@@ -99,6 +105,7 @@ export class ReceitaMassaVinculosSyncManager {
         produtoNome: item.produtoNome,
         motivo: item.motivo,
       })),
+      mudancas: resultado.mudancas,
     };
   }
 
@@ -168,6 +175,7 @@ export class ReceitaMassaVinculosSyncManager {
             id,
             quantidade_por_produto,
             produtos (
+              id,
               nome,
               unit_weight
             )
@@ -215,6 +223,7 @@ export class ReceitaMassaVinculosSyncManager {
       const quantidadeAtual = quantidadeAtualPorVinculo.get(item.vinculoId) ?? 0;
       const vinculo = vinculos.find((entry) => entry.vinculoId === item.vinculoId);
       const produtoNome = vinculo?.produtoNome ?? 'Produto';
+      const produtoId = vinculo?.produtoId ?? '';
 
       if (quantidadeAtual === item.quantidade) {
         inalterados += 1;
@@ -224,6 +233,7 @@ export class ReceitaMassaVinculosSyncManager {
       mudancas.push({
         receitaId,
         receitaNome,
+        produtoId,
         produtoNome,
         vinculoId: item.vinculoId,
         quantidadeAtual,

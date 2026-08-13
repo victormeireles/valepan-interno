@@ -24,7 +24,7 @@ describe('filterHubNavItems', () => {
     );
   });
 
-  it('persona tablet: só fermentação + painel', () => {
+  it('persona tablet: fermentação + painel + fluxo', () => {
     const snap = {
       isSystemOwner: false,
       identidades: ['interno'],
@@ -40,6 +40,7 @@ describe('filterHubNavItems', () => {
     expect(producao.map((item) => item.href)).toEqual([
       '/realizado/fermentacao',
       '/realizado/painel-producao',
+      '/realizado/fluxo-processo',
     ]);
     expect(operacao).toEqual([]);
   });

@@ -151,6 +151,11 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/api/painel/fluxo-processo',
+    requirement: modulo('interno_painel', 'ler'),
+  },
+  {
+    match: 'prefix',
     prefix: '/api/ordens-producao',
     requirement: modulo('interno_ordens', 'editar'),
   },
@@ -242,6 +247,11 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/realizado/painel-producao',
+    requirement: modulo('interno_painel', 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/realizado/fluxo-processo',
     requirement: modulo('interno_painel', 'ler'),
   },
   {

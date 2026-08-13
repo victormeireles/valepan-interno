@@ -14,7 +14,7 @@ describe('InsumoConsumoSemanalAggregator', () => {
     ],
   };
 
-  it('soma somente movimentos de saida por insumo e semana', () => {
+  it('soma consumo líquido por insumo e semana (backfill positivo reduz)', () => {
     const aggregator = new InsumoConsumoSemanalAggregator();
 
     const items = aggregator.aggregate(periodo, [
@@ -91,7 +91,7 @@ describe('InsumoConsumoSemanalAggregator', () => {
         insumoId: 'farinha',
         nome: 'Farinha Tia Ofelia',
         unidadeResumida: 'KG',
-        total: 13.5,
+        total: 11.5,
         estoqueAtual: 0,
         media: 0,
         coberturaDias: null,
@@ -99,17 +99,17 @@ describe('InsumoConsumoSemanalAggregator', () => {
         coberturaPicoDias: null,
         consumoPorSemana: {
           '2026-06-28': 10,
-          '2026-07-05': 3.5,
+          '2026-07-05': 1.5,
           '2026-07-12': 0,
         },
         receitas: [
           {
             receitaId: 'receita-massa',
             receitaNome: 'Massa brioche',
-            total: 13.5,
+            total: 11.5,
             consumoPorSemana: {
               '2026-06-28': 10,
-              '2026-07-05': 3.5,
+              '2026-07-05': 1.5,
               '2026-07-12': 0,
             },
           },

@@ -18,7 +18,9 @@ import ReceitaIngredientesAccordion from '@/components/Receitas/ReceitaIngredien
 import ReceitaGramaturasSection, {
   type ReceitaGramaturaFormItem,
 } from '@/components/Receitas/ReceitaGramaturasSection';
+import ConsumoProdutividadeBackfillDialog from '@/components/Receitas/ConsumoProdutividadeBackfillDialog';
 import { receitaTipoUsaGramatura } from '@/domain/receitas/receita-gramatura-resolver';
+import type { ProdutividadeConsumoChange } from '@/domain/insumos/insumo-consumo-produtividade-change';
 
 type TipoReceita = ReceitaWithRelations['tipo'];
 
@@ -28,6 +30,7 @@ interface ReceitaModalProps {
   onSaved?: (info?: {
     vinculosMassa?: ReceitaMassaVinculoSyncResult;
     vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+    backfillMessage?: string;
   }) => void;
   receita?: ReceitaWithRelations | null;
 }
@@ -91,6 +94,12 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
   const [accordionOpen, setAccordionOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backfillChanges, setBackfillChanges] = useState<ProdutividadeConsumoChange[]>([]);
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [pendingSavedInfo, setPendingSavedInfo] = useState<{
+    vinculosMassa?: ReceitaMassaVinculoSyncResult;
+    vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+  } | null>(null);
 
   const {
     importPhase,
@@ -232,6 +241,49 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
     (item) => item.pesoG >= 1 && item.quantidade > 0,
   );
 
+  const finishSave = (
+    info?: {
+      vinculosMassa?: ReceitaMassaVinculoSyncResult;
+      vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+      backfillMessage?: string;
+    },
+  ) => {
+    onSaved?.(info);
+    onClose();
+  };
+
+  const collectProdutividadeChanges = (info: {
+    vinculosMassa?: ReceitaMassaVinculoSyncResult;
+    vinculosGramatura?: ReceitaGramaturaVinculoSyncResult;
+  }): ProdutividadeConsumoChange[] => {
+    const changes: ProdutividadeConsumoChange[] = [];
+
+    for (const item of info.vinculosMassa?.mudancas ?? []) {
+      if (!item.produtoId) continue;
+      changes.push({
+        produtoId: item.produtoId,
+        produtoNome: item.produtoNome,
+        tipo: 'massa',
+        receitaId: item.receitaId,
+        quantidadeAntes: item.quantidadeAtual,
+        quantidadeDepois: item.quantidadeNova,
+      });
+    }
+
+    for (const item of info.vinculosGramatura?.mudancas ?? []) {
+      changes.push({
+        produtoId: item.produtoId,
+        produtoNome: item.produtoNome,
+        tipo: item.tipo,
+        receitaId: item.receitaId,
+        quantidadeAntes: item.quantidadeAntes,
+        quantidadeDepois: item.quantidadeDepois,
+      });
+    }
+
+    return changes;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -266,12 +318,20 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
         throw new Error(result.error as string);
       }
 
-      onSaved?.(
-        result.success
-          ? { vinculosMassa: result.vinculosMassa, vinculosGramatura: result.vinculosGramatura }
-          : undefined,
-      );
-      onClose();
+      const savedInfo = {
+        vinculosMassa: result.vinculosMassa,
+        vinculosGramatura: result.vinculosGramatura,
+      };
+      const changes = collectProdutividadeChanges(savedInfo);
+
+      if (changes.length > 0) {
+        setPendingSavedInfo(savedInfo);
+        setBackfillChanges(changes);
+        setBackfillOpen(true);
+        return;
+      }
+
+      finishSave(savedInfo);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar receita';
       setError(message);
@@ -282,7 +342,10 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm"
+        onClick={backfillOpen ? undefined : onClose}
+      />
 
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
         <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex justify-between items-center">
@@ -403,6 +466,25 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
           </div>
         </form>
       </div>
+
+      <ConsumoProdutividadeBackfillDialog
+        open={backfillOpen}
+        changes={backfillChanges}
+        onSkip={() => {
+          setBackfillOpen(false);
+          setBackfillChanges([]);
+          const info = pendingSavedInfo;
+          setPendingSavedInfo(null);
+          finishSave(info ?? undefined);
+        }}
+        onDone={(message) => {
+          setBackfillOpen(false);
+          setBackfillChanges([]);
+          const info = pendingSavedInfo;
+          setPendingSavedInfo(null);
+          finishSave({ ...(info ?? {}), backfillMessage: message });
+        }}
+      />
     </div>
   );
 }

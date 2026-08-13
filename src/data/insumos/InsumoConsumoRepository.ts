@@ -138,7 +138,6 @@ export class InsumoConsumoRepository {
         .select(
           'insumo_id, created_at, delta_quantidade, origem, fermentacao_lote_id, forno_lote_id, embalagem_lote_id, insumos(nome, unidades(nome_resumido))',
         )
-        .lt('delta_quantidade', 0)
         .in('origem', ['producao_fermentacao', 'producao_forno', 'producao_embalagem'])
         .or(
           [

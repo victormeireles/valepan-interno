@@ -54,7 +54,8 @@ export class InsumoConsumoSemanalAggregator {
       if (!periodo.colunas.some((coluna) => coluna.inicio === colunaInicio)) continue;
 
       const item = this.getOrCreateItem(itemsByInsumo, periodo, movimento);
-      const consumo = Math.abs(movimento.deltaQuantidade);
+      // Líquido: saída (-) aumenta consumo; ajuste de backfill (+) reduz.
+      const consumo = -movimento.deltaQuantidade;
       item.consumoPorSemana[colunaInicio] += consumo;
       item.total += consumo;
       this.addReceitaDetalhe(item, periodo, movimento, colunaInicio, consumo);
@@ -63,14 +64,30 @@ export class InsumoConsumoSemanalAggregator {
     return [...itemsByInsumo.values()]
       .map((item) => ({
         ...item,
-        receitas: item.receitas.sort((a, b) => b.total - a.total),
+        consumoPorSemana: Object.fromEntries(
+          Object.entries(item.consumoPorSemana).map(([chave, valor]) => [
+            chave,
+            Math.max(0, valor),
+          ]),
+        ),
+        total: Math.max(0, item.total),
+        receitas: item.receitas
+          .map((receita) => ({
+            ...receita,
+            consumoPorSemana: Object.fromEntries(
+              Object.entries(receita.consumoPorSemana).map(([chave, valor]) => [
+                chave,
+                Math.max(0, valor),
+              ]),
+            ),
+            total: Math.max(0, receita.total),
+          }))
+          .sort((a, b) => b.total - a.total),
       }))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }
 
   private isConsumoProducaoVinculado(movimento: InsumoConsumoMovimentoFonte): boolean {
-    if (movimento.deltaQuantidade >= 0) return false;
-
     switch (movimento.origem) {
       case 'producao_fermentacao':
         return Boolean(movimento.fermentacaoLoteId);

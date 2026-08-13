@@ -93,25 +93,30 @@ export class InsumoEstoqueRepository {
   }
 
   async insertMovimento(input: RegistrarInsumoMovimentoInput): Promise<InsumoMovimentoRow> {
+    const payload: Record<string, unknown> = {
+      insumo_id: input.insumoId,
+      empresa_id: input.empresaId ?? null,
+      delta_quantidade: input.deltaQuantidade,
+      saldo_resultante: input.saldoResultante,
+      custo_unitario: input.custoUnitario,
+      origem: input.origem,
+      omie_n_id_receb: input.omieNIdReceb ?? null,
+      omie_n_id_item: input.omieNIdItem ?? null,
+      omie_webhook_evento_id: input.omieWebhookEventoId ?? null,
+      pendencia_id: input.pendenciaId ?? null,
+      numero_nf: input.numeroNf ?? null,
+      observacao: input.observacao ?? null,
+      fermentacao_lote_id: input.fermentacaoLoteId ?? null,
+      forno_lote_id: input.fornoLoteId ?? null,
+      embalagem_lote_id: input.embalagemLoteId ?? null,
+    };
+    if (input.createdAt) {
+      payload.created_at = input.createdAt;
+    }
+
     const { data, error } = await this.db
       .from('insumo_movimentos')
-      .insert({
-        insumo_id: input.insumoId,
-        empresa_id: input.empresaId ?? null,
-        delta_quantidade: input.deltaQuantidade,
-        saldo_resultante: input.saldoResultante,
-        custo_unitario: input.custoUnitario,
-        origem: input.origem,
-        omie_n_id_receb: input.omieNIdReceb ?? null,
-        omie_n_id_item: input.omieNIdItem ?? null,
-        omie_webhook_evento_id: input.omieWebhookEventoId ?? null,
-        pendencia_id: input.pendenciaId ?? null,
-        numero_nf: input.numeroNf ?? null,
-        observacao: input.observacao ?? null,
-        fermentacao_lote_id: input.fermentacaoLoteId ?? null,
-        forno_lote_id: input.fornoLoteId ?? null,
-        embalagem_lote_id: input.embalagemLoteId ?? null,
-      })
+      .insert(payload)
       .select()
       .single();
 

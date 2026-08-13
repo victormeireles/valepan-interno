@@ -158,6 +158,24 @@ export class FermentacaoLoteRepository {
 
     return map;
   }
+
+  async listByProduzidoEmRange(
+    startIso: string,
+    endIsoExclusive: string,
+  ): Promise<FermentacaoLoteRecord[]> {
+    const { data, error } = await this.supabase
+      .from('fermentacao_lotes')
+      .select()
+      .gte('produzido_em', startIso)
+      .lt('produzido_em', endIsoExclusive)
+      .order('produzido_em', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar lotes de fermentação por período: ${error.message}`);
+    }
+
+    return (data ?? []).map(fromDbRow);
+  }
 }
 
 export const fermentacaoLoteRepository = new FermentacaoLoteRepository();

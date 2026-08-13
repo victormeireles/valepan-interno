@@ -155,6 +155,24 @@ export class FornoLoteRepository {
 
     return map;
   }
+
+  async listByProduzidoEmRange(
+    startIso: string,
+    endIsoExclusive: string,
+  ): Promise<FornoLoteRecord[]> {
+    const { data, error } = await this.supabase
+      .from('forno_lotes')
+      .select()
+      .gte('produzido_em', startIso)
+      .lt('produzido_em', endIsoExclusive)
+      .order('produzido_em', { ascending: true });
+
+    if (error) {
+      throw new Error(`Erro ao listar lotes de forno por período: ${error.message}`);
+    }
+
+    return (data ?? []).map(fromDbRow);
+  }
 }
 
 export const fornoLoteRepository = new FornoLoteRepository();

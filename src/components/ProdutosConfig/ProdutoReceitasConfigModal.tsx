@@ -20,6 +20,8 @@ import {
   PRODUTO_RECEITA_TIPO_OPTIONS,
   type TipoReceita,
 } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import ConsumoProdutividadeBackfillDialog from '@/components/Receitas/ConsumoProdutividadeBackfillDialog';
+import type { ProdutividadeConsumoChange } from '@/domain/insumos/insumo-consumo-produtividade-change';
 
 export type ReceitaCatalogoItem = {
   id: string;
@@ -82,6 +84,9 @@ export default function ProdutoReceitasConfigModal({
   );
   const [loadingTipo, setLoadingTipo] = useState<TipoReceita | 'all' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [backfillChanges, setBackfillChanges] = useState<ProdutividadeConsumoChange[]>([]);
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [closeAfterBackfill, setCloseAfterBackfill] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -194,6 +199,12 @@ export default function ProdutoReceitasConfigModal({
     await refreshLocalProduto();
     setMessage(`${option?.label ?? tipo} salvo com sucesso.`);
     setLoadingTipo(null);
+
+    if (result.produtividadeChange) {
+      setCloseAfterBackfill(false);
+      setBackfillChanges([result.produtividadeChange]);
+      setBackfillOpen(true);
+    }
   };
 
   const handleUnlink = async (tipo: TipoReceita) => {
@@ -224,6 +235,7 @@ export default function ProdutoReceitasConfigModal({
 
     try {
       const errors: string[] = [];
+      const changes: ProdutividadeConsumoChange[] = [];
 
       for (const option of PRODUTO_RECEITA_TIPO_OPTIONS) {
         const receitaId = selectedReceitas[option.value];
@@ -248,6 +260,11 @@ export default function ProdutoReceitasConfigModal({
 
         if (!result.success) {
           errors.push(`${option.label}: ${result.error || 'Erro ao salvar.'}`);
+          continue;
+        }
+
+        if (result.produtividadeChange) {
+          changes.push(result.produtividadeChange);
         }
       }
 
@@ -257,6 +274,14 @@ export default function ProdutoReceitasConfigModal({
       }
 
       await refreshLocalProduto();
+
+      if (changes.length > 0) {
+        setCloseAfterBackfill(true);
+        setBackfillChanges(changes);
+        setBackfillOpen(true);
+        return;
+      }
+
       onClose();
     } catch {
       setMessage('Erro inesperado ao salvar receitas.');
@@ -396,6 +421,29 @@ export default function ProdutoReceitasConfigModal({
           </button>
         </div>
       </div>
+
+      <ConsumoProdutividadeBackfillDialog
+        open={backfillOpen}
+        changes={backfillChanges}
+        onSkip={() => {
+          setBackfillOpen(false);
+          setBackfillChanges([]);
+          if (closeAfterBackfill) {
+            setCloseAfterBackfill(false);
+            onClose();
+          }
+        }}
+        onDone={(toastMessage) => {
+          setBackfillOpen(false);
+          setBackfillChanges([]);
+          if (closeAfterBackfill) {
+            setCloseAfterBackfill(false);
+            onClose();
+            return;
+          }
+          setMessage(toastMessage);
+        }}
+      />
     </div>
   );
 }

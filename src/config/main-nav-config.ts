@@ -95,6 +95,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         moduloId: 'interno_painel',
         match: (pathname) => pathname.startsWith('/realizado/painel-producao'),
       },
+      {
+        type: 'link',
+        href: '/realizado/fluxo-processo',
+        label: 'Fluxo',
+        icon: 'timeline',
+        moduloId: 'interno_painel',
+        match: (pathname) => pathname.startsWith('/realizado/fluxo-processo'),
+      },
     ],
   },
   {

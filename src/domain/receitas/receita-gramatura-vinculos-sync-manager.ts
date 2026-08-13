@@ -13,9 +13,20 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 type TipoReceita = Database['public']['Enums']['tipo_receita'];
 
+export type ReceitaGramaturaVinculoMudanca = {
+  produtoId: string;
+  produtoNome: string;
+  vinculoId: string;
+  receitaId: string;
+  tipo: TipoReceita;
+  quantidadeAntes: number;
+  quantidadeDepois: number;
+};
+
 export type ReceitaGramaturaVinculoSyncResult = {
   atualizados: number;
   ignorados: Array<{ produtoNome: string; motivo: string }>;
+  mudancas: ReceitaGramaturaVinculoMudanca[];
 };
 
 type GramaturaDbRow = {
@@ -33,7 +44,7 @@ type IngredienteDbRow = {
 type VinculoDbRow = {
   id: string;
   quantidade_por_produto: number;
-  produtos: { nome: string; unit_weight: number | null } | null;
+  produtos: { id: string; nome: string; unit_weight: number | null } | null;
 };
 
 function unwrapJoin<T>(value: T | T[] | null): T | null {
@@ -110,6 +121,7 @@ export class ReceitaGramaturaVinculosSyncManager {
           id,
           quantidade_por_produto,
           produtos (
+            id,
             nome,
             unit_weight
           )
@@ -129,11 +141,12 @@ export class ReceitaGramaturaVinculosSyncManager {
     const vinculos = (vinculosRows ?? []) as VinculoDbRow[];
 
     if (gramaturas.length === 0 || vinculos.length === 0) {
-      return { atualizados: 0, ignorados: [] };
+      return { atualizados: 0, ignorados: [], mudancas: [] };
     }
 
     let atualizados = 0;
     const ignorados: ReceitaGramaturaVinculoSyncResult['ignorados'] = [];
+    const mudancas: ReceitaGramaturaVinculoMudanca[] = [];
 
     for (const vinculo of vinculos) {
       const produto = unwrapJoin(vinculo.produtos);
@@ -166,9 +179,18 @@ export class ReceitaGramaturaVinculosSyncManager {
 
       if (error) throw error;
       atualizados += 1;
+      mudancas.push({
+        produtoId: produto.id,
+        produtoNome: produto.nome,
+        vinculoId: vinculo.id,
+        receitaId,
+        tipo,
+        quantidadeAntes: vinculo.quantidade_por_produto,
+        quantidadeDepois: quantidadeNova,
+      });
     }
 
-    return { atualizados, ignorados };
+    return { atualizados, ignorados, mudancas };
   }
 }
 

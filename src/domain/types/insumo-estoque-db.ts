@@ -85,6 +85,8 @@ export type RegistrarInsumoMovimentoInput = {
   fermentacaoLoteId?: string | null;
   fornoLoteId?: string | null;
   embalagemLoteId?: string | null;
+  /** Quando informado, atribui o movimento a uma data histórica (ex.: backfill). */
+  createdAt?: string | null;
 };
 
 export type CriarIntegracaoInsumoInput = {

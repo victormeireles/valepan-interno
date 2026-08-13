@@ -184,6 +184,12 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
     if (existingError) throw existingError;
 
     if (existing) {
+      const { data: beforeRow } = await supabase
+        .from('produto_receitas')
+        .select('quantidade_por_produto, receita_id')
+        .eq('id', existing.id)
+        .single();
+
       const { error } = await supabase
         .from('produto_receitas')
         .update({
@@ -194,22 +200,49 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
         .eq('id', existing.id);
 
       if (error) throw error;
-    } else {
-      const { error } = await supabase.from('produto_receitas').insert({
-        produto_id: payload.produtoId,
-        receita_id: payload.receitaId,
-        quantidade_por_produto: payload.quantidade,
-        ativo: true,
-      });
 
-      if (error) throw error;
+      const { data: produto } = await supabase
+        .from('produtos')
+        .select('id, nome')
+        .eq('id', payload.produtoId)
+        .single();
+
+      revalidatePath(PRODUTOS_PATH);
+      const quantidadeAntes = Number(beforeRow?.quantidade_por_produto ?? 0);
+      const mesmaReceita = beforeRow?.receita_id === payload.receitaId;
+      return {
+        success: true as const,
+        produtividadeChange:
+          mesmaReceita &&
+          quantidadeAntes > 0 &&
+          quantidadeAntes !== payload.quantidade &&
+          produto
+            ? {
+                produtoId: produto.id,
+                produtoNome: produto.nome,
+                tipo: receita.tipo as TipoReceita,
+                receitaId: payload.receitaId,
+                quantidadeAntes,
+                quantidadeDepois: payload.quantidade,
+              }
+            : null,
+      };
     }
 
+    const { error } = await supabase.from('produto_receitas').insert({
+      produto_id: payload.produtoId,
+      receita_id: payload.receitaId,
+      quantidade_por_produto: payload.quantidade,
+      ativo: true,
+    });
+
+    if (error) throw error;
+
     revalidatePath(PRODUTOS_PATH);
-    return { success: true };
+    return { success: true as const, produtividadeChange: null };
   } catch (error) {
     console.error('Erro ao vincular receita ao produto:', error);
-    return { success: false, error: 'Erro ao vincular receita ao produto' };
+    return { success: false as const, error: 'Erro ao vincular receita ao produto' };
   }
 }
 
@@ -222,7 +255,24 @@ export async function updateProdutoReceita(
 
   try {
     if (quantidade <= 0) {
-      return { success: false, error: 'Quantidade deve ser maior que zero' };
+      return { success: false as const, error: 'Quantidade deve ser maior que zero' };
+    }
+
+    const { data: atual, error: atualError } = await supabase
+      .from('produto_receitas')
+      .select(`
+        id,
+        produto_id,
+        receita_id,
+        quantidade_por_produto,
+        produtos ( id, nome ),
+        receitas ( id, tipo, nome )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (atualError || !atual) {
+      return { success: false as const, error: 'Vínculo não encontrado' };
     }
 
     const { error } = await supabase
@@ -233,10 +283,28 @@ export async function updateProdutoReceita(
     if (error) throw error;
 
     revalidatePath(PRODUTOS_PATH);
-    return { success: true };
+
+    const produto = Array.isArray(atual.produtos) ? atual.produtos[0] : atual.produtos;
+    const receita = Array.isArray(atual.receitas) ? atual.receitas[0] : atual.receitas;
+    const quantidadeAntes = Number(atual.quantidade_por_produto);
+
+    return {
+      success: true as const,
+      produtividadeChange:
+        quantidadeAntes !== quantidade && produto && receita
+          ? {
+              produtoId: produto.id as string,
+              produtoNome: (produto.nome as string) ?? 'Produto',
+              tipo: receita.tipo as TipoReceita,
+              receitaId: atual.receita_id as string,
+              quantidadeAntes,
+              quantidadeDepois: quantidade,
+            }
+          : null,
+    };
   } catch (error) {
     console.error('Erro ao atualizar vínculo de receita:', error);
-    return { success: false, error: 'Erro ao atualizar vínculo de receita' };
+    return { success: false as const, error: 'Erro ao atualizar vínculo de receita' };
   }
 }
 

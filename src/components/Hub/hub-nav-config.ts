@@ -44,6 +44,13 @@ export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
     icon: 'monitor',
     moduloId: 'interno_painel',
   },
+  {
+    href: '/realizado/fluxo-processo',
+    title: 'Fluxo de Produção',
+    description: 'Hora a hora por etapa e por assadeira',
+    icon: 'timeline',
+    moduloId: 'interno_painel',
+  },
 ];
 
 export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
