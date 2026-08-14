@@ -1,0 +1,133 @@
+# Simulador de custos do produto
+
+Data: 2026-08-14  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+Permitir que admin estime o **custo por unidade (pão)** de um produto ao alterar vínculos de receita e/ou `quantidade_por_produto`, comparando **antes vs depois** por tipo e no total — sem gravar nada no banco.
+
+## Contexto
+
+Em `/config/produtos` já existem vínculos produto→receita (`produto_receitas`) por tipo (massa, brilho, confeito, antimofo, embalagem, caixa) e o modal de Receitas para editar de verdade.
+
+O custo unitário **não** é campo fixo: é calculado na hora a partir de vínculos + ingredientes + `insumos.custo_unitario`, a mesma lógica usada em outro sistema (CMV de NF).
+
+Hoje o catálogo passado ao modal de Receitas **não** inclui `custo_unitario` dos ingredientes — o simulador precisa desses dados.
+
+## Escopo
+
+Inclui:
+
+- Ação **Simulador de custos** no menu ⋮ do produto (junto com Assadeiras / Receitas)
+- Modal só-leitura quanto a persistência (estado local; Fechar descarta)
+- Comparação antes/depois: breakdown por tipo + total + Δ R$ e %
+- Domínio puro de cálculo alinhado ao CMV
+- Action admin para carregar vínculos + ingredientes com custo
+- Deep-link `?produto={id}&config=simulador`
+- Acesso: rota `/config` já exige `interno_config` / `administrar`
+
+Fora de escopo:
+
+- Aplicar/salvar alterações da simulação no produto
+- Mão de obra, energia, overhead
+- CMV de nota fiscal / mapeamento Omie (só a fórmula de custo/unidade)
+- Exibir custo/unidade na listagem de produtos
+- Histórico ou salvamento de cenários
+
+## Decisão de abordagem
+
+**Modal no menu ⋮ de `/config/produtos`** (aprovado).
+
+Alternativas descartadas: painel dentro do modal de Receitas (mistura edição real com simulação); tela admin dedicada (navegação extra sem ganho).
+
+## Cálculo (alinhado ao CMV)
+
+### Dados
+
+1. **Vínculos** — `produto_receitas` + join `receitas` + `produtos`  
+   Filtros: `produto_receitas.ativo`, `receitas.ativo`, `produtos.ativo`  
+   Campos: `receita_id`, `quantidade_por_produto`, tipo da receita
+
+2. **Ingredientes** — `receita_ingredientes` + join `insumos`  
+   Campos: `quantidade_padrao`, `insumos.custo_unitario` (pode ser `null`)
+
+### Fórmula
+
+Para cada vínculo com `quantidade_por_produto > 0`:
+
+```
+custo_da_receita = Σ (quantidade_padrao × coalesce(custo_unitario, 0))
+// se custo_unitario for null → parcela 0 e marca insumo_sem_custo
+
+custo_por_pão_daquela_receita = custo_da_receita / quantidade_por_produto
+```
+
+Total do produto:
+
+```
+custoUnitario = soma de (custo_receita / quantidade_por_produto) de cada vínculo
+```
+
+Insumo sem custo **entra no total como 0** e gera flag `insumo_sem_custo` (não remove o tipo do total).
+
+Exemplo: massa `(10×5 + 2×1) / 100 = 0,52` + brilho `2 / 100 = 0,02` → **R$ 0,54 / un**.
+
+### Cenários no modal
+
+- **Antes:** vínculos reais do produto + qtds atuais + custos atuais dos insumos
+- **Depois:** overrides locais (outra receita do mesmo tipo e/ou outra qtd); tipos não editados herdam o Antes
+- Ambos usam a mesma fórmula; só mudam `receita_id` e/ou `quantidade_por_produto` no Depois
+
+## UI / fluxo
+
+1. Menu ⋮ → **Simulador de custos**
+2. Modal header: “Simulador de custos” + nome do produto
+3. Corpo:
+   - Linhas por tipo (mesmo conjunto do modal de Receitas): select de receita + input de qtd no cenário Depois
+   - Estado inicial = vínculos atuais (Antes)
+   - Tipos sem vínculo: select “Selecione…” + qtd vazia; se o usuário escolher receita + qtd, entram só no Depois
+4. Painel de resultado (sempre visível / sticky no rodapé do body):
+   - Por tipo: custo/un Antes → Depois (Geist Mono, pt-BR)
+   - Total Antes / Depois
+   - Δ absoluto (R$) e Δ %
+   - Avisos: `insumo_sem_custo`, qtd ≤ 0, receita sem ingredientes
+5. Footer: apenas **Fechar** (sem “Salvar” / “Aplicar”)
+
+Visual: shell dos outros modais de ProdutosConfig (stone/amber, pt-BR, Material Icons). Copy operacional (“Antes”, “Depois”, “Custo/un”, “Diferença”).
+
+## Arquitetura
+
+| Peça | Responsabilidade |
+|------|------------------|
+| `ProdutoConfigOverflowMenu` | Nova ação `simulador` |
+| `ProdutosConfigClient` | Estado do modal + `syncUrl(..., 'simulador')` |
+| `ProdutoCustoSimuladorModal` | UI do simulador (overrides locais) |
+| Subcomponentes pequenos | Linha de override; painel de resultado (SRP / &lt;500 linhas) |
+| `produto-custo-unitario-calculo.ts` | Domínio puro: custo por vínculo + total + flags |
+| Action `getProdutoCustoSimulacao` (ou equivalente) | `requireInternoModulo('interno_config', 'administrar')`; retorna produto, vínculos e catálogo de receitas com ingredientes + `custo_unitario` |
+
+Sem mutation de `produto_receitas`. Sem nova tabela.
+
+## Tratamento de erros / edge cases
+
+| Situação | Comportamento |
+|----------|----------------|
+| Produto sem vínculos | Antes = R$ 0; Depois só com o que o usuário montar |
+| `quantidade_por_produto` ≤ 0 | Tipo não entra no total; aviso |
+| `custo_unitario` null | Parcela 0 + flag `insumo_sem_custo` |
+| Receita sem ingredientes | Custo 0 + aviso |
+| Receita inativa no catálogo | Não listar no select do Depois (só ativas) |
+| Fechar / Esc / overlay | Descarta overrides |
+
+## Testes
+
+- Domínio: casos do exemplo 0,52 + 0,02 = 0,54; null → 0 + flag; várias receitas; qtd ≤ 0 ignorada; override de qtd/receita muda só o Depois
+- UI: smoke opcional — abrir menu, abrir modal, alterar qtd, ver Δ (se houver padrão de teste client no repo)
+
+## Critérios de sucesso
+
+- Admin abre simulador a partir do produto e vê Antes = custo atual coerente com a fórmula do CMV
+- Alterar qtd (ex. massa 953→715) ou receita/qtd de embalagem/caixa atualiza Depois e o breakdown em tempo real
+- Fechar não altera vínculos no banco
+- Avisos de insumo sem custo visíveis sem bloquear o total
