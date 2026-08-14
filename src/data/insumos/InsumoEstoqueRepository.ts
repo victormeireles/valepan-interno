@@ -382,9 +382,10 @@ export class InsumoEstoqueRepository {
       }
 
       for (const row of data ?? []) {
-        const loteId = row[coluna] as string | null;
+        const record = row as Record<string, unknown>;
+        const loteId = record[coluna] as string | null;
         if (!loteId) continue;
-        const insumoId = row.insumo_id as string;
+        const insumoId = record.insumo_id as string;
         let porInsumo = result.get(loteId);
         if (!porInsumo) {
           porInsumo = new Map();
@@ -392,7 +393,7 @@ export class InsumoEstoqueRepository {
         }
         porInsumo.set(
           insumoId,
-          (porInsumo.get(insumoId) ?? 0) + Number(row.delta_quantidade),
+          (porInsumo.get(insumoId) ?? 0) + Number(record.delta_quantidade),
         );
       }
     }

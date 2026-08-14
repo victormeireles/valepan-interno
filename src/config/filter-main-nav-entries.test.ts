@@ -37,6 +37,7 @@ describe('filterMainNavEntries', () => {
     expect(producao?.type === 'group' ? producao.children.map((c) => c.href) : []).toEqual([
       '/realizado/fermentacao',
       '/realizado/painel-producao',
+      '/realizado/fluxo-processo',
     ]);
   });
 });
