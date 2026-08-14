@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import type { InsumoConsumoVisualizacao } from '@/domain/insumos/insumo-consumo-semanal-periodo';
 import CoberturaLegend from '@/features/insumo-estoque/components/CoberturaLegend';
+import ConsumoEmbalagemReceitaBackfillButton from '@/features/insumo-estoque/ConsumoEmbalagemReceitaBackfillButton';
+import ConsumoFornoReceitaBackfillButton from '@/features/insumo-estoque/ConsumoFornoReceitaBackfillButton';
 import InsumoConsumoSemanalMobileList from '@/features/insumo-estoque/components/InsumoConsumoSemanalMobileList';
 import InsumoConsumoSemanalTable from '@/features/insumo-estoque/components/InsumoConsumoSemanalTable';
 import { useInsumoConsumoViewport } from '@/features/insumo-estoque/hooks/useInsumoConsumoViewport';
@@ -147,6 +149,8 @@ export default function InsumoConsumoSemanalClient({ initialData }: Props) {
             >
               Padrão
             </Button>
+            <ConsumoEmbalagemReceitaBackfillButton />
+            <ConsumoFornoReceitaBackfillButton />
           </div>
         </form>
       </Card>

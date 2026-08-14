@@ -13,10 +13,6 @@ import {
   InsumoEstoqueService,
 } from '@/lib/services/insumo-estoque-service';
 import {
-  insumoConsumoEmbalagemService,
-  InsumoConsumoEmbalagemService,
-} from '@/lib/services/insumo-consumo-embalagem-service';
-import {
   insumoConsumoFornoService,
   InsumoConsumoFornoService,
 } from '@/lib/services/insumo-consumo-forno-service';
@@ -24,6 +20,8 @@ import {
   insumoConsumoProducaoService,
   InsumoConsumoProducaoService,
 } from '@/lib/services/insumo-consumo-producao-service';
+import { insumoConsumoEmbalagemBackfillBatchService } from '@/lib/services/insumo-consumo-embalagem-backfill-batch-service';
+import { insumoConsumoFornoBackfillBatchService } from '@/lib/services/insumo-consumo-forno-backfill-batch-service';
 import type { InsumoMovimentoLoteColuna } from '@/data/insumos/InsumoEstoqueRepository';
 import type { InsumoMovimentoOrigem } from '@/domain/types/insumo-estoque';
 
@@ -55,8 +53,6 @@ export class InsumoConsumoProdutividadeBackfillService {
     private readonly loteRepository: InsumoConsumoProdutividadeLoteRepository =
       insumoConsumoProdutividadeLoteRepository,
     private readonly estoqueService: InsumoEstoqueService = insumoEstoqueService,
-    private readonly embalagemService: InsumoConsumoEmbalagemService =
-      insumoConsumoEmbalagemService,
     private readonly fornoService: InsumoConsumoFornoService = insumoConsumoFornoService,
     private readonly fermentacaoService: InsumoConsumoProducaoService =
       insumoConsumoProducaoService,
@@ -70,7 +66,7 @@ export class InsumoConsumoProdutividadeBackfillService {
     const avisos: string[] = [];
     let lotesTotais = 0;
 
-    for (const change of changes.filter(InsumoConsumoProdutividadeFator.mudou)) {
+    for (const change of changes.filter(InsumoConsumoProdutividadeFator.deveBackfill)) {
       const etapa = InsumoConsumoProdutividadeEtapaMapper.fromTipo(change.tipo);
       const fator = InsumoConsumoProdutividadeFator.calcular(
         change.quantidadeAntes,
@@ -81,11 +77,48 @@ export class InsumoConsumoProdutividadeBackfillService {
         continue;
       }
 
+      const trocaReceita = this.isTrocaReceita(change);
+      const fornoReconciliar =
+        (change.tipo === 'brilho' || change.tipo === 'confeito') &&
+        (change.forcarReconciliar || trocaReceita);
+
+      if (
+        etapa.usaFatorSeguro &&
+        trocaReceita &&
+        !InsumoConsumoProdutividadeFator.mudou(change) &&
+        !fornoReconciliar
+      ) {
+        avisos.push(
+          `${change.produtoNome}: troca de receita em ${change.tipo} sem backfill automático (fora do escopo).`,
+        );
+        continue;
+      }
+
       const lotes = await this.loteRepository.listLoteIdsByProduto({
         produtoId: change.produtoId,
         coluna: etapa.coluna,
         desdeIso,
       });
+
+      lotesTotais += lotes.length;
+
+      if ((!etapa.usaFatorSeguro && trocaReceita) || fornoReconciliar) {
+        avisos.push(
+          `${change.produtoNome}: reconciliação pela receita atual (insumos podem mudar). Saldo do novo insumo pode piorar até ajuste manual.`,
+        );
+        items.push({
+          produtoId: change.produtoId,
+          produtoNome: change.produtoNome,
+          tipo: change.tipo,
+          quantidadeAntes: change.quantidadeAntes,
+          quantidadeDepois: change.quantidadeDepois,
+          fator: 1,
+          lotesAfetados: lotes.length,
+          deltasPorInsumo: [],
+        });
+        continue;
+      }
+
       const insumoIds = await this.loteRepository.listReceitaInsumoIds(change.receitaId);
       const deltas = await this.loteRepository.sumDeltasByLotesInsumos({
         coluna: etapa.coluna,
@@ -94,7 +127,6 @@ export class InsumoConsumoProdutividadeBackfillService {
         excluirBackfill: true,
       });
 
-      lotesTotais += lotes.length;
       items.push({
         produtoId: change.produtoId,
         produtoNome: change.produtoNome,
@@ -122,7 +154,7 @@ export class InsumoConsumoProdutividadeBackfillService {
     let movimentosInseridos = 0;
     const avisos: string[] = [];
 
-    for (const change of changes.filter(InsumoConsumoProdutividadeFator.mudou)) {
+    for (const change of changes.filter(InsumoConsumoProdutividadeFator.deveBackfill)) {
       const etapa = InsumoConsumoProdutividadeEtapaMapper.fromTipo(change.tipo);
       const fator = InsumoConsumoProdutividadeFator.calcular(
         change.quantidadeAntes,
@@ -130,6 +162,46 @@ export class InsumoConsumoProdutividadeBackfillService {
       );
       if (!etapa || fator == null) {
         avisos.push(`${change.produtoNome}: tipo/fator inválido para backfill.`);
+        continue;
+      }
+
+      const trocaReceita = this.isTrocaReceita(change);
+      if (
+        etapa.usaFatorSeguro &&
+        trocaReceita &&
+        !InsumoConsumoProdutividadeFator.mudou(change) &&
+        !change.forcarReconciliar &&
+        change.tipo !== 'brilho' &&
+        change.tipo !== 'confeito'
+      ) {
+        avisos.push(
+          `${change.produtoNome}: troca de receita em ${change.tipo} sem backfill automático (fora do escopo).`,
+        );
+        continue;
+      }
+
+      if (!etapa.usaFatorSeguro && (change.tipo === 'embalagem' || change.tipo === 'caixa')) {
+        const result = await insumoConsumoEmbalagemBackfillBatchService.applyPorProdutos(
+          [{ produtoId: change.produtoId, produtoNome: change.produtoNome }],
+          desdeIso,
+        );
+        lotesProcessados += result.lotesProcessados;
+        movimentosInseridos += result.movimentosInseridos;
+        avisos.push(...result.avisos);
+        continue;
+      }
+
+      if (
+        (change.tipo === 'brilho' || change.tipo === 'confeito') &&
+        (change.forcarReconciliar || trocaReceita)
+      ) {
+        const result = await insumoConsumoFornoBackfillBatchService.applyPorProdutos(
+          [{ produtoId: change.produtoId, produtoNome: change.produtoNome }],
+          desdeIso,
+        );
+        lotesProcessados += result.lotesProcessados;
+        movimentosInseridos += result.movimentosInseridos;
+        avisos.push(...result.avisos);
         continue;
       }
 
@@ -160,6 +232,15 @@ export class InsumoConsumoProdutividadeBackfillService {
     }
 
     return { lotesProcessados, movimentosInseridos, avisos };
+  }
+
+  private isTrocaReceita(change: ProdutividadeConsumoChange): boolean {
+    if (change.forcarReconciliar) return true;
+    return (
+      change.receitaAntesId != null &&
+      change.receitaAntesId !== '' &&
+      change.receitaAntesId !== change.receitaId
+    );
   }
 
   private async applyFator(input: {
@@ -232,14 +313,13 @@ export class InsumoConsumoProdutividadeBackfillService {
     const avisos: string[] = [];
 
     if (change.tipo === 'embalagem' || change.tipo === 'caixa') {
-      const lotes = await this.loteRepository.loadEmbalagemLotes(loteIds);
-      for (const lote of lotes) {
-        const result = await this.embalagemService.sincronizar(lote);
-        lotesProcessados += 1;
-        if (result.aplicado) movimentosInseridos += 1;
-        avisos.push(...result.avisos);
-      }
-      return { lotesProcessados, movimentosInseridos, avisos };
+      return {
+        lotesProcessados: 0,
+        movimentosInseridos: 0,
+        avisos: [
+          `${change.produtoNome}: use o backfill batch de embalagem (caminho inesperado).`,
+        ],
+      };
     }
 
     if (change.tipo === 'massa') {

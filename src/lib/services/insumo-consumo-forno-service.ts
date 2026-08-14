@@ -82,6 +82,7 @@ export class InsumoConsumoFornoService {
         origem: ORIGEM,
         consumosAlvo: calculo.consumos,
         observacao,
+        createdAt: lote.produzidoEm,
       });
 
       return { aplicado: true, avisos: calculo.avisos };

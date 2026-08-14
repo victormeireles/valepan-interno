@@ -210,20 +210,28 @@ export async function linkReceitaAoProduto(payload: LinkReceitaPayload) {
       revalidatePath(PRODUTOS_PATH);
       const quantidadeAntes = Number(beforeRow?.quantidade_por_produto ?? 0);
       const mesmaReceita = beforeRow?.receita_id === payload.receitaId;
+      const tipo = receita.tipo as TipoReceita;
+      const trocaReceitaReconciliavel =
+        !mesmaReceita && (tipo === 'embalagem' || tipo === 'caixa');
+      const trocaQuantidade =
+        mesmaReceita &&
+        quantidadeAntes > 0 &&
+        quantidadeAntes !== payload.quantidade;
+
       return {
         success: true as const,
         produtividadeChange:
-          mesmaReceita &&
-          quantidadeAntes > 0 &&
-          quantidadeAntes !== payload.quantidade &&
-          produto
+          produto && (trocaReceitaReconciliavel || trocaQuantidade)
             ? {
                 produtoId: produto.id,
                 produtoNome: produto.nome,
-                tipo: receita.tipo as TipoReceita,
+                tipo,
                 receitaId: payload.receitaId,
-                quantidadeAntes,
+                quantidadeAntes: quantidadeAntes > 0 ? quantidadeAntes : payload.quantidade,
                 quantidadeDepois: payload.quantidade,
+                ...(trocaReceitaReconciliavel
+                  ? { receitaAntesId: beforeRow?.receita_id ?? null }
+                  : {}),
               }
             : null,
       };

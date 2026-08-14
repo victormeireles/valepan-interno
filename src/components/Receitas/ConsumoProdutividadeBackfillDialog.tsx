@@ -135,10 +135,10 @@ export default function ConsumoProdutividadeBackfillDialog({
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-                Produtividade salva
+                Receita / produtividade
               </p>
               <h2 id={titleId} className="mt-0.5 text-lg font-bold tracking-tight text-stone-900">
-                Ajustar consumo histórico?
+                Recalcular consumo histórico?
               </h2>
             </div>
           </div>
@@ -146,15 +146,15 @@ export default function ConsumoProdutividadeBackfillDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
           <p id={descId} className="text-sm leading-relaxed text-stone-600">
-            O consumo futuro já usa a nova produtividade
+            O consumo futuro já usa a receita/produtividade atual
             {produtosResumo ? (
               <>
                 {' '}
                 de <span className="font-medium text-stone-800">{produtosResumo}</span>
               </>
             ) : null}
-            . Se confirmar, os ajustes entram na data de cada lote (não em hoje), para a
-            análise diária/semanal refletir o histórico corrigido.
+            . Se confirmar, os lotes são reconciliados na data de cada um (não em hoje). O saldo
+            do novo insumo pode ficar mais negativo até o ajuste manual de estoque/entradas.
           </p>
 
           <div className="mt-4">

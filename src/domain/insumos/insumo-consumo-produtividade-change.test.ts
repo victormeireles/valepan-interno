@@ -14,6 +14,49 @@ describe('InsumoConsumoProdutividadeFator', () => {
   });
 });
 
+describe('InsumoConsumoProdutividadeFator.deveBackfill', () => {
+  const base = {
+    produtoId: 'p1',
+    produtoNome: 'HB Brioche 65g',
+    tipo: 'embalagem' as const,
+    receitaId: 'r-nova',
+    quantidadeAntes: 4,
+    quantidadeDepois: 4,
+  };
+
+  it('retorna true quando quantidade muda', () => {
+    expect(
+      InsumoConsumoProdutividadeFator.deveBackfill({
+        ...base,
+        quantidadeAntes: 4,
+        quantidadeDepois: 6,
+      }),
+    ).toBe(true);
+  });
+
+  it('retorna true quando receita muda com qpp igual', () => {
+    expect(
+      InsumoConsumoProdutividadeFator.deveBackfill({
+        ...base,
+        receitaAntesId: 'r-antiga',
+      }),
+    ).toBe(true);
+  });
+
+  it('retorna true com forcarReconciliar', () => {
+    expect(
+      InsumoConsumoProdutividadeFator.deveBackfill({
+        ...base,
+        forcarReconciliar: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('retorna false sem mudança nem forçar', () => {
+    expect(InsumoConsumoProdutividadeFator.deveBackfill(base)).toBe(false);
+  });
+});
+
 describe('InsumoConsumoProdutividadeEtapaMapper', () => {
   it('mapeia antimofo para embalagem com fator seguro', () => {
     expect(InsumoConsumoProdutividadeEtapaMapper.fromTipo('antimofo')).toEqual({

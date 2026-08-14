@@ -9,6 +9,8 @@ export type ProdutividadeConsumoChange = {
   receitaId: string;
   quantidadeAntes: number;
   quantidadeDepois: number;
+  receitaAntesId?: string | null;
+  forcarReconciliar?: boolean;
 };
 
 export class InsumoConsumoProdutividadeFator {
@@ -18,7 +20,20 @@ export class InsumoConsumoProdutividadeFator {
     return quantidadeAntes / quantidadeDepois;
   }
 
+  /** Prefer `deveBackfill` — só detecta mudança de quantidade. */
   static mudou(change: ProdutividadeConsumoChange): boolean {
+    return change.quantidadeAntes !== change.quantidadeDepois;
+  }
+
+  static deveBackfill(change: ProdutividadeConsumoChange): boolean {
+    if (change.forcarReconciliar) return true;
+    if (
+      change.receitaAntesId != null &&
+      change.receitaAntesId !== '' &&
+      change.receitaAntesId !== change.receitaId
+    ) {
+      return true;
+    }
     return change.quantidadeAntes !== change.quantidadeDepois;
   }
 }

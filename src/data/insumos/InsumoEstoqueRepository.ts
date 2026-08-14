@@ -9,6 +9,7 @@ import type {
   InsumoSaldoRow,
   RegistrarInsumoMovimentoInput,
 } from '@/domain/types/insumo-estoque-db';
+import { idListChunker } from '@/data/insumos/IdListChunker';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
 
@@ -125,6 +126,59 @@ export class InsumoEstoqueRepository {
     }
 
     return data as InsumoMovimentoRow;
+  }
+
+  async insertMovimentos(inputs: RegistrarInsumoMovimentoInput[]): Promise<number> {
+    if (inputs.length === 0) return 0;
+
+    const payloads = inputs.map((input) => {
+      const payload: Record<string, unknown> = {
+        insumo_id: input.insumoId,
+        empresa_id: input.empresaId ?? null,
+        delta_quantidade: input.deltaQuantidade,
+        saldo_resultante: input.saldoResultante,
+        custo_unitario: input.custoUnitario,
+        origem: input.origem,
+        omie_n_id_receb: input.omieNIdReceb ?? null,
+        omie_n_id_item: input.omieNIdItem ?? null,
+        omie_webhook_evento_id: input.omieWebhookEventoId ?? null,
+        pendencia_id: input.pendenciaId ?? null,
+        numero_nf: input.numeroNf ?? null,
+        observacao: input.observacao ?? null,
+        fermentacao_lote_id: input.fermentacaoLoteId ?? null,
+        forno_lote_id: input.fornoLoteId ?? null,
+        embalagem_lote_id: input.embalagemLoteId ?? null,
+      };
+      if (input.createdAt) {
+        payload.created_at = input.createdAt;
+      }
+      return payload;
+    });
+
+    const { error } = await this.db.from('insumo_movimentos').insert(payloads);
+    if (error) {
+      throw new Error(`Erro ao registrar movimentos de insumo em lote: ${error.message}`);
+    }
+    return inputs.length;
+  }
+
+  async findCustosByInsumoIds(insumoIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (insumoIds.length === 0) return result;
+
+    const { data, error } = await this.supabase
+      .from('insumos')
+      .select('id, custo_unitario')
+      .in('id', insumoIds);
+
+    if (error) {
+      throw new Error(`Erro ao buscar custos de insumos: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      result.set(row.id as string, Number(row.custo_unitario ?? 0));
+    }
+    return result;
   }
 
   async listSaldosComDetalhes(): Promise<InsumoSaldoComDetalhes[]> {
@@ -304,6 +358,46 @@ export class InsumoEstoqueRepository {
       map.set(insumoId, (map.get(insumoId) ?? 0) + Number(row.delta_quantidade));
     }
     return map;
+  }
+
+  /**
+   * Agrega deltas por lote e insumo para vários lotes (uma query por chunk).
+   * Retorno: loteId → (insumoId → soma delta).
+   */
+  async sumDeltasGroupedByLoteInsumo(
+    coluna: InsumoMovimentoLoteColuna,
+    loteIds: string[],
+  ): Promise<Map<string, Map<string, number>>> {
+    const result = new Map<string, Map<string, number>>();
+    if (loteIds.length === 0) return result;
+
+    for (const chunk of idListChunker.chunk(loteIds)) {
+      const { data, error } = await this.db
+        .from('insumo_movimentos')
+        .select(`${coluna}, insumo_id, delta_quantidade`)
+        .in(coluna, chunk);
+
+      if (error) {
+        throw new Error(`Erro ao agregar movimentos por lotes: ${error.message}`);
+      }
+
+      for (const row of data ?? []) {
+        const loteId = row[coluna] as string | null;
+        if (!loteId) continue;
+        const insumoId = row.insumo_id as string;
+        let porInsumo = result.get(loteId);
+        if (!porInsumo) {
+          porInsumo = new Map();
+          result.set(loteId, porInsumo);
+        }
+        porInsumo.set(
+          insumoId,
+          (porInsumo.get(insumoId) ?? 0) + Number(row.delta_quantidade),
+        );
+      }
+    }
+
+    return result;
   }
 
   async clearLoteId(coluna: InsumoMovimentoLoteColuna, loteId: string): Promise<void> {

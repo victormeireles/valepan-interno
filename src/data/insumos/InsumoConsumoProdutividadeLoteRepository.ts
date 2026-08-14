@@ -93,12 +93,8 @@ export class InsumoConsumoProdutividadeLoteRepository {
   async loadEmbalagemLotes(ids: string[]): Promise<EmbalagemLoteRecord[]> {
     const rows: EmbalagemLoteRecord[] = [];
     for (const chunk of idListChunker.chunk(ids)) {
-      const loaded = await Promise.all(
-        chunk.map((id) => embalagemLoteRepository.findById(id)),
-      );
-      for (const lote of loaded) {
-        if (lote) rows.push(lote);
-      }
+      const loaded = await embalagemLoteRepository.findByIds(chunk);
+      rows.push(...loaded);
     }
     return rows;
   }
@@ -112,7 +108,22 @@ export class InsumoConsumoProdutividadeLoteRepository {
   async loadFornoLotesWithOrdens(ids: string[]): Promise<
     Array<{ lote: FornoLoteRecord; ordem: OrdemProducaoRecord }>
   > {
-    return this.loadEtapaWithOrdens(ids, (id) => fornoLoteRepository.findById(id));
+    const lotes: FornoLoteRecord[] = [];
+    for (const chunk of idListChunker.chunk(ids)) {
+      const loaded = await fornoLoteRepository.findByIds(chunk);
+      lotes.push(...loaded);
+    }
+
+    const ordemIds = [...new Set(lotes.map((lote) => lote.ordemProducaoId))];
+    const ordens = await ordemProducaoRepository.findByIds(ordemIds);
+    const ordemById = new Map(ordens.map((ordem) => [ordem.id, ordem]));
+
+    const result: Array<{ lote: FornoLoteRecord; ordem: OrdemProducaoRecord }> = [];
+    for (const lote of lotes) {
+      const ordem = ordemById.get(lote.ordemProducaoId);
+      if (ordem) result.push({ lote, ordem });
+    }
+    return result;
   }
 
   private async loadEtapaWithOrdens<T extends { ordemProducaoId: string }>(
@@ -210,6 +221,103 @@ export class InsumoConsumoProdutividadeLoteRepository {
     }
 
     return result;
+  }
+
+  async listProdutosEmbalagemPorInsumo(insumoId: string): Promise<
+    Array<{
+      produtoId: string;
+      produtoNome: string;
+      receitaId: string;
+      quantidadePorProduto: number;
+    }>
+  > {
+    return this.listProdutosPorInsumoTipos(insumoId, ['embalagem']);
+  }
+
+  async listProdutosFornoPorInsumo(insumoId: string): Promise<
+    Array<{
+      produtoId: string;
+      produtoNome: string;
+      receitaId: string;
+      quantidadePorProduto: number;
+    }>
+  > {
+    return this.listProdutosPorInsumoTipos(insumoId, ['brilho', 'confeito']);
+  }
+
+  private async listProdutosPorInsumoTipos(
+    insumoId: string,
+    tipos: string[],
+  ): Promise<
+    Array<{
+      produtoId: string;
+      produtoNome: string;
+      receitaId: string;
+      quantidadePorProduto: number;
+    }>
+  > {
+    const tiposSet = new Set(tipos);
+    const { data: ingredientes, error: ingredientesError } = await this.db
+      .from('receita_ingredientes')
+      .select('receita_id, receitas!inner ( id, tipo, ativo )')
+      .eq('insumo_id', insumoId);
+
+    if (ingredientesError) {
+      throw new Error(
+        `Erro ao listar receitas do insumo: ${ingredientesError.message}`,
+      );
+    }
+
+    const receitaIds = [
+      ...new Set(
+        (ingredientes ?? [])
+          .filter((row) => {
+            const receita = Array.isArray(row.receitas) ? row.receitas[0] : row.receitas;
+            if (!receita) return false;
+            const typed = receita as { tipo: string; ativo: boolean };
+            return typed.ativo && tiposSet.has(typed.tipo);
+          })
+          .map((row) => row.receita_id as string),
+      ),
+    ];
+
+    if (receitaIds.length === 0) return [];
+
+    const rows: Array<{
+      produtoId: string;
+      produtoNome: string;
+      receitaId: string;
+      quantidadePorProduto: number;
+    }> = [];
+
+    for (const chunk of idListChunker.chunk(receitaIds)) {
+      const { data, error } = await this.db
+        .from('produto_receitas')
+        .select('quantidade_por_produto, receita_id, produtos!inner ( id, nome )')
+        .eq('ativo', true)
+        .in('receita_id', chunk);
+
+      if (error) {
+        throw new Error(
+          `Erro ao listar produtos por insumo/receita: ${error.message}`,
+        );
+      }
+
+      for (const row of data ?? []) {
+        const produto = Array.isArray(row.produtos) ? row.produtos[0] : row.produtos;
+        if (!produto) continue;
+        const qpp = Number(row.quantidade_por_produto);
+        if (!(qpp > 0)) continue;
+        rows.push({
+          produtoId: (produto as { id: string }).id,
+          produtoNome: ((produto as { nome: string }).nome as string) ?? 'Produto',
+          receitaId: row.receita_id as string,
+          quantidadePorProduto: qpp,
+        });
+      }
+    }
+
+    return rows;
   }
 }
 

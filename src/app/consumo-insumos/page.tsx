@@ -4,6 +4,8 @@ import { ConsumoInsumosLoadingSkeleton } from '@/app/consumo-insumos/ConsumoInsu
 import InsumoConsumoSemanalClient from '@/features/insumo-estoque/InsumoConsumoSemanalClient';
 
 export const dynamic = 'force-dynamic';
+/** Backfill batch de embalagem pode processar milhares de lotes. */
+export const maxDuration = 300;
 
 type SearchParams = Promise<{
   dataInicio?: string;

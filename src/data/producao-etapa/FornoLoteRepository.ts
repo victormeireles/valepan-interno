@@ -90,6 +90,20 @@ export class FornoLoteRepository {
     return data ? fromDbRow(data) : null;
   }
 
+  async findByIds(ids: string[]): Promise<FornoLoteRecord[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await this.supabase
+      .from('forno_lotes')
+      .select()
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(`Erro ao buscar lotes de forno: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => fromDbRow(row));
+  }
+
   async updateById(id: string, patch: FornoLoteUpdate): Promise<FornoLoteRecord> {
     const fotos = patch.fotos;
     const { data, error } = await this.supabase

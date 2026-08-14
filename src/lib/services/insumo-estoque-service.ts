@@ -136,6 +136,55 @@ export class InsumoEstoqueService {
       createdAt: input.createdAt ?? null,
     });
   }
+
+  /**
+   * Aplica vários deltas com poucas queries: 1 leitura de saldos/custos,
+   * 1 upsert de saldo por insumo afetado, inserts de movimentos em chunks.
+   */
+  async aplicarDeltasEmLote(inputs: AplicarDeltaInput[]): Promise<number> {
+    const pendentes = inputs.filter((input) => input.delta !== 0);
+    if (pendentes.length === 0) return 0;
+
+    const insumoIds = [...new Set(pendentes.map((input) => input.insumoId))];
+    const [saldos, custos] = await Promise.all([
+      this.repository.listQuantidadesByInsumoIds(insumoIds),
+      this.repository.findCustosByInsumoIds(insumoIds),
+    ]);
+
+    const saldoCorrente = new Map(saldos);
+    for (const insumoId of insumoIds) {
+      if (!saldoCorrente.has(insumoId)) saldoCorrente.set(insumoId, 0);
+    }
+
+    const movimentos = pendentes.map((input) => {
+      const atual = saldoCorrente.get(input.insumoId) ?? 0;
+      const novo = atual + input.delta;
+      saldoCorrente.set(input.insumoId, novo);
+      return {
+        insumoId: input.insumoId,
+        deltaQuantidade: input.delta,
+        saldoResultante: novo,
+        custoUnitario: custos.get(input.insumoId) ?? 0,
+        origem: input.origem,
+        fermentacaoLoteId: input.fermentacaoLoteId ?? null,
+        fornoLoteId: input.fornoLoteId ?? null,
+        embalagemLoteId: input.embalagemLoteId ?? null,
+        observacao: input.observacao ?? null,
+        createdAt: input.createdAt ?? null,
+      };
+    });
+
+    for (const insumoId of insumoIds) {
+      await this.repository.upsertSaldo(insumoId, saldoCorrente.get(insumoId) ?? 0);
+    }
+
+    const CHUNK = 200;
+    for (let offset = 0; offset < movimentos.length; offset += CHUNK) {
+      await this.repository.insertMovimentos(movimentos.slice(offset, offset + CHUNK));
+    }
+
+    return movimentos.length;
+  }
 }
 
 export const insumoEstoqueService = new InsumoEstoqueService();

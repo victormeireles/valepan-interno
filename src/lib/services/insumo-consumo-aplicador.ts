@@ -42,8 +42,10 @@ export class InsumoConsumoAplicador {
     origem: InsumoMovimentoOrigem;
     consumosAlvo: InsumoConsumoCalculado[];
     observacao: string;
+    /** Data histórica do movimento (ex.: produzido_em do lote). */
+    createdAt?: string | null;
   }): Promise<void> {
-    const { vinculo, origem, consumosAlvo, observacao } = params;
+    const { vinculo, origem, consumosAlvo, observacao, createdAt } = params;
     const deltasAtuais = await this.estoqueRepository.sumDeltaByLoteInsumo(
       vinculo.coluna,
       vinculo.loteId,
@@ -62,6 +64,7 @@ export class InsumoConsumoAplicador {
         delta: deltaNecessario,
         origem,
         observacao,
+        createdAt: createdAt ?? null,
         ...this.vinculoInput(vinculo),
       });
     }
