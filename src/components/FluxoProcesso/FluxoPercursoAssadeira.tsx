@@ -43,10 +43,10 @@ export default function FluxoPercursoAssadeira({
     return [i, f];
   };
 
-  const fermTot = a ? scale.fromUn(a.ferm, ass) : 0;
-  const fornoTot = a ? scale.fromUn(a.forno, ass) : 0;
-  const embTot = a ? scale.fromUn(a.emb, ass) : 0;
-  const embAnt = a ? scale.fromUn(a.embAnt, ass) : 0;
+  const fermTot = scale.assadeiraEtapaTotal(ass, 'ferm');
+  const fornoTot = scale.assadeiraEtapaTotal(ass, 'forno');
+  const embTot = scale.assadeiraEtapaTotal(ass, 'emb');
+  const embAnt = scale.assadeiraEmbAntTotal(ass);
 
   const toggleCelula = (etapa: FluxoEtapaKey, hora: number, volume: number) => {
     if (volume <= 0) return;

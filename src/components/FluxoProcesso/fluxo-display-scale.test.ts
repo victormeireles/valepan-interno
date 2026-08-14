@@ -74,6 +74,7 @@ function miniFluxo(): VpFluxoPayload {
         embAnt: 480,
         unPorLata: 24,
         produtos: [],
+        ondas: [],
       },
     ],
     lead: {
@@ -82,6 +83,7 @@ function miniFluxo(): VpFluxoPayload {
     },
     opAnterior: { un: 480, eventos: 1 },
     trocas: { forno: 0 },
+    unPorCaixaByProduto: {},
   };
 }
 
@@ -98,5 +100,43 @@ describe('FluxoDisplayScale', () => {
     const scale = new FluxoDisplayScale(miniFluxo(), 'un');
     expect(scale.etapaTotal('ferm')).toBe(2400);
     expect(scale.unitLabel).toBe('un');
+  });
+
+  it('converte para CX só produtos com fator; ignora os demais', () => {
+    const fluxo = miniFluxo();
+    fluxo.unPorCaixaByProduto = { 'HB Brioche 65g': 48 };
+    const horas = Array.from({ length: 24 }, () => 0);
+    horas[1] = 2400;
+    fluxo.assadeiras[0].produtos = [
+      {
+        nome: 'HB Brioche 65g',
+        ferm: 2400,
+        forno: 0,
+        emb: 0,
+        embAnt: 0,
+        fermHoras: horas,
+        fornoHoras: Array(24).fill(0),
+        embHoras: Array(24).fill(0),
+      },
+      {
+        nome: 'Sem caixa',
+        ferm: 960,
+        forno: 0,
+        emb: 0,
+        embAnt: 0,
+        fermHoras: (() => {
+          const h = Array.from({ length: 24 }, () => 0);
+          h[1] = 960;
+          return h;
+        })(),
+        fornoHoras: Array(24).fill(0),
+        embHoras: Array(24).fill(0),
+      },
+    ];
+    const scale = new FluxoDisplayScale(fluxo, 'cx');
+    expect(scale.unitLabel).toBe('CX');
+    expect(scale.celula('ferm', '65g verde', 1)).toBe(50);
+    expect(scale.temConversaoCaixa('Sem caixa')).toBe(false);
+    expect(scale.fromUn(960, '65g verde', 'Sem caixa')).toBe(0);
   });
 });

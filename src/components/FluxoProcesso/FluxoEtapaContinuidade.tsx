@@ -107,16 +107,30 @@ export default function FluxoEtapaContinuidade({
                           {hhmm(b.ini)}–{hhmm(b.fim)}
                         </span>
                         <span className="font-mono tabular-nums text-text-muted">
-                          {b.eventos} apont. · {fmtQty(scale.fromUn(b.un), scale.mode)}{' '}
+                          {b.eventos} apont. ·{' '}
+                          {fmtQty(
+                            b.produtos.length > 0
+                              ? b.produtos.reduce(
+                                  (t, p) => t + scale.fromUn(p.un, undefined, p.nome),
+                                  0,
+                                )
+                              : scale.fromUn(b.un),
+                            scale.mode,
+                          )}{' '}
                           {scale.unitLabel}
                         </span>
                       </div>
                       {b.produtos.length > 0 ? (
                         <div className="mt-0.5 text-text-muted">
                           {b.produtos
+                            .filter(
+                              (p) =>
+                                scale.mode !== 'cx' ||
+                                scale.temConversaoCaixa(p.nome),
+                            )
                             .map(
                               (p) =>
-                                `${p.nome} (${fmtQty(scale.fromUn(p.un), scale.mode)} ${scale.unitLabel})`,
+                                `${p.nome} (${fmtQty(scale.fromUn(p.un, undefined, p.nome), scale.mode)} ${scale.unitLabel})`,
                             )
                             .join(' · ')}
                         </div>

@@ -15,6 +15,12 @@ import { getBrazilHourMinuteNow } from '@/lib/utils/date-utils';
 import { useFluxoDisplay } from './fluxo-display-context';
 import type { FluxoDisplayMode } from './fluxo-display-scale';
 
+const MODO_OPCOES: ReadonlyArray<{ value: FluxoDisplayMode; label: string }> = [
+  { value: 'lt', label: 'Assadeiras' },
+  { value: 'un', label: 'Unidades' },
+  { value: 'cx', label: 'Caixas' },
+];
+
 type FluxoProcessoHeaderProps = {
   diaLabel: string;
   selectedDate: string;
@@ -79,32 +85,32 @@ export default function FluxoProcessoHeader({
             {diaLabel} · agora {agora}
           </span>
 
-          <div
-            className="flex gap-0.5 rounded-full bg-surface-sunken p-0.5"
-            role="group"
-            aria-label="Unidade de exibição"
-          >
-            {(
-              [
-                ['un', 'Unidades'],
-                ['lt', 'Assadeiras'],
-              ] as const satisfies ReadonlyArray<readonly [FluxoDisplayMode, string]>
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={mode === key}
-                onClick={() => setMode(key)}
-                className={[
-                  'cursor-pointer rounded-full border-none px-3 py-1.5 text-xs',
-                  mode === key
-                    ? 'bg-surface font-semibold text-text-strong shadow-[0_1px_3px_rgba(63,3,19,0.12)]'
-                    : 'bg-transparent font-normal text-text-muted',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="relative">
+            <label htmlFor="fluxo-unidade-exibicao" className="sr-only">
+              Unidade de exibição
+            </label>
+            <select
+              id="fluxo-unidade-exibicao"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as FluxoDisplayMode)}
+              className={controlInputClassName({
+                size: 'compact',
+                fullWidth: false,
+                className: 'appearance-none pr-9',
+              })}
+            >
+              {MODO_OPCOES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span
+              className="material-icons pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xl text-text-muted"
+              aria-hidden="true"
+            >
+              expand_more
+            </span>
           </div>
 
           <input

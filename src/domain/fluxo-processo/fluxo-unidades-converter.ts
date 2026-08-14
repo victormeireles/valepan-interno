@@ -105,6 +105,18 @@ export class FluxoUnidadesConverter {
   }
 
   /**
+   * Fator un/caixa só quando a OP do produto tem caixas (>0).
+   * Sem conversão → null (exibição em CX ignora o produto).
+   */
+  unPorCaixaKnown(produtoNome: string): number | null {
+    return this.fatores.unPorCaixaByProduto.get(produtoNome) ?? null;
+  }
+
+  knownUnPorCaixaByProduto(): Record<string, number> {
+    return Object.fromEntries(this.fatores.unPorCaixaByProduto.entries());
+  }
+
+  /**
    * Resolve unidades do apontamento.
    * Se já traz unidades (>0), usa direto (Broa, Pão Francês, etc.).
    */

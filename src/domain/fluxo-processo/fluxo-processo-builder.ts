@@ -18,6 +18,7 @@ import { FluxoParadasCalculator } from './fluxo-paradas';
 import {
   FluxoProdutosAssadeiraAggregator,
 } from './fluxo-produtos-hora';
+import { FluxoOndasAssadeiraCalculator } from './fluxo-ondas-assadeira';
 import { FluxoQualidadeBlocoCalculator } from './fluxo-qualidade-bloco';
 import type {
   FluxoApontamentoEvento,
@@ -34,6 +35,7 @@ type ResolvedEvent = {
   produtoNome: string;
   assadeiraNome: string;
   unidades: number;
+  dataOp: string;
   opAnterior: boolean;
 };
 
@@ -46,6 +48,7 @@ export class FluxoProcessoBuilder {
   private readonly matrizBuilder = new FluxoMatrizHorariaBuilder();
   private readonly lead = new FluxoLeadTimeCalculator();
   private readonly produtosAgg = new FluxoProdutosAssadeiraAggregator();
+  private readonly ondas = new FluxoOndasAssadeiraCalculator();
 
   build(input: FluxoBuilderInput): VpFluxoPayload {
     const converter = new FluxoUnidadesConverter(input.ordensDia);
@@ -151,6 +154,7 @@ export class FluxoProcessoBuilder {
       },
       opAnterior: { un: opAnteriorUn, eventos: opAnteriorEventos },
       trocas: { forno: countTrocasAssadeira(forno) },
+      unPorCaixaByProduto: converter.knownUnPorCaixaByProduto(),
     };
   }
 
@@ -178,6 +182,7 @@ export class FluxoProcessoBuilder {
           produtoNome: r.produtoNome,
           assadeiraNome: ass,
           unidades,
+          dataOp: (r.dataOp ?? '').trim(),
           opAnterior: Boolean(opAnterior),
         };
       })
@@ -246,6 +251,7 @@ export class FluxoProcessoBuilder {
         .filter((e) => e.assadeiraNome === nome && e.opAnterior)
         .reduce((t, e) => t + e.unidades, 0);
       const sampleProd = produtos[0]?.nome ?? '';
+      const ondas = this.ondas.computeForAssadeira(nome, ferm, forno, emb);
       return {
         nome,
         ferm: fermTot,
@@ -254,6 +260,7 @@ export class FluxoProcessoBuilder {
         embAnt,
         unPorLata: Math.round(converter.unPorLata(sampleProd, nome)),
         produtos,
+        ondas,
       };
     });
   }

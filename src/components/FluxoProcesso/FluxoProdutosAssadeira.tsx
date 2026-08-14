@@ -25,7 +25,9 @@ export default function FluxoProdutosAssadeira({
   const a = fluxo.assadeiras.find((x) => x.nome === ass);
   if (!a) return null;
 
-  const produtos = produtosFilter.apply(a.produtos, filtro);
+  const produtos = produtosFilter
+    .apply(a.produtos, filtro)
+    .filter((p) => scale.mode !== 'cx' || scale.temConversaoCaixa(p.nome));
   const colAtiva = filtro?.etapa ?? null;
 
   return (
@@ -72,7 +74,7 @@ export default function FluxoProdutosAssadeira({
                 {p.nome}
               </td>
               {(['ferm', 'forno', 'emb'] as const).map((k) => {
-                const v = scale.fromUn(p[k], ass);
+                const v = scale.fromUn(p[k], ass, p.nome);
                 const destaque = colAtiva === k && v > 0;
                 return (
                   <td

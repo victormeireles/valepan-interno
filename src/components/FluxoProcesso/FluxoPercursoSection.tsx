@@ -6,6 +6,7 @@ import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-type
 import type { FluxoPercursoCelulaFiltro } from '@/domain/fluxo-processo/fluxo-produtos-hora';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtQty } from './fluxo-display-scale';
+import FluxoOndasAssadeira from './FluxoOndasAssadeira';
 import FluxoPercursoAssadeira from './FluxoPercursoAssadeira';
 import FluxoProdutosAssadeira from './FluxoProdutosAssadeira';
 import { rotuloAssadeira } from './fluxo-processo-format';
@@ -30,6 +31,10 @@ export default function FluxoPercursoSection({
       : null;
   const volumeCelula =
     filtro != null ? scale.celula(filtro.etapa, ass, filtro.hora) : 0;
+
+  const assadeira = fluxo.assadeiras.find((a) => a.nome === ass);
+  const ondas = assadeira?.ondas ?? [];
+  const corAssadeira = fluxo.cores[ass] ?? '#A8A29E';
 
   const trocarAss = (proxima: string) => {
     setFiltro(null);
@@ -98,6 +103,26 @@ export default function FluxoPercursoSection({
           ) : null}
         </div>
         <FluxoProdutosAssadeira fluxo={fluxo} ass={ass} filtro={filtro} />
+      </div>
+
+      <div className="mt-4 border-t border-stone-100 pt-3">
+        <div className="mb-1.5 flex flex-wrap items-baseline gap-2">
+          <div className="text-[10.5px] font-bold uppercase tracking-wide text-text-muted">
+            Ondas do fluxo
+          </div>
+          <span className="text-[11px] text-text-faint">FIFO por OP + produto</span>
+          {ondas.length > 0 ? (
+            <span className="font-mono text-[11px] tabular-nums text-text-muted">
+              {ondas.length} {ondas.length === 1 ? 'onda' : 'ondas'}
+            </span>
+          ) : null}
+        </div>
+        <FluxoOndasAssadeira
+          fluxo={fluxo}
+          ondas={ondas}
+          assadeiraNome={ass}
+          corAssadeira={corAssadeira}
+        />
       </div>
     </Card>
   );

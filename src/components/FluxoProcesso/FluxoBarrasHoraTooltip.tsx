@@ -1,13 +1,13 @@
 'use client';
 
-import { fmtQty } from './fluxo-display-scale';
+import { fmtQty, type FluxoDisplayMode } from './fluxo-display-scale';
 import type { FluxoHoraLegendaItem } from './FluxoHoraLegendaBuilder';
 
 type FluxoBarrasHoraTooltipProps = {
   hora: number;
   total: number;
   unitLabel: string;
-  mode: 'un' | 'lt';
+  mode: FluxoDisplayMode;
   itens: FluxoHoraLegendaItem[];
 };
 

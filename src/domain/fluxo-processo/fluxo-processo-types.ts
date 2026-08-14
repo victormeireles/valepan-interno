@@ -60,6 +60,47 @@ export type FluxoAssadeiraResumo = {
   embAnt: number;
   unPorLata: number;
   produtos: FluxoProdutoAssadeira[];
+  /** Ondas FIFO (OP + produto) fermentação → forno → embalagem. */
+  ondas: FluxoOndaAssadeira[];
+};
+
+export type FluxoOndaProduto = {
+  nome: string;
+  un: number;
+};
+
+/** Trecho contínuo de horas com volume (gaps viram espaço vazio no trilho). */
+export type FluxoOndaSegmento = {
+  ini: number;
+  fim: number;
+  volumeUn: number;
+};
+
+/** Bloco contínuo de fermentação casado por FIFO até forno/emb. */
+export type FluxoOndaAssadeira = {
+  id: string;
+  opKey: string;
+  opLabel: string;
+  /** Volume fermentado no bloco. */
+  volumeUn: number;
+  /** Volume casado no forno (janela da onda). */
+  volumeFornoUn: number;
+  /** Volume casado na embalagem (janela da onda). */
+  volumeEmbUn: number;
+  fermIniHora: number;
+  fermFimHora: number;
+  /** Envelope forno (1º–último segmento); null se sem casamento. */
+  fornoIniHora: number | null;
+  fornoFimHora: number | null;
+  embIniHora: number | null;
+  embFimHora: number | null;
+  /** Segmentos contínuos dentro da janela (ex.: emb 06 + 09–11). */
+  fornoSegmentos: FluxoOndaSegmento[];
+  embSegmentos: FluxoOndaSegmento[];
+  lagFermFornoMedMin: number | null;
+  lagFornoEmbMedMin: number | null;
+  embOpAnterior: boolean;
+  produtos: FluxoOndaProduto[];
 };
 
 export type FluxoLeadStats = {
@@ -92,6 +133,11 @@ export type VpFluxoPayload = {
   };
   opAnterior: FluxoOpAnterior;
   trocas: { forno: number };
+  /**
+   * un/caixa por produto com OP que tem caixas.
+   * Produtos ausentes não entram no modo CX.
+   */
+  unPorCaixaByProduto: Record<string, number>;
 };
 
 export type FluxoApontamentoEvento = {
