@@ -2,9 +2,7 @@
 
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import { resolveTipoEstoqueMarca } from '@/lib/utils/cliente-display';
-import DataEtiquetaBadge from './DataEtiquetaBadge';
-import TipoEstoqueMarcaBadge from './TipoEstoqueMarcaBadge';
+import EtapaProductTitle from './EtapaProductTitle';
 
 type EtapaStatusStyles = {
   border: string;
@@ -18,7 +16,9 @@ export type EtapaProductCardHeaderProps = {
   congelado?: boolean;
   hasPhoto?: boolean;
   onProductPhotoClick?: () => void;
-  /** Assadeira, cliente inline, observação — entre produto e progresso no desktop */
+  /** Tag da assadeira à frente do nome (só com >1 opção cadastrada no produto). */
+  assadeira?: string;
+  /** Cliente inline, observação — entre produto e progresso no desktop */
   metaItems?: string[];
   /** Data da etiqueta (dd/mm) — badge destacado quando ≠ data da OP. */
   dataEtiqueta?: string;
@@ -41,88 +41,6 @@ export type EtapaProductCardHeaderProps = {
   panelId: string;
   onToggleExpanded: () => void;
 };
-
-function ProductBadges({
-  congelado,
-  hasPhoto,
-  onProductPhotoClick,
-}: Pick<EtapaProductCardHeaderProps, 'congelado' | 'hasPhoto' | 'onProductPhotoClick'>) {
-  return (
-    <>
-      {congelado ? (
-        <span
-          className="material-icons shrink-0 text-base text-sky-500"
-          title="Congelado"
-          aria-label="Congelado"
-        >
-          ac_unit
-        </span>
-      ) : null}
-      {hasPhoto ? (
-        onProductPhotoClick ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onProductPhotoClick();
-            }}
-            className="material-icons shrink-0 text-base text-amber-600"
-            title="Ver foto"
-            aria-label="Ver foto do produto"
-          >
-            photo_camera
-          </button>
-        ) : (
-          <span
-            className="material-icons shrink-0 text-base text-amber-600"
-            title="Tem foto"
-            aria-hidden="true"
-          >
-            photo_camera
-          </span>
-        )
-      ) : null}
-    </>
-  );
-}
-
-function ProductTitle({
-  produto,
-  tipoEstoqueCliente,
-  showTipoEstoqueMarcaBadge = false,
-  dataEtiqueta,
-  congelado,
-  hasPhoto,
-  onProductPhotoClick,
-}: {
-  produto: string;
-  tipoEstoqueCliente?: string;
-  showTipoEstoqueMarcaBadge?: boolean;
-  dataEtiqueta?: string;
-  congelado?: boolean;
-  hasPhoto?: boolean;
-  onProductPhotoClick?: () => void;
-}) {
-  const marca =
-    showTipoEstoqueMarcaBadge && tipoEstoqueCliente
-      ? resolveTipoEstoqueMarca(tipoEstoqueCliente)
-      : null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong">
-        {produto}
-      </span>
-      {marca ? <TipoEstoqueMarcaBadge marca={marca} /> : null}
-      <ProductBadges
-        congelado={congelado}
-        hasPhoto={hasPhoto}
-        onProductPhotoClick={onProductPhotoClick}
-      />
-      {dataEtiqueta ? <DataEtiquetaBadge data={dataEtiqueta} /> : null}
-    </div>
-  );
-}
 
 function CardActions({
   produto,
@@ -300,6 +218,7 @@ export default function EtapaProductCardHeader({
   congelado,
   hasPhoto,
   onProductPhotoClick,
+  assadeira,
   metaItems = [],
   dataEtiqueta,
   tipoEstoqueCliente,
@@ -344,6 +263,7 @@ export default function EtapaProductCardHeader({
 
   const titleProps = {
     produto,
+    assadeira,
     tipoEstoqueCliente,
     showTipoEstoqueMarcaBadge,
     dataEtiqueta,
@@ -366,7 +286,7 @@ export default function EtapaProductCardHeader({
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <ProductTitle {...titleProps} />
+              <EtapaProductTitle {...titleProps} />
               {metaItems.length > 0 ? (
                 <div className="mt-0.5">
                   <MetaLine items={metaItems} />
@@ -394,8 +314,8 @@ export default function EtapaProductCardHeader({
         />
 
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="shrink-0">
-            <ProductTitle {...titleProps} />
+          <div className="min-w-0 max-w-[min(100%,22rem)]">
+            <EtapaProductTitle {...titleProps} />
           </div>
 
           {metaItems.length > 0 ? (

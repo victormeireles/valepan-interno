@@ -101,8 +101,7 @@ export default function EtapaProductAccordion({
     (resolveTipoEstoqueMarca(cliente) || shouldOmitClienteMetaEmbalagem(cliente))
       ? null
       : cliente,
-    observacao ? `Obs: ${observacao}` : null,
-    assadeira ? `Assadeira ${assadeira}` : null,
+    observacao || null,
   ].filter((item): item is string => Boolean(item));
 
   return (
@@ -117,6 +116,7 @@ export default function EtapaProductAccordion({
         showTipoEstoqueMarcaBadge={showTipoEstoqueMarcaBadge}
         dataEtiqueta={dataEtiqueta}
         metaItems={metaItems}
+        assadeira={assadeira}
         horario={horario}
         producedLabel={producedLabel}
         targetLabel={targetLabel}

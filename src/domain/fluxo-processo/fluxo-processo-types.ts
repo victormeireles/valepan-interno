@@ -9,14 +9,16 @@ export type FluxoGap = {
 export type FluxoBlocoProduto = {
   nome: string;
   un: number;
+  assadeiraNome: string;
 };
 
-/** Rajada de lançamento retroativo (intervalos ≤ 1 min). */
+/** Lançamento único acima do limite operacional da etapa (> 40 LT ferm, > 20 LT forno ou > 55 CX emb). */
 export type FluxoBlocoLancamento = {
   ini: number;
   fim: number;
   eventos: number;
   un: number;
+  assadeiraNome: string;
   produtos: FluxoBlocoProduto[];
 };
 
@@ -32,7 +34,7 @@ export type FluxoEtapaResumo = {
   ativo: number;
   eventos: number;
   blocoPct: number;
-  /** Principais rajadas (ordenado por volume), para cobrança da equipe. */
+  /** Principais lançamentos acima do limite (ordenado por volume). */
   blocoLancamentos: FluxoBlocoLancamento[];
 };
 

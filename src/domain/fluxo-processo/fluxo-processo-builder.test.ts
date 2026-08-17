@@ -50,6 +50,28 @@ describe('FluxoUnidadesConverter', () => {
     ).toBe(240);
   });
 
+  it('com latas digitadas, deriva unidades pelo fator da OP (não confia em unidades divergentes)', () => {
+    const c = new FluxoUnidadesConverter([
+      {
+        produtoNome: 'HB Brioche 65g',
+        assadeiraNome: '65g verde',
+        unidades: 2400,
+        latas: 100,
+        caixas: 50,
+      },
+    ]);
+    // 40 LT × 24 un/LT = 960, mesmo se unidades no lote estiverem erradas
+    expect(
+      c.resolveUnidades({
+        unidades: 984,
+        latas: 40,
+        produtoNome: 'HB Brioche 65g',
+        assadeiraNome: '65g verde',
+        etapa: 'ferm',
+      }),
+    ).toBe(960);
+  });
+
   it('cai para fallback 24/48 sem fator', () => {
     const c = new FluxoUnidadesConverter([]);
     expect(
@@ -102,51 +124,108 @@ describe('FluxoParadasCalculator', () => {
 });
 
 describe('FluxoQualidadeBlocoCalculator', () => {
-  it('conta intervalos ≤ 1 min', () => {
-    const calc = new FluxoQualidadeBlocoCalculator(1);
-    const pct = calc.computePct([
-      isoAt('2026-08-12', 1, 0),
-      isoAt('2026-08-12', 1, 0),
-      isoAt('2026-08-12', 1, 1),
-      isoAt('2026-08-12', 1, 30),
+  it('ignora vários lançamentos no limite mesmo com horários próximos', () => {
+    const calc = new FluxoQualidadeBlocoCalculator(20);
+    const result = calc.compute([
+      {
+        produzidoEm: isoAt('2026-08-12', 12, 41),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 480,
+        quantidadeOperacional: 20,
+      },
+      {
+        produzidoEm: isoAt('2026-08-12', 12, 41),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 480,
+        quantidadeOperacional: 20,
+      },
+      {
+        produzidoEm: isoAt('2026-08-12', 12, 41),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 480,
+        quantidadeOperacional: 20,
+      },
     ]);
-    // 3 intervalos: 0, 1, 29 → 2/3 ≈ 67%
-    expect(pct).toBe(67);
+    expect(result.blocoPct).toBe(0);
+    expect(result.lancamentos).toHaveLength(0);
   });
 
-  it('lista principais rajadas por volume', () => {
-    const calc = new FluxoQualidadeBlocoCalculator(1);
+  it('marca lançamento único acima do limite (ex.: forno > 20 LT)', () => {
+    const calc = new FluxoQualidadeBlocoCalculator(20);
     const result = calc.compute([
       {
         produzidoEm: isoAt('2026-08-12', 8, 0),
-        produtoNome: 'A',
-        unidades: 100,
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 480,
+        quantidadeOperacional: 20,
       },
       {
-        produzidoEm: isoAt('2026-08-12', 8, 0),
-        produtoNome: 'A',
-        unidades: 200,
-      },
-      {
-        produzidoEm: isoAt('2026-08-12', 8, 1),
-        produtoNome: 'B',
-        unidades: 50,
-      },
-      {
-        produzidoEm: isoAt('2026-08-12', 10, 0),
-        produtoNome: 'C',
-        unidades: 10,
-      },
-      {
-        produzidoEm: isoAt('2026-08-12', 10, 0),
-        produtoNome: 'C',
-        unidades: 10,
+        produzidoEm: isoAt('2026-08-12', 8, 5),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 552,
+        quantidadeOperacional: 23,
       },
     ]);
-    expect(result.lancamentos.length).toBeGreaterThanOrEqual(2);
-    expect(result.lancamentos[0].un).toBe(350);
-    expect(result.lancamentos[0].eventos).toBe(3);
-    expect(result.lancamentos[0].produtos[0].nome).toBe('A');
+    // 552 / (480+552) ≈ 53%
+    expect(result.blocoPct).toBe(53);
+    expect(result.lancamentos).toHaveLength(1);
+    expect(result.lancamentos[0].un).toBe(552);
+    expect(result.lancamentos[0].assadeiraNome).toBe('65g verde');
+    expect(result.lancamentos[0].eventos).toBe(1);
+    expect(result.lancamentos[0].produtos[0].nome).toBe('HB Padrão');
+    expect(result.lancamentos[0].produtos[0].assadeiraNome).toBe('65g verde');
+  });
+
+  it('leva assadeiraNome para a UI reconverter un → LT pelo fator da OP', () => {
+    const calc = new FluxoQualidadeBlocoCalculator(20);
+    const result = calc.compute([
+      {
+        produzidoEm: isoAt('2026-08-12', 1, 38),
+        produtoNome: 'HB Brioche 65g',
+        assadeiraNome: '65g verde',
+        unidades: 960,
+        quantidadeOperacional: 40,
+      },
+    ]);
+    expect(result.lancamentos).toHaveLength(1);
+    expect(result.lancamentos[0].un).toBe(960);
+    expect(result.lancamentos[0].assadeiraNome).toBe('65g verde');
+  });
+
+  it('usa limite de embalagem (> 55 CX) sem agrupar por proximidade', () => {
+    const calc = new FluxoQualidadeBlocoCalculator(55);
+    const result = calc.compute([
+      {
+        produzidoEm: isoAt('2026-08-12', 10, 0),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 2640,
+        quantidadeOperacional: 55,
+      },
+      {
+        produzidoEm: isoAt('2026-08-12', 10, 0),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: '65g verde',
+        unidades: 2640,
+        quantidadeOperacional: 55,
+      },
+      {
+        produzidoEm: isoAt('2026-08-12', 10, 1),
+        produtoNome: 'HB Brioche',
+        assadeiraNome: '65g verde',
+        unidades: 2880,
+        quantidadeOperacional: 60,
+      },
+    ]);
+    // 2880 / (2640+2640+2880) ≈ 35%
+    expect(result.blocoPct).toBe(35);
+    expect(result.lancamentos).toHaveLength(1);
+    expect(result.lancamentos[0].un).toBe(2880);
   });
 });
 
@@ -283,5 +362,87 @@ describe('FluxoProcessoBuilder', () => {
     for (const e of payload.etapas) {
       expect(sumMatrizEtapa(payload.matriz, e.key)).toBe(e.un);
     }
+  });
+
+  it('digitação em bloco usa limite por lançamento, não proximidade de horário', () => {
+    const payload = new FluxoProcessoBuilder().build({
+      dateISO: '2026-08-12',
+      planoUn: 2400,
+      ordensDia: [
+        {
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 2400,
+          latas: 100,
+          caixas: 50,
+        },
+      ],
+      fermentacao: [
+        {
+          produzidoEm: isoAt('2026-08-12', 12, 41),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          latas: 40,
+        },
+        {
+          produzidoEm: isoAt('2026-08-12', 12, 41),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          latas: 40,
+        },
+        {
+          produzidoEm: isoAt('2026-08-12', 12, 42),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          latas: 45,
+        },
+      ],
+      forno: [
+        {
+          produzidoEm: isoAt('2026-08-12', 14, 0),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          latas: 20,
+        },
+      ],
+      embalagem: [
+        {
+          produzidoEm: isoAt('2026-08-12', 16, 0),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          caixas: 55,
+          dataOp: '2026-08-12',
+        },
+        {
+          produzidoEm: isoAt('2026-08-12', 16, 0),
+          produtoNome: 'HB Brioche 65g',
+          assadeiraNome: '65g verde',
+          unidades: 0,
+          caixas: 60,
+          dataOp: '2026-08-12',
+        },
+      ],
+    });
+
+    const ferm = payload.etapas.find((e) => e.key === 'ferm')!;
+    // 45 LT excessivo: 1080/(960+960+1080) ≈ 36%
+    expect(ferm.blocoPct).toBe(36);
+    expect(ferm.blocoLancamentos).toHaveLength(1);
+    expect(ferm.blocoLancamentos[0].un).toBe(1080);
+    expect(ferm.blocoLancamentos[0].assadeiraNome).toBe('65g verde');
+
+    const forno = payload.etapas.find((e) => e.key === 'forno')!;
+    expect(forno.blocoPct).toBe(0);
+
+    const emb = payload.etapas.find((e) => e.key === 'emb')!;
+    // 60 CX: 2880/(2640+2880) ≈ 52%
+    expect(emb.blocoPct).toBe(52);
+    expect(emb.blocoLancamentos).toHaveLength(1);
+    expect(emb.blocoLancamentos[0].un).toBe(2880);
   });
 });

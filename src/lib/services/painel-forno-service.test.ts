@@ -11,6 +11,7 @@ const listFermentacaoByOrdemProducaoIds = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
+const countOpcoesByProdutoIds = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
@@ -30,6 +31,12 @@ vi.mock('@/data/producao-etapa/FornoLoteRepository', () => ({
 vi.mock('@/data/producao-etapa/FermentacaoLoteRepository', () => ({
   fermentacaoLoteRepository: {
     listByOrdemProducaoIds: (...args: unknown[]) => listFermentacaoByOrdemProducaoIds(...args),
+  },
+}));
+
+vi.mock('@/domain/assadeiras/assadeira-resolver', () => ({
+  assadeiraResolver: {
+    countOpcoesByProdutoIds: (...args: unknown[]) => countOpcoesByProdutoIds(...args),
   },
 }));
 
@@ -121,6 +128,7 @@ describe('PainelFornoService.getPainelForDate', () => {
       data: [{ id: 'ass-1', nome: 'Lata 40' }],
       error: null,
     });
+    countOpcoesByProdutoIds.mockResolvedValue(new Map([['prod-1', 1]]));
   });
 
   it('retorna ordens vazias quando não há ordens', async () => {
@@ -189,6 +197,7 @@ describe('PainelFornoService.getCargaCompleta', () => {
       data: [{ id: 'ass-1', nome: 'Lata 40' }],
       error: null,
     });
+    countOpcoesByProdutoIds.mockResolvedValue(new Map([['prod-1', 1]]));
     findUltimaDataComPedidos.mockResolvedValue('2026-06-17');
     findDataAnteriorComPedidos.mockResolvedValue('2026-06-16');
   });

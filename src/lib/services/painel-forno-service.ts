@@ -1,5 +1,6 @@
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
 import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
 import { somarAssadeirasLotes } from '@/domain/embalagem/painel-embalagem-enrichment';
 import { ordensToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
@@ -110,6 +111,9 @@ export class PainelFornoService {
     if (ordens.length === 0) return [];
 
     const names = await this.loadNameMaps(ordens);
+    const opcoesByProdutoId = await assadeiraResolver.countOpcoesByProdutoIds(
+      ordens.map((ordem) => ordem.produtoId),
+    );
 
     return sortOrdensPorPlanejamento(
       ordens.map((ordem) =>
@@ -122,6 +126,8 @@ export class PainelFornoService {
           assadeiraNome: ordem.assadeiraId
             ? names.assadeiraNomeById.get(ordem.assadeiraId)
             : undefined,
+          temMultiplasAssadeirasCadastradas:
+            (opcoesByProdutoId.get(ordem.produtoId) ?? 0) > 1,
           fermentacaoProduzido: somarAssadeirasLotes(
             fermentacaoLotesByOrdem.get(ordem.id) ?? [],
           ),

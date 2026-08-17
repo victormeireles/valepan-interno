@@ -53,7 +53,7 @@ export default function ClientGroup({
           {/* Observações */}
           {observacao && (
             <div className="text-gray-300">
-              <span className="font-medium">Obs:</span> {observacao}
+              {observacao}
             </div>
           )}
         </div>

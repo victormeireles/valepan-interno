@@ -1,3 +1,4 @@
+import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
 import { ordensToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
 import { sortOrdensPorPlanejamento } from '@/domain/realizado/etapa-painel-adapter';
@@ -82,6 +83,9 @@ export class PainelFermentacaoService {
     if (ordens.length === 0) return [];
 
     const names = await this.loadNameMaps(ordens);
+    const opcoesByProdutoId = await assadeiraResolver.countOpcoesByProdutoIds(
+      ordens.map((ordem) => ordem.produtoId),
+    );
 
     return sortOrdensPorPlanejamento(
       ordens.map((ordem) =>
@@ -94,6 +98,8 @@ export class PainelFermentacaoService {
           assadeiraNome: ordem.assadeiraId
             ? names.assadeiraNomeById.get(ordem.assadeiraId)
             : undefined,
+          temMultiplasAssadeirasCadastradas:
+            (opcoesByProdutoId.get(ordem.produtoId) ?? 0) > 1,
         }),
       ),
     );

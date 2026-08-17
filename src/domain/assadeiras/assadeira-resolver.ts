@@ -59,6 +59,20 @@ export class AssadeiraResolver {
     return list[0] ?? null;
   }
 
+  /** Contagem de opções cadastradas (exceção ou regra) por produto. */
+  async countOpcoesByProdutoIds(
+    produtoIds: string[],
+  ): Promise<Map<string, number>> {
+    const uniqueIds = [...new Set(produtoIds.filter(Boolean))];
+    const entries = await Promise.all(
+      uniqueIds.map(async (produtoId) => {
+        const list = await this.resolveForProduto(produtoId);
+        return [produtoId, list.length] as const;
+      }),
+    );
+    return new Map(entries);
+  }
+
   private async loadExcecoes(produtoId: string): Promise<AssadeiraVinculoResolvido[]> {
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const { data, error } = await supabase

@@ -4,6 +4,9 @@ import {
   FLUXO_ASSADEIRA_CORES,
   FLUXO_ASSADEIRA_ORDEM_BASE,
   FLUXO_ASSADEIRA_SEM,
+  FLUXO_BLOCO_MAX_CX,
+  FLUXO_BLOCO_MAX_LT_FERM,
+  FLUXO_BLOCO_MAX_LT_FORNO,
   FLUXO_COR_ASSADEIRA_FALLBACK,
   FLUXO_ETAPA_NOME,
   FLUXO_PADRAO,
@@ -35,6 +38,8 @@ type ResolvedEvent = {
   produtoNome: string;
   assadeiraNome: string;
   unidades: number;
+  /** LT (ferm/forno) ou CX (emb) do lançamento. */
+  quantidadeOperacional: number;
   dataOp: string;
   opAnterior: boolean;
 };
@@ -44,7 +49,6 @@ type ResolvedEvent = {
  */
 export class FluxoProcessoBuilder {
   private readonly paradas = new FluxoParadasCalculator();
-  private readonly bloco = new FluxoQualidadeBlocoCalculator();
   private readonly matrizBuilder = new FluxoMatrizHorariaBuilder();
   private readonly lead = new FluxoLeadTimeCalculator();
   private readonly produtosAgg = new FluxoProdutosAssadeiraAggregator();
@@ -86,11 +90,19 @@ export class FluxoProcessoBuilder {
         const timestamps = events.map((e) => e.produzidoEm);
         const parada = this.paradas.compute(timestamps);
         const un = sumMatrizEtapa(matriz, key);
-        const qualidade = this.bloco.compute(
+        const maxQty =
+          key === 'emb'
+            ? FLUXO_BLOCO_MAX_CX
+            : key === 'forno'
+              ? FLUXO_BLOCO_MAX_LT_FORNO
+              : FLUXO_BLOCO_MAX_LT_FERM;
+        const qualidade = new FluxoQualidadeBlocoCalculator(maxQty).compute(
           events.map((e) => ({
             produzidoEm: e.produzidoEm,
             produtoNome: e.produtoNome,
+            assadeiraNome: e.assadeiraNome,
             unidades: e.unidades,
+            quantidadeOperacional: e.quantidadeOperacional,
           })),
         );
         return {
@@ -175,6 +187,15 @@ export class FluxoProcessoBuilder {
           assadeiraNome: ass,
           etapa,
         });
+        const quantidadeOperacional = resolveQuantidadeOperacional({
+          etapa,
+          unidades,
+          latas: r.latas,
+          caixas: r.caixas,
+          produtoNome: r.produtoNome,
+          assadeiraNome: ass,
+          converter,
+        });
         const opAnterior =
           etapa === 'emb' && r.dataOp != null && r.dataOp.trim() !== '' && r.dataOp < dateISO;
         return {
@@ -182,6 +203,7 @@ export class FluxoProcessoBuilder {
           produtoNome: r.produtoNome,
           assadeiraNome: ass,
           unidades,
+          quantidadeOperacional,
           dataOp: (r.dataOp ?? '').trim(),
           opAnterior: Boolean(opAnterior),
         };
@@ -268,6 +290,25 @@ export class FluxoProcessoBuilder {
 
 function sumByAss(rows: ResolvedEvent[], ass: string): number {
   return rows.filter((e) => e.assadeiraNome === ass).reduce((t, e) => t + e.unidades, 0);
+}
+
+/** Quantidade operacional = unidades ÷ fator da assadeira/produto da OP. */
+function resolveQuantidadeOperacional(input: {
+  etapa: FluxoEtapaKey;
+  unidades: number;
+  latas?: number;
+  caixas?: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  converter: FluxoUnidadesConverter;
+}): number {
+  if (input.unidades <= 0) return 0;
+  if (input.etapa === 'emb') {
+    const fator = input.converter.unPorCaixa(input.produtoNome, input.assadeiraNome);
+    return fator > 0 ? input.unidades / fator : 0;
+  }
+  const fator = input.converter.unPorLata(input.produtoNome, input.assadeiraNome);
+  return fator > 0 ? input.unidades / fator : 0;
 }
 
 /** Conta mudanças de assadeira entre apontamentos consecutivos do forno. */

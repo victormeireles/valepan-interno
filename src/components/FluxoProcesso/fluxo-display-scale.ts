@@ -302,6 +302,12 @@ export function fmtQty(n: number, mode?: FluxoDisplayMode): string {
   return formatCompactNumber(n);
 }
 
+/** Volume completo em pt-BR, sem sufixo k/M. */
+export function fmtQtyExact(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  return Math.round(n).toLocaleString('pt-BR');
+}
+
 export function fmtQtyK(n: number, mode?: FluxoDisplayMode): string {
   return fmtQty(n, mode);
 }

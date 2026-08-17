@@ -21,6 +21,7 @@ export type BuildPainelOrdemInput = {
   produto: string;
   tipoEstoque: string;
   assadeiraNome?: string;
+  temMultiplasAssadeirasCadastradas?: boolean;
   fermentacaoProduzido?: number;
   fornoProduzido?: number;
 };
@@ -39,8 +40,17 @@ export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEta
 }
 
 export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa {
-  const { etapa, ordem, lotes, produto, tipoEstoque, assadeiraNome, fermentacaoProduzido, fornoProduzido } =
-    input;
+  const {
+    etapa,
+    ordem,
+    lotes,
+    produto,
+    tipoEstoque,
+    assadeiraNome,
+    temMultiplasAssadeirasCadastradas,
+    fermentacaoProduzido,
+    fornoProduzido,
+  } = input;
   const modoQuantidade = resolveModoQuantidadeEtapa(ordem.assadeiraId);
   const pedido: EtapaQuantidade = {
     assadeiras: ordem.assadeiras,
@@ -95,6 +105,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     finalizada,
     cascata,
     assadeiraNome: ordem.assadeiraId ? assadeiraNome : undefined,
+    temMultiplasAssadeirasCadastradas: temMultiplasAssadeirasCadastradas === true,
     lotes: lotes.map(mapLoteToPainelEtapa),
   };
 }

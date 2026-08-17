@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { FluxoDisplayScale } from '@/components/FluxoProcesso/fluxo-display-scale';
+import {
+  FluxoDisplayScale,
+  fmtQtyExact,
+} from '@/components/FluxoProcesso/fluxo-display-scale';
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 
 function miniFluxo(): VpFluxoPayload {
@@ -96,6 +99,32 @@ describe('FluxoDisplayScale', () => {
     expect(scale.unitLabel).toBe('LT');
   });
 
+  it('960 un ÷ 24 un/LT da assadeira da OP = 40 LT (não usa média do dia)', () => {
+    const fluxo = miniFluxo();
+    // Outra assadeira puxa a média para longe de 24
+    fluxo.ordemAss = ['65g verde', '50g'];
+    fluxo.assadeiras.push({
+      nome: '50g',
+      ferm: 5000,
+      forno: 0,
+      emb: 0,
+      embAnt: 0,
+      unPorLata: 20,
+      produtos: [],
+      ondas: [],
+    });
+    fluxo.matriz.ferm['50g'] = [5000, ...Array(23).fill(0)];
+    fluxo.matriz.forno['50g'] = Array(24).fill(0);
+    fluxo.matriz.emb['50g'] = Array(24).fill(0);
+    fluxo.matrizAnt.ferm['50g'] = Array(24).fill(0);
+    fluxo.matrizAnt.forno['50g'] = Array(24).fill(0);
+    fluxo.matrizAnt.emb['50g'] = Array(24).fill(0);
+
+    const scale = new FluxoDisplayScale(fluxo, 'lt');
+    expect(scale.fromUn(960)).toBeGreaterThan(40); // média do dia ≠ 24
+    expect(scale.fromUn(960, '65g verde')).toBe(40);
+  });
+
   it('mantém unidades no modo un', () => {
     const scale = new FluxoDisplayScale(miniFluxo(), 'un');
     expect(scale.etapaTotal('ferm')).toBe(2400);
@@ -138,5 +167,13 @@ describe('FluxoDisplayScale', () => {
     expect(scale.celula('ferm', '65g verde', 1)).toBe(50);
     expect(scale.temConversaoCaixa('Sem caixa')).toBe(false);
     expect(scale.fromUn(960, '65g verde', 'Sem caixa')).toBe(0);
+  });
+});
+
+describe('fmtQtyExact', () => {
+  it('mostra o volume completo em pt-BR, sem sufixo k', () => {
+    expect(fmtQtyExact(2_347)).toBe('2.347');
+    expect(fmtQtyExact(1_000)).toBe('1.000');
+    expect(fmtQtyExact(42)).toBe('42');
   });
 });

@@ -17,6 +17,7 @@ import type { ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 import { buildEtapaCadeiaBarras } from './build-etapa-cadeia-barras';
+import { shouldShowAssadeiraNomeTag } from './should-show-assadeira-nome-tag';
 
 function buildLotePhotoLinks(fotoUrl?: string): EtapaLotePhotoLink[] {
   if (!fotoUrl) return [];
@@ -84,10 +85,17 @@ function mapOrdemToProduct(
     };
   });
 
+  const observacao = ordem.observacao?.trim();
+  const showAssadeira = shouldShowAssadeiraNomeTag({
+    assadeiraNome: ordem.assadeiraNome,
+    temMultiplasAssadeirasCadastradas: ordem.temMultiplasAssadeirasCadastradas,
+  });
+
   return {
     id: ordem.ordemProducaoId,
     produto: ordem.produto,
-    assadeira: ordem.assadeiraNome,
+    assadeira: showAssadeira ? ordem.assadeiraNome?.trim() : undefined,
+    observacao: observacao || undefined,
     somaProduzido: ordem.produzido,
     somaAProduzir: ordem.aProduzir,
     unidade: ordem.unidade,

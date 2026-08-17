@@ -71,6 +71,7 @@ export type EtapaProductItem = {
   id: string;
   produto: string;
   congelado?: boolean;
+  /** Tag no card — só quando o produto tem >1 assadeira cadastrada. */
   assadeira?: string;
   /** Cliente / tipo de estoque — inline no card (embalagem). */
   cliente?: string;

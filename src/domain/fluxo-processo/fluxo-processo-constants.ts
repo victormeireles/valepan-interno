@@ -2,9 +2,14 @@ import type { FluxoEtapaKey } from './fluxo-processo-types';
 
 export const FLUXO_GAP_MIN_MINUTES = 45;
 
-export const FLUXO_BLOCO_MAX_GAP_MINUTES = 1;
+/** Limite LT por lançamento (fermentação). Acima = digitação em bloco. */
+export const FLUXO_BLOCO_MAX_LT_FERM = 40;
 
-export const FLUXO_BLOCO_WARN_PCT = 10;
+/** Limite LT por lançamento (forno). Acima = digitação em bloco. */
+export const FLUXO_BLOCO_MAX_LT_FORNO = 20;
+
+/** Limite CX por lançamento (embalagem). Acima = digitação em bloco. */
+export const FLUXO_BLOCO_MAX_CX = 55;
 
 export const FLUXO_FALLBACK_UN_POR_LATA = 24;
 

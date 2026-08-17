@@ -118,7 +118,8 @@ export class FluxoUnidadesConverter {
 
   /**
    * Resolve unidades do apontamento.
-   * Se já traz unidades (>0), usa direto (Broa, Pão Francês, etc.).
+   * Com latas/caixas digitadas, deriva unidades pelo fator da OP (mesma língua).
+   * Sem latas/caixas (Broa, Pão Francês, etc.), usa unidades diretas.
    */
   resolveUnidades(input: {
     unidades: number;
@@ -128,15 +129,16 @@ export class FluxoUnidadesConverter {
     assadeiraNome: string;
     etapa: 'ferm' | 'forno' | 'emb';
   }): number {
-    if (input.unidades > 0) return Math.round(input.unidades);
     const ass = input.assadeiraNome || FLUXO_ASSADEIRA_SEM;
     if (input.etapa === 'emb') {
       const cx = input.caixas ?? 0;
-      if (cx <= 0) return 0;
-      return Math.round(cx * this.unPorCaixa(input.produtoNome, ass));
+      if (cx > 0) return Math.round(cx * this.unPorCaixa(input.produtoNome, ass));
+      if (input.unidades > 0) return Math.round(input.unidades);
+      return 0;
     }
     const lt = input.latas ?? 0;
-    if (lt <= 0) return 0;
-    return Math.round(lt * this.unPorLata(input.produtoNome, ass));
+    if (lt > 0) return Math.round(lt * this.unPorLata(input.produtoNome, ass));
+    if (input.unidades > 0) return Math.round(input.unidades);
+    return 0;
   }
 }

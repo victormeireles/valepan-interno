@@ -29,6 +29,8 @@ export type PainelOrdemEtapa = {
   finalizada: boolean;
   cascata?: EtapaCascataDisplay;
   assadeiraNome?: string;
+  /** Produto com >1 assadeira cadastrada (exceção/regra) — controla a tag no card. */
+  temMultiplasAssadeirasCadastradas?: boolean;
   lotes: PainelLoteEtapa[];
 };
 

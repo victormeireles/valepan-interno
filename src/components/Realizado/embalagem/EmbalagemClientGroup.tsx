@@ -48,7 +48,7 @@ export default function EmbalagemClientGroup({
           </Badge>
         ) : null}
         {observacao ? (
-          <span className="text-xs italic text-text-muted">Obs: {observacao}</span>
+          <span className="text-xs italic text-text-muted">{observacao}</span>
         ) : null}
         <span className="ml-auto font-mono text-xs tabular-nums text-text-muted">
           {concluidos}/{pedidos.length} concluídos

@@ -3,7 +3,7 @@
 import { Card } from '@/components/ui/Card';
 import type { FluxoEtapaResumo, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import { useFluxoDisplay } from './fluxo-display-context';
-import { fmtQty, fmtQtyK } from './fluxo-display-scale';
+import { fmtQty, fmtQtyExact, fmtQtyK } from './fluxo-display-scale';
 import FluxoEtapaContinuidade from './FluxoEtapaContinuidade';
 import {
   diaAnteriorLabelFromDia,
@@ -68,7 +68,7 @@ export default function FluxoEtapaCards({ fluxo, etapaAtiva, onSelect }: FluxoEt
                   Volume
                 </div>
                 <div className="mt-0.5 font-mono text-xl font-bold tabular-nums text-text-strong">
-                  {fmtQty(volume, scale.mode)}
+                  {fmtQtyExact(volume)}
                   <span className="text-[11px] font-medium text-text-muted">
                     {' '}
                     {scale.unitLabel}
@@ -76,7 +76,7 @@ export default function FluxoEtapaCards({ fluxo, etapaAtiva, onSelect }: FluxoEt
                 </div>
                 {e.key === 'emb' ? (
                   <div className="mt-0.5 text-[11px] text-text-faint">
-                    {fmtQty(scale.opAnteriorTotal(), scale.mode)} de OP de {antLabel}
+                    {fmtQtyExact(scale.opAnteriorTotal())} de OP de {antLabel}
                   </div>
                 ) : null}
                 {e.key === 'ferm' ? (
