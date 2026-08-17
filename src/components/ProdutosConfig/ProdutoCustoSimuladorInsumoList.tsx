@@ -1,6 +1,7 @@
 'use client';
 
 import { formatCustoUnidade } from '@/components/ProdutosConfig/produto-custo-format';
+import ProdutoCustoSimuladorDecimalField from '@/components/ProdutosConfig/ProdutoCustoSimuladorDecimalField';
 import type { ProdutoCustoIngrediente } from '@/domain/produtos/produto-custo-unitario-types';
 
 type Props = {
@@ -51,24 +52,12 @@ export default function ProdutoCustoSimuladorInsumoList({
                 <label className="sr-only" htmlFor={`custo-simulado-${insumo.insumoId}`}>
                   Custo simulado de {insumo.insumoNome}
                 </label>
-                <input
+                <ProdutoCustoSimuladorDecimalField
                   id={`custo-simulado-${insumo.insumoId}`}
                   className={fieldClassName}
-                  inputMode="decimal"
                   placeholder="Simulado"
-                  value={override ?? ''}
-                  onChange={(event) => {
-                    const raw = event.target.value.trim().replace(',', '.');
-                    if (!raw) {
-                      onCustoChange(insumo.insumoId, undefined);
-                      return;
-                    }
-                    const parsed = Number(raw);
-                    onCustoChange(
-                      insumo.insumoId,
-                      Number.isFinite(parsed) ? parsed : undefined,
-                    );
-                  }}
+                  value={override}
+                  onValueChange={(valor) => onCustoChange(insumo.insumoId, valor)}
                 />
               </div>
             </div>

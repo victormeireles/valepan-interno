@@ -1,5 +1,6 @@
 'use client';
 
+import ProdutoCustoSimuladorDecimalField from '@/components/ProdutosConfig/ProdutoCustoSimuladorDecimalField';
 import type { TipoReceita } from '@/components/ProdutosConfig/produto-receita-tipo-options';
 import type { ProdutoCustoReceitaCatalogoItem } from '@/domain/produtos/produto-custo-unitario-types';
 
@@ -75,21 +76,12 @@ export default function ProdutoCustoSimuladorTipoRow({
         <label className="sr-only" htmlFor={quantidadeFieldId}>
           Quantidade de {option.label}
         </label>
-        <input
+        <ProdutoCustoSimuladorDecimalField
           id={quantidadeFieldId}
           className={`${fieldClassName} font-mono tabular-nums`}
-          inputMode="decimal"
           placeholder="Qtd"
-          value={quantidade ?? ''}
-          onChange={(event) => {
-            const raw = event.target.value.trim().replace(',', '.');
-            if (!raw) {
-              onQuantidadeChange(undefined);
-              return;
-            }
-            const parsed = Number(raw);
-            onQuantidadeChange(Number.isFinite(parsed) ? parsed : undefined);
-          }}
+          value={quantidade}
+          onValueChange={onQuantidadeChange}
         />
       </div>
     </div>

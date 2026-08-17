@@ -75,8 +75,7 @@ export default function ProdutoCustoSimuladorResultado({ comparacao }: Props) {
       </div>
 
       <p className={`font-mono tabular-nums text-sm ${deltaClass}`}>
-        Diferença: {formatDeltaReais(comparacao.deltaReais)} (
-        {formatDeltaPercentual(comparacao.deltaPercentual)})
+        Diferença: {formatDeltaReais(comparacao.deltaReais)} ({formatDeltaPercentual(comparacao.deltaPercentual)})
       </p>
     </section>
   );
