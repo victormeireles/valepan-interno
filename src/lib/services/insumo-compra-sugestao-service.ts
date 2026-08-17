@@ -19,6 +19,7 @@ import {
   insumoCompraSugestaoCalculator,
   type InsumoCompraSugestaoCalculator,
 } from '@/domain/insumos/insumo-compra-sugestao-calculator';
+import { insumoCompraDiaOperacional } from '@/domain/insumos/insumo-compra-dia-operacional';
 import type { InsumoCompraSugestaoStatus } from '@/domain/insumos/insumo-compra-sugestao-types';
 import {
   insumoConsumoCoberturaCalculator,
@@ -222,7 +223,7 @@ export class InsumoCompraSugestaoService {
       estoqueAtual: estoque,
       consumos: colunas.map((coluna) => fonte.consumo?.consumoPorSemana[coluna] ?? 0),
     });
-    const consumoDiario = coberturaConsumo.media / 7;
+    const consumoDiario = insumoCompraDiaOperacional.consumoDiaUtil(coberturaConsumo.media);
     const regra = fonte.regra;
     const sugestao = this.dependencies.sugestaoCalculator.calculate({
       estoque,
