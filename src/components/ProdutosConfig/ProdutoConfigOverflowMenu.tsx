@@ -4,7 +4,7 @@ import OverflowMenu from '@/components/OverflowMenu/OverflowMenu';
 import OverflowMenuItem from '@/components/OverflowMenu/OverflowMenuItem';
 import { configTableOverflowTriggerClass } from '@/components/Config/config-table-styles';
 
-export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas';
+export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas' | 'simulador';
 
 type Props = {
   onSelect: (action: ProdutoConfigMenuAction) => void;
@@ -28,6 +28,11 @@ export default function ProdutoConfigOverflowMenu({ onSelect, compact = false }:
         icon="menu_book"
         label="Configurar receitas"
         onClick={() => onSelect('receitas')}
+      />
+      <OverflowMenuItem
+        icon="calculate"
+        label="Simulador de custos"
+        onClick={() => onSelect('simulador')}
       />
     </OverflowMenu>
   );

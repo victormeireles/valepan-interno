@@ -23,9 +23,8 @@ import { Input } from '@/components/ui/Input';
 import { Toast } from '@/components/ui/Toast';
 import ProdutoAssadeiraLinkModal from '@/components/ProdutoAssadeiras/ProdutoAssadeiraLinkModal';
 import ProdutoAssadeirasConfigModal from '@/components/ProdutosConfig/ProdutoAssadeirasConfigModal';
-import ProdutoReceitasConfigModal, {
-  type ReceitaCatalogoItem,
-} from '@/components/ProdutosConfig/ProdutoReceitasConfigModal';
+import ProdutoReceitasConfigModal, { type ReceitaCatalogoItem } from '@/components/ProdutosConfig/ProdutoReceitasConfigModal';
+import ProdutoCustoSimuladorModal from '@/components/ProdutosConfig/ProdutoCustoSimuladorModal';
 import type { ProdutoConfigMenuAction } from '@/components/ProdutosConfig/ProdutoConfigOverflowMenu';
 import ProdutosConfigCategoryTabs, {
   ALL_CATEGORIES_TAB_ID,
@@ -74,6 +73,7 @@ export default function ProdutosConfigClient({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [assadeirasModalOpen, setAssadeirasModalOpen] = useState(false);
   const [receitasModalOpen, setReceitasModalOpen] = useState(false);
+  const [simuladorModalOpen, setSimuladorModalOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [activeProdutoId, setActiveProdutoId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<ProdutoAssadeiraLink | undefined>();
@@ -131,6 +131,7 @@ export default function ProdutosConfigClient({
     if (config === 'assadeiras') {
       setActiveProdutoId(produtoId);
       setReceitasModalOpen(false);
+      setSimuladorModalOpen(false);
       setAssadeirasModalOpen(true);
       void loadLinksForProduto(produtoId);
       return;
@@ -140,7 +141,16 @@ export default function ProdutosConfigClient({
       setActiveProdutoId(produtoId);
       setAssadeirasModalOpen(false);
       setLinkModalOpen(false);
+      setSimuladorModalOpen(false);
       setReceitasModalOpen(true);
+    }
+
+    if (config === 'simulador') {
+      setActiveProdutoId(produtoId);
+      setAssadeirasModalOpen(false);
+      setReceitasModalOpen(false);
+      setLinkModalOpen(false);
+      setSimuladorModalOpen(true);
     }
   }, [searchParams, produtos, loadLinksForProduto]);
 
@@ -187,6 +197,7 @@ export default function ProdutosConfigClient({
 
   const openAssadeirasModal = (produtoId: string) => {
     setReceitasModalOpen(false);
+    setSimuladorModalOpen(false);
     setActiveProdutoId(produtoId);
     setAssadeirasModalOpen(true);
     syncUrl(produtoId, 'assadeiras');
@@ -204,6 +215,7 @@ export default function ProdutosConfigClient({
   const openReceitasModal = (produtoId: string) => {
     setAssadeirasModalOpen(false);
     setLinkModalOpen(false);
+    setSimuladorModalOpen(false);
     setActiveProdutoId(produtoId);
     setReceitasModalOpen(true);
     syncUrl(produtoId, 'receitas');
@@ -235,12 +247,31 @@ export default function ProdutosConfigClient({
     setTimeout(() => setToast(null), 4000);
   };
 
+  const openSimuladorModal = (produtoId: string) => {
+    setAssadeirasModalOpen(false);
+    setReceitasModalOpen(false);
+    setLinkModalOpen(false);
+    setActiveProdutoId(produtoId);
+    setSimuladorModalOpen(true);
+    syncUrl(produtoId, 'simulador');
+  };
+
+  const closeSimuladorModal = () => {
+    setSimuladorModalOpen(false);
+    setActiveProdutoId(null);
+    syncUrl(null, null);
+  };
+
   const handleMenuSelect = (produtoId: string, action: ProdutoConfigMenuAction) => {
     if (action === 'assadeiras') {
       openAssadeirasModal(produtoId);
       return;
     }
-    openReceitasModal(produtoId);
+    if (action === 'receitas') {
+      openReceitasModal(produtoId);
+      return;
+    }
+    openSimuladorModal(produtoId);
   };
 
   const handleSaved = (
@@ -454,6 +485,13 @@ export default function ProdutosConfigClient({
             receitasCatalogo={receitasCatalogo}
             onClose={closeReceitasModal}
             onUpdated={handleReceitasUpdated}
+          />
+
+          <ProdutoCustoSimuladorModal
+            isOpen={simuladorModalOpen}
+            produtoId={activeProduto.id}
+            produtoNome={activeProduto.nome}
+            onClose={closeSimuladorModal}
           />
         </>
       )}
