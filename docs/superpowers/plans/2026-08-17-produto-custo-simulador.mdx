@@ -1,0 +1,1616 @@
+# Simulador de custos do produto — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Modal admin em `/config/produtos` que estima custo/unidade (MP + embalagens) com overrides de receita, qtd e custo de insumo, comparando Antes vs Depois sem gravar nada.
+
+**Architecture:** Domínio puro calcula `Σ(quantidade_padrao × custo) / quantidade_por_produto` por vínculo e soma os tipos. O modal carrega payload via server action (`interno_config` / `administrar`), aplica overrides só em memória e mostra breakdown + insumos. Fechar descarta estado.
+
+**Tech Stack:** TypeScript, Vitest, Next.js 15 App Router, server actions, Supabase, React 19, design system Valepan (pt-BR, Material Icons).
+
+**Spec:** `docs/superpowers/specs/2026-08-14-produto-custo-simulador-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; quebrar ao se aproximar de 400. Funções < 40 linhas. Classes com SRP.
+- Cálculo alinhado ao CMV: `custo_unitario` null conta como 0 e marca `insumo_sem_custo`; o tipo **continua no total**.
+- `quantidade_por_produto <= 0` → tipo **não** entra no total + aviso `quantidade_invalida`.
+- Receita sem ingredientes → custo 0 + aviso `sem_ingredientes` (entra no total como 0 se qtd > 0).
+- Override de custo: mapa `insumoId → number` só no Depois; vazio/ausente usa o cadastrado.
+- Um insumo = um campo, mesmo se aparecer em várias receitas.
+- Sem mutation de `produto_receitas` nem de `insumos.custo_unitario`. Sem “Salvar” / “Aplicar”.
+- UI: pt-BR, Material Icons, shell igual a `ProdutoReceitasConfigModal`, `font-mono tabular-nums` em valores.
+- Rota `/config` já exige `administrar`; a action também chama `requireInternoModulo('interno_config', 'administrar')`.
+- Não há testes `.tsx` no repo; UI valida manualmente. Domínio: Vitest (`npm test -- <arquivo>`).
+- Commits: incluir no passo; se a sessão não pediu commit, pular o `git commit` e só deixar os arquivos.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/produtos/produto-custo-unitario-types.ts` | Tipos do cálculo, payload e seleção |
+| `src/domain/produtos/produto-custo-unitario-calculo.ts` | Custo por vínculo, total e comparação Antes/Depois |
+| `src/domain/produtos/produto-custo-unitario-calculo.test.ts` | Testes da fórmula CMV + overrides |
+| `src/domain/produtos/produto-custo-simulador-cenario.ts` | Monta vínculos do Depois e une insumos |
+| `src/domain/produtos/produto-custo-simulador-cenario.test.ts` | Testes de cenário e união de insumos |
+| `src/app/actions/produto-custo-simulador-actions.ts` | Lê produto + vínculos + catálogo com custo |
+| `src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx` | Ação `simulador` |
+| `src/app/config/produtos/ProdutosConfigClient.tsx` | Estado, URL `config=simulador`, monta o modal |
+| `src/components/ProdutosConfig/produto-custo-format.ts` | Formatação R$ e Δ |
+| `src/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow.tsx` | Linha tipo / receita / qtd |
+| `src/components/ProdutosConfig/ProdutoCustoSimuladorInsumoList.tsx` | Lista de insumos + custo simulado |
+| `src/components/ProdutosConfig/ProdutoCustoSimuladorResultado.tsx` | Breakdown Antes/Depois + total |
+| `src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx` | Shell, fetch, estado local |
+
+---
+
+### Task 1: Domínio — custo por vínculo e total
+
+**Files:**
+- Create: `src/domain/produtos/produto-custo-unitario-types.ts`
+- Create: `src/domain/produtos/produto-custo-unitario-calculo.ts`
+- Test: `src/domain/produtos/produto-custo-unitario-calculo.test.ts`
+
+**Interfaces:**
+- Produces:
+  - Types: `ProdutoCustoTipoReceita`, `ProdutoCustoIngrediente`, `ProdutoCustoVinculo`, `ProdutoCustoVinculoAviso`, `ProdutoCustoVinculoResultado`, `ProdutoCustoTotal`, `ProdutoCustoComparacao`, `ProdutoCustoReceitaCatalogoItem`, `ProdutoCustoTipoSelecao`, `ProdutoCustoCenarioInput`, `ProdutoCustoSimulacaoPayload`
+  - `class ProdutoCustoUnitarioCalculo`
+    - `calcularVinculo(vinculo: ProdutoCustoVinculo, custoOverrides?: Record<string, number>): ProdutoCustoVinculoResultado`
+    - `calcularProduto(vinculos: ProdutoCustoVinculo[], custoOverrides?: Record<string, number>): ProdutoCustoTotal`
+    - `comparar(antes: ProdutoCustoVinculo[], depois: ProdutoCustoVinculo[], custoOverridesDepois?: Record<string, number>): ProdutoCustoComparacao`
+  - `export const produtoCustoUnitarioCalculo = new ProdutoCustoUnitarioCalculo()`
+
+- [ ] **Step 1: Write types + failing test**
+
+Create `src/domain/produtos/produto-custo-unitario-types.ts`:
+
+```typescript
+export type ProdutoCustoTipoReceita =
+  | 'massa'
+  | 'brilho'
+  | 'confeito'
+  | 'antimofo'
+  | 'embalagem'
+  | 'caixa';
+
+export type ProdutoCustoIngrediente = {
+  insumoId: string;
+  insumoNome: string;
+  unidade: string | null;
+  quantidadePadrao: number;
+  custoUnitario: number | null;
+};
+
+export type ProdutoCustoVinculo = {
+  tipo: ProdutoCustoTipoReceita;
+  receitaId: string;
+  receitaNome: string;
+  quantidadePorProduto: number;
+  ingredientes: ProdutoCustoIngrediente[];
+};
+
+export type ProdutoCustoVinculoAviso =
+  | 'quantidade_invalida'
+  | 'sem_ingredientes'
+  | 'insumo_sem_custo';
+
+export type ProdutoCustoVinculoResultado = {
+  tipo: ProdutoCustoTipoReceita;
+  receitaId: string;
+  receitaNome: string;
+  entraNoTotal: boolean;
+  custoReceita: number;
+  custoPorUnidade: number;
+  avisos: ProdutoCustoVinculoAviso[];
+};
+
+export type ProdutoCustoTotal = {
+  custoUnitario: number;
+  porTipo: ProdutoCustoVinculoResultado[];
+  insumoSemCusto: boolean;
+};
+
+export type ProdutoCustoComparacao = {
+  antes: ProdutoCustoTotal;
+  depois: ProdutoCustoTotal;
+  deltaReais: number;
+  deltaPercentual: number | null;
+};
+
+export type ProdutoCustoReceitaCatalogoItem = {
+  id: string;
+  nome: string;
+  tipo: ProdutoCustoTipoReceita;
+  ingredientes: ProdutoCustoIngrediente[];
+};
+
+export type ProdutoCustoTipoSelecao = {
+  receitaId: string;
+  quantidade: number | undefined;
+};
+
+export type ProdutoCustoCenarioInput = {
+  vinculosAntes: ProdutoCustoVinculo[];
+  catalogo: ProdutoCustoReceitaCatalogoItem[];
+  selecao: Partial<Record<ProdutoCustoTipoReceita, ProdutoCustoTipoSelecao>>;
+};
+
+export type ProdutoCustoSimulacaoPayload = {
+  produto: { id: string; nome: string };
+  vinculos: ProdutoCustoVinculo[];
+  receitasCatalogo: ProdutoCustoReceitaCatalogoItem[];
+};
+```
+
+Create `src/domain/produtos/produto-custo-unitario-calculo.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { ProdutoCustoUnitarioCalculo } from './produto-custo-unitario-calculo';
+import type { ProdutoCustoVinculo } from './produto-custo-unitario-types';
+
+const calc = new ProdutoCustoUnitarioCalculo();
+
+function massa(): ProdutoCustoVinculo {
+  return {
+    tipo: 'massa',
+    receitaId: 'r-massa',
+    receitaNome: 'HB Padrão',
+    quantidadePorProduto: 100,
+    ingredientes: [
+      {
+        insumoId: 'farinha',
+        insumoNome: 'Farinha',
+        unidade: 'kg',
+        quantidadePadrao: 10,
+        custoUnitario: 5,
+      },
+      {
+        insumoId: 'sal',
+        insumoNome: 'Sal',
+        unidade: 'kg',
+        quantidadePadrao: 2,
+        custoUnitario: 1,
+      },
+    ],
+  };
+}
+
+function brilho(): ProdutoCustoVinculo {
+  return {
+    tipo: 'brilho',
+    receitaId: 'r-brilho',
+    receitaNome: 'Brilho',
+    quantidadePorProduto: 100,
+    ingredientes: [
+      {
+        insumoId: 'ovo',
+        insumoNome: 'Ovo',
+        unidade: 'un',
+        quantidadePadrao: 2,
+        custoUnitario: 1,
+      },
+    ],
+  };
+}
+
+describe('ProdutoCustoUnitarioCalculo', () => {
+  it('exemplo CMV: massa 0,52 + brilho 0,02 = 0,54', () => {
+    const total = calc.calcularProduto([massa(), brilho()]);
+    expect(total.custoUnitario).toBeCloseTo(0.54, 10);
+    expect(total.porTipo[0].custoPorUnidade).toBeCloseTo(0.52, 10);
+    expect(total.porTipo[1].custoPorUnidade).toBeCloseTo(0.02, 10);
+    expect(total.insumoSemCusto).toBe(false);
+  });
+
+  it('custo_unitario null conta 0 e marca insumo_sem_custo sem tirar do total', () => {
+    const vinculo = massa();
+    vinculo.ingredientes[0].custoUnitario = null;
+    const resultado = calc.calcularVinculo(vinculo);
+    expect(resultado.custoReceita).toBe(2);
+    expect(resultado.custoPorUnidade).toBeCloseTo(0.02, 10);
+    expect(resultado.entraNoTotal).toBe(true);
+    expect(resultado.avisos).toContain('insumo_sem_custo');
+  });
+
+  it('quantidade <= 0 não entra no total', () => {
+    const vinculo = { ...massa(), quantidadePorProduto: 0 };
+    const resultado = calc.calcularVinculo(vinculo);
+    expect(resultado.entraNoTotal).toBe(false);
+    expect(resultado.custoPorUnidade).toBe(0);
+    expect(resultado.avisos).toContain('quantidade_invalida');
+    expect(calc.calcularProduto([vinculo, brilho()]).custoUnitario).toBeCloseTo(0.02, 10);
+  });
+
+  it('receita sem ingredientes: custo 0 + aviso', () => {
+    const vinculo = { ...massa(), ingredientes: [] };
+    const resultado = calc.calcularVinculo(vinculo);
+    expect(resultado.custoPorUnidade).toBe(0);
+    expect(resultado.entraNoTotal).toBe(true);
+    expect(resultado.avisos).toContain('sem_ingredientes');
+  });
+
+  it('override de custo vale só no Depois e insumo compartilhado afeta todos os vínculos', () => {
+    const massaComOvo: ProdutoCustoVinculo = {
+      ...massa(),
+      ingredientes: [
+        ...massa().ingredientes,
+        {
+          insumoId: 'ovo',
+          insumoNome: 'Ovo',
+          unidade: 'un',
+          quantidadePadrao: 2,
+          custoUnitario: 1,
+        },
+      ],
+    };
+    const comparacao = calc.comparar(
+      [massaComOvo, brilho()],
+      [massaComOvo, brilho()],
+      { ovo: 3 },
+    );
+    expect(comparacao.antes.custoUnitario).toBeCloseTo(0.56, 10);
+    expect(comparacao.depois.custoUnitario).toBeCloseTo(0.64, 10);
+    expect(comparacao.deltaReais).toBeCloseTo(0.08, 10);
+    expect(comparacao.deltaPercentual).toBeCloseTo((0.08 / 0.56) * 100, 8);
+  });
+
+  it('override preenche custo null e remove a flag no Depois', () => {
+    const vinculo = massa();
+    vinculo.ingredientes[0].custoUnitario = null;
+    const comparacao = calc.comparar([vinculo], [vinculo], { farinha: 5 });
+    expect(comparacao.antes.insumoSemCusto).toBe(true);
+    expect(comparacao.depois.insumoSemCusto).toBe(false);
+    expect(comparacao.depois.custoUnitario).toBeCloseTo(0.52, 10);
+  });
+
+  it('deltaPercentual é null quando Antes é 0', () => {
+    const comparacao = calc.comparar([], [brilho()]);
+    expect(comparacao.antes.custoUnitario).toBe(0);
+    expect(comparacao.depois.custoUnitario).toBeCloseTo(0.02, 10);
+    expect(comparacao.deltaPercentual).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm test -- src/domain/produtos/produto-custo-unitario-calculo.test.ts`
+
+Expected: FAIL (módulo `produto-custo-unitario-calculo` não existe).
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `src/domain/produtos/produto-custo-unitario-calculo.ts`:
+
+```typescript
+import type {
+  ProdutoCustoComparacao,
+  ProdutoCustoIngrediente,
+  ProdutoCustoTotal,
+  ProdutoCustoVinculo,
+  ProdutoCustoVinculoAviso,
+  ProdutoCustoVinculoResultado,
+} from './produto-custo-unitario-types';
+
+export class ProdutoCustoUnitarioCalculo {
+  calcularVinculo(
+    vinculo: ProdutoCustoVinculo,
+    custoOverrides: Record<string, number> = {},
+  ): ProdutoCustoVinculoResultado {
+    if (vinculo.quantidadePorProduto <= 0) {
+      return this.resultadoBase(vinculo, {
+        entraNoTotal: false,
+        custoReceita: 0,
+        custoPorUnidade: 0,
+        avisos: ['quantidade_invalida'],
+      });
+    }
+
+    const avisos: ProdutoCustoVinculoAviso[] = [];
+    if (vinculo.ingredientes.length === 0) {
+      avisos.push('sem_ingredientes');
+    }
+
+    const custoReceita = this.somarCustoReceita(
+      vinculo.ingredientes,
+      custoOverrides,
+      avisos,
+    );
+
+    return this.resultadoBase(vinculo, {
+      entraNoTotal: true,
+      custoReceita,
+      custoPorUnidade: custoReceita / vinculo.quantidadePorProduto,
+      avisos,
+    });
+  }
+
+  calcularProduto(
+    vinculos: ProdutoCustoVinculo[],
+    custoOverrides: Record<string, number> = {},
+  ): ProdutoCustoTotal {
+    const porTipo = vinculos.map((vinculo) =>
+      this.calcularVinculo(vinculo, custoOverrides),
+    );
+    const custoUnitario = porTipo.reduce(
+      (soma, item) => (item.entraNoTotal ? soma + item.custoPorUnidade : soma),
+      0,
+    );
+    return {
+      custoUnitario,
+      porTipo,
+      insumoSemCusto: porTipo.some((item) => item.avisos.includes('insumo_sem_custo')),
+    };
+  }
+
+  comparar(
+    antes: ProdutoCustoVinculo[],
+    depois: ProdutoCustoVinculo[],
+    custoOverridesDepois: Record<string, number> = {},
+  ): ProdutoCustoComparacao {
+    const totalAntes = this.calcularProduto(antes);
+    const totalDepois = this.calcularProduto(depois, custoOverridesDepois);
+    const deltaReais = totalDepois.custoUnitario - totalAntes.custoUnitario;
+    return {
+      antes: totalAntes,
+      depois: totalDepois,
+      deltaReais,
+      deltaPercentual:
+        totalAntes.custoUnitario === 0
+          ? null
+          : (deltaReais / totalAntes.custoUnitario) * 100,
+    };
+  }
+
+  private somarCustoReceita(
+    ingredientes: ProdutoCustoIngrediente[],
+    custoOverrides: Record<string, number>,
+    avisos: ProdutoCustoVinculoAviso[],
+  ): number {
+    let custoReceita = 0;
+    let insumoSemCusto = false;
+
+    for (const ingrediente of ingredientes) {
+      const custo =
+        custoOverrides[ingrediente.insumoId] ?? ingrediente.custoUnitario;
+      if (custo == null) {
+        insumoSemCusto = true;
+        continue;
+      }
+      custoReceita += ingrediente.quantidadePadrao * custo;
+    }
+
+    if (insumoSemCusto) avisos.push('insumo_sem_custo');
+    return custoReceita;
+  }
+
+  private resultadoBase(
+    vinculo: ProdutoCustoVinculo,
+    extra: Pick<
+      ProdutoCustoVinculoResultado,
+      'entraNoTotal' | 'custoReceita' | 'custoPorUnidade' | 'avisos'
+    >,
+  ): ProdutoCustoVinculoResultado {
+    return {
+      tipo: vinculo.tipo,
+      receitaId: vinculo.receitaId,
+      receitaNome: vinculo.receitaNome,
+      ...extra,
+    };
+  }
+}
+
+export const produtoCustoUnitarioCalculo = new ProdutoCustoUnitarioCalculo();
+```
+
+- [ ] **Step 4: Run tests and make sure they pass**
+
+Run: `npm test -- src/domain/produtos/produto-custo-unitario-calculo.test.ts`
+
+Expected: PASS (7 tests).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/produtos/produto-custo-unitario-types.ts src/domain/produtos/produto-custo-unitario-calculo.ts src/domain/produtos/produto-custo-unitario-calculo.test.ts
+git commit -m "feat(produtos): calcula custo unitário alinhado ao CMV"
+```
+
+---
+
+### Task 2: Domínio — cenário Depois e união de insumos
+
+**Files:**
+- Create: `src/domain/produtos/produto-custo-simulador-cenario.ts`
+- Test: `src/domain/produtos/produto-custo-simulador-cenario.test.ts`
+
+**Interfaces:**
+- Consumes: types de Task 1 (`ProdutoCustoCenarioInput`, `ProdutoCustoVinculo`, `ProdutoCustoIngrediente`, `ProdutoCustoReceitaCatalogoItem`)
+- Produces:
+  - `class ProdutoCustoSimuladorCenario`
+    - `montarDepois(input: ProdutoCustoCenarioInput): ProdutoCustoVinculo[]`
+    - `coletarInsumos(...grupos: ProdutoCustoVinculo[][]): ProdutoCustoIngrediente[]`
+    - `selecaoInicial(vinculos: ProdutoCustoVinculo[]): ProdutoCustoCenarioInput['selecao']`
+  - `export const produtoCustoSimuladorCenario = new ProdutoCustoSimuladorCenario()`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `src/domain/produtos/produto-custo-simulador-cenario.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { ProdutoCustoSimuladorCenario } from './produto-custo-simulador-cenario';
+import type {
+  ProdutoCustoReceitaCatalogoItem,
+  ProdutoCustoVinculo,
+} from './produto-custo-unitario-types';
+
+const cenario = new ProdutoCustoSimuladorCenario();
+
+const massaAtual: ProdutoCustoVinculo = {
+  tipo: 'massa',
+  receitaId: 'r-massa',
+  receitaNome: 'HB Padrão',
+  quantidadePorProduto: 953,
+  ingredientes: [
+    {
+      insumoId: 'farinha',
+      insumoNome: 'Farinha',
+      unidade: 'kg',
+      quantidadePadrao: 10,
+      custoUnitario: 5,
+    },
+  ],
+};
+
+const caixaAtual: ProdutoCustoVinculo = {
+  tipo: 'caixa',
+  receitaId: 'r-caixa-40',
+  receitaNome: 'Caixa Valepan',
+  quantidadePorProduto: 40,
+  ingredientes: [
+    {
+      insumoId: 'papelão',
+      insumoNome: 'Papelão',
+      unidade: 'un',
+      quantidadePadrao: 1,
+      custoUnitario: 2,
+    },
+  ],
+};
+
+const catalogo: ProdutoCustoReceitaCatalogoItem[] = [
+  {
+    id: 'r-massa',
+    nome: 'HB Padrão',
+    tipo: 'massa',
+    ingredientes: massaAtual.ingredientes,
+  },
+  {
+    id: 'r-caixa-40',
+    nome: 'Caixa Valepan',
+    tipo: 'caixa',
+    ingredientes: caixaAtual.ingredientes,
+  },
+  {
+    id: 'r-caixa-48',
+    nome: 'Caixa 48',
+    tipo: 'caixa',
+    ingredientes: [
+      {
+        insumoId: 'papelão',
+        insumoNome: 'Papelão',
+        unidade: 'un',
+        quantidadePadrao: 1,
+        custoUnitario: 2.4,
+      },
+    ],
+  },
+  {
+    id: 'r-pacote-6',
+    nome: 'Pacote C/ 6',
+    tipo: 'embalagem',
+    ingredientes: [
+      {
+        insumoId: 'filme',
+        insumoNome: 'Filme',
+        unidade: 'un',
+        quantidadePadrao: 1,
+        custoUnitario: 0.1,
+      },
+    ],
+  },
+];
+
+describe('ProdutoCustoSimuladorCenario', () => {
+  it('selecaoInicial copia vínculos atuais', () => {
+    const selecao = cenario.selecaoInicial([massaAtual, caixaAtual]);
+    expect(selecao.massa).toEqual({ receitaId: 'r-massa', quantidade: 953 });
+    expect(selecao.caixa).toEqual({ receitaId: 'r-caixa-40', quantidade: 40 });
+  });
+
+  it('override de qtd e troca de receita montam o Depois', () => {
+    const depois = cenario.montarDepois({
+      vinculosAntes: [massaAtual, caixaAtual],
+      catalogo,
+      selecao: {
+        massa: { receitaId: 'r-massa', quantidade: 715 },
+        caixa: { receitaId: 'r-caixa-48', quantidade: 48 },
+        embalagem: { receitaId: 'r-pacote-6', quantidade: 6 },
+      },
+    });
+
+    expect(depois).toHaveLength(3);
+    expect(depois.find((item) => item.tipo === 'massa')?.quantidadePorProduto).toBe(715);
+    expect(depois.find((item) => item.tipo === 'caixa')?.receitaId).toBe('r-caixa-48');
+    expect(depois.find((item) => item.tipo === 'embalagem')?.receitaNome).toBe('Pacote C/ 6');
+  });
+
+  it('receita vazia no Depois omite o tipo', () => {
+    const depois = cenario.montarDepois({
+      vinculosAntes: [massaAtual, caixaAtual],
+      catalogo,
+      selecao: {
+        massa: { receitaId: 'r-massa', quantidade: 953 },
+        caixa: { receitaId: '', quantidade: 40 },
+      },
+    });
+    expect(depois.map((item) => item.tipo)).toEqual(['massa']);
+  });
+
+  it('coletarInsumos une Antes e Depois sem duplicar insumo', () => {
+    const depois = cenario.montarDepois({
+      vinculosAntes: [massaAtual],
+      catalogo,
+      selecao: {
+        massa: { receitaId: 'r-massa', quantidade: 953 },
+        embalagem: { receitaId: 'r-pacote-6', quantidade: 6 },
+      },
+    });
+    const insumos = cenario.coletarInsumos([massaAtual], depois);
+    expect(insumos.map((item) => item.insumoId).sort()).toEqual(['farinha', 'filme']);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm test -- src/domain/produtos/produto-custo-simulador-cenario.test.ts`
+
+Expected: FAIL (módulo não existe).
+
+- [ ] **Step 3: Write minimal implementation**
+
+Create `src/domain/produtos/produto-custo-simulador-cenario.ts`:
+
+```typescript
+import type {
+  ProdutoCustoCenarioInput,
+  ProdutoCustoIngrediente,
+  ProdutoCustoTipoReceita,
+  ProdutoCustoVinculo,
+} from './produto-custo-unitario-types';
+
+export class ProdutoCustoSimuladorCenario {
+  selecaoInicial(
+    vinculos: ProdutoCustoVinculo[],
+  ): ProdutoCustoCenarioInput['selecao'] {
+    const selecao: ProdutoCustoCenarioInput['selecao'] = {};
+    for (const vinculo of vinculos) {
+      selecao[vinculo.tipo] = {
+        receitaId: vinculo.receitaId,
+        quantidade: vinculo.quantidadePorProduto,
+      };
+    }
+    return selecao;
+  }
+
+  montarDepois(input: ProdutoCustoCenarioInput): ProdutoCustoVinculo[] {
+    const depois: ProdutoCustoVinculo[] = [];
+    const tipos = Object.keys(input.selecao) as ProdutoCustoTipoReceita[];
+
+    for (const tipo of tipos) {
+      const escolha = input.selecao[tipo];
+      if (!escolha?.receitaId) continue;
+      const receita = input.catalogo.find((item) => item.id === escolha.receitaId);
+      if (!receita) continue;
+
+      depois.push({
+        tipo: receita.tipo,
+        receitaId: receita.id,
+        receitaNome: receita.nome,
+        quantidadePorProduto: escolha.quantidade ?? 0,
+        ingredientes: receita.ingredientes,
+      });
+    }
+
+    return depois;
+  }
+
+  coletarInsumos(...grupos: ProdutoCustoVinculo[][]): ProdutoCustoIngrediente[] {
+    const porId = new Map<string, ProdutoCustoIngrediente>();
+    for (const grupo of grupos) {
+      for (const vinculo of grupo) {
+        for (const ingrediente of vinculo.ingredientes) {
+          if (!porId.has(ingrediente.insumoId)) {
+            porId.set(ingrediente.insumoId, ingrediente);
+          }
+        }
+      }
+    }
+    return [...porId.values()].sort((a, b) =>
+      a.insumoNome.localeCompare(b.insumoNome, 'pt-BR'),
+    );
+  }
+}
+
+export const produtoCustoSimuladorCenario = new ProdutoCustoSimuladorCenario();
+```
+
+- [ ] **Step 4: Run tests and make sure they pass**
+
+Run: `npm test -- src/domain/produtos/produto-custo-simulador-cenario.test.ts src/domain/produtos/produto-custo-unitario-calculo.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/produtos/produto-custo-simulador-cenario.ts src/domain/produtos/produto-custo-simulador-cenario.test.ts
+git commit -m "feat(produtos): monta cenário Depois do simulador de custos"
+```
+
+---
+
+### Task 3: Server action de leitura
+
+**Files:**
+- Create: `src/app/actions/produto-custo-simulador-actions.ts`
+
+**Interfaces:**
+- Consumes: `ProdutoCustoSimulacaoPayload`, `ProdutoCustoTipoReceita`, `ProdutoCustoIngrediente`, `ProdutoCustoVinculo`, `ProdutoCustoReceitaCatalogoItem`
+- Produces: `getProdutoCustoSimulacao(produtoId: string): Promise<{ success: true; data: ProdutoCustoSimulacaoPayload } | { success: false; error: string }>`
+- Auth: `await requireInternoModulo('interno_config', 'administrar')`
+- Queries:
+  1. `produtos` ativo por id (`id, nome`)
+  2. `produto_receitas` ativo do produto, join `receitas!inner` ativo (`id, receita_id, quantidade_por_produto, receitas(id, nome, tipo, ativo)`)
+  3. `receitas` ativas com `receita_ingredientes (quantidade_padrao, insumo_id, insumos (id, nome, custo_unitario, unidades (nome_resumido, nome)))`
+
+- [ ] **Step 1: Implement the action**
+
+Não há padrão de teste de action com Supabase real neste fluxo. A action só lê e mapeia; a fórmula já está coberta no domínio.
+
+Create `src/app/actions/produto-custo-simulador-actions.ts`:
+
+```typescript
+'use server';
+
+import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import type {
+  ProdutoCustoIngrediente,
+  ProdutoCustoReceitaCatalogoItem,
+  ProdutoCustoSimulacaoPayload,
+  ProdutoCustoTipoReceita,
+  ProdutoCustoVinculo,
+} from '@/domain/produtos/produto-custo-unitario-types';
+
+type ActionResult =
+  | { success: true; data: ProdutoCustoSimulacaoPayload }
+  | { success: false; error: string };
+
+type InsumoJoin = {
+  id: string;
+  nome: string;
+  custo_unitario: number | null;
+  unidades: { nome: string; nome_resumido: string | null } | null;
+};
+
+type IngredienteJoin = {
+  quantidade_padrao: number;
+  insumo_id: string | null;
+  insumos: InsumoJoin | null;
+};
+
+type ReceitaJoin = {
+  id: string;
+  nome: string;
+  tipo: ProdutoCustoTipoReceita;
+  ativo: boolean | null;
+  receita_ingredientes?: IngredienteJoin[] | null;
+};
+
+export async function getProdutoCustoSimulacao(produtoId: string): Promise<ActionResult> {
+  await requireInternoModulo('interno_config', 'administrar');
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+
+  const { data: produto, error: produtoError } = await supabase
+    .from('produtos')
+    .select('id, nome')
+    .eq('id', produtoId)
+    .eq('ativo', true)
+    .maybeSingle();
+
+  if (produtoError || !produto) {
+    return { success: false, error: 'Produto não encontrado.' };
+  }
+
+  const [{ data: vinculoRows, error: vinculoError }, { data: receitaRows, error: receitaError }] =
+    await Promise.all([
+      supabase
+        .from('produto_receitas')
+        .select(
+          `
+          receita_id,
+          quantidade_por_produto,
+          receitas!inner (
+            id,
+            nome,
+            tipo,
+            ativo
+          )
+        `,
+        )
+        .eq('produto_id', produtoId)
+        .eq('ativo', true)
+        .eq('receitas.ativo', true),
+      supabase
+        .from('receitas')
+        .select(
+          `
+          id,
+          nome,
+          tipo,
+          ativo,
+          receita_ingredientes (
+            quantidade_padrao,
+            insumo_id,
+            insumos (
+              id,
+              nome,
+              custo_unitario,
+              unidades (
+                nome,
+                nome_resumido
+              )
+            )
+          )
+        `,
+        )
+        .eq('ativo', true)
+        .order('nome'),
+    ]);
+
+  if (vinculoError || receitaError) {
+    console.error('Erro ao carregar simulador de custos', vinculoError || receitaError);
+    return { success: false, error: 'Erro ao carregar dados do simulador.' };
+  }
+
+  const receitasCatalogo = (receitaRows ?? []).map(mapReceitaCatalogo);
+  const receitaPorId = new Map(receitasCatalogo.map((item) => [item.id, item]));
+  const vinculos = mapVinculos(vinculoRows ?? [], receitaPorId);
+
+  return {
+    success: true,
+    data: {
+      produto: { id: produto.id, nome: produto.nome },
+      vinculos,
+      receitasCatalogo,
+    },
+  };
+}
+
+function mapReceitaCatalogo(row: ReceitaJoin): ProdutoCustoReceitaCatalogoItem {
+  return {
+    id: row.id,
+    nome: row.nome,
+    tipo: row.tipo,
+    ingredientes: (row.receita_ingredientes ?? [])
+      .map(mapIngrediente)
+      .filter((item): item is ProdutoCustoIngrediente => item != null),
+  };
+}
+
+function mapIngrediente(row: IngredienteJoin): ProdutoCustoIngrediente | null {
+  if (!row.insumos?.id) return null;
+  return {
+    insumoId: row.insumos.id,
+    insumoNome: row.insumos.nome,
+    unidade: row.insumos.unidades?.nome_resumido ?? row.insumos.unidades?.nome ?? null,
+    quantidadePadrao: Number(row.quantidade_padrao),
+    custoUnitario:
+      row.insumos.custo_unitario == null ? null : Number(row.insumos.custo_unitario),
+  };
+}
+
+function mapVinculos(
+  rows: Array<{
+    receita_id: string;
+    quantidade_por_produto: number;
+    receitas: Pick<ReceitaJoin, 'id' | 'nome' | 'tipo'> | null;
+  }>,
+  receitaPorId: Map<string, ProdutoCustoReceitaCatalogoItem>,
+): ProdutoCustoVinculo[] {
+  const vinculos: ProdutoCustoVinculo[] = [];
+  for (const row of rows) {
+    const receita = row.receitas ? receitaPorId.get(row.receitas.id) : undefined;
+    if (!receita) continue;
+    vinculos.push({
+      tipo: receita.tipo,
+      receitaId: receita.id,
+      receitaNome: receita.nome,
+      quantidadePorProduto: Number(row.quantidade_por_produto),
+      ingredientes: receita.ingredientes,
+    });
+  }
+  return vinculos;
+}
+```
+
+Se o client do Supabase reclamar do `receitas!inner` / filtro `eq('receitas.ativo', true)`, cair para o padrão já usado em `getProdutosComReceitas` (select aninhado sem `!inner`) e filtrar `receita.ativo` no `mapVinculos`.
+
+- [ ] **Step 2: Typecheck the new action**
+
+Run: `npx tsc --noEmit --pretty false 2>&1 | Select-String "produto-custo-simulador"`
+
+Expected: nenhuma linha (action tipa). Se `tsc` do projeto inteiro já tiver erros alheios, ignore-os.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/actions/produto-custo-simulador-actions.ts
+git commit -m "feat(produtos): action de leitura do simulador de custos"
+```
+
+---
+
+### Task 4: Menu ⋮ + URL `config=simulador`
+
+**Files:**
+- Modify: `src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx`
+- Modify: `src/app/config/produtos/ProdutosConfigClient.tsx`
+- Create: `src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx` (shell mínimo: header + Fechar; fetch no Task 5 se preferir deixar o fetch já aqui — **deixar o fetch neste task** para o deep-link já abrir dados)
+
+**Interfaces:**
+- `ProdutoConfigMenuAction` passa a ser `'assadeiras' | 'receitas' | 'simulador'`
+- `syncUrl(produtoId, 'simulador')`
+- Deep-link: `?produto={id}&config=simulador`
+
+Não crescer `ProdutosConfigClient.tsx` acima de 500 linhas. Hoje tem ~461. Só: 1 state, 2 funções, 1 branch no `useEffect`, 1 branch no `handleMenuSelect`, 1 JSX do modal (~25–35 linhas).
+
+- [ ] **Step 1: Extend the overflow menu**
+
+In `src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx`:
+
+Change:
+
+```typescript
+export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas';
+```
+
+To:
+
+```typescript
+export type ProdutoConfigMenuAction = 'assadeiras' | 'receitas' | 'simulador';
+```
+
+After the Receitas `OverflowMenuItem`, add:
+
+```tsx
+      <OverflowMenuItem
+        icon="calculate"
+        label="Simulador de custos"
+        onClick={() => onSelect('simulador')}
+      />
+```
+
+- [ ] **Step 2: Wire client URL + stub modal**
+
+In `ProdutosConfigClient.tsx`:
+
+1. Import:
+
+```typescript
+import ProdutoCustoSimuladorModal from '@/components/ProdutosConfig/ProdutoCustoSimuladorModal';
+```
+
+2. State next to the other modal flags:
+
+```typescript
+  const [simuladorModalOpen, setSimuladorModalOpen] = useState(false);
+```
+
+3. In the `useEffect` of `searchParams`, when opening assadeiras/receitas, also `setSimuladorModalOpen(false)`. Add:
+
+```typescript
+    if (config === 'simulador') {
+      setActiveProdutoId(produtoId);
+      setAssadeirasModalOpen(false);
+      setReceitasModalOpen(false);
+      setLinkModalOpen(false);
+      setSimuladorModalOpen(true);
+    }
+```
+
+4. Functions:
+
+```typescript
+  const openSimuladorModal = (produtoId: string) => {
+    setAssadeirasModalOpen(false);
+    setReceitasModalOpen(false);
+    setLinkModalOpen(false);
+    setActiveProdutoId(produtoId);
+    setSimuladorModalOpen(true);
+    syncUrl(produtoId, 'simulador');
+  };
+
+  const closeSimuladorModal = () => {
+    setSimuladorModalOpen(false);
+    setActiveProdutoId(null);
+    syncUrl(null, null);
+  };
+```
+
+5. Replace `handleMenuSelect` with:
+
+```typescript
+  const handleMenuSelect = (produtoId: string, action: ProdutoConfigMenuAction) => {
+    if (action === 'assadeiras') {
+      openAssadeirasModal(produtoId);
+      return;
+    }
+    if (action === 'receitas') {
+      openReceitasModal(produtoId);
+      return;
+    }
+    openSimuladorModal(produtoId);
+  };
+```
+
+Also close simulador when opening the other two modals (`setSimuladorModalOpen(false)` in `openAssadeirasModal` / `openReceitasModal`).
+
+6. Inside `{activeProduto && ( ... )}` add:
+
+```tsx
+          <ProdutoCustoSimuladorModal
+            isOpen={simuladorModalOpen}
+            produtoId={activeProduto.id}
+            produtoNome={activeProduto.nome}
+            onClose={closeSimuladorModal}
+          />
+```
+
+- [ ] **Step 3: Create modal shell that fetches**
+
+Create `src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx`:
+
+```tsx
+'use client';
+
+import { useEffect, useId, useState } from 'react';
+import { getProdutoCustoSimulacao } from '@/app/actions/produto-custo-simulador-actions';
+import type { ProdutoCustoSimulacaoPayload } from '@/domain/produtos/produto-custo-unitario-types';
+
+type Props = {
+  isOpen: boolean;
+  produtoId: string;
+  produtoNome: string;
+  onClose: () => void;
+};
+
+export default function ProdutoCustoSimuladorModal({
+  isOpen,
+  produtoId,
+  produtoNome,
+  onClose,
+}: Props) {
+  const titleId = useId();
+  const [payload, setPayload] = useState<ProdutoCustoSimulacaoPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPayload(null);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    void getProdutoCustoSimulacao(produtoId).then((result) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (!result.success) {
+        setError(result.error);
+        setPayload(null);
+        return;
+      }
+      setPayload(result.data);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, produtoId]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative bg-white w-full md:max-w-4xl md:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col min-w-0"
+      >
+        <div className="bg-gray-50/60 border-b border-gray-100 px-4 py-4 sm:px-5 flex items-start justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Simulador de custos
+            </p>
+            <h2 id={titleId} className="text-lg font-bold text-gray-900 truncate">
+              {payload?.produto.nome ?? produtoNome}
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Estimativa de matéria-prima e embalagens. Nada é salvo ao fechar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 shrink-0 transition-colors"
+          >
+            <span className="material-icons text-xl" aria-hidden="true">
+              close
+            </span>
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 min-w-0 px-4 py-3 sm:px-5 sm:py-4">
+          {loading ? (
+            <p className="text-sm text-stone-500">Carregando…</p>
+          ) : null}
+          {error ? (
+            <p className="text-sm text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {!loading && !error && payload ? (
+            <p className="text-sm text-stone-600">
+              {payload.vinculos.length} vínculo(s) carregado(s).
+            </p>
+          ) : null}
+        </div>
+
+        <div className="px-4 py-3 sm:px-5 border-t border-gray-100 bg-gray-50/60 flex justify-end shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 px-4 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 4: Manual check**
+
+Run: `npm run dev`
+
+Abrir `/config/produtos` → ⋮ de um produto → **Simulador de custos**. URL vira `?produto=…&config=simulador`. Modal abre, carrega, Fechar limpa a URL. Recarregar a URL reabre o modal.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/ProdutosConfig/ProdutoConfigOverflowMenu.tsx src/app/config/produtos/ProdutosConfigClient.tsx src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx
+git commit -m "feat(produtos): abre simulador de custos no menu do produto"
+```
+
+---
+
+### Task 5: UI — tipos, resultado e overrides de qtd/receita
+
+**Files:**
+- Create: `src/components/ProdutosConfig/produto-custo-format.ts`
+- Create: `src/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow.tsx`
+- Create: `src/components/ProdutosConfig/ProdutoCustoSimuladorResultado.tsx`
+- Modify: `src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx`
+
+**Interfaces:**
+- Consumes: `produtoCustoUnitarioCalculo.comparar`, `produtoCustoSimuladorCenario.selecaoInicial` / `montarDepois`, `PRODUTO_RECEITA_TIPO_OPTIONS`
+- `formatCustoUnidade(value: number): string` → `R$ 0,54`
+- `formatDeltaPercentual(value: number | null): string` → `+12,5%` / `—`
+
+- [ ] **Step 1: Format helpers**
+
+Create `src/components/ProdutosConfig/produto-custo-format.ts`:
+
+```typescript
+export function formatCustoUnidade(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+export function formatDeltaPercentual(value: number | null): string {
+  if (value == null) return '—';
+  const formatted = Math.abs(value).toLocaleString('pt-BR', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  });
+  if (value > 0) return `+${formatted}%`;
+  if (value < 0) return `−${formatted}%`;
+  return '0%';
+}
+
+export function formatDeltaReais(value: number): string {
+  const abs = formatCustoUnidade(Math.abs(value));
+  if (value > 0) return `+${abs}`;
+  if (value < 0) return `−${abs}`;
+  return abs;
+}
+```
+
+- [ ] **Step 2: Tipo row**
+
+Create `src/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow.tsx`:
+
+```tsx
+'use client';
+
+import type { TipoReceita } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import type { ProdutoCustoReceitaCatalogoItem } from '@/domain/produtos/produto-custo-unitario-types';
+
+type TipoOption = {
+  value: TipoReceita;
+  label: string;
+  helper: string;
+  icon: string;
+};
+
+type Props = {
+  option: TipoOption;
+  vinculoAtivo: boolean;
+  receitasDisponiveis: ProdutoCustoReceitaCatalogoItem[];
+  receitaId: string;
+  quantidade: number | undefined;
+  onReceitaChange: (value: string) => void;
+  onQuantidadeChange: (value: number | undefined) => void;
+};
+
+const fieldClassName =
+  'w-full min-h-11 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10';
+
+export default function ProdutoCustoSimuladorTipoRow({
+  option,
+  vinculoAtivo,
+  receitasDisponiveis,
+  receitaId,
+  quantidade,
+  onReceitaChange,
+  onQuantidadeChange,
+}: Props) {
+  const receitaFieldId = `simulador-receita-${option.value}`;
+  const quantidadeFieldId = `simulador-qtd-${option.value}`;
+
+  return (
+    <div className="px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className="flex flex-col gap-2 lg:grid lg:grid-cols-[7.5rem_minmax(0,1fr)_6rem] lg:items-center lg:gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50 border border-gray-100 text-gray-600"
+            aria-hidden="true"
+          >
+            <span className="material-icons text-base">{option.icon}</span>
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900">{option.label}</p>
+            {vinculoAtivo ? (
+              <p className="text-[11px] text-emerald-600">Vinculado</p>
+            ) : (
+              <p className="text-[11px] text-stone-400">Sem vínculo</p>
+            )}
+          </div>
+        </div>
+
+        <label className="sr-only" htmlFor={receitaFieldId}>
+          Receita de {option.label}
+        </label>
+        <select
+          id={receitaFieldId}
+          className={fieldClassName}
+          value={receitaId}
+          onChange={(event) => onReceitaChange(event.target.value)}
+        >
+          <option value="">Selecione…</option>
+          {receitasDisponiveis.map((receita) => (
+            <option key={receita.id} value={receita.id}>
+              {receita.nome}
+            </option>
+          ))}
+        </select>
+
+        <label className="sr-only" htmlFor={quantidadeFieldId}>
+          Quantidade de {option.label}
+        </label>
+        <input
+          id={quantidadeFieldId}
+          className={`${fieldClassName} font-mono tabular-nums`}
+          inputMode="decimal"
+          placeholder="Qtd"
+          value={quantidade ?? ''}
+          onChange={(event) => {
+            const raw = event.target.value.trim().replace(',', '.');
+            if (!raw) {
+              onQuantidadeChange(undefined);
+              return;
+            }
+            const parsed = Number(raw);
+            onQuantidadeChange(Number.isFinite(parsed) ? parsed : undefined);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Result panel**
+
+Create `src/components/ProdutosConfig/ProdutoCustoSimuladorResultado.tsx`:
+
+```tsx
+'use client';
+
+import { PRODUTO_RECEITA_TIPO_LABELS } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import {
+  formatCustoUnidade,
+  formatDeltaPercentual,
+  formatDeltaReais,
+} from '@/components/ProdutosConfig/produto-custo-format';
+import type {
+  ProdutoCustoComparacao,
+  ProdutoCustoTipoReceita,
+  ProdutoCustoVinculoResultado,
+} from '@/domain/produtos/produto-custo-unitario-types';
+
+type Props = {
+  comparacao: ProdutoCustoComparacao;
+};
+
+const AVISO_COPY: Record<string, string> = {
+  quantidade_invalida: 'Quantidade deve ser maior que zero.',
+  sem_ingredientes: 'Receita sem ingredientes.',
+  insumo_sem_custo: 'Há insumo sem custo cadastrado (conta como R$ 0).',
+};
+
+export default function ProdutoCustoSimuladorResultado({ comparacao }: Props) {
+  const tipos = uniqueTipos(comparacao);
+  const deltaClass =
+    comparacao.deltaReais < 0
+      ? 'text-emerald-700'
+      : comparacao.deltaReais > 0
+        ? 'text-rose-700'
+        : 'text-stone-600';
+
+  return (
+    <section
+      aria-label="Comparação de custo"
+      className="rounded-2xl border border-stone-200 bg-stone-50 p-4 space-y-3"
+    >
+      <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_7rem] gap-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+        <span>Tipo</span>
+        <span className="text-right">Antes</span>
+        <span className="text-right">Depois</span>
+      </div>
+
+      {tipos.map((tipo) => {
+        const antes = byTipo(comparacao.antes.porTipo, tipo);
+        const depois = byTipo(comparacao.depois.porTipo, tipo);
+        return (
+          <div
+            key={tipo}
+            className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem] gap-1 sm:gap-2 items-baseline"
+          >
+            <p className="col-span-2 sm:col-span-1 text-sm font-medium text-stone-800">
+              {PRODUTO_RECEITA_TIPO_LABELS[tipo]}
+            </p>
+            <p className="font-mono tabular-nums text-sm text-stone-600 text-left sm:text-right">
+              {antes ? formatCustoUnidade(antes.custoPorUnidade) : '—'}
+            </p>
+            <p className="font-mono tabular-nums text-sm text-stone-900 text-right">
+              {depois ? formatCustoUnidade(depois.custoPorUnidade) : '—'}
+            </p>
+            <Avisos resultado={depois} />
+          </div>
+        );
+      })}
+
+      <div className="border-t border-stone-200 pt-3 grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem] gap-2 items-baseline">
+        <p className="col-span-2 sm:col-span-1 text-sm font-bold text-stone-900">Total / un</p>
+        <p className="font-mono tabular-nums text-sm font-semibold text-stone-600 text-left sm:text-right">
+          {formatCustoUnidade(comparacao.antes.custoUnitario)}
+        </p>
+        <p className="font-mono tabular-nums text-base font-bold text-stone-900 text-right">
+          {formatCustoUnidade(comparacao.depois.custoUnitario)}
+        </p>
+      </div>
+
+      <p className={`font-mono tabular-nums text-sm ${deltaClass}`}>
+        Diferença: {formatDeltaReais(comparacao.deltaReais)} (
+        {formatDeltaPercentual(comparacao.deltaPercentual)})
+      </p>
+    </section>
+  );
+}
+
+function byTipo(
+  itens: ProdutoCustoVinculoResultado[],
+  tipo: ProdutoCustoTipoReceita,
+): ProdutoCustoVinculoResultado | undefined {
+  return itens.find((item) => item.tipo === tipo);
+}
+
+function uniqueTipos(comparacao: ProdutoCustoComparacao): ProdutoCustoTipoReceita[] {
+  const seen = new Set<ProdutoCustoTipoReceita>();
+  const ordered: ProdutoCustoTipoReceita[] = [];
+  for (const item of [...comparacao.antes.porTipo, ...comparacao.depois.porTipo]) {
+    if (seen.has(item.tipo)) continue;
+    seen.add(item.tipo);
+    ordered.push(item.tipo);
+  }
+  return ordered;
+}
+
+function Avisos({ resultado }: { resultado?: ProdutoCustoVinculoResultado }) {
+  if (!resultado?.avisos.length) return null;
+  return (
+    <p className="col-span-2 sm:col-span-3 text-xs text-amber-800">
+      {resultado.avisos.map((aviso) => AVISO_COPY[aviso]).join(' ')}
+    </p>
+  );
+}
+```
+
+- [ ] **Step 4: Wire seleção + resultado no modal**
+
+No `ProdutoCustoSimuladorModal.tsx`:
+
+- Importar `useMemo` e os módulos de domínio/UI desta task.
+- Estado `selecao` (`ProdutoCustoCenarioInput['selecao']`) e `custoOverrides` (`Record<string, number>` — usado vazio aqui; Task 6 preenche).
+- Quando `payload` chega: `setSelecao(produtoCustoSimuladorCenario.selecaoInicial(payload.vinculos))` e `setCustoOverrides({})`.
+- `vinculosDepois = produtoCustoSimuladorCenario.montarDepois({ vinculosAntes: payload.vinculos, catalogo: payload.receitasCatalogo, selecao })`
+- `comparacao = produtoCustoUnitarioCalculo.comparar(payload.vinculos, vinculosDepois, custoOverrides)`
+- Renderizar, no body (no lugar do parágrafo de contagem):
+
+```tsx
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
+              {PRODUTO_RECEITA_TIPO_OPTIONS.map((option) => {
+                const escolha = selecao[option.value];
+                const vinculoAtual = payload.vinculos.find((item) => item.tipo === option.value);
+                return (
+                  <ProdutoCustoSimuladorTipoRow
+                    key={option.value}
+                    option={option}
+                    vinculoAtivo={Boolean(vinculoAtual)}
+                    receitasDisponiveis={payload.receitasCatalogo.filter(
+                      (item) => item.tipo === option.value,
+                    )}
+                    receitaId={escolha?.receitaId ?? ''}
+                    quantidade={escolha?.quantidade}
+                    onReceitaChange={(receitaId) =>
+                      setSelecao((prev) => ({
+                        ...prev,
+                        [option.value]: {
+                          receitaId,
+                          quantidade: prev[option.value]?.quantidade,
+                        },
+                      }))
+                    }
+                    onQuantidadeChange={(quantidade) =>
+                      setSelecao((prev) => ({
+                        ...prev,
+                        [option.value]: {
+                          receitaId: prev[option.value]?.receitaId ?? '',
+                          quantidade,
+                        },
+                      }))
+                    }
+                  />
+                );
+              })}
+            </div>
+            <ProdutoCustoSimuladorResultado comparacao={comparacao} />
+          </div>
+```
+
+Manter o footer só com **Fechar**.
+
+Se o modal passar de ~350 linhas, extrair o bloco de tipos para `ProdutoCustoSimuladorTipoList.tsx` (props: `payload`, `selecao`, `onSelecaoChange`).
+
+- [ ] **Step 5: Manual check**
+
+No produto HB Padrão: abrir simulador, conferir Total Antes. Mudar massa 953→715: Depois sobe (mesmo custo de receita ÷ menos pães). Trocar caixa/embalagem: linha do tipo e total atualizam. Fechar e reabrir: volta ao Antes.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/components/ProdutosConfig/produto-custo-format.ts src/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow.tsx src/components/ProdutosConfig/ProdutoCustoSimuladorResultado.tsx src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx src/components/ProdutosConfig/ProdutoCustoSimuladorTipoList.tsx
+git commit -m "feat(produtos): compara custo Antes/Depois no simulador"
+```
+
+(`ProdutoCustoSimuladorTipoList.tsx` só entra no `git add` se tiver sido extraído.)
+
+---
+
+### Task 6: UI — insumos usados e override de custo
+
+**Files:**
+- Create: `src/components/ProdutosConfig/ProdutoCustoSimuladorInsumoList.tsx`
+- Modify: `src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx`
+
+**Interfaces:**
+- Consumes: `produtoCustoSimuladorCenario.coletarInsumos(payload.vinculos, vinculosDepois)`
+- Cada linha: nome, unidade, custo atual (somente leitura), input “Custo simulado”
+- Campo vazio remove a chave de `custoOverrides` (volta ao cadastrado)
+- `custo_unitario` null no cadastro: mostrar “Sem custo” no atual; preencher o simulado tira a flag no Depois
+
+- [ ] **Step 1: Insumo list component**
+
+Create `src/components/ProdutosConfig/ProdutoCustoSimuladorInsumoList.tsx`:
+
+```tsx
+'use client';
+
+import { formatCustoUnidade } from '@/components/ProdutosConfig/produto-custo-format';
+import type { ProdutoCustoIngrediente } from '@/domain/produtos/produto-custo-unitario-types';
+
+type Props = {
+  insumos: ProdutoCustoIngrediente[];
+  custoOverrides: Record<string, number>;
+  onCustoChange: (insumoId: string, valor: number | undefined) => void;
+};
+
+const fieldClassName =
+  'w-full min-h-11 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 font-mono tabular-nums focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10';
+
+export default function ProdutoCustoSimuladorInsumoList({
+  insumos,
+  custoOverrides,
+  onCustoChange,
+}: Props) {
+  if (insumos.length === 0) {
+    return (
+      <p className="text-sm text-stone-500">Nenhum insumo nas receitas deste cenário.</p>
+    );
+  }
+
+  return (
+    <section aria-label="Insumos usados" className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+        Insumos usados
+      </h3>
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
+        {insumos.map((insumo) => {
+          const override = custoOverrides[insumo.insumoId];
+          const atualLabel =
+            insumo.custoUnitario == null
+              ? 'Sem custo'
+              : formatCustoUnidade(insumo.custoUnitario);
+          return (
+            <div
+              key={insumo.insumoId}
+              className="px-3 py-2.5 sm:px-4 sm:py-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7rem_8rem] gap-2 sm:items-center"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-stone-900 truncate">{insumo.insumoNome}</p>
+                <p className="text-[11px] text-stone-500">{insumo.unidade ?? 'un'}</p>
+              </div>
+              <p className="font-mono tabular-nums text-sm text-stone-600 sm:text-right">
+                {atualLabel}
+              </p>
+              <div>
+                <label className="sr-only" htmlFor={`custo-simulado-${insumo.insumoId}`}>
+                  Custo simulado de {insumo.insumoNome}
+                </label>
+                <input
+                  id={`custo-simulado-${insumo.insumoId}`}
+                  className={fieldClassName}
+                  inputMode="decimal"
+                  placeholder="Simulado"
+                  value={override ?? ''}
+                  onChange={(event) => {
+                    const raw = event.target.value.trim().replace(',', '.');
+                    if (!raw) {
+                      onCustoChange(insumo.insumoId, undefined);
+                      return;
+                    }
+                    const parsed = Number(raw);
+                    onCustoChange(
+                      insumo.insumoId,
+                      Number.isFinite(parsed) ? parsed : undefined,
+                    );
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+```
+
+- [ ] **Step 2: Wire overrides in the modal**
+
+No modal, entre a lista de tipos e o resultado:
+
+```tsx
+            <ProdutoCustoSimuladorInsumoList
+              insumos={produtoCustoSimuladorCenario.coletarInsumos(
+                payload.vinculos,
+                vinculosDepois,
+              )}
+              custoOverrides={custoOverrides}
+              onCustoChange={(insumoId, valor) => {
+                setCustoOverrides((prev) => {
+                  const next = { ...prev };
+                  if (valor == null) delete next[insumoId];
+                  else next[insumoId] = valor;
+                  return next;
+                });
+              }}
+            />
+```
+
+`comparacao` já deve passar `custoOverrides` para `comparar(...)` (feito na Task 5).
+
+- [ ] **Step 3: Manual check**
+
+1. Abrir simulador do HB Padrão: lista de insumos com custo atual.
+2. Subir o custo da farinha: Depois e Δ sobem; Antes permanece.
+3. Trocar embalagem para Pacote C/ 6: insumo novo aparece.
+4. Fechar: nada muda em `/config/insumos` nem nos vínculos de receitas.
+5. Insumo sem custo: aviso no resultado; preencher simulado some o aviso no Depois.
+
+- [ ] **Step 4: Run domain tests again**
+
+Run: `npm test -- src/domain/produtos/produto-custo-unitario-calculo.test.ts src/domain/produtos/produto-custo-simulador-cenario.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/ProdutosConfig/ProdutoCustoSimuladorInsumoList.tsx src/components/ProdutosConfig/ProdutoCustoSimuladorModal.tsx
+git commit -m "feat(produtos): simula impacto de custo de insumo no produto"
+```
+
+---
+
+## Verificação final
+
+- Spec: menu ⋮, modal, Antes/Depois por tipo + total + Δ, override de receita/qtd/custo, flags CMV, admin-only, sem persistir, deep-link.
+- Sem placeholders no plano.
+- Tipos estáveis: `ProdutoCustoVinculo`, `calcularVinculo` / `calcularProduto` / `comparar`, `montarDepois` / `coletarInsumos` / `selecaoInicial`, `getProdutoCustoSimulacao`.
