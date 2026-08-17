@@ -5,6 +5,7 @@ import {
   formatInsumoQuantidadeArredondada,
 } from '@/features/insumo-estoque/utils/formatters';
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
+import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
 import InsumoCompraSugestaoRegraTrigger from './InsumoCompraSugestaoRegraTrigger';
 
@@ -77,11 +78,14 @@ export default function InsumoCompraSugestaoMobileList({
                   />
                 </dd>
               </div>
-              <Metrica
-                label="Consumo/dia"
-                value={formatInsumoQuantidadeArredondada(item.consumoDiario, item.unidade)}
-                title="Média por dia útil (semana = 5,5 dias). Domingo não conta; sábado conta meio."
-              />
+              <div>
+                <dt>
+                  <InsumoCompraConsumoDiaHint />
+                </dt>
+                <dd className="mt-0.5 font-mono text-sm tabular-nums text-stone-700">
+                  {formatInsumoQuantidadeArredondada(item.consumoDiario, item.unidade)}
+                </dd>
+              </div>
               <Metrica label="Cobertura" value={formatCoberturaDias(item.coberturaAtualDias)} />
               <Metrica label="Lead time" value={`${item.leadTimeDias} d`} />
             </dl>
@@ -143,19 +147,14 @@ function Metrica({
   label,
   value,
   strong = false,
-  title,
 }: {
   label: string;
   value: string;
   strong?: boolean;
-  title?: string;
 }) {
   return (
     <div>
-      <dt
-        title={title}
-        className="text-[11px] font-semibold uppercase tracking-wide text-stone-500"
-      >
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
         {label}
       </dt>
       <dd

@@ -9,6 +9,7 @@ import {
   formatInsumoQuantidadeArredondada,
 } from '@/features/insumo-estoque/utils/formatters';
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
+import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
 import InsumoCompraSugestaoRegraTrigger from './InsumoCompraSugestaoRegraTrigger';
 
@@ -33,11 +34,9 @@ export default function InsumoCompraSugestaoTable({
             <Cabecalho label="Insumo" />
             <Cabecalho label="Status" />
             <Cabecalho label="Estoque" numeric />
-            <Cabecalho
-              label="Consumo/dia"
-              numeric
-              title="Média por dia útil (semana = 5,5 dias). Domingo não conta; sábado conta meio."
-            />
+            <th scope="col" className={`${configTableHeadCellClass} text-right`}>
+              <InsumoCompraConsumoDiaHint align="end" />
+            </th>
             <Cabecalho label="Cobertura" numeric />
             <Cabecalho label="Lead time" numeric />
             <Cabecalho label="Sugestão" numeric />
@@ -140,25 +139,13 @@ function StatusBadge({
   );
 }
 
-function Cabecalho({
-  label,
-  numeric = false,
-  title,
-}: {
-  label: string;
-  numeric?: boolean;
-  title?: string;
-}) {
+function Cabecalho({ label, numeric = false }: { label: string; numeric?: boolean }) {
   return (
     <th
       scope="col"
-      title={title}
       className={`${configTableHeadCellClass} ${numeric ? 'text-right' : 'text-left'}`}
     >
-      <span
-        title={title}
-        className="text-[11px] font-semibold uppercase tracking-wide text-stone-500"
-      >
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
         {label}
       </span>
     </th>
