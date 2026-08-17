@@ -190,8 +190,10 @@ describe('InsumoCompraSugestaoService', () => {
     });
     expect(pageData.itens[0]).toEqual(
       expect.objectContaining({
-        consumoDiario: 10,
-        coberturaAtualDias: 1,
+        consumoDiario: 70 / 5.5,
+        // cobertura: estoque 10, r≈12.727, ref 2026-08-12 = quarta (3)
+        // qua consome 10 → 10/12.727 ≈ 0.7857 d
+        coberturaAtualDias: expect.closeTo(10 / (70 / 5.5), 5),
         distribuidorPreferencial: 'Fornecedor A',
         distribuidoresAlternativos: ['Fornecedor B'],
       }),

@@ -77,6 +77,11 @@ export default function InsumoCompraSugestaoMobileList({
                   />
                 </dd>
               </div>
+              <Metrica
+                label="Consumo/dia"
+                value={formatInsumoQuantidadeArredondada(item.consumoDiario, item.unidade)}
+                title="Média por dia útil (semana = 5,5 dias). Domingo não conta; sábado conta meio."
+              />
               <Metrica label="Cobertura" value={formatCoberturaDias(item.coberturaAtualDias)} />
               <Metrica label="Lead time" value={`${item.leadTimeDias} d`} />
             </dl>
@@ -138,14 +143,21 @@ function Metrica({
   label,
   value,
   strong = false,
+  title,
 }: {
   label: string;
   value: string;
   strong?: boolean;
+  title?: string;
 }) {
   return (
     <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{label}</dt>
+      <dt
+        title={title}
+        className="text-[11px] font-semibold uppercase tracking-wide text-stone-500"
+      >
+        {label}
+      </dt>
       <dd
         className={`mt-0.5 font-mono text-sm tabular-nums ${
           strong ? 'font-semibold text-stone-900' : 'text-stone-700'
