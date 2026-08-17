@@ -5,7 +5,7 @@ Status: aprovado em brainstorming
 
 ## Objetivo
 
-Permitir que admin estime o **custo por unidade (pão)** de um produto ao alterar vínculos de receita e/ou `quantidade_por_produto`, comparando **antes vs depois** por tipo e no total — sem gravar nada no banco.
+Permitir que admin estime o **custo por unidade (pão)** de um produto ao alterar vínculos de receita, `quantidade_por_produto` e/ou o **custo unitário dos insumos**, comparando **antes vs depois** por tipo e no total — sem gravar nada no banco.
 
 ## Contexto
 
@@ -22,6 +22,7 @@ Inclui:
 - Ação **Simulador de custos** no menu ⋮ do produto (junto com Assadeiras / Receitas)
 - Modal só-leitura quanto a persistência (estado local; Fechar descarta)
 - Comparação antes/depois: breakdown por tipo + total + Δ R$ e %
+- Seção **Insumos usados**: custo atual visível e editável só no cenário Depois (um campo por insumo; vale para todos os vínculos)
 - Domínio puro de cálculo alinhado ao CMV
 - Action admin para carregar vínculos + ingredientes com custo
 - Deep-link `?produto={id}&config=simulador`
@@ -29,7 +30,7 @@ Inclui:
 
 Fora de escopo:
 
-- Aplicar/salvar alterações da simulação no produto
+- Aplicar/salvar alterações da simulação no produto ou no cadastro de insumos
 - Mão de obra, energia, overhead
 - CMV de nota fiscal / mapeamento Omie (só a fórmula de custo/unidade)
 - Exibir custo/unidade na listagem de produtos
@@ -75,9 +76,12 @@ Exemplo: massa `(10×5 + 2×1) / 100 = 0,52` + brilho `2 / 100 = 0,02` → **R$ 
 
 ### Cenários no modal
 
-- **Antes:** vínculos reais do produto + qtds atuais + custos atuais dos insumos
-- **Depois:** overrides locais (outra receita do mesmo tipo e/ou outra qtd); tipos não editados herdam o Antes
-- Ambos usam a mesma fórmula; só mudam `receita_id` e/ou `quantidade_por_produto` no Depois
+- **Antes:** vínculos reais do produto + qtds atuais + `insumos.custo_unitario` atuais
+- **Depois:** overrides locais de receita, qtd e/ou custo de insumo; o que não foi editado herda o Antes
+- Ambos usam a mesma fórmula
+- Override de custo: mapa `insumo_id → custo_unitario` aplicado só no Depois, em **todos** os vínculos que usam aquele insumo (se farinha aparece em massa e brilho, um único campo)
+
+No Depois, a fórmula usa `coalesce(override[insumo_id], custo_unitario, 0)`. Se o usuário preenche um custo onde o cadastro era `null`, a flag `insumo_sem_custo` some naquele insumo no Depois.
 
 ## UI / fluxo
 
@@ -87,6 +91,7 @@ Exemplo: massa `(10×5 + 2×1) / 100 = 0,52` + brilho `2 / 100 = 0,02` → **R$ 
    - Linhas por tipo (mesmo conjunto do modal de Receitas): select de receita + input de qtd no cenário Depois
    - Estado inicial = vínculos atuais (Antes)
    - Tipos sem vínculo: select “Selecione…” + qtd vazia; se o usuário escolher receita + qtd, entram só no Depois
+   - Seção **Insumos usados**: união dos ingredientes das receitas do Antes **e** do Depois (se trocar a receita, os insumos novos aparecem). Cada linha: nome, unidade, custo atual (somente leitura), input de custo simulado. Um insumo = uma linha, mesmo se entrar em várias receitas.
 4. Painel de resultado (sempre visível / sticky no rodapé do body):
    - Por tipo: custo/un Antes → Depois (Geist Mono, pt-BR)
    - Total Antes / Depois
@@ -103,11 +108,11 @@ Visual: shell dos outros modais de ProdutosConfig (stone/amber, pt-BR, Material 
 | `ProdutoConfigOverflowMenu` | Nova ação `simulador` |
 | `ProdutosConfigClient` | Estado do modal + `syncUrl(..., 'simulador')` |
 | `ProdutoCustoSimuladorModal` | UI do simulador (overrides locais) |
-| Subcomponentes pequenos | Linha de override; painel de resultado (SRP / &lt;500 linhas) |
-| `produto-custo-unitario-calculo.ts` | Domínio puro: custo por vínculo + total + flags |
+| Subcomponentes pequenos | Linha de tipo; lista de insumos; painel de resultado (SRP / &lt;500 linhas) |
+| `produto-custo-unitario-calculo.ts` | Domínio puro: custo por vínculo + total + flags; aceita mapa opcional de override de custo |
 | Action `getProdutoCustoSimulacao` (ou equivalente) | `requireInternoModulo('interno_config', 'administrar')`; retorna produto, vínculos e catálogo de receitas com ingredientes + `custo_unitario` |
 
-Sem mutation de `produto_receitas`. Sem nova tabela.
+Sem mutation de `produto_receitas` nem de `insumos.custo_unitario`. Sem nova tabela.
 
 ## Tratamento de erros / edge cases
 
@@ -115,19 +120,21 @@ Sem mutation de `produto_receitas`. Sem nova tabela.
 |----------|----------------|
 | Produto sem vínculos | Antes = R$ 0; Depois só com o que o usuário montar |
 | `quantidade_por_produto` ≤ 0 | Tipo não entra no total; aviso |
-| `custo_unitario` null | Parcela 0 + flag `insumo_sem_custo` |
+| `custo_unitario` null | Parcela 0 + flag `insumo_sem_custo` (some no Depois se houver override numérico) |
+| Override de custo vazio / inválido | Usa o custo cadastrado (Antes) |
+| Mesmo insumo em várias receitas | Um campo; o override vale para todos os vínculos no Depois |
 | Receita sem ingredientes | Custo 0 + aviso |
 | Receita inativa no catálogo | Não listar no select do Depois (só ativas) |
 | Fechar / Esc / overlay | Descarta overrides |
 
 ## Testes
 
-- Domínio: casos do exemplo 0,52 + 0,02 = 0,54; null → 0 + flag; várias receitas; qtd ≤ 0 ignorada; override de qtd/receita muda só o Depois
+- Domínio: casos do exemplo 0,52 + 0,02 = 0,54; null → 0 + flag; várias receitas; qtd ≤ 0 ignorada; override de qtd/receita/custo de insumo muda só o Depois; override de um insumo compartilhado afeta todos os vínculos
 - UI: smoke opcional — abrir menu, abrir modal, alterar qtd, ver Δ (se houver padrão de teste client no repo)
 
 ## Critérios de sucesso
 
 - Admin abre simulador a partir do produto e vê Antes = custo atual coerente com a fórmula do CMV
-- Alterar qtd (ex. massa 953→715) ou receita/qtd de embalagem/caixa atualiza Depois e o breakdown em tempo real
-- Fechar não altera vínculos no banco
+- Alterar qtd (ex. massa 953→715), receita/qtd de embalagem/caixa **ou custo de um insumo** atualiza Depois e o breakdown em tempo real
+- Fechar não altera vínculos nem `insumos.custo_unitario` no banco
 - Avisos de insumo sem custo visíveis sem bloquear o total
