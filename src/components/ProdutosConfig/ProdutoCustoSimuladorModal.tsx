@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { getProdutoCustoSimulacao } from '@/app/actions/produto-custo-simulador-actions';
 import { PRODUTO_RECEITA_TIPO_OPTIONS } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import ProdutoCustoSimuladorInsumoList from '@/components/ProdutosConfig/ProdutoCustoSimuladorInsumoList';
 import ProdutoCustoSimuladorResultado from '@/components/ProdutosConfig/ProdutoCustoSimuladorResultado';
 import ProdutoCustoSimuladorTipoRow from '@/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow';
 import { produtoCustoSimuladorCenario } from '@/domain/produtos/produto-custo-simulador-cenario';
@@ -172,6 +173,21 @@ export default function ProdutoCustoSimuladorModal({
                   );
                 })}
               </div>
+              <ProdutoCustoSimuladorInsumoList
+                insumos={produtoCustoSimuladorCenario.coletarInsumos(
+                  payload.vinculos,
+                  vinculosDepois,
+                )}
+                custoOverrides={custoOverrides}
+                onCustoChange={(insumoId, valor) => {
+                  setCustoOverrides((prev) => {
+                    const next = { ...prev };
+                    if (valor == null) delete next[insumoId];
+                    else next[insumoId] = valor;
+                    return next;
+                  });
+                }}
+              />
               <ProdutoCustoSimuladorResultado comparacao={comparacao} />
             </div>
           ) : null}
