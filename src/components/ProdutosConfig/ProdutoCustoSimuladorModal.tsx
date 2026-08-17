@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { getProdutoCustoSimulacao } from '@/app/actions/produto-custo-simulador-actions';
-import type { ProdutoCustoSimulacaoPayload } from '@/domain/produtos/produto-custo-unitario-types';
+import { PRODUTO_RECEITA_TIPO_OPTIONS } from '@/components/ProdutosConfig/produto-receita-tipo-options';
+import ProdutoCustoSimuladorResultado from '@/components/ProdutosConfig/ProdutoCustoSimuladorResultado';
+import ProdutoCustoSimuladorTipoRow from '@/components/ProdutosConfig/ProdutoCustoSimuladorTipoRow';
+import { produtoCustoSimuladorCenario } from '@/domain/produtos/produto-custo-simulador-cenario';
+import { produtoCustoUnitarioCalculo } from '@/domain/produtos/produto-custo-unitario-calculo';
+import type {
+  ProdutoCustoCenarioInput,
+  ProdutoCustoSimulacaoPayload,
+} from '@/domain/produtos/produto-custo-unitario-types';
 
 type Props = {
   isOpen: boolean;
@@ -21,6 +29,8 @@ export default function ProdutoCustoSimuladorModal({
   const [payload, setPayload] = useState<ProdutoCustoSimulacaoPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selecao, setSelecao] = useState<ProdutoCustoCenarioInput['selecao']>({});
+  const [custoOverrides, setCustoOverrides] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!isOpen) {
@@ -33,21 +43,48 @@ export default function ProdutoCustoSimuladorModal({
     setLoading(true);
     setError(null);
 
-    void getProdutoCustoSimulacao(produtoId).then((result) => {
-      if (cancelled) return;
-      setLoading(false);
-      if (!result.success) {
-        setError(result.error);
+    void getProdutoCustoSimulacao(produtoId)
+      .then((result) => {
+        if (cancelled) return;
+        setLoading(false);
+        if (!result.success) {
+          setError(result.error);
+          setPayload(null);
+          return;
+        }
+        setPayload(result.data);
+        setSelecao(produtoCustoSimuladorCenario.selecaoInicial(result.data.vinculos));
+        setCustoOverrides({});
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setError('Erro ao carregar dados do simulador.');
         setPayload(null);
-        return;
-      }
-      setPayload(result.data);
-    });
+      });
 
     return () => {
       cancelled = true;
     };
   }, [isOpen, produtoId]);
+
+  const vinculosDepois = useMemo(() => {
+    if (!payload) return [];
+    return produtoCustoSimuladorCenario.montarDepois({
+      vinculosAntes: payload.vinculos,
+      catalogo: payload.receitasCatalogo,
+      selecao,
+    });
+  }, [payload, selecao]);
+
+  const comparacao = useMemo(() => {
+    if (!payload) return null;
+    return produtoCustoUnitarioCalculo.comparar(
+      payload.vinculos,
+      vinculosDepois,
+      custoOverrides,
+    );
+  }, [payload, vinculosDepois, custoOverrides]);
 
   if (!isOpen) return null;
 
@@ -97,10 +134,46 @@ export default function ProdutoCustoSimuladorModal({
               {error}
             </p>
           ) : null}
-          {!loading && !error && payload ? (
-            <p className="text-sm text-stone-600">
-              {payload.vinculos.length} vínculo(s) carregado(s).
-            </p>
+          {!loading && !error && payload && comparacao ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
+                {PRODUTO_RECEITA_TIPO_OPTIONS.map((option) => {
+                  const escolha = selecao[option.value];
+                  const vinculoAtual = payload.vinculos.find((item) => item.tipo === option.value);
+                  return (
+                    <ProdutoCustoSimuladorTipoRow
+                      key={option.value}
+                      option={option}
+                      vinculoAtivo={Boolean(vinculoAtual)}
+                      receitasDisponiveis={payload.receitasCatalogo.filter(
+                        (item) => item.tipo === option.value,
+                      )}
+                      receitaId={escolha?.receitaId ?? ''}
+                      quantidade={escolha?.quantidade}
+                      onReceitaChange={(receitaId) =>
+                        setSelecao((prev) => ({
+                          ...prev,
+                          [option.value]: {
+                            receitaId,
+                            quantidade: prev[option.value]?.quantidade,
+                          },
+                        }))
+                      }
+                      onQuantidadeChange={(quantidade) =>
+                        setSelecao((prev) => ({
+                          ...prev,
+                          [option.value]: {
+                            receitaId: prev[option.value]?.receitaId ?? '',
+                            quantidade,
+                          },
+                        }))
+                      }
+                    />
+                  );
+                })}
+              </div>
+              <ProdutoCustoSimuladorResultado comparacao={comparacao} />
+            </div>
           ) : null}
         </div>
 
