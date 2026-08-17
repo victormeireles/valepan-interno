@@ -11,6 +11,7 @@ export type InsumoCompraSugestaoStatus =
 
 export type InsumoCompraSugestaoInput = {
   estoque: number;
+  /** Consumo por dia útil (média semanal / 5,5). */
   consumoDiario: number;
   leadTimeDias: number;
   quantidadeMinima: number | null;

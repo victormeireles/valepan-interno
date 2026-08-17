@@ -1,3 +1,4 @@
+import { insumoCompraDiaOperacional } from './insumo-compra-dia-operacional';
 import { insumoCompraJanela } from './insumo-compra-janela';
 import type {
   InsumoCompraSugestaoInput,
@@ -50,8 +51,17 @@ export class InsumoCompraSugestaoCalculator {
   }
 
   private createContext(input: InsumoCompraSugestaoInput): CalculoContexto {
-    const cobertura = input.estoque <= 0 ? 0 : input.estoque / input.consumoDiario;
-    const metaEstoque = input.consumoDiario * input.leadTimeDias * 1.5;
+    const cobertura = insumoCompraDiaOperacional.coberturaCalendarioDias(
+      input.estoque,
+      input.consumoDiario,
+      input.dayOfWeek,
+    );
+    const demandaLead = insumoCompraDiaOperacional.demandaHorizonte(
+      input.consumoDiario,
+      input.dayOfWeek,
+      input.leadTimeDias,
+    );
+    const metaEstoque = demandaLead * 1.5;
     const quantidadeBruta = Math.max(0, metaEstoque - input.estoque);
     const diasAteJanela = insumoCompraJanela.diasAteProximoPermitido(
       input.janelaTipo,
@@ -72,7 +82,12 @@ export class InsumoCompraSugestaoCalculator {
     contexto: CalculoContexto,
   ): InsumoCompraSugestaoResult {
     const quantidadeMinima = input.quantidadeMinima as number;
-    const diasAteLoteMinimo = (quantidadeMinima - contexto.quantidadeBruta) / input.consumoDiario;
+    const gapLote = quantidadeMinima - contexto.quantidadeBruta;
+    const diasAteLoteMinimo = insumoCompraDiaOperacional.diasCalendarioParaDemanda(
+      gapLote,
+      input.consumoDiario,
+      input.dayOfWeek,
+    );
     const esperaJanela = contexto.naJanela ? 0 : contexto.diasAteJanela;
     const coberturaNecessaria = esperaJanela + diasAteLoteMinimo + input.leadTimeDias;
 
