@@ -217,6 +217,11 @@ export function brazilSevenAmUtcMs(isoDate: string): number {
   return new Date(`${isoDate}T07:00:00-03:00`).getTime();
 }
 
+/** Fim do dia civil BR (23:59:59.999) como epoch ms UTC. */
+export function brazilDayEndUtcMs(isoDate: string): number {
+  return Date.parse(`${isoDate}T23:59:59.999-03:00`);
+}
+
 /** Rótulo tipo `8h40` para instante no fuso BR. */
 export function formatBrazilHourMinuteLabel(d: Date): string {
   const parts = new Intl.DateTimeFormat('en-GB', {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  brazilDayEndUtcMs,
   extractCalendarDate,
   formatISODateBr,
   normalizeToISODate,
@@ -38,5 +39,12 @@ describe('formatISODateBr', () => {
 describe('normalizeToISODate', () => {
   it('não desloca Date criado de ISO date-only', () => {
     expect(normalizeToISODate(new Date('2026-06-11'))).toBe('2026-06-11');
+  });
+});
+
+describe('brazilDayEndUtcMs', () => {
+  it('brazilDayEndUtcMs retorna 23:59:59.999 no fuso BR', () => {
+    const ms = brazilDayEndUtcMs('2026-08-12');
+    expect(new Date(ms).toISOString()).toBe('2026-08-13T02:59:59.999Z');
   });
 });
