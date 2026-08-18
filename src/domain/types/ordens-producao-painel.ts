@@ -1,6 +1,14 @@
 import type { AssadeiraDisplayVariant } from '@/domain/ordens-producao/ordem-assadeira-display';
 import type { ModoQuantidadeOrdem } from '@/domain/ordens-producao/ordem-quantidade-label';
 
+export type OrdemProducaoEstimativaView = {
+  fermentacaoFim: string;
+  camaraFim: string;
+  fornoFim: string;
+  resfriamentoFim: string;
+  embalagemFim: string;
+};
+
 export type OrdemProducaoPainelItem = {
   id: string;
   ordemPlanejamento: number;
@@ -16,6 +24,7 @@ export type OrdemProducaoPainelItem = {
   unidades: number;
   caixas: number;
   quantidadeLabel: string;
+  estimativa: OrdemProducaoEstimativaView | null;
 };
 
 export type OrdensProducaoListResponse = {
@@ -26,5 +35,6 @@ export type OrdensProducaoListResponse = {
     totalUnidades: number;
     totalCaixas: number;
   };
+  estimativaDisponivel: boolean;
   ordens: OrdemProducaoPainelItem[];
 };

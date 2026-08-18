@@ -1,21 +1,21 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type {
   InsumoMovimentoRecord,
   InsumoSaldoComDetalhes,
 } from '@/domain/types/insumo-estoque';
+import { InsumoHistoricoAgrupador } from '@/domain/insumos/insumo-historico-agrupador';
+import {
+  getInsumoHistoricoPresetRange,
+  INSUMO_HISTORICO_LIMITE,
+  type InsumoHistoricoPreset,
+} from '@/domain/insumos/insumo-historico-periodo';
 import { getInsumoMovimentos } from '@/app/actions/insumo-estoque-actions';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import {
-  formatCurrency,
-  formatDateTime,
-  formatInsumoQuantidade,
-  origemMovimentoLabel,
-  origemMovimentoTone,
-} from '@/features/insumo-estoque/utils/formatters';
+import InsumoHistoricoLista from './InsumoHistoricoLista';
+import InsumoHistoricoPeriodoFiltro from './InsumoHistoricoPeriodoFiltro';
 
 type Props = {
   isOpen: boolean;
@@ -23,8 +23,13 @@ type Props = {
   onClose: () => void;
 };
 
+const agrupador = new InsumoHistoricoAgrupador();
+
 export default function InsumoHistoricoModal({ isOpen, item, onClose }: Props) {
   const titleId = useId();
+  const [presetAtivo, setPresetAtivo] = useState<InsumoHistoricoPreset | null>('hoje');
+  const [de, setDe] = useState('');
+  const [ate, setAte] = useState('');
   const [movimentos, setMovimentos] = useState<InsumoMovimentoRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -32,18 +37,31 @@ export default function InsumoHistoricoModal({ isOpen, item, onClose }: Props) {
 
   useEffect(() => {
     if (isOpen && item) {
+      const range = getInsumoHistoricoPresetRange('hoje');
       setAnimating(true);
-      setLoading(true);
+      setPresetAtivo('hoje');
+      setDe(range.de);
+      setAte(range.ate);
+      setMovimentos([]);
       setError('');
-      getInsumoMovimentos(item.insumoId)
-        .then(setMovimentos)
-        .catch(() => setError('Erro ao carregar histórico'))
-        .finally(() => setLoading(false));
     } else if (!isOpen) {
       const timer = setTimeout(() => setAnimating(false), 200);
       return () => clearTimeout(timer);
     }
   }, [isOpen, item]);
+
+  useEffect(() => {
+    if (!isOpen || !item || !de || !ate) return;
+    setLoading(true);
+    setError('');
+    getInsumoMovimentos(item.insumoId, { de, ate })
+      .then(setMovimentos)
+      .catch(() => setError('Erro ao carregar histórico'))
+      .finally(() => setLoading(false));
+  }, [isOpen, item, de, ate]);
+
+  const itens = useMemo(() => agrupador.agrupar(movimentos), [movimentos]);
+  const truncado = movimentos.length >= INSUMO_HISTORICO_LIMITE;
 
   if ((!isOpen && !animating) || !item) return null;
 
@@ -67,76 +85,68 @@ export default function InsumoHistoricoModal({ isOpen, item, onClose }: Props) {
           isOpen ? 'translate-y-0 scale-100' : 'translate-y-4 scale-95'
         }`}
       >
-        <div className="flex items-start justify-between border-b border-stone-100 px-6 py-5">
-          <div>
-            <h2 id={titleId} className="text-xl font-bold tracking-tight text-stone-900">
-              Histórico de movimentos
-            </h2>
-            <p className="mt-1 text-sm text-stone-600">{item.nome}</p>
+        <div className="shrink-0 border-b border-stone-100 px-6 py-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 id={titleId} className="text-xl font-bold tracking-tight text-stone-900">
+                Histórico de movimentos
+              </h2>
+              <p className="mt-1 text-sm text-stone-600">{item.nome}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              aria-label="Fechar"
+            >
+              <span className="material-icons">close</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            aria-label="Fechar"
-          >
-            <span className="material-icons">close</span>
-          </button>
+          <div className="mt-4">
+            <InsumoHistoricoPeriodoFiltro
+              presetAtivo={presetAtivo}
+              de={de}
+              ate={ate}
+              onPreset={(preset) => {
+                const range = getInsumoHistoricoPresetRange(preset);
+                setPresetAtivo(preset);
+                setDe(range.de);
+                setAte(range.ate);
+              }}
+              onDe={(value) => {
+                setPresetAtivo(null);
+                setDe(value);
+              }}
+              onAte={(value) => {
+                setPresetAtivo(null);
+                setAte(value);
+              }}
+            />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {truncado ? (
+            <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 ring-1 ring-amber-100">
+              Mostrando os 500 movimentos mais recentes — refine o período se precisar de mais detalhe.
+            </div>
+          ) : null}
           {loading ? (
             <p className="text-sm text-stone-500">Carregando movimentos…</p>
           ) : error ? (
             <p className="text-sm text-rose-600">{error}</p>
-          ) : movimentos.length === 0 ? (
+          ) : itens.length === 0 ? (
             <EmptyState
               icon="history"
-              title="Nenhum movimento"
-              description="Este insumo ainda não possui entradas ou ajustes registrados."
+              title="Nenhum movimento neste período"
+              description="Tente ampliar o intervalo com os atalhos ou as datas acima."
             />
           ) : (
-            <ul className="divide-y divide-stone-100">
-              {movimentos.map((mov) => {
-                const deltaPositivo = mov.deltaQuantidade >= 0;
-                return (
-                  <li key={mov.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={origemMovimentoTone(mov.origem)}>
-                        {origemMovimentoLabel(mov.origem)}
-                      </Badge>
-                      <span className="text-xs text-stone-500">
-                        {formatDateTime(mov.createdAt)}
-                      </span>
-                      {mov.numeroNf ? (
-                        <span className="font-mono text-xs tabular-nums text-stone-500">
-                          NF {mov.numeroNf}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p
-                        className={`font-mono text-sm font-semibold tabular-nums ${
-                          deltaPositivo ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {deltaPositivo ? '+' : ''}
-                        {formatInsumoQuantidade(mov.deltaQuantidade, item.unidadeResumida)}
-                      </p>
-                      <p className="font-mono text-xs tabular-nums text-stone-600">
-                        Saldo: {formatInsumoQuantidade(mov.saldoResultante, item.unidadeResumida)}
-                      </p>
-                    </div>
-                    <p className="font-mono text-xs tabular-nums text-stone-600">
-                      Custo: {formatCurrency(mov.custoUnitario)}
-                    </p>
-                    {mov.observacao ? (
-                      <p className="text-sm text-stone-600">{mov.observacao}</p>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <InsumoHistoricoLista
+              itens={itens}
+              unidadeResumida={item.unidadeResumida}
+              mostrarCabecalhoDia={de !== ate}
+            />
           )}
         </div>
 

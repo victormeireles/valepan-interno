@@ -10,7 +10,7 @@ import {
   buildFornoWorklistData,
   FORNO_ETAPA_CONFIG,
 } from '@/domain/producao-etapa/forno-etapa-adapter';
-import { buildOrdensEtapaToolbarMetrics } from '@/domain/producao-etapa/build-etapa-toolbar-metrics';
+import { toolbarMetricsEtapaDiaCivil } from '@/domain/producao-etapa/etapa-totais-visiveis';
 import {
   splitOrdensPorFinalizacao,
   type PainelLoteItemEtapa,
@@ -235,8 +235,13 @@ export default function ProducaoFornoPage() {
   );
 
   const toolbarMetrics = useMemo(
-    () => buildOrdensEtapaToolbarMetrics(ordens, FORNO_ETAPA_CONFIG.unit.toUpperCase()),
-    [ordens],
+    () =>
+      toolbarMetricsEtapaDiaCivil(
+        ordens,
+        FORNO_ETAPA_CONFIG.unit.toUpperCase(),
+        dashboardItems,
+      ),
+    [ordens, dashboardItems],
   );
 
   const worklist = useMemo(

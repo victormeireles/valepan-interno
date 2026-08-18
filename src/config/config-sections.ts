@@ -7,6 +7,12 @@ export type ConfigSection = {
 
 export const CONFIG_SECTIONS: readonly ConfigSection[] = [
   {
+    href: '/config/operacao',
+    label: 'Operação',
+    icon: 'schedule',
+    description: 'Turnos e tempos médios do processo',
+  },
+  {
     href: '/config/assadeiras',
     label: 'Assadeiras',
     icon: 'bakery_dining',

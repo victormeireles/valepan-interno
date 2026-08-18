@@ -6,10 +6,16 @@ import type {
   FluxoEtapaResumo,
   VpFluxoPayload,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
+import {
+  extractCalendarDate,
+  getBrazilHourMinuteNow,
+  getTodayISOInBrazilTimezone,
+} from '@/lib/utils/date-utils';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtQty } from './fluxo-display-scale';
 import FluxoBarrasHora from './FluxoBarrasHora';
 import FluxoFaixaEtapa from './FluxoFaixaEtapa';
+import FluxoOpRelogioList from './FluxoOpRelogioList';
 import { diaAnteriorLabelFromDia } from './fluxo-processo-format';
 
 type FluxoProducaoPorHoraProps = {
@@ -30,6 +36,9 @@ export default function FluxoProducaoPorHora({
   >;
   const antLabel = diaAnteriorLabelFromDia(fluxo.dia);
   const total = scale.etapaTotal(etapa);
+  const mostrarAgora =
+    extractCalendarDate(fluxo.dia) === getTodayISOInBrazilTimezone();
+  const horaAgora = getBrazilHourMinuteNow().hour;
 
   return (
     <Card padding="lg">
@@ -54,13 +63,19 @@ export default function FluxoProducaoPorHora({
         </div>
         <span className="ml-auto font-mono text-[11px] tabular-nums text-text-muted">
           {fmtQty(total, scale.mode)} {scale.unitLabel} no dia · empilhado por assadeira
-          {etapa === 'emb'
+          {etapa === 'emb' && scale.opAnteriorTotal() > 0
             ? ` · ${fmtQty(scale.opAnteriorTotal(), scale.mode)} de OP de ${antLabel}`
             : ''}
         </span>
       </div>
-      <FluxoBarrasHora fluxo={fluxo} etapa={etapa} />
+      <FluxoBarrasHora
+        fluxo={fluxo}
+        etapa={etapa}
+        mostrarAgora={mostrarAgora}
+        horaAgora={horaAgora}
+      />
       <FluxoFaixaEtapa etapa={byKey[etapa]} />
+      <FluxoOpRelogioList etapa={etapa} controle={fluxo.controle} />
     </Card>
   );
 }

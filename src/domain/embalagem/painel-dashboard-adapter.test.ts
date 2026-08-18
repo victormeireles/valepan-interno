@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  lotesEmbToDashboardSnapshots,
   pedidosToDashboardItems,
   pedidosToDashboardSnapshots,
 } from '@/domain/embalagem/painel-dashboard-adapter';
@@ -51,6 +52,34 @@ describe('pedidosToDashboardSnapshots', () => {
       producaoUpdatedAt: '2026-06-05T15:56:00Z',
     });
     expect(snapshots[1]).not.toHaveProperty('pacoteFotoUrl');
+  });
+});
+
+describe('lotesEmbToDashboardSnapshots', () => {
+  it('converte lotes apontados no dia, independente da data do pedido', () => {
+    const snaps = lotesEmbToDashboardSnapshots([
+      {
+        id: 'l1',
+        createdAt: '2026-08-17T10:00:00Z',
+        modo: 'parcial',
+        dataPedido: '2026-08-16',
+        dataFabricacao: '2026-08-17',
+        tipoEstoqueId: 't1',
+        produtoId: 'p1',
+        congelado: 'Não',
+        quantidade: { caixas: 40, pacotes: 0, unidades: 0, kg: 0 },
+        produzidoEm: '2026-08-17T13:20:00-03:00',
+      },
+    ]);
+    expect(snaps).toEqual([
+      {
+        caixas: 40,
+        pacotes: 0,
+        pedidoCaixas: 0,
+        pedidoPacotes: 0,
+        producaoUpdatedAt: '2026-08-17T13:20:00-03:00',
+      },
+    ]);
   });
 });
 

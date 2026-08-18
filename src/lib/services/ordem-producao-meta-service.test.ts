@@ -18,6 +18,10 @@ vi.mock('@/lib/services/estoque-resolver-service', () => ({
   },
 }));
 
+vi.mock('@/lib/services/estimativa-producao-recalc', () => ({
+  enqueueEstimativaRecalc: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
     upsertMany: (...args: unknown[]) => upsertMany(...args),

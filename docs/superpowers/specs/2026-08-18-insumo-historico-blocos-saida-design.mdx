@@ -1,0 +1,59 @@
+# Design: Histórico de insumos — agrupar saídas por bloco
+
+**Data:** 2026-08-18  
+**Status:** Aprovado  
+**Tela:** modal Histórico de movimentos (`/estoque-insumos`)
+
+## Problema
+
+O ledger grava uma linha por lote de produção. No histórico do insumo isso vira uma lista longa de saídas quase iguais. Entradas NF e ajustes manuais já são eventos pontuais e devem continuar assim.
+
+## Decisão
+
+Agrupar **somente saídas de produção** (`producao_fermentacao`, `producao_forno`, `producao_embalagem`) em **blocos contínuos do mesmo dia civil** (fuso `America/Sao_Paulo`, ordem mais recente no topo). Quebra o bloco:
+
+- qualquer origem que não seja saída de produção;
+- virada de dia civil.
+
+- 1 lote isolado: linha igual à de hoje (sem accordion).
+- 2+ lotes consecutivos no mesmo dia: uma linha resumida, expansível.
+
+Entrada NF, ajuste manual e resolução de pendência **não mudam**.
+
+## Filtro de período
+
+Igual ao histórico de `/painel/dashboard-estoque`, com atalhos Valepan:
+
+- **Hoje** (padrão ao abrir)
+- **Ontem**
+- **3 dias** (hoje e os dois dias anteriores)
+- **De / Até** para intervalo livre
+
+Consulta no banco no intervalo civil BR. Limite 500 movimentos, com aviso se truncar. Empty state: "Nenhum movimento neste período".
+
+Quando De ≠ Até, a lista ganha cabeçalho por dia (`terça 18/08`).
+
+## Exemplo (mais recente no topo)
+
+1. `2 lotes entre 14h35 e 15h13` · −20 kg → expande os 2 lotes  
+2. `13h15 entrada de mercadoria` · +75 kg → linha simples  
+3. `5 lotes entre 8h35 e 12h10` · −50 kg → expande os 5 lotes  
+4. `7h ajuste manual` · +100 kg → linha simples  
+
+## Bloco recolhido
+
+- Rótulo: `{n} lotes entre {horaMaisAntiga} e {horaMaisRecente}` (fuso `America/Sao_Paulo`, formato `8h35`).
+- Se início e fim caem em dias civis diferentes, incluir a data curta (`18/08 22h00`).
+- Delta = soma dos deltas; saldo = `saldoResultante` da saída mais recente do bloco.
+- Badge: origem comum, ou `Produção` se o bloco misturar etapas.
+- Sem custo unitário na linha recolhida.
+
+## Bloco expandido
+
+Cada lote como a linha atual: hora, quantidade, saldo, custo, observação.
+
+## Fora de escopo
+
+- Agrupar por proximidade de horário (não é digitação em bloco do fluxo).
+- Agrupar entradas ou ajustes.
+- Atalho de 7 dias (estoque acabado usa 7; insumos usam 3).

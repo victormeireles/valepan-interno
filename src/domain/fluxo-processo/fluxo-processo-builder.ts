@@ -109,6 +109,9 @@ export class FluxoProcessoBuilder {
           key,
           nome: FLUXO_ETAPA_NOME[key],
           un,
+          volOperacional: events
+            .filter((e) => !e.opAnterior)
+            .reduce((t, e) => t + e.quantidadeOperacional, 0),
           ini: parada?.ini ?? 0,
           fim: parada?.fim ?? 0,
           span: parada?.span ?? 0,
@@ -125,6 +128,9 @@ export class FluxoProcessoBuilder {
     const assadeiras = this.buildAssadeiras(ordemAss, ferm, forno, emb, converter);
     const embDia = emb.filter((e) => !e.opAnterior);
     const opAnteriorUn = emb.filter((e) => e.opAnterior).reduce((t, e) => t + e.unidades, 0);
+    const opAnteriorVol = emb
+      .filter((e) => e.opAnterior)
+      .reduce((t, e) => t + e.quantidadeOperacional, 0);
     const opAnteriorEventos = emb.filter((e) => e.opAnterior).length;
 
     return {
@@ -132,7 +138,7 @@ export class FluxoProcessoBuilder {
       diaLabel: formatWeekdayDayMonthBr(input.dateISO),
       planoUn: Math.round(input.planoUn),
       etapas,
-      padrao: { ...FLUXO_PADRAO },
+      padrao: { ...(input.padrao ?? FLUXO_PADRAO) },
       ordemAss,
       cores,
       matriz,
@@ -164,9 +170,12 @@ export class FluxoProcessoBuilder {
           })),
         ),
       },
-      opAnterior: { un: opAnteriorUn, eventos: opAnteriorEventos },
+      opAnterior: { un: opAnteriorUn, eventos: opAnteriorEventos, volOperacional: opAnteriorVol },
       trocas: { forno: countTrocasAssadeira(forno) },
       unPorCaixaByProduto: converter.knownUnPorCaixaByProduto(),
+      produtividade: null,
+      ritmoPorEtapa: null,
+      controle: null,
       filas: null,
     };
   }
@@ -305,6 +314,8 @@ function resolveQuantidadeOperacional(input: {
 }): number {
   if (input.unidades <= 0) return 0;
   if (input.etapa === 'emb') {
+    const cx = input.caixas ?? 0;
+    if (cx > 0) return cx;
     const fator = input.converter.unPorCaixa(input.produtoNome, input.assadeiraNome);
     return fator > 0 ? input.unidades / fator : 0;
   }

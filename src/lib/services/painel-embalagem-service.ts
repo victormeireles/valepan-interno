@@ -1,9 +1,10 @@
-import { pedidosToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
+import { lotesEmbToDashboardSnapshots } from '@/domain/embalagem/painel-dashboard-adapter';
 import { buildPainelPedido } from '@/domain/embalagem/painel-pedido-builder';
 import {
   buildCategoriaPorProdutoMap,
   filterPedidosEmbalagemPorCategoriaVisivel,
 } from '@/domain/categorias/filter-pedidos-embalagem-por-categoria';
+import { RecorteVisivelEmbalagem } from '@/domain/categorias/recorte-visivel-embalagem';
 import { categoriaVisibilidadeManager } from '@/domain/categorias/categoria-visibilidade-manager';
 import {
   loadAssadeiraCtxByProdutoId,
@@ -29,7 +30,9 @@ import {
   tiposEstoqueService,
   type TipoEstoqueDTO,
 } from '@/lib/services/tipos-estoque-service';
+import { configOperacaoService } from '@/lib/services/config-operacao-service';
 import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+import { brazilCivilDayRangeIso } from '@/lib/services/ritmo-lotes-dia-loader';
 
 export { buildPainelPedido, mapLoteToPainel } from '@/domain/embalagem/painel-pedido-builder';
 
@@ -154,9 +157,10 @@ export class PainelEmbalagemService {
   async getCargaCompleta(date: string): Promise<CargaEmbalagemResponse> {
     const dateSemana = addCalendarDaysISO(date, -7);
 
-    const [ultimaDataComDados, dateAnterior] = await Promise.all([
+    const [ultimaDataComDados, dateAnterior, config] = await Promise.all([
       pedidoEmbalagemRepository.findUltimaDataComPedidos(7),
       pedidoEmbalagemRepository.findDataAnteriorComPedidos(date, 14),
+      configOperacaoService.getConfig(),
     ]);
 
     const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
@@ -178,48 +182,37 @@ export class PainelEmbalagemService {
       ctx.assadeiraByProduto,
     );
 
-    const pedidosSemana = this.buildPedidosPainel(
-      this.filterPedidosPorCategoriaVisivel(
-        pedidosByDate.get(dateSemana) ?? [],
-        ctx.categoriaPorProduto,
-        ctx.categoriasVisiveis,
-      ),
-      ctx.lotesByPedido,
-      ctx.tipoById,
-      ctx.produtoNomeById,
-      ctx.etapasByOrdem,
-      ctx.assadeiraByProduto,
-    );
+    const [lotesDia, lotesSemana, lotesAnterior] = await Promise.all([
+      this.listLotesDoDia(date),
+      this.listLotesDoDia(dateSemana),
+      dateAnterior ? this.listLotesDoDia(dateAnterior) : Promise.resolve([]),
+    ]);
 
-    const pedidosAnterior =
-      dateAnterior != null
-        ? this.buildPedidosPainel(
-            this.filterPedidosPorCategoriaVisivel(
-              pedidosByDate.get(dateAnterior) ?? [],
-              ctx.categoriaPorProduto,
-              ctx.categoriasVisiveis,
-            ),
-            ctx.lotesByPedido,
-            ctx.tipoById,
-            ctx.produtoNomeById,
-            ctx.etapasByOrdem,
-            ctx.assadeiraByProduto,
-          )
-        : [];
+    const recorte = new RecorteVisivelEmbalagem(
+      ctx.categoriaPorProduto,
+      ctx.categoriasVisiveis,
+    );
 
     return {
       date,
       ultimaDataComDados,
       pedidos: pedidosMain,
+      horarioInicioEmbalagem: config.horarioInicioEmbalagem,
+      dashboardDia: lotesEmbToDashboardSnapshots(recorte.lotesPorProduto(lotesDia)),
       comparacaoSemana: {
         date: dateSemana,
-        items: pedidosToDashboardSnapshots(pedidosSemana),
+        items: lotesEmbToDashboardSnapshots(recorte.lotesPorProduto(lotesSemana)),
       },
       comparacaoAnterior: {
         date: dateAnterior,
-        items: pedidosToDashboardSnapshots(pedidosAnterior),
+        items: lotesEmbToDashboardSnapshots(recorte.lotesPorProduto(lotesAnterior)),
       },
     };
+  }
+
+  private listLotesDoDia(dateISO: string) {
+    const { startIso, endIso } = brazilCivilDayRangeIso(dateISO);
+    return embalagemLoteRepository.listByProduzidoEmRange(startIso, endIso);
   }
 }
 

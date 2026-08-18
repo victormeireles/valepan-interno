@@ -7,9 +7,10 @@ Status: aprovado em brainstorming
 
 No dashboard `/realizado/fluxo-processo`, mostrar de relance **quanto pão está parado entre etapas agora**:
 
-- volume **a produzir** (OPs do dia sem nenhum realizado de fermentação)
+- volume **a produzir** (saldo planejado ainda sem fermentação, inclusive de OPs já iniciadas)
 - volume **fermentando**, com quantos já passaram do prazo físico de câmara
 - volume **resfriando**, com quantos já passaram do prazo físico de resfriamento
+- volume **embalado** (já saiu do resfriamento; fecha a conta da OP)
 
 Clicar num tile abre a lista das **OPs** daquela fila, para ver quais pães estão presos.
 
@@ -41,7 +42,7 @@ Fora de escopo:
 - Link para telas de realizado (fermentação / forno / embalagem)
 - Notificação, alerta sonoro ou badge no menu
 - Filtro por assadeira no painel
-- Mostrar o saldo planejado restante de OPs já iniciadas (só entra o que já foi apontado, ou a OP inteira se ainda não começou)
+- Prazo pelo último lote da OP (o relógio é lote a lote; um lançamento novo não zera o atraso do lote antigo)
 - Reforecast, Gantt, ou mudança no motor de estimativa
 
 ## Decisão de abordagem
@@ -65,28 +66,45 @@ O subtítulo do painel no dia passado: **Situação ao fim do dia**.
 
 ### A produzir
 
-Entra a OP inteira (volume planejado em unidades) quando **não existe nenhum lote de fermentação** daquela OP.
+Por OP: `aProduzirUn = max(0, planejadoUn − fermUn)`.
+
+Entra o saldo planejado ainda sem fermentação — OP inteira se não começou, ou o restante se já fermentou parte.
 
 Não tem subcontador de prazo.
 
-OPs já iniciadas (pelo menos um lote de fermentação) **não** colocam o saldo planejado restante nesta fila. Esse saldo não aparece em nenhum dos três tiles.
+Exemplo: OP de 1.000 UN, fermentou 200 → **800 a produzir**.
 
 ### Fermentando
 
-Por OP: `wipUn = max(0, fermUn − fornoUn)`.
+Lotes de fermentação da OP, depois de consumir o volume já assado (forno) em **FIFO** (lote mais antigo primeiro).
 
 - `fermUn` = soma das unidades dos lotes de fermentação da OP
 - `fornoUn` = soma das unidades dos lotes de forno da OP
+- Cada lote restante vira um item, com o próprio `produzidoEm`
 
-OP com `wipUn == 0` não entra na lista.
+Exemplo: fermentou 200 em dois lotes (100 + 100); assou 50 → o forno consome 50 do lote mais antigo; **150 fermentando** (50 do lote antigo + 100 do novo).
+
+Lote com saldo 0 não entra na lista.
 
 ### Resfriando
 
-Por OP: `wipUn = max(0, fornoUn − embAlocadoUn)`.
+Lotes de forno da OP, depois de consumir o volume embalado alocado à OP em **FIFO**.
 
 `embAlocadoUn` vem da alocação **FIFO** dos lotes de embalagem do dia às OPs do dia, na ordem de `ordemPlanejamento` (mesma regra do relógio em `fluxo-op-relogio.ts`). Lote de embalagem sem `ordemProducaoId` é consumido nessa fila; não se tenta casar por produto.
 
-OP com `wipUn == 0` não entra na lista.
+Dentro da OP, essa alocação consome os lotes de forno mais antigos primeiro. Cada lote restante vira um item.
+
+Exemplo: 50 UN já assadas e nada embalado → **50 resfriando** (todos os lotes de forno restantes).
+
+### Embalado
+
+Por OP: volume de embalagem alocado à OP (FIFO entre OPs, igual ao resfriando).
+
+Não tem subcontador de prazo.
+
+Exemplo: OP 928, ferm 800, forno 580, emb 0 → **a produzir 128**, **fermentando 220**, **resfriando 580**, **embalado 0**. A soma das quatro filas fecha o planejado.
+
+Os totais dos tiles são a **soma das OPs**.
 
 ### Prazo físico (critério B)
 
@@ -94,14 +112,14 @@ Tempos de `config_operacao` (já expostos em `fluxo.padrao`):
 
 | Fila | Relógio dispara em | Tempo |
 |------|--------------------|--------|
-| Fermentando | último lote de **fermentação** da OP (`produzidoEm` mais recente) | `camaraMin` (`tempoMedioFermentacaoMin`, padrão 180) |
-| Resfriando | último lote de **forno** da OP | `resfrioMin` (`tempoMedioResfriamentoMin`, padrão 60) |
+| Fermentando | `produzidoEm` **de cada lote restante** de fermentação | `camaraMin` (`tempoMedioFermentacaoMin`, padrão 180) |
+| Resfriando | `produzidoEm` **de cada lote restante** de forno | `resfrioMin` (`tempoMedioResfriamentoMin`, padrão 60) |
 
-A OP está **presa** quando `wipUn > 0` e `asOf > ultimoLoteEm + tempoMedio`.
+O lote está **preso** quando o saldo restante `> 0` e `asOf > produzidoEm + tempoMedio`.
 
-`presoMin` = minutos inteiros de `asOf − (ultimoLoteEm + tempoMedio)`, só quando preso; senão `null`.
+`presoMin` = minutos inteiros de `asOf − (produzidoEm + tempoMedio)`, só quando preso; senão `null`.
 
-O relógio usa o **último lote da OP na etapa de origem**, não o envelhecimento lote a lote. Um lançamento novo na mesma OP zera o atraso daquela fila.
+O relógio é **lote a lote**. Um lançamento novo na mesma OP **não** zera o atraso do lote antigo.
 
 A produzir não calcula prazo.
 
@@ -121,6 +139,7 @@ type FluxoFilasDia = {
   aProduzir: FluxoFilaResumo;
   fermentando: FluxoFilaResumo;
   resfriando: FluxoFilaResumo;
+  embalado: FluxoFilaResumo;
 };
 
 type FluxoFilaResumo = {
@@ -134,6 +153,7 @@ type FluxoFilaItem = {
   ordemPlanejamento: number;
   produtoNome: string;
   assadeiraNome: string;
+  observacao: string;
   volumeUn: number;
   preso: boolean;
   presoMin: number | null;
@@ -168,13 +188,14 @@ Card branco, `rounded-xl`, borda stone-200, sombra suave.
 - Subtítulo hoje: **Volume nas filas entre etapas, agora**
 - Subtítulo outro dia: **Situação ao fim do dia**
 
-Três tiles em grid (`1 col` mobile, `3 cols` desktop), alvo de toque ≥44px.
+Quatro tiles em grid (`2 col` mobile, `4 cols` desktop), alvo de toque ≥44px.
 
 | Tile | Ícone Material | Destaque |
 |------|----------------|----------|
 | A produzir | `schedule` | stone |
 | Fermentando | `bakery_dining` | dourado `#C6A848` |
 | Resfriando | `ac_unit` | stone-700 |
+| Embalado | `inventory_2` | emerald |
 
 Cada tile mostra:
 
@@ -189,7 +210,7 @@ Tile ativo: borda amber + ring suave (mesmo padrão dos cards de etapa). Não de
 
 ### Detalhe ao clicar
 
-Painel expandível **abaixo dos três tiles**, no mesmo card. Sem modal, sem drawer lateral (não existe Sheet no design system).
+Painel expandível **abaixo dos quatro tiles**, no mesmo card. Sem modal, sem drawer lateral (não existe Sheet no design system).
 
 - Clicar num tile abre a lista daquela fila
 - Clicar no tile ativo fecha
@@ -198,17 +219,17 @@ Painel expandível **abaixo dos três tiles**, no mesmo card. Sem modal, sem dra
 
 Cabeçalho da lista: **Fermentando — 340 LT · 80 LT acima do prazo** (números via scale).
 
-Uma linha por OP (`ListRow`):
+Uma linha por **lote restante** (ou uma linha pela OP em a produzir) (`ListRow`):
 
 - Índice: `#` + `ordemPlanejamento`
 - Título: nome do produto
-- Subtítulo: nome da assadeira
+- Subtítulo: observação da OP (ou assadeira) · horário do lote (fermentando / resfriando)
 - Coluna volume (mono)
 - Se preso: badge **preso há {duração}** (amber)
 
 Duração: `{N} min` se menos de 60 minutos; `{H} h {M} min` se 60 minutos ou mais.
 
-Empty da fila: **Nenhuma OP nesta fila.**
+Empty da fila: **Nenhum item nesta fila.**
 
 A lista não navega para outra tela.
 
@@ -229,6 +250,8 @@ src/domain/fluxo-processo/filas/
   fluxo-filas-types.ts
   fluxo-filas-builder.ts
   fluxo-filas-builder.test.ts
+  fluxo-filas-lote-saldo.ts
+  fluxo-filas-fifo-emb.ts
 ```
 
 `FluxoFilasBuilder.build(input)` recebe:
@@ -265,7 +288,7 @@ Arquivos existentes de cards / gráfico / controle **não** mudam de responsabil
 | Situação | Comportamento |
 |----------|----------------|
 | Sem OPs no dia | `filas = null`; empty **Sem OPs para este dia.** |
-| Fila sem itens | Tile com `0`; detalhe **Nenhuma OP nesta fila.** |
+| Fila sem itens | Tile com `0`; detalhe **Nenhum item nesta fila.** |
 | Config sem tempos | Usar `FLUXO_PADRAO` (180 / 60), igual ao restante do fluxo |
 | Emb sem casamento por OP | FIFO; não falhar o payload |
 | Fetch da carga falha | Sem mudança: a tela já trata loading/erro do page client |
@@ -276,13 +299,14 @@ Domínio, obrigatórios:
 
 1. OP sem lote de fermentação → volume planejado em **a produzir**; não aparece nas outras filas
 2. OP com ferm 100 e forno 40 → **fermentando** = 60
-3. Último lote ferm + `camaraMin` anterior a `asOf` e wip > 0 → preso; `presoUn` inclui esse volume
-4. Último lote ferm + `camaraMin` ainda não chegou em `asOf` → não preso
-5. Novo lote ferm depois do estouro → deixa de estar preso (relógio no último lote)
+3. Lote ferm + `camaraMin` anterior a `asOf` e saldo > 0 → preso; `presoUn` inclui esse volume
+4. Lote ferm + `camaraMin` ainda não chegou em `asOf` → não preso
+5. Novo lote ferm depois do estouro **não** zera o atraso do lote antigo
 6. forno 80, emb FIFO 30 na primeira OP → **resfriando** = 50 nessa OP
-7. Último lote forno + `resfrioMin` anterior a `asOf` e wip > 0 → preso em resfriando
-8. OP já iniciada (ferm parcial) não joga saldo planejado em **a produzir**
+7. Lote forno + `resfrioMin` anterior a `asOf` e saldo > 0 → preso em resfriando
+8. OP já iniciada (ferm parcial) joga o saldo planejado restante em **a produzir**
 9. Dia passado: `asOf` = fim do dia civil; prazo calculado contra esse instante
+10. OP 1000, ferm 200 (dois lotes), forno 50, emb 0 → 800 / 150 / 50; forno consome o lote ferm mais antigo
 
 UI: formatação de duração e conversão de unidade via `fluxo-fila-format` (testes unitários do formatador). Sem teste E2E neste ciclo.
 

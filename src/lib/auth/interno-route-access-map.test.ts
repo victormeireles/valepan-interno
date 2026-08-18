@@ -15,6 +15,16 @@ describe('InternoRouteAccessMap', () => {
       modulo: 'interno_config',
       minimo: 'administrar',
     });
+    expect(map.resolve('/config/operacao')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_config',
+      minimo: 'administrar',
+    });
+    expect(map.resolve('/api/config/operacao')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_config',
+      minimo: 'administrar',
+    });
   });
 
   it('protege sugestão de compras com leitura de insumos', () => {

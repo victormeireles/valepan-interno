@@ -230,11 +230,24 @@ export class InsumoEstoqueRepository {
     return [...new Set((data ?? []).map((row) => row.insumo_id as string))];
   }
 
-  async listMovimentos(insumoId: string, limit = 100): Promise<InsumoMovimentoRecord[]> {
-    const { data, error } = await this.db
+  async listMovimentos(
+    insumoId: string,
+    options: { createdAtDe?: string; createdAtAte?: string; limit?: number } = {},
+  ): Promise<InsumoMovimentoRecord[]> {
+    const limit = options.limit ?? 100;
+    let query = this.db
       .from('insumo_movimentos')
       .select('*')
-      .eq('insumo_id', insumoId)
+      .eq('insumo_id', insumoId);
+
+    if (options.createdAtDe) {
+      query = query.gte('created_at', options.createdAtDe);
+    }
+    if (options.createdAtAte) {
+      query = query.lte('created_at', options.createdAtAte);
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .limit(limit);
 

@@ -14,7 +14,6 @@ import { formatBrazilHourMinuteLabel } from '@/lib/utils/date-utils';
 import type {
   PainelProducaoLoteView,
   PainelProducaoProduct,
-  PainelProducaoRitmoEntry,
   PainelProducaoStageView,
 } from './painel-producao-types';
 
@@ -119,43 +118,4 @@ export function buildPainelProducaoProduct(input: {
     forno: buildEtapaStageView(input.fornoLotes, fornoMeta, unit),
     emb: buildEmbalagemStageView(input.embalagemLotes, embMeta),
   };
-}
-
-export function collectRitmoEntriesFromProducts(
-  products: PainelProducaoProduct[],
-  stage: 'ferm' | 'forno' | 'emb',
-  lotesByOrdem: {
-    fermentacao: Map<string, FermentacaoLoteRecord[]>;
-    forno: Map<string, FermentacaoLoteRecord[]>;
-    embalagem: Map<string, EmbalagemLoteRecord[]>;
-  },
-): PainelProducaoRitmoEntry[] {
-  const entries: PainelProducaoRitmoEntry[] = [];
-
-  for (const product of products) {
-    const ordemId = product.id;
-
-    if (stage === 'ferm') {
-      for (const lote of lotesByOrdem.fermentacao.get(ordemId) ?? []) {
-        const qty = lote.assadeiras > 0 ? lote.assadeiras : lote.unidades;
-        if (qty > 0) entries.push({ quantity: qty, timestamp: lote.produzidoEm });
-      }
-    }
-
-    if (stage === 'forno') {
-      for (const lote of lotesByOrdem.forno.get(ordemId) ?? []) {
-        const qty = lote.assadeiras > 0 ? lote.assadeiras : lote.unidades;
-        if (qty > 0) entries.push({ quantity: qty, timestamp: lote.produzidoEm });
-      }
-    }
-
-    if (stage === 'emb') {
-      for (const lote of lotesByOrdem.embalagem.get(ordemId) ?? []) {
-        const qty = derivarUnidadeEmbalagem(lote.quantidade).valor;
-        if (qty > 0) entries.push({ quantity: qty, timestamp: lote.produzidoEm });
-      }
-    }
-  }
-
-  return entries;
 }

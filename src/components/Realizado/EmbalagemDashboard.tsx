@@ -15,10 +15,12 @@ import {
   getBrazilHourMinuteNow,
   hoursRemainingUntilClockTodayBr,
   getBrazilCalendarDateTimeFromInstant,
-  brazilSevenAmUtcMs,
-  getBrazilDateISOFromInstant,
-  formatBrazilHourMinuteLabel,
 } from '@/lib/utils/date-utils';
+import {
+  entriesFromEmbalagemItems,
+  realizadoRitmoMediaBuilder,
+  ritmoEndCapMs,
+} from '@/domain/realizado/realizado-ritmo-media';
 
 export type EmbalagemDashboardItem = {
   cliente: string;
@@ -46,43 +48,6 @@ function hourlyCaixasMap(items: EmbalagemDashboardItem[]): Map<number, number> {
     m.set(h, (m.get(h) ?? 0) + cx);
   }
   return m;
-}
-
-/** Soma caixas cuja coluna Q está no intervalo [startMs, endMs] (inclusive). */
-function sumCaixasEmJanela(
-  items: EmbalagemDashboardItem[],
-  startMs: number,
-  endMs: number,
-): number {
-  let sum = 0;
-  for (const it of items) {
-    const cx = it.caixas ?? 0;
-    if (cx <= 0) continue;
-    const raw = it.producaoUpdatedAt?.trim();
-    if (!raw) continue;
-    const t = new Date(raw).getTime();
-    if (Number.isNaN(t)) continue;
-    if (t >= startMs && t <= endMs) sum += cx;
-  }
-  return sum;
-}
-
-/** Maior instante (ms) de `producaoUpdatedAt` num dia civil BR; null se não houver Q válido nesse dia. */
-function ultimoProducaoUpdatedAtMsNoDia(
-  items: EmbalagemDashboardItem[],
-  dateISO: string,
-): number | null {
-  let maxT = -Infinity;
-  for (const it of items) {
-    const raw = it.producaoUpdatedAt?.trim();
-    if (!raw) continue;
-    const d = new Date(raw);
-    const t = d.getTime();
-    if (Number.isNaN(t)) continue;
-    if (getBrazilDateISOFromInstant(d) !== dateISO) continue;
-    maxT = Math.max(maxT, t);
-  }
-  return Number.isFinite(maxT) ? maxT : null;
 }
 
 function getCaixasForHour(map: Map<number, number>, hour: number): number {
@@ -631,6 +596,7 @@ type MediaComparacaoData = {
   mediaDia: number;
   mediaOntem: number | null;
   mediaSemana: number | null;
+  horaInicioLabel: string;
   ultimoRegistroLabel: string;
 };
 
@@ -640,16 +606,17 @@ function buildRitmoCompactoProps(
   comparisonPrev: EmbalagemDashboardProps['comparisonPrev'],
 ): RitmoCompactCardProps {
   const deltaOntem =
-    mediaComparacao.mediaOntem !== null
+    mediaComparacao.mediaOntem != null && mediaComparacao.mediaOntem > 0
       ? Math.round((mediaComparacao.mediaDia / mediaComparacao.mediaOntem - 1) * 100)
       : null;
 
   const deltaSemana =
-    mediaComparacao.mediaSemana !== null
+    mediaComparacao.mediaSemana != null && mediaComparacao.mediaSemana > 0
       ? Math.round((mediaComparacao.mediaDia / mediaComparacao.mediaSemana - 1) * 100)
       : null;
 
   return {
+    horaInicioLabel: mediaComparacao.horaInicioLabel,
     horaFimLabel: mediaComparacao.ultimoRegistroLabel,
     ritmoValor: mediaComparacao.mediaDia,
     comparacaoOntem:
@@ -716,49 +683,21 @@ export default function EmbalagemDashboard({
     : null;
   const tituloColD7 = formatWeekdayPassadaDayMonthBr(comparisonWeek.date);
 
-  /**
-   * Média cx/h numa janela [7h BR ; último producaoUpdatedAt do dia filtrado].
-   * Mesma duração (ms) para ontem e D-7: 7h daquele dia até +windowMs.
-   */
   const mediaComparacao = useMemo(() => {
-    const startMs = brazilSevenAmUtcMs(selectedDate);
-    if (!Number.isFinite(startMs)) return null;
-
-    const lastMs = ultimoProducaoUpdatedAtMsNoDia(items, selectedDate);
-    if (lastMs === null) return null;
-
-    const windowMs = lastMs - startMs;
-    if (windowMs <= 0) return null;
-
-    const horas = windowMs / 3600000;
-    const cxJanela = sumCaixasEmJanela(items, startMs, lastMs);
-    const mediaDia = cxJanela / horas;
-
-    let mediaOntem: number | null = null;
-    if (comparisonPrev) {
-      const sPrev = brazilSevenAmUtcMs(comparisonPrev.date);
-      if (Number.isFinite(sPrev)) {
-        const ePrev = sPrev + windowMs;
-        const cxO = sumCaixasEmJanela(comparisonPrev.items, sPrev, ePrev);
-        mediaOntem = cxO / horas;
-      }
-    }
-
-    const sWeek = brazilSevenAmUtcMs(comparisonWeek.date);
-    let mediaSemana: number | null = null;
-    if (Number.isFinite(sWeek)) {
-      const eWeek = sWeek + windowMs;
-      const cxW = sumCaixasEmJanela(comparisonWeek.items, sWeek, eWeek);
-      mediaSemana = cxW / horas;
-    }
-
-    const ultimoRegistroLabel = formatBrazilHourMinuteLabel(new Date(lastMs));
-
+    const view = realizadoRitmoMediaBuilder.build({
+      hoje: entriesFromEmbalagemItems(items),
+      ontem: entriesFromEmbalagemItems(comparisonPrev?.items ?? []),
+      semana: entriesFromEmbalagemItems(comparisonWeek.items),
+      dateOntem: comparisonPrev?.date ?? null,
+      endCapMs: ritmoEndCapMs(selectedDate),
+    });
+    if (!view) return null;
     return {
-      mediaDia,
-      mediaOntem,
-      mediaSemana,
-      ultimoRegistroLabel,
+      mediaDia: view.ritmo,
+      mediaOntem: comparisonPrev ? view.ritmoOntem : null,
+      mediaSemana: view.ritmoSemana,
+      horaInicioLabel: view.horaInicioLabel,
+      ultimoRegistroLabel: view.horaFimLabel,
     };
   }, [selectedDate, items, comparisonPrev, comparisonWeek]);
 
@@ -879,7 +818,7 @@ export default function EmbalagemDashboard({
                   <PrevisaoMetricCard
                     dense
                     icon={<IconBars className="h-4 w-4" />}
-                    title={`Média 7h → ${mediaComparacao.ultimoRegistroLabel}`}
+                    title={`Média ${mediaComparacao.horaInicioLabel} → ${mediaComparacao.ultimoRegistroLabel}`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <p className="shrink-0 font-mono text-[15px] font-bold leading-none tabular-nums text-text-strong">
@@ -890,7 +829,7 @@ export default function EmbalagemDashboard({
                           <StatCompare
                             compact
                             label="Ontem"
-                            title="Ontem (mesma hora)"
+                            title="Ontem"
                             value={mediaComparacao.mediaOntem}
                             unit="cx"
                             delta={

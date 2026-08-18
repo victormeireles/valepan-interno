@@ -2,12 +2,15 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
+import { ordemAssadeiraVisual } from '@/components/OrdensProducao/ordem-assadeira-visual';
 import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
 import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
 import OrdemProducaoRowMenu from '@/components/OrdensProducao/OrdemProducaoRowMenu';
 import { buildOrdemMobileDetails } from '@/components/OrdensProducao/ordem-producao-meta';
 import type { OrdemProducaoRowBaseProps } from '@/components/OrdensProducao/ordem-producao-row-types';
 import { ordensProducaoEtiquetaBadgeClass, ordensProducaoRowClass } from '@/components/OrdensProducao/ordens-producao-theme';
+import OrdemProducaoEstimativaLine from '@/components/OrdensProducao/OrdemProducaoEstimativaLine';
 
 export default function OrdemProducaoMobileRow({
   ordem,
@@ -46,7 +49,10 @@ export default function OrdemProducaoMobileRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${ordensProducaoRowClass} grid grid-cols-[auto_auto_1fr_auto] gap-x-2 gap-y-1 px-3 ${
+      className={`${ordensProducaoRowClass} grid grid-cols-[auto_auto_1fr_auto] gap-x-2 gap-y-1 px-3 ${ordemAssadeiraVisual.resolveRailClass(
+        ordem.assadeiraNome,
+        ordem.assadeiraVariant,
+      )} ${
         isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
       } ${selected ? 'bg-amber-50/80 odd:bg-amber-50/80 even:bg-amber-50/80' : ''}`}
     >
@@ -70,11 +76,19 @@ export default function OrdemProducaoMobileRow({
         onClick={() => onEdit(ordem)}
         className="col-start-3 min-w-0 self-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-[9px]"
       >
-        <span className="flex items-baseline gap-2">
-          <span className="font-mono text-xs font-semibold tabular-nums text-stone-400">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-stone-400">
             {ordem.ordemPlanejamento}
           </span>
-          <span className="block truncate font-semibold tracking-[-0.004em] text-text-strong">
+          {ordem.assadeiraVariant !== 'sem' ? (
+            <span className="min-w-0 max-w-[9rem] shrink-0">
+              <OrdemProducaoAssadeiraCell
+                variant={ordem.assadeiraVariant}
+                nome={ordem.assadeiraNome}
+              />
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate font-semibold tracking-[-0.004em] text-text-strong">
             {ordem.produto}
           </span>
         </span>
@@ -94,6 +108,7 @@ export default function OrdemProducaoMobileRow({
             {ordem.observacao}
           </span>
         ) : null}
+        <OrdemProducaoEstimativaLine estimativa={ordem.estimativa} />
         <span className="mt-1 block font-mono text-xs tabular-nums text-stone-600">
           {latasValue != null ? `${latasValue.toLocaleString('pt-BR')} LT` : '— LT'}
           {' • '}

@@ -67,6 +67,8 @@ export function origemMovimentoLabel(origem: string): string {
       return 'Produção forno';
     case 'producao_embalagem':
       return 'Produção embalagem';
+    case 'producao':
+      return 'Produção';
     default:
       return origem;
   }
@@ -82,6 +84,7 @@ export function origemMovimentoTone(
     case 'producao_fermentacao':
     case 'producao_forno':
     case 'producao_embalagem':
+    case 'producao':
       return 'accent';
     default:
       return 'neutral';

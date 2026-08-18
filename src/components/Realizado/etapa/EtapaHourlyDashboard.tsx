@@ -2,7 +2,13 @@
 
 import { useMemo, type ReactNode } from 'react';
 import { belowEtapaToolbarStickyTop } from '@/components/ui/page-shell';
+import EtapaRitmoMediaCard from '@/components/Realizado/etapa/EtapaRitmoMediaCard';
 import type { EtapaDashboardItem } from '@/domain/types/painel-etapa';
+import {
+  entriesFromEtapaItems,
+  realizadoRitmoMediaBuilder,
+  ritmoEndCapMs,
+} from '@/domain/realizado/realizado-ritmo-media';
 import {
   buildHourlyQuantityMap,
   countQuantityWithoutValidHour,
@@ -156,11 +162,45 @@ export default function EtapaHourlyDashboard({
     : null;
   const tituloColD7 = formatWeekdayPassadaDayMonthBr(comparisonWeek.date);
 
+  const ritmoMedia = useMemo(() => {
+    const view = realizadoRitmoMediaBuilder.build({
+      hoje: entriesFromEtapaItems(items),
+      ontem: entriesFromEtapaItems(comparisonPrev?.items ?? []),
+      semana: entriesFromEtapaItems(comparisonWeek.items),
+      dateOntem: comparisonPrev?.date ?? null,
+      endCapMs: ritmoEndCapMs(selectedDate),
+    });
+    if (!view) return null;
+    const delta = (atual: number, base: number) =>
+      base > 0 ? Math.round((atual / base - 1) * 100) : null;
+    return {
+      ...view,
+      comparacaoOntem: comparisonPrev
+        ? { label: 'Ontem', valor: view.ritmoOntem, delta: delta(view.ritmo, view.ritmoOntem) }
+        : null,
+      comparacaoSemana: {
+        label: 'Semana passada',
+        valor: view.ritmoSemana,
+        delta: delta(view.ritmo, view.ritmoSemana),
+      },
+    };
+  }, [items, comparisonPrev, comparisonWeek, selectedDate]);
+
   return (
     <aside
-      className={['min-w-0 min-[960px]:sticky', belowEtapaToolbarStickyTop].join(' ')}
+      className={['min-w-0 space-y-3 min-[960px]:sticky', belowEtapaToolbarStickyTop].join(' ')}
       aria-label="Painel de métricas do dia"
     >
+      {ritmoMedia ? (
+        <EtapaRitmoMediaCard
+          unitLabel={unitLabel}
+          ritmo={ritmoMedia.ritmo}
+          horaInicioLabel={ritmoMedia.horaInicioLabel}
+          horaFimLabel={ritmoMedia.horaFimLabel}
+          comparacaoOntem={ritmoMedia.comparacaoOntem}
+          comparacaoSemana={ritmoMedia.comparacaoSemana}
+        />
+      ) : null}
       <section
         aria-label={`${unitName} por hora`}
         className="overflow-hidden rounded-xl border border-border-default bg-surface shadow-control"

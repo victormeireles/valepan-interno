@@ -3,6 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
+import { ordemAssadeiraVisual } from '@/components/OrdensProducao/ordem-assadeira-visual';
 import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
 import OrdemProducaoQtyValue from '@/components/OrdensProducao/OrdemProducaoQtyValue';
 import OrdemProducaoRowCheckbox from '@/components/OrdensProducao/OrdemProducaoRowCheckbox';
@@ -20,6 +21,7 @@ import {
 } from '@/components/OrdensProducao/ordens-producao-table-layout';
 import { ordensProducaoEtiquetaBadgeClass } from '@/components/OrdensProducao/ordens-producao-theme';
 import { formatISODateBrNoYear } from '@/lib/utils/date-utils';
+import OrdemProducaoEstimativaLine from '@/components/OrdensProducao/OrdemProducaoEstimativaLine';
 
 export default function OrdemProducaoTableRow({
   ordem,
@@ -62,7 +64,12 @@ export default function OrdemProducaoTableRow({
         isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
       } ${selected ? 'bg-amber-50/80 odd:bg-amber-50/80 even:bg-amber-50/80' : ''}`}
     >
-      <td className={ordensProducaoTableCheckboxCellClass}>
+      <td
+        className={`${ordensProducaoTableCheckboxCellClass} ${ordemAssadeiraVisual.resolveRailClass(
+          ordem.assadeiraNome,
+          ordem.assadeiraVariant,
+        )}`}
+      >
         <OrdemProducaoRowCheckbox
           checked={selected}
           onChange={() => onToggleSelect(ordem)}
@@ -85,6 +92,13 @@ export default function OrdemProducaoTableRow({
         </span>
       </td>
 
+      <td className={ordensProducaoTableTextCellClass}>
+        <OrdemProducaoAssadeiraCell
+          variant={ordem.assadeiraVariant}
+          nome={ordem.assadeiraNome}
+        />
+      </td>
+
       <td className={ordensProducaoTableProdutoClass}>
         <button
           type="button"
@@ -97,14 +111,8 @@ export default function OrdemProducaoTableRow({
           >
             {ordem.produto}
           </span>
+          <OrdemProducaoEstimativaLine estimativa={ordem.estimativa} />
         </button>
-      </td>
-
-      <td className={ordensProducaoTableTextCellClass}>
-        <OrdemProducaoAssadeiraCell
-          variant={ordem.assadeiraVariant}
-          nome={ordem.assadeiraNome}
-        />
       </td>
 
       <td className={ordensProducaoTableTextCellClass}>

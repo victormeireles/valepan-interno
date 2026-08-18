@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  brazilClockUtcMs,
   brazilDayEndUtcMs,
+  brazilSevenAmUtcMs,
   extractCalendarDate,
   formatISODateBr,
   normalizeToISODate,
+  toClockHHmm,
 } from './date-utils';
 
 describe('extractCalendarDate', () => {
@@ -42,9 +45,37 @@ describe('normalizeToISODate', () => {
   });
 });
 
+describe('toClockHHmm', () => {
+  it('normaliza time do Postgres e hora curta', () => {
+    expect(toClockHHmm('07:00:00')).toBe('07:00');
+    expect(toClockHHmm('7:00')).toBe('07:00');
+    expect(toClockHHmm('21:50')).toBe('21:50');
+  });
+
+  it('rejeita relógio inválido', () => {
+    expect(toClockHHmm('24:00')).toBeNull();
+    expect(toClockHHmm('07')).toBeNull();
+    expect(toClockHHmm('')).toBeNull();
+  });
+});
+
 describe('brazilDayEndUtcMs', () => {
   it('brazilDayEndUtcMs retorna 23:59:59.999 no fuso BR', () => {
     const ms = brazilDayEndUtcMs('2026-08-12');
     expect(new Date(ms).toISOString()).toBe('2026-08-13T02:59:59.999Z');
+  });
+});
+
+describe('brazilClockUtcMs', () => {
+  it('usa offset -03:00 no relógio informado', () => {
+    expect(brazilClockUtcMs('2026-08-17', '06:30')).toBe(
+      new Date('2026-08-17T06:30:00-03:00').getTime(),
+    );
+  });
+
+  it('mantém 07:00 no wrapper legado', () => {
+    expect(brazilSevenAmUtcMs('2026-08-17')).toBe(
+      brazilClockUtcMs('2026-08-17', '07:00'),
+    );
   });
 });

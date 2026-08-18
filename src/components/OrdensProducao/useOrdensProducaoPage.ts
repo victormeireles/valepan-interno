@@ -38,6 +38,7 @@ export function useOrdensProducaoPage() {
     totalUnidades: 0,
     totalCaixas: 0,
   });
+  const [estimativaDisponivel, setEstimativaDisponivel] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -75,10 +76,12 @@ export function useOrdensProducaoPage() {
       const data = await ordensProducaoListManager.fetchList(date);
       setOrdens(data.ordens);
       setResumo(data.resumo);
+      setEstimativaDisponivel(data.estimativaDisponivel !== false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar ordens');
       setOrdens([]);
       setResumo({ totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 });
+      setEstimativaDisponivel(true);
     } finally {
       setLoading(false);
     }
@@ -92,6 +95,10 @@ export function useOrdensProducaoPage() {
     async (orderedIds: string[], previousOrdens: OrdemProducaoPainelItem[]) => {
       try {
         await ordensProducaoListManager.reorder(filterDate, orderedIds);
+        const data = await ordensProducaoListManager.fetchList(filterDate);
+        setOrdens(data.ordens);
+        setResumo(data.resumo);
+        setEstimativaDisponivel(data.estimativaDisponivel !== false);
       } catch (err) {
         setOrdens(previousOrdens);
         showToast({
@@ -285,6 +292,7 @@ export function useOrdensProducaoPage() {
     setFilterDate,
     ordens,
     resumo,
+    estimativaDisponivel,
     loading,
     error,
     toast,

@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ordensToDashboardItems,
   snapshotsToDashboardItems,
 } from '@/domain/producao-etapa/painel-dashboard-adapter';
 import type {
@@ -14,6 +13,7 @@ import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/dat
 type EtapaPainelCargaResponse = {
   ordens: PainelOrdemEtapa[];
   ultimaDataComDados: string | null;
+  dashboardDia?: EtapaDashboardSnapshot[];
   comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
   comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
 };
@@ -51,6 +51,9 @@ export function useEtapaPainelCarga({
     addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
   );
   const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
+  const [dashboardItems, setDashboardItems] = useState(
+    snapshotsToDashboardItems([]),
+  );
 
   const applyCargaResponse = useCallback(
     (data: EtapaPainelCargaResponse, currentDate: string) => {
@@ -70,6 +73,7 @@ export function useEtapaPainelCarga({
       setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
       setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
       setDateComparisonPrev(data.comparacaoAnterior.date);
+      setDashboardItems(snapshotsToDashboardItems(data.dashboardDia ?? []));
     },
     [setSelectedDate],
   );
@@ -121,11 +125,9 @@ export function useEtapaPainelCarga({
 
   useEffect(() => {
     if (producaoModalOpen) return;
-    const interval = setInterval(() => void refreshOrdensOnly(), 60_000);
+    const interval = setInterval(() => void loadCarga(false), 60_000);
     return () => clearInterval(interval);
-  }, [producaoModalOpen, refreshOrdensOnly]);
-
-  const dashboardItems = useMemo(() => ordensToDashboardItems(ordens), [ordens]);
+  }, [producaoModalOpen, loadCarga]);
 
   return {
     ordens,

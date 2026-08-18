@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
+import { enqueueEstimativaRecalc } from '@/lib/services/estimativa-producao-recalc';
 
 type ReorderPayload = {
   dataProducao: string;
@@ -43,6 +44,7 @@ export async function PATCH(request: Request) {
       payload.dataProducao,
       payload.orderedIds,
     );
+    await enqueueEstimativaRecalc(payload.dataProducao);
 
     return NextResponse.json({ message: 'Ordem de planejamento atualizada com sucesso' });
   } catch (error) {

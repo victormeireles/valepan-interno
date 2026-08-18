@@ -6,7 +6,7 @@ export const FLUXO_GAP_MIN_MINUTES = 45;
 export const FLUXO_BLOCO_MAX_LT_FERM = 40;
 
 /** Limite LT por lançamento (forno). Acima = digitação em bloco. */
-export const FLUXO_BLOCO_MAX_LT_FORNO = 20;
+export const FLUXO_BLOCO_MAX_LT_FORNO = 40;
 
 /** Limite CX por lançamento (embalagem). Acima = digitação em bloco. */
 export const FLUXO_BLOCO_MAX_CX = 55;

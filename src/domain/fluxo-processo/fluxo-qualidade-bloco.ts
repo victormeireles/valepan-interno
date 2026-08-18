@@ -18,7 +18,7 @@ export type FluxoQualidadeBlocoResult = {
 
 /**
  * Qualidade do apontamento: % do volume em lançamentos acima do limite
- * operacional da etapa (ex.: > 40 LT ferm, > 20 LT forno ou > 55 CX emb).
+ * operacional da etapa (ex.: > 40 LT ferm/forno ou > 55 CX emb).
  */
 export class FluxoQualidadeBlocoCalculator {
   constructor(

@@ -6,6 +6,8 @@ const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
 const resolveDefaultForProduto = vi.fn();
+const recalcForDate = vi.fn();
+const listByOrdemIds = vi.fn();
 
 vi.mock('@/domain/assadeiras/assadeira-resolver', () => ({
   assadeiraResolver: {
@@ -30,6 +32,13 @@ vi.mock('@/lib/services/products/supabase-product-service', () => ({
     findByIds(...args: unknown[]) {
       return findByIdsProdutos(...args);
     }
+  },
+}));
+
+vi.mock('@/lib/services/estimativa-producao-service', () => ({
+  estimativaProducaoService: {
+    recalcForDate: (...args: unknown[]) => recalcForDate(...args),
+    listByOrdemIds: (...args: unknown[]) => listByOrdemIds(...args),
   },
 }));
 
@@ -64,6 +73,15 @@ function makeOrdem(
     assadeiras: 12,
     ordemPlanejamento: 1,
     quantidade: { caixas: 20, pacotes: 0, unidades: 480, kg: 0 },
+    fermentacaoFinalizada: false,
+    fermentacaoMetaConfirmada: null,
+    fermentacaoFinalizadaEm: null,
+    fornoFinalizada: false,
+    fornoMetaConfirmada: null,
+    fornoFinalizadaEm: null,
+    embalagemFinalizada: false,
+    embalagemMetaConfirmada: null,
+    embalagemFinalizadaEm: null,
     ...overrides,
   };
 }
@@ -115,6 +133,8 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       data: [{ id: 'ass-1', nome: 'Lata 40' }],
       error: null,
     });
+    recalcForDate.mockResolvedValue({ status: 'ok' });
+    listByOrdemIds.mockResolvedValue([]);
   });
 
   it('retorna lista vazia e resumo zerado', async () => {
@@ -125,6 +145,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
     expect(result).toEqual({
       date: '2026-06-17',
       resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 },
+      estimativaDisponivel: true,
       ordens: [],
     });
     expect(findByIdsTipos).not.toHaveBeenCalled();
@@ -151,6 +172,8 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       caixas: 20,
       quantidadeLabel: '12 LT → 480 UN • 20 CX',
     });
+    expect(result.estimativaDisponivel).toBe(true);
+    expect(result.ordens[0].estimativa).toBeNull();
   });
 
   it('mapeia ordem sem assadeira em modo unidades', async () => {
@@ -223,6 +246,34 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
     expect(result.ordens[0]).toMatchObject({
       assadeiraNome: 'Lata nova',
       assadeiraVariant: 'alternativa',
+    });
+  });
+
+  it('anexa horários previstos quando a estimativa existe', async () => {
+    listByDataProducao.mockResolvedValue([makeOrdem('op-1')]);
+    listByOrdemIds.mockResolvedValue([
+      {
+        ordemProducaoId: 'op-1',
+        fermentacaoInicioPrevisto: '2026-08-17T03:00:00.000Z',
+        fermentacaoFimPrevisto: '2026-08-17T04:00:00.000Z',
+        camaraFimPrevisto: '2026-08-17T07:00:00.000Z',
+        fornoInicioPrevisto: '2026-08-17T07:00:00.000Z',
+        fornoFimPrevisto: '2026-08-17T08:00:00.000Z',
+        resfriamentoFimPrevisto: '2026-08-17T09:00:00.000Z',
+        embalagemInicioPrevisto: '2026-08-17T10:00:00.000Z',
+        embalagemFimPrevisto: '2026-08-17T11:00:00.000Z',
+      },
+    ]);
+
+    const result = await ordensProducaoPainelService.getListForDate('2026-06-17');
+
+    expect(result.estimativaDisponivel).toBe(true);
+    expect(result.ordens[0].estimativa).toEqual({
+      fermentacaoFim: '2026-08-17T04:00:00.000Z',
+      camaraFim: '2026-08-17T07:00:00.000Z',
+      fornoFim: '2026-08-17T08:00:00.000Z',
+      resfriamentoFim: '2026-08-17T09:00:00.000Z',
+      embalagemFim: '2026-08-17T11:00:00.000Z',
     });
   });
 });

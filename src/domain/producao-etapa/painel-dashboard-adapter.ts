@@ -42,3 +42,18 @@ export function snapshotsToDashboardItems(
 ): EtapaDashboardItem[] {
   return snapshots.map((snapshot) => ({ ...snapshot }));
 }
+
+export function lotesToDashboardSnapshots(
+  lotes: Array<{ assadeiras: number; produzidoEm: string }>,
+): EtapaDashboardSnapshot[] {
+  const items: EtapaDashboardSnapshot[] = [];
+  for (const lote of lotes) {
+    if (lote.assadeiras <= 0) continue;
+    items.push({
+      assadeiras: lote.assadeiras,
+      pedidoAssadeiras: 0,
+      produzidoEm: lote.produzidoEm,
+    });
+  }
+  return items;
+}

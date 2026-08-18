@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isOrdemContaAssadeirasDashboard,
+  lotesToDashboardSnapshots,
   ordensToDashboardItems,
   ordensToDashboardSnapshots,
-  snapshotsToDashboardItems,
 } from './painel-dashboard-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 
@@ -76,9 +76,33 @@ describe('ordensToDashboardItems', () => {
   });
 });
 
-describe('snapshotsToDashboardItems', () => {
-  it('copia snapshots', () => {
-    const snapshots = ordensToDashboardSnapshots([ordem()]);
-    expect(snapshotsToDashboardItems(snapshots)).toEqual(snapshots);
+describe('lotesToDashboardSnapshots', () => {
+  it('converte lotes do dia civil, inclusive OP de outro dia', () => {
+    const snaps = lotesToDashboardSnapshots([
+      {
+        loteId: 'l-ontem',
+        modo: 'parcial',
+        assadeiras: 12,
+        unidades: 0,
+        produzidoEm: '2026-08-17T10:00:00-03:00',
+      },
+    ]);
+    expect(snaps).toEqual([
+      { assadeiras: 12, pedidoAssadeiras: 0, produzidoEm: '2026-08-17T10:00:00-03:00' },
+    ]);
+  });
+
+  it('ignora lote sem assadeiras', () => {
+    expect(
+      lotesToDashboardSnapshots([
+        {
+          loteId: 'l-un',
+          modo: 'parcial',
+          assadeiras: 0,
+          unidades: 240,
+          produzidoEm: '2026-08-17T10:00:00-03:00',
+        },
+      ]),
+    ).toEqual([]);
   });
 });

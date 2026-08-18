@@ -3,7 +3,8 @@
 import { useId, useState } from 'react';
 import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import { useFluxoDisplay } from './fluxo-display-context';
-import { fmtCellShort, fmtQty, fmtQtyK } from './fluxo-display-scale';
+import { fmtQtyK } from './fluxo-display-scale';
+import FluxoBarrasHoraColuna from './FluxoBarrasHoraColuna';
 import FluxoBarrasHoraTooltip from './FluxoBarrasHoraTooltip';
 import { FluxoHoraLegendaBuilder } from './FluxoHoraLegendaBuilder';
 import {
@@ -20,13 +21,19 @@ const legendaBuilder = new FluxoHoraLegendaBuilder();
 type FluxoBarrasHoraProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaKey;
+  mostrarAgora: boolean;
+  horaAgora: number;
 };
 
 /**
- * Barras empilhadas por hora.
- * Total vai no rótulo acima da barra; detalhe da legenda no tooltip da hora.
+ * Barras empilhadas por hora + fantasma previsto e marcador agora (hoje).
  */
-export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) {
+export default function FluxoBarrasHora({
+  fluxo,
+  etapa,
+  mostrarAgora,
+  horaAgora,
+}: FluxoBarrasHoraProps) {
   const { scale } = useFluxoDisplay();
   const chartId = useId();
   const [horaAtiva, setHoraAtiva] = useState<number | null>(null);
@@ -37,6 +44,7 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
     (fluxo.matrizAnt[etapa][a] ?? []).some((v) => v > 0),
   );
   const totais = HORAS.map((h) => scale.horaTotal(etapa, h));
+  const previstos = HORAS.map((h) => scale.horaPrevisto(etapa, h));
   const maxHora = scale.maxHoraComum();
   const cap = scale.capacidade(etapa);
   const cor = FLUXO_UI_ETAPA_COR[etapa];
@@ -50,34 +58,13 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
 
   return (
     <div>
-      <div className="mb-2.5 flex flex-wrap gap-3.5">
-        {usadas.map((a) => (
-          <span
-            key={a}
-            className="inline-flex items-center gap-1.5 text-[11px] text-text-body"
-          >
-            <span
-              className="h-[9px] w-2.5 rounded-[2px]"
-              style={{ background: fluxo.cores[a] }}
-              aria-hidden
-            />
-            {rotuloAssadeira(a)}
-          </span>
-        ))}
-        {temAnt ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
-            <span
-              className="h-[9px] w-3 rounded-[2px]"
-              style={{
-                background:
-                  'repeating-linear-gradient(45deg, var(--stone-500) 0 3px, var(--stone-300) 3px 7px)',
-              }}
-              aria-hidden
-            />
-            hachurado = OP de {antLabel}
-          </span>
-        ) : null}
-      </div>
+      <FluxoBarrasHoraLegenda
+        fluxo={fluxo}
+        usadas={usadas}
+        temAnt={temAnt}
+        antLabel={antLabel}
+        mostrarAgora={mostrarAgora}
+      />
 
       <div className="flex">
         <div className="relative w-[46px] shrink-0" style={{ height: CHART_H }}>
@@ -125,6 +112,7 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
             <FluxoBarrasHoraTooltip
               hora={horaAtiva}
               total={totais[horaAtiva]}
+              previsto={previstos[horaAtiva]}
               unitLabel={scale.unitLabel}
               mode={scale.mode}
               itens={itensAtivos}
@@ -132,81 +120,25 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
           ) : null}
 
           <div className="absolute inset-x-0 bottom-0 flex items-end" style={{ height: plotH }}>
-            {HORAS.map((h) => {
-              const total = totais[h];
-              const barH = maxHora > 0 ? (total / maxHora) * plotH : 0;
-              const ativa = horaAtiva === h;
-              const labelId = `${chartId}-hora-${h}`;
-
-              return (
-                <button
-                  key={h}
-                  type="button"
-                  role="listitem"
-                  id={labelId}
-                  aria-label={
-                    total > 0
-                      ? `${String(h).padStart(2, '0')}:00, ${fmtQty(total, scale.mode)} ${scale.unitLabel}`
-                      : `${String(h).padStart(2, '0')}:00, sem apontamento`
-                  }
-                  onMouseEnter={() => setHoraAtiva(h)}
-                  onFocus={() => setHoraAtiva(h)}
-                  onBlur={() => setHoraAtiva((cur) => (cur === h ? null : cur))}
-                  className={[
-                    'relative flex h-full min-w-0 flex-1 cursor-pointer flex-col justify-end border-none bg-transparent px-0.5',
-                    'transition-colors duration-150 ease-out',
-                    ativa ? 'bg-amber-50/70' : 'hover:bg-stone-50',
-                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500',
-                  ].join(' ')}
-                >
-                  {total > 0 ? (
-                    <span
-                      className={[
-                        'pointer-events-none absolute left-0 right-0 text-center font-mono text-[9px] font-semibold tabular-nums',
-                        ativa ? 'text-text-strong' : 'text-text-muted',
-                      ].join(' ')}
-                      style={{ bottom: Math.max(barH + 2, 2) }}
-                    >
-                      {fmtCellShort(total, scale.mode)}
-                    </span>
-                  ) : null}
-
-                  <div className="flex w-full flex-col" style={{ height: barH || undefined }}>
-                    {usadas
-                      .slice()
-                      .reverse()
-                      .map((a) => {
-                        const v = scale.celula(etapa, a, h);
-                        if (!v) return null;
-                        const ant = scale.celulaAnt(etapa, a, h);
-                        const dia = v - ant;
-                        return (
-                          <div key={a} className="flex flex-col">
-                            {ant > 0 ? (
-                              <div
-                                style={{
-                                  height: (ant / maxHora) * plotH,
-                                  minHeight: 1,
-                                  background: `repeating-linear-gradient(45deg, ${fluxo.cores[a]} 0 3px, color-mix(in srgb, ${fluxo.cores[a]} 30%, white) 3px 7px)`,
-                                }}
-                              />
-                            ) : null}
-                            {dia > 0 ? (
-                              <div
-                                style={{
-                                  height: (dia / maxHora) * plotH,
-                                  minHeight: 1,
-                                  background: fluxo.cores[a],
-                                }}
-                              />
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </button>
-              );
-            })}
+            {HORAS.map((h) => (
+              <FluxoBarrasHoraColuna
+                key={h}
+                h={h}
+                fluxo={fluxo}
+                etapa={etapa}
+                scale={scale}
+                usadas={usadas}
+                total={totais[h]}
+                previsto={previstos[h]}
+                maxHora={maxHora}
+                plotH={plotH}
+                ativa={horaAtiva === h}
+                labelId={`${chartId}-hora-${h}`}
+                mostrarAgora={mostrarAgora && h === horaAgora}
+                onActivate={() => setHoraAtiva(h)}
+                onDeactivate={() => setHoraAtiva((cur) => (cur === h ? null : cur))}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -217,7 +149,7 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
             key={h}
             className={[
               'flex-1 pt-1.5 text-center font-mono text-[9px] tabular-nums',
-              totais[h] ? 'text-text-muted' : 'text-text-faint',
+              totais[h] || previstos[h] ? 'text-text-muted' : 'text-text-faint',
               horaAtiva === h ? 'font-bold text-text-strong' : '',
             ].join(' ')}
           >
@@ -225,6 +157,63 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+type FluxoBarrasHoraLegendaProps = {
+  fluxo: VpFluxoPayload;
+  usadas: string[];
+  temAnt: boolean;
+  antLabel: string;
+  mostrarAgora: boolean;
+};
+
+function FluxoBarrasHoraLegenda({
+  fluxo,
+  usadas,
+  temAnt,
+  antLabel,
+  mostrarAgora,
+}: FluxoBarrasHoraLegendaProps) {
+  return (
+    <div className="mb-2.5 flex flex-wrap gap-3.5">
+      {usadas.map((a) => (
+        <span
+          key={a}
+          className="inline-flex items-center gap-1.5 text-[11px] text-text-body"
+        >
+          <span
+            className="h-[9px] w-2.5 rounded-[2px]"
+            style={{ background: fluxo.cores[a] }}
+            aria-hidden
+          />
+          {rotuloAssadeira(a)}
+        </span>
+      ))}
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+        <span className="h-[9px] w-2.5 rounded-[2px] bg-stone-200/80" aria-hidden />
+        previsto
+      </span>
+      {mostrarAgora ? (
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+          <span className="inline-block h-2.5 w-0.5 bg-amber-600" aria-hidden />
+          agora
+        </span>
+      ) : null}
+      {temAnt ? (
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+          <span
+            className="h-[9px] w-3 rounded-[2px]"
+            style={{
+              background:
+                'repeating-linear-gradient(45deg, var(--stone-500) 0 3px, var(--stone-300) 3px 7px)',
+            }}
+            aria-hidden
+          />
+          hachurado = OP de {antLabel}
+        </span>
+      ) : null}
     </div>
   );
 }

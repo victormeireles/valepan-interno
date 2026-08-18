@@ -133,11 +133,11 @@ export default function OrdensProducaoList({
                   <th scope="col" className={`${ordensProducaoTableControlCellClass} text-center`}>
                     <span className="sr-only">Prioridade</span>
                   </th>
-                  <th scope="col" className={ordensProducaoTableHeadProdutoClass}>
-                    Produto
-                  </th>
                   <th scope="col" className={ordensProducaoTableHeadTextClass}>
                     Assadeira
+                  </th>
+                  <th scope="col" className={ordensProducaoTableHeadProdutoClass}>
+                    Produto
                   </th>
                   <th scope="col" className={ordensProducaoTableHeadTextClass}>
                     Cliente

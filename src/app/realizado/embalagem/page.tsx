@@ -5,7 +5,6 @@ import ProducaoModal from '@/components/ProducaoModal';
 import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import EtapaReabrirConfirmDialog from '@/components/Realizado/etapa/EtapaReabrirConfirmDialog';
 import {
-  pedidosToDashboardItems,
   snapshotsToDashboardItems,
 } from '@/domain/embalagem/painel-dashboard-adapter';
 import { splitPedidosEmbalagemPorStatus } from '@/domain/embalagem/embalagem-painel-adapter';
@@ -63,12 +62,16 @@ export default function ProducaoEmbalagemPage() {
     addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
   );
   const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
+  const [dashboardDiaItems, setDashboardDiaItems] = useState(
+    snapshotsToDashboardItems([]),
+  );
 
   const applyCargaResponse = useCallback(
     (
       data: {
         pedidos: PainelPedidoEmbalagem[];
         ultimaDataComDados: string | null;
+        dashboardDia?: DashboardSnapshot[];
         comparacaoSemana: { date: string; items: DashboardSnapshot[] };
         comparacaoAnterior: { date: string | null; items: DashboardSnapshot[] };
       },
@@ -89,6 +92,7 @@ export default function ProducaoEmbalagemPage() {
       setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
       setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
       setDateComparisonPrev(data.comparacaoAnterior.date);
+      setDashboardDiaItems(snapshotsToDashboardItems(data.dashboardDia ?? []));
     },
     [],
   );
@@ -142,9 +146,9 @@ export default function ProducaoEmbalagemPage() {
 
   useEffect(() => {
     if (producaoModalOpen) return;
-    const interval = setInterval(() => void refreshPedidosOnly(), 60_000);
+    const interval = setInterval(() => void loadCargaEmbalagem(false), 60_000);
     return () => clearInterval(interval);
-  }, [selectedDate, producaoModalOpen, refreshPedidosOnly]);
+  }, [selectedDate, producaoModalOpen, loadCargaEmbalagem]);
 
   const pedidoLookup = useMemo(() => buildEmbalagemPedidoLookup(pedidos), [pedidos]);
   const loteLookup = useMemo(() => buildEmbalagemLoteLookup(pedidos), [pedidos]);
@@ -217,14 +221,14 @@ export default function ProducaoEmbalagemPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao excluir lote');
-        await refreshPedidosOnly();
+        await loadCargaEmbalagem(false);
       } catch (err) {
         setMessage(getVisibleErrorMessage(err, 'Erro ao excluir lote'));
       } finally {
         setDeletingLoteId(null);
       }
     },
-    [refreshPedidosOnly],
+    [loadCargaEmbalagem],
   );
 
   const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
@@ -288,7 +292,7 @@ export default function ProducaoEmbalagemPage() {
   );
 
   const refreshPainelData = async () => {
-    await refreshPedidosOnly();
+    await loadCargaEmbalagem(false);
   };
 
   const handleSaveProducao = async (
@@ -336,7 +340,7 @@ export default function ProducaoEmbalagemPage() {
     [setMessage],
   );
 
-  const dashboardItems = useMemo(() => pedidosToDashboardItems(pedidos), [pedidos]);
+  const dashboardItems = dashboardDiaItems;
   const toolbarMetrics = useMemo(
     () => buildEmbalagemToolbarMetrics(pedidos),
     [pedidos],

@@ -1,0 +1,921 @@
+# Rastreio de turnos na produção — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Carimbar turno 1/2/3 em cada lote novo de fermentação, forno e embalagem, com chip de turno ativo por etapa e prompt no + lote (primeiro do dia ou fora da janela).
+
+**Architecture:** Domínio puro decide dia operacional, “dentro da janela” e se o + lote pergunta. Config passa a ter `config_operacao_turnos`; o snapshot ainda expõe os seis horários derivados (ritmo/fluxo intactos). `producao_turno_ativo` guarda o número confirmado por etapa. POST de lote recusa com 409 se o ativo do dia for inválido.
+
+**Tech Stack:** TypeScript, Vitest, Next.js 15 App Router, React 19, Tailwind v4, Supabase (RLS), design system Valepan (pt-BR, Material Icons, Geist Mono).
+
+**Spec:** `docs/superpowers/specs/2026-08-18-rastreio-turnos-producao-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; quebrar ao se aproximar de 400. Funções < 40 linhas. SRP por classe/arquivo.
+- Relógio e dia operacional: `America/Sao_Paulo`. Reusar `brazilClockUtcMs`, `getBrazilDateISOFromInstant`, `addCalendarDaysISO`, `toMinutesFromClock`, `janelaDurationMinutes`.
+- Identidade v1 = número do turno. Sem pessoa, PIN, `usuario_id` no lote.
+- Ritmo/fluxo/estimativa **não** leem a tabela de turnos; só os seis campos derivados do snapshot.
+- T1 obrigatório por etapa; T2/T3 em sequência; vão ok; sobreposição inválida; fronteira `fim(N)=início(N+1)` ok; instante da fronteira pertence ao seguinte (`[inicio, fim)`).
+- Copy pt-BR da spec: `Definir turno`, `Qual turno?`, `Ainda é o Nº turno?`, `Continuar no Nº`, `Trocar para o Mº`, `Não foi possível trocar o turno.`
+- PUT do ativo: `/api/producao/{fermentacao|forno|embalagem}/turno-ativo` (prefixo já gated no middleware; não usar URL única da spec).
+- Testes: Vitest (`npm test -- <arquivo>`). Sem RTL/E2E: estados do sheet via função pura.
+- Commits: incluir no passo; se a sessão não pediu commit, pular o `git commit`.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/producao-turno/producao-turno-types.ts` | Etapa, número, turno cadastrado, ativo, decisão de prompt |
+| `src/domain/producao-turno/producao-turno-janela.ts` | `isClockInJanela` |
+| `src/domain/producao-turno/producao-turno-dia.ts` | Dia operacional (start/end ou null no vão pré-T1) |
+| `src/domain/producao-turno/producao-turno-overlap.ts` | Sequência T1→T2→T3 e sobreposição |
+| `src/domain/producao-turno/producao-turno-prompt.ts` | `ProducaoTurnoPrompt.decide` |
+| `src/domain/producao-turno/producao-turno-sheet-model.ts` | Título/ações do sheet |
+| `src/domain/config-operacao/*` | Snapshot com `turnos`; deriva os seis horários |
+| `supabase/migrations/20260818160000_producao_turnos.sql` | Tabelas, coluna `turno` nos lotes, RLS |
+| `src/types/database.ts` + `types/database.ts` | Tipos gerados à mão |
+| `src/lib/services/config-operacao-service.ts` | Lê/grava turnos + minutos |
+| `src/app/config/operacao/*` | UI dos 3 turnos por etapa |
+| `src/data/producao-turno/ProducaoTurnoAtivoRepository.ts` | Get/upsert ativo |
+| `src/lib/services/producao-turno-service.ts` | Valida ativo, `requireNumero`, PUT |
+| `src/app/api/producao/{etapa}/turno-ativo/route.ts` | PUT |
+| `src/lib/services/*-lote-service.ts` | Carimba `turno` no insert |
+| `src/lib/services/producao-turno-carga-attach.ts` | Anexa `turnos` + `turnoAtivo` na carga |
+| `src/components/Realizado/turno/*` | Chip, sheet, hook do gate |
+| `src/components/Realizado/etapa/EtapaToolbar.tsx` | Slot do chip |
+| Adapters/rows de lote | Rótulo `T1`/`T2`/`T3` |
+
+---
+
+### Task 1: Janela de relógio + dia operacional
+
+**Files:**
+- Create: `src/domain/producao-turno/producao-turno-types.ts`
+- Create: `src/domain/producao-turno/producao-turno-janela.ts`
+- Create: `src/domain/producao-turno/producao-turno-janela.test.ts`
+- Create: `src/domain/producao-turno/producao-turno-dia.ts`
+- Create: `src/domain/producao-turno/producao-turno-dia.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `ProducaoTurnoEtapaId = 'fermentacao' | 'forno' | 'embalagem'`
+  - `ProducaoTurnoNumero = 1 | 2 | 3`
+  - `ProducaoTurnoCadastrado = { numero: ProducaoTurnoNumero; inicio: string; fim: string }`
+  - `ProducaoTurnoDia = { startMs: number; endMs: number }`
+  - `isClockInJanela(agoraMin: number, inicio: string, fim: string): boolean`
+  - `ProducaoTurnoDiaResolver.resolve(nowMs: number, turnos: ProducaoTurnoCadastrado[]): ProducaoTurnoDia | null`
+
+- [ ] **Step 1: Write types**
+
+```typescript
+export type ProducaoTurnoEtapaId = 'fermentacao' | 'forno' | 'embalagem';
+export type ProducaoTurnoNumero = 1 | 2 | 3;
+
+export type ProducaoTurnoCadastrado = {
+  numero: ProducaoTurnoNumero;
+  inicio: string;
+  fim: string;
+};
+
+export type ProducaoTurnoAtivo = {
+  numero: ProducaoTurnoNumero;
+  confirmadoEm: string;
+};
+
+export type ProducaoTurnoDia = {
+  startMs: number;
+  endMs: number;
+};
+```
+
+- [ ] **Step 2: Write failing tests for `isClockInJanela`**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { isClockInJanela } from './producao-turno-janela';
+
+describe('isClockInJanela', () => {
+  it('inclui o início e exclui o fim (fronteira vai para o próximo)', () => {
+    expect(isClockInJanela(7 * 60, '07:00', '14:00')).toBe(true);
+    expect(isClockInJanela(14 * 60, '07:00', '14:00')).toBe(false);
+    expect(isClockInJanela(14 * 60, '14:00', '22:00')).toBe(true);
+  });
+
+  it('aceita overnight', () => {
+    expect(isClockInJanela(23 * 60, '22:00', '05:00')).toBe(true);
+    expect(isClockInJanela(2 * 60, '22:00', '05:00')).toBe(true);
+    expect(isClockInJanela(5 * 60, '22:00', '05:00')).toBe(false);
+    expect(isClockInJanela(12 * 60, '22:00', '05:00')).toBe(false);
+  });
+
+  it('rejeita duração zero', () => {
+    expect(isClockInJanela(7 * 60, '07:00', '07:00')).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npm test -- src/domain/producao-turno/producao-turno-janela.test.ts`
+Expected: FAIL (módulo não existe)
+
+- [ ] **Step 4: Implement `isClockInJanela`**
+
+```typescript
+import { toMinutesFromClock } from '@/domain/painel-producao/painel-producao-time';
+
+export function isClockInJanela(agoraMin: number, inicio: string, fim: string): boolean {
+  const ini = toMinutesFromClock(inicio);
+  const end = toMinutesFromClock(fim);
+  if (end === ini) return false;
+  if (end > ini) return agoraMin >= ini && agoraMin < end;
+  return agoraMin >= ini || agoraMin < end;
+}
+```
+
+- [ ] **Step 5: Run janela tests — PASS**
+
+Run: `npm test -- src/domain/producao-turno/producao-turno-janela.test.ts`
+
+- [ ] **Step 6: Write failing tests for dia operacional**
+
+Usar instantes UTC com `-03:00`. T1 `07:00`–`14:00`, T2 `14:00`–`22:00`, T3 `22:00`–`05:00`.
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { brazilClockUtcMs } from '@/lib/utils/date-utils';
+import { ProducaoTurnoDiaResolver } from './producao-turno-dia';
+
+const turnos = [
+  { numero: 1 as const, inicio: '07:00', fim: '14:00' },
+  { numero: 2 as const, inicio: '14:00', fim: '22:00' },
+  { numero: 3 as const, inicio: '22:00', fim: '05:00' },
+];
+
+const resolver = new ProducaoTurnoDiaResolver();
+
+describe('ProducaoTurnoDiaResolver', () => {
+  it('às 15:00 usa o T1 de hoje', () => {
+    const now = brazilClockUtcMs('2026-08-18', '15:00');
+    const dia = resolver.resolve(now, turnos);
+    expect(dia?.startMs).toBe(brazilClockUtcMs('2026-08-18', '07:00'));
+    expect(dia?.endMs).toBe(brazilClockUtcMs('2026-08-19', '05:00'));
+  });
+
+  it('às 02:00 ainda é o dia que começou ontem às 07:00', () => {
+    const now = brazilClockUtcMs('2026-08-19', '02:00');
+    const dia = resolver.resolve(now, turnos);
+    expect(dia?.startMs).toBe(brazilClockUtcMs('2026-08-18', '07:00'));
+  });
+
+  it('às 06:00 (vão após o último) retorna null', () => {
+    const now = brazilClockUtcMs('2026-08-19', '06:00');
+    expect(resolver.resolve(now, turnos)).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 7: Implement resolver**
+
+`src/domain/producao-turno/producao-turno-dia.ts`:
+
+- Ordenar turnos por `numero`; T1 = primeiro; último = último ligado.
+- `durationMs = janelaDurationMinutes(t1.inicio, last.fim) * 60_000`
+- Candidatos: T1 de hoje e T1 de ontem (`getBrazilDateISOFromInstant` + `addCalendarDaysISO`).
+- Retornar o intervalo `[t1Start, t1Start + duration)` que contém `nowMs`.
+- Senão `null`.
+
+- [ ] **Step 8: Run dia tests — PASS**
+
+Run: `npm test -- src/domain/producao-turno/producao-turno-dia.test.ts`
+
+- [ ] **Step 9: Add `brazilClockMinutes` (não existe hoje)**
+
+Em `src/lib/utils/date-utils.ts`:
+
+```typescript
+export function brazilClockMinutes(now: Date): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+  return hour * 60 + minute;
+}
+```
+
+Teste em `date-utils.test.ts`: `brazilClockMinutes(new Date('2026-08-18T18:00:00.000Z'))` é `15 * 60` (15:00 BRT = UTC+3 no inverno permanente -03).
+
+`2026-08-18T18:00:00.000Z` → 15:00 em `-03:00` → 900.
+
+Run: `npm test -- src/lib/utils/date-utils.test.ts`
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/domain/producao-turno/producao-turno-types.ts src/domain/producao-turno/producao-turno-janela.ts src/domain/producao-turno/producao-turno-janela.test.ts src/domain/producao-turno/producao-turno-dia.ts src/domain/producao-turno/producao-turno-dia.test.ts src/lib/utils/date-utils.ts src/lib/utils/date-utils.test.ts
+git commit -m "feat(turnos): janela de relógio e dia operacional da etapa"
+```
+
+---
+
+### Task 2: Sobreposição + decisão do prompt + copy do sheet
+
+**Files:**
+- Create: `src/domain/producao-turno/producao-turno-overlap.ts`
+- Create: `src/domain/producao-turno/producao-turno-overlap.test.ts`
+- Create: `src/domain/producao-turno/producao-turno-prompt.ts`
+- Create: `src/domain/producao-turno/producao-turno-prompt.test.ts`
+- Create: `src/domain/producao-turno/producao-turno-sheet-model.ts`
+- Create: `src/domain/producao-turno/producao-turno-sheet-model.test.ts`
+- Modify: `src/domain/producao-turno/producao-turno-types.ts` (kinds do prompt)
+
+**Interfaces:**
+- Consumes: `ProducaoTurnoCadastrado`, `ProducaoTurnoAtivo`, `isClockInJanela`, `ProducaoTurnoDiaResolver`
+- Produces:
+  - `assertTurnosEtapaValidos(turnos): string | null` — mensagens da spec
+  - `ProducaoTurnoPrompt.decide(input): ProducaoTurnoPromptDecision`
+  - `buildTurnoSheetModel(decision): TurnoSheetModel`
+  - `ProducaoTurnoPromptDecision.kind`: `'nenhum' | 'definir' | 'confirmar_fora'`
+  - `turnoVigente: ProducaoTurnoNumero | null`
+  - `ativoValido: boolean`
+
+- [ ] **Step 1: Write overlap tests**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { assertTurnosEtapaValidos } from './producao-turno-overlap';
+
+describe('assertTurnosEtapaValidos', () => {
+  it('exige T1', () => {
+    expect(assertTurnosEtapaValidos([])).toMatch(/1º turno/i);
+  });
+
+  it('rejeita T3 sem T2', () => {
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 3, inicio: '22:00', fim: '05:00' },
+      ]),
+    ).toBe('Ligue o 2º turno antes do 3º.');
+  });
+
+  it('rejeita início = fim', () => {
+    expect(
+      assertTurnosEtapaValidos([{ numero: 1, inicio: '07:00', fim: '07:00' }]),
+    ).toBe('Início e fim do turno não podem ser iguais.');
+  });
+
+  it('rejeita sobreposição e aceita vão e fronteira', () => {
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '13:00', fim: '22:00' },
+      ]),
+    ).toBe('Os turnos desta etapa se sobrepõem.');
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '14:00', fim: '22:00' },
+      ]),
+    ).toBeNull();
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '14:30', fim: '22:00' },
+      ]),
+    ).toBeNull();
+  });
+});
+```
+
+Sobreposição: percorrer turnos ordenados; converter cada `inicio` para offset em minutos desde o T1.inicio (overnight: se clock < T1.inicio, `+ 24h`). `inicio(N+1) < fim(N)` no mesmo eixo → sobrepõe. `inicio(N+1) >= fim(N)` ok.
+
+- [ ] **Step 2: Implement overlap — tests PASS**
+
+- [ ] **Step 3: Write prompt tests**
+
+Relógio em minutos via helper de teste `min('15:00')`. Agora: T1 07–14, T2 14–22.
+
+```typescript
+// definir: ativo null OU confirmadoEm < dia.start OU dia null OU numero sumiu da config
+// nenhum: ativo válido e agora dentro da janela do numero
+// confirmar_fora: ativo válido e agora fora da janela
+// turnoVigente: numero cuja janela contém agora, senão null (vão / depois do último)
+```
+
+Casos mínimos:
+1. Sem ativo às 10:00 → `definir`
+2. Ativo T1 confirmado hoje, 10:00 → `nenhum`, turnoVigente=1
+3. Ativo T1, 15:00 → `confirmar_fora`, turnoVigente=2
+4. Ativo T1, 14:10 com T2 começando 14:30 → `confirmar_fora`, turnoVigente=null
+5. Ativo T2 confirmado ontem, agora 10:00 (novo dia) → `definir`
+6. Config desligou T3 e ativo era 3 → `definir`
+
+`agoraMin` + `nowMs` entram no input para não duplicar relógio.
+
+```typescript
+export type ProducaoTurnoPromptInput = {
+  nowMs: number;
+  agoraMin: number;
+  turnos: ProducaoTurnoCadastrado[];
+  ativo: ProducaoTurnoAtivo | null;
+};
+
+export type ProducaoTurnoPromptDecision = {
+  kind: 'nenhum' | 'definir' | 'confirmar_fora';
+  ativoValido: boolean;
+  numeroAtivo: ProducaoTurnoNumero | null;
+  turnoVigente: ProducaoTurnoNumero | null;
+};
+```
+
+- [ ] **Step 4: Implement `ProducaoTurnoPrompt` — tests PASS**
+
+`ativoValido` se: dia != null, ativo != null, `Date.parse(confirmadoEm) >= dia.startMs`, numero existe em `turnos`.
+
+`turnoVigente` = primeiro turno com `isClockInJanela(agoraMin, inicio, fim)`.
+
+- [ ] **Step 5: Sheet model tests + implement**
+
+```typescript
+export type TurnoSheetModel = {
+  title: string;
+  actions: Array<{ numero: ProducaoTurnoNumero; label: string; primary: boolean }>;
+};
+
+export function buildTurnoSheetModel(
+  decision: ProducaoTurnoPromptDecision,
+  turnos: ProducaoTurnoCadastrado[],
+): TurnoSheetModel | null {
+  if (decision.kind === 'nenhum') return null;
+  if (decision.kind === 'definir') {
+    return {
+      title: 'Qual turno?',
+      actions: turnos.map((t) => ({
+        numero: t.numero,
+        label: `Turno ${t.numero}`,
+        primary: false,
+      })),
+    };
+  }
+  const n = decision.numeroAtivo!;
+  const actions: TurnoSheetModel['actions'] = [
+    { numero: n, label: `Continuar no ${n}º`, primary: false },
+  ];
+  if (decision.turnoVigente && decision.turnoVigente !== n) {
+    actions.push({
+      numero: decision.turnoVigente,
+      label: `Trocar para o ${decision.turnoVigente}º`,
+      primary: true,
+    });
+  } else {
+    for (const t of turnos) {
+      if (t.numero === n) continue;
+      actions.push({ numero: t.numero, label: `Trocar para o ${t.numero}º`, primary: false });
+    }
+  }
+  return { title: `Ainda é o ${n}º turno?`, actions };
+}
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/producao-turno
+git commit -m "feat(turnos): validação, prompt do lote e copy do sheet"
+```
+
+---
+
+### Task 3: Snapshot de operação com turnos derivados
+
+**Files:**
+- Modify: `src/domain/config-operacao/config-operacao-types.ts`
+- Modify: `src/domain/config-operacao/config-operacao-mapper.ts`
+- Modify: `src/domain/config-operacao/config-operacao-mapper.test.ts`
+
+**Interfaces:**
+- Consumes: `assertTurnosEtapaValidos`, `ProducaoTurnoEtapaId`, `ProducaoTurnoCadastrado`
+- Produces:
+  - `ConfigOperacaoTurno = { etapa, numero, inicio, fim }`
+  - `ConfigOperacaoSnapshot.turnos: ConfigOperacaoTurno[]` + os seis horários **somente leitura derivados**
+  - `ConfigOperacaoPatch = { turnos?: ConfigOperacaoTurno[]; tempoMedioFermentacaoMin?: number; tempoMedioResfriamentoMin?: number }`
+  - `ConfigOperacaoRow` = só minutos + `updated_at` (sem os seis clocks)
+  - `configOperacaoMapper.composeSnapshot(row, turnosRows): ConfigOperacaoSnapshot`
+  - `configOperacaoMapper.turnosDaEtapa(snapshot, etapa): ProducaoTurnoCadastrado[]`
+  - `deriveEtapaJanela(turnosDaEtapa): { inicio, fim }` — T1.inicio e último.fim
+
+- [ ] **Step 1: Atualizar types**
+
+`horarioInicioProducao` etc. **permanecem no snapshot** (consumidores atuais). Somem de `ConfigOperacaoRow` e de `ConfigOperacaoPatch`.
+
+`DEFAULT_CONFIG_OPERACAO.turnos`:
+
+```typescript
+[
+  { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '18:00' },
+  { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
+  { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+]
+```
+
+E os seis campos iguais a esses T1.
+
+- [ ] **Step 2: Testes do mapper**
+
+- `composeSnapshot` deriva fermentação 07–18, forno 07–18, embalagem 07–05 quando T1 07–22 e T2 22–05.
+- `validateSnapshot` recusa T3 sem T2, sobreposição, T1 ausente em alguma etapa, tempos ≤ 0.
+- `parsePatch` aceita `{ turnos, tempoMedioFermentacaoMin }`; rejeita relógio inválido; **não** aceita mais `horarioInicioProducao`.
+- `mergeSnapshot` substitui `turnos` inteiro se o patch trouxer `turnos`.
+
+`validateSnapshot`: para cada etapa, filtrar turnos, chamar `assertTurnosEtapaValidos`. As três etapas precisam de T1.
+
+- [ ] **Step 3: Implementar mapper — tests PASS**
+
+`mapRowToSnapshot` antigo some. Novo: `composeSnapshot`.
+
+`snapshotToRow` só devolve os dois tempos médios.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/config-operacao
+git commit -m "feat(turnos): snapshot de operação deriva janela dos turnos cadastrados"
+```
+
+Corrigir qualquer teste de mapper que ainda monte `ConfigOperacaoRow` com clocks.
+
+---
+
+### Task 4: Migration + tipos do banco
+
+**Files:**
+- Create: `supabase/migrations/20260818160000_producao_turnos.sql`
+- Modify: `src/types/database.ts`
+- Modify: `types/database.ts`
+
+**Interfaces:**
+- Produces: tabelas `config_operacao_turnos`, `producao_turno_ativo`; coluna `turno smallint` nas três tabelas de lote.
+
+- [ ] **Step 1: Write migration**
+
+```sql
+CREATE TABLE public.config_operacao_turnos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  etapa text NOT NULL CHECK (etapa IN ('fermentacao', 'forno', 'embalagem')),
+  numero smallint NOT NULL CHECK (numero IN (1, 2, 3)),
+  inicio time NOT NULL,
+  fim time NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT config_operacao_turnos_duracao_chk CHECK (inicio <> fim),
+  CONSTRAINT config_operacao_turnos_unique UNIQUE (etapa, numero)
+);
+
+INSERT INTO public.config_operacao_turnos (etapa, numero, inicio, fim)
+SELECT 'fermentacao', 1, horario_inicio_producao, horario_fim_producao FROM public.config_operacao
+UNION ALL
+SELECT 'forno', 1, horario_inicio_forno, horario_fim_forno FROM public.config_operacao
+UNION ALL
+SELECT 'embalagem', 1, horario_inicio_embalagem, horario_fim_embalagem FROM public.config_operacao;
+
+ALTER TABLE public.config_operacao
+  DROP CONSTRAINT IF EXISTS config_operacao_producao_janela_chk,
+  DROP CONSTRAINT IF EXISTS config_operacao_forno_janela_chk,
+  DROP CONSTRAINT IF EXISTS config_operacao_embalagem_janela_chk;
+
+ALTER TABLE public.config_operacao
+  DROP COLUMN horario_inicio_producao,
+  DROP COLUMN horario_fim_producao,
+  DROP COLUMN horario_inicio_forno,
+  DROP COLUMN horario_fim_forno,
+  DROP COLUMN horario_inicio_embalagem,
+  DROP COLUMN horario_fim_embalagem;
+
+CREATE TABLE public.producao_turno_ativo (
+  etapa text PRIMARY KEY CHECK (etapa IN ('fermentacao', 'forno', 'embalagem')),
+  numero smallint NOT NULL CHECK (numero IN (1, 2, 3)),
+  confirmado_em timestamptz NOT NULL
+);
+
+ALTER TABLE public.fermentacao_lotes
+  ADD COLUMN turno smallint NULL CHECK (turno IN (1, 2, 3));
+ALTER TABLE public.forno_lotes
+  ADD COLUMN turno smallint NULL CHECK (turno IN (1, 2, 3));
+ALTER TABLE public.embalagem_lotes
+  ADD COLUMN turno smallint NULL CHECK (turno IN (1, 2, 3));
+
+ALTER TABLE public.config_operacao_turnos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_turno_ativo ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY config_operacao_turnos_select ON public.config_operacao_turnos
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY config_operacao_turnos_write ON public.config_operacao_turnos
+  FOR ALL TO authenticated USING ((SELECT is_admin())) WITH CHECK ((SELECT is_admin()));
+
+CREATE POLICY producao_turno_ativo_select ON public.producao_turno_ativo
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY producao_turno_ativo_insert ON public.producao_turno_ativo
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY producao_turno_ativo_update ON public.producao_turno_ativo
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY producao_turno_ativo_delete ON public.producao_turno_ativo
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+```
+
+Se o INSERT via UNION falhar quando `config_operacao` estiver vazia, o seed da migration 20260817180000 já inseriu linha — ok em prod. Em teste local vazio, o INSERT simplesmente não cria linhas; o service usa DEFAULT.
+
+- [ ] **Step 2: Atualizar `database.ts` (os dois arquivos)**
+
+Adicionar Tables `config_operacao_turnos` e `producao_turno_ativo` no mesmo formato de `config_operacao`. Em `config_operacao` Row/Insert/Update, remover os seis clocks. Em `fermentacao_lotes` / `forno_lotes` / `embalagem_lotes` Row/Insert/Update, adicionar `turno: number | null`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add supabase/migrations/20260818160000_producao_turnos.sql src/types/database.ts types/database.ts
+git commit -m "feat(turnos): migration de turnos cadastrados, ativo e carimbo no lote"
+```
+
+Não aplicar no remoto a menos que o usuário peça. Local: `npx supabase db push` se o stack local estiver no ar; senão seguir o fluxo habitual do repo.
+
+---
+
+### Task 5: Service de config persiste turnos
+
+**Files:**
+- Modify: `src/lib/services/config-operacao-service.ts`
+- Modify: `src/app/api/config/operacao/route.ts` (mensagem 400 do PATCH)
+
+**Interfaces:**
+- Consumes: `composeSnapshot`, `parsePatch`, `validateSnapshot`, `snapshotToRow`
+- Produces: `getConfig()` / `updateConfig(patch)` com `turnos` no JSON
+
+- [ ] **Step 1: Reescrever get/update**
+
+`getConfig`:
+1. SELECT minutos + `id` + `updated_at` de `config_operacao`
+2. SELECT `etapa, numero, inicio, fim` de `config_operacao_turnos`
+3. `composeSnapshot(row, mapTurnos(rows))`
+4. Se erro/vazio: `DEFAULT_CONFIG_OPERACAO` (igual hoje)
+
+`updateConfig`:
+1. merge + validate (já lança Error com a mensagem da spec)
+2. UPDATE minutos em `config_operacao`
+3. Se `patch.turnos`: DELETE todos `config_operacao_turnos` + INSERT os novos (service role ignora RLS)
+4. invalidate cache; return getConfig fresco
+
+Mapear `inicio`/`fim` time do PG com `toClockHHmm` (o mapper já fazia isso nos clocks).
+
+- [ ] **Step 2: PATCH 400 copy**
+
+Trocar o texto para mencionar `turnos` (array) e tempos inteiros — sem `horarioInicioProducao`.
+
+- [ ] **Step 3: Rodar testes do mapper + qualquer teste do service de config**
+
+Run: `npm test -- src/domain/config-operacao src/lib/services/config-operacao-service.ts src/lib/services/estimativa-producao-service.test.ts src/domain/painel-producao/painel-producao-windows.test.ts`
+
+Corrigir fixtures que ainda passam os seis clocks **graváveis**; o snapshot **ainda tem** os seis campos derivados, então testes de windows/estimativa que montam snapshot completo precisam incluir `turnos` **ou** os seis derivados. Preferir incluir `turnos` + deixar o mapper derivar nos testes de integração; nos testes que constroem snapshot na mão, adicionar `turnos` E manter os seis campos consistentes.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/config-operacao-service.ts src/app/api/config/operacao/route.ts src/domain src/lib/services
+git commit -m "feat(turnos): persiste turnos na config de operação"
+```
+
+---
+
+### Task 6: UI `/config/operacao`
+
+**Files:**
+- Create: `src/app/config/operacao/OperacaoTurnoEtapaBlock.tsx`
+- Create: `src/app/config/operacao/OperacaoTurnosSection.tsx`
+- Modify: `src/app/config/operacao/OperacaoConfigClient.tsx`
+- Modify: `src/app/config/operacao/page.tsx` se a description do header estiver só no client
+
+**Interfaces:**
+- Consumes: `ConfigOperacaoSnapshot.turnos`
+- PATCH body: `{ turnos, tempoMedioFermentacaoMin, tempoMedioResfriamentoMin }`
+
+- [ ] **Step 1: Draft local**
+
+Tipo `EtapaDraft = { t1, t2?: { inicio, fim }, t3?: { inicio, fim } }` com `t2`/`t3` presentes só se o Switch estiver ligado.
+
+`OperacaoTurnoEtapaBlock`: label da etapa; T1 sempre com dois `Input type="time"`; `Switch` “2º turno”; com T2 ligado, campos de T2 + `Switch` “3º turno” (disabled se T2 off). Desligar T2 também desliga T3 no draft. Texto de ajuda: “Se o fim for menor que o início, vale o dia seguinte (ex.: 7h → 5h).”
+
+T3 só habilitável com T2 ligado — desligar T2 zera T3 no draft.
+
+- [ ] **Step 2: Section + client**
+
+Header description: `Turnos por etapa e tempos médios usados no painel e no fluxo.`
+
+Some o bloco “1º turno”. Tempos médios iguais.
+
+Save: montar `ConfigOperacaoTurno[]` a partir dos três drafts e PATCH.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/config/operacao
+git commit -m "feat(turnos): cadastro de até 3 turnos por etapa na operação"
+```
+
+---
+
+### Task 7: Turno ativo (repo, service, PUT)
+
+**Files:**
+- Create: `src/data/producao-turno/ProducaoTurnoAtivoRepository.ts`
+- Create: `src/lib/services/producao-turno-service.ts`
+- Create: `src/lib/services/producao-turno-service.test.ts`
+- Create: `src/app/api/producao/fermentacao/turno-ativo/route.ts`
+- Create: `src/app/api/producao/forno/turno-ativo/route.ts`
+- Create: `src/app/api/producao/embalagem/turno-ativo/route.ts`
+- Create: `src/domain/producao-turno/turno-requerido-error.ts`
+
+**Interfaces:**
+- Consumes: `ProducaoTurnoPrompt`, `configOperacaoService.getConfig()`, `configOperacaoMapper.turnosDaEtapa`
+- Produces:
+  - `TurnoRequeridoError` com `code = 'turno_requerido'`
+  - `producaoTurnoService.getEstado(etapa, now): { ativo, decision, turnos }`
+  - `producaoTurnoService.confirm(etapa, numero, now): void` — upsert; `numero` tem que existir nos turnos ligados
+  - `producaoTurnoService.requireNumero(etapa, now): ProducaoTurnoNumero` — se `decision.kind !== 'nenhum'` lança `TurnoRequeridoError`
+
+- [ ] **Step 1: Error + repository**
+
+```typescript
+export class TurnoRequeridoError extends Error {
+  readonly code = 'turno_requerido' as const;
+  constructor() {
+    super('Turno da etapa não confirmado para este dia');
+    this.name = 'TurnoRequeridoError';
+  }
+}
+```
+
+Repository: `findByEtapa(etapa)`, `upsert({ etapa, numero, confirmadoEm })`.
+
+- [ ] **Step 2: Service tests (mock repo + config)**
+
+1. `requireNumero` com ativo T1 válido às 10:00 retorna 1
+2. `requireNumero` sem ativo lança `TurnoRequeridoError`
+3. `confirm` de numero 3 sem T3 na config lança Error `'Turno não cadastrado para esta etapa.'`
+4. `getEstado` fermentação não usa ativo do forno
+
+`agoraMin` = `brazilClockMinutes(now)` (Task 1).
+
+- [ ] **Step 3: Implement service — tests PASS**
+
+- [ ] **Step 4: PUT routes**
+
+Cada rota: `const etapa` fixa no arquivo. Body `{ numero: 1|2|3 }`. `await producaoTurnoService.confirm(etapa, numero)`. 400 se numero inválido; 200 `{ numero, confirmadoEm }`.
+
+Não alterar `interno-route-access-map`: os prefixos `/api/producao/fermentacao` etc. já exigem `editar`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/data/producao-turno src/lib/services/producao-turno-service.ts src/lib/services/producao-turno-service.test.ts src/domain/producao-turno/turno-requerido-error.ts src/app/api/producao/fermentacao/turno-ativo src/app/api/producao/forno/turno-ativo src/app/api/producao/embalagem/turno-ativo
+git commit -m "feat(turnos): ativo por etapa e API para confirmar"
+```
+
+---
+
+### Task 8: Carimbar turno no POST de lote
+
+**Files:**
+- Modify: `src/domain/types/fermentacao-lote.ts` (`turno?: ProducaoTurnoNumero | null` no Record; Insert novo exige `turno`)
+- Modify: `src/domain/types/forno-lote.ts` (igual)
+- Modify: `src/domain/types/embalagem-lote.ts` (igual)
+- Modify: `src/data/producao-etapa/FermentacaoLoteRepository.ts` (`toDbInsert` / `fromDbRow`)
+- Modify: `src/data/producao-etapa/FornoLoteRepository.ts`
+- Modify: `src/data/embalagem/EmbalagemLoteRepository.ts`
+- Modify: `src/lib/services/fermentacao-lote-service.ts`
+- Modify: `src/lib/services/forno-lote-service.ts`
+- Modify: `src/lib/services/embalagem-lote-service.ts`
+- Modify: `src/lib/services/fermentacao-lote-service.test.ts` (e forno/emb se existirem testes de criar)
+- Modify: `src/app/api/producao/fermentacao/ordem/[ordemId]/lote/route.ts`
+- Modify: `src/app/api/producao/forno/ordem/[ordemId]/lote/route.ts`
+- Modify: `src/app/api/producao/embalagem/pedido/[pedidoEmbalagemId]/lote/route.ts`
+
+**Interfaces:**
+- Consumes: `producaoTurnoService.requireNumero`
+- Produces: insert com `turno`; 409 `{ code: 'turno_requerido', error }`
+
+- [ ] **Step 1: Types + repository map `turno`**
+
+`fromDbRow`: `turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null`
+
+`toDbInsert` no create: `turno: input.turno`
+
+Update **não** envia `turno`.
+
+- [ ] **Step 2: Service criar**
+
+No início de `criarLotePorOrdem` / `criarLotePorPedidoEmbalagem`:
+
+```typescript
+const turno = await producaoTurnoService.requireNumero('fermentacao');
+```
+
+Passar `turno` no `insert`. `atualizarLote` não chama `requireNumero`.
+
+Mock `producaoTurnoService.requireNumero` nos testes existentes de criar lote para retornar `1`. Novo teste: `requireNumero` rejeita → não chama `insert`.
+
+- [ ] **Step 3: Routes POST**
+
+```typescript
+} catch (error) {
+  if (error instanceof TurnoRequeridoError) {
+    return NextResponse.json(
+      { code: error.code, error: error.message },
+      { status: 409 },
+    );
+  }
+  // existente
+}
+```
+
+PUT de lote existente: sem mudança.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/types/fermentacao-lote.ts src/domain/types/forno-lote.ts src/domain/types/embalagem-lote.ts src/data/producao-etapa src/data/embalagem/EmbalagemLoteRepository.ts src/lib/services/fermentacao-lote-service.ts src/lib/services/forno-lote-service.ts src/lib/services/embalagem-lote-service.ts src/lib/services/fermentacao-lote-service.test.ts src/lib/services/forno-lote-service.test.ts src/lib/services/embalagem-lote-service.test.ts src/app/api/producao
+git commit -m "feat(turnos): carimba turno no lote novo e recusa sem ativo do dia"
+```
+
+---
+
+### Task 9: Payload da carga + rótulo na lista
+
+**Files:**
+- Modify: `src/domain/types/painel-etapa.ts` (`PainelLoteEtapa.turno`, `CargaEtapaResponse.turnos` + `turnoAtivo`)
+- Modify: `src/domain/types/painel-embalagem.ts` (`PainelLoteEmbalagem.turno`, `CargaEmbalagemResponse` igual)
+- Create: `src/domain/producao-turno/producao-turno-carga.ts` — DTO `{ turnos, turnoAtivo: { numero, confirmadoEm, valido } | null }`
+- Create: `src/lib/services/producao-turno-carga-attach.ts`
+- Modify: `src/lib/services/painel-fermentacao-service.ts`
+- Modify: `src/lib/services/painel-forno-service.ts`
+- Modify: `src/lib/services/painel-embalagem-service.ts`
+- Modify: `src/domain/producao-etapa/painel-ordem-builder.ts` (`mapLoteToPainelEtapa`)
+- Modify: `src/domain/embalagem/painel-pedido-builder.ts` (`turno` em `PainelLoteEmbalagem`)
+- Modify: `src/components/Realizado/etapa/types.ts` (`EtapaLoteItem.turnoLabel?: string`)
+- Modify: `src/domain/producao-etapa/etapa-ordem-worklist-adapter.ts`
+- Modify: `src/domain/embalagem/embalagem-etapa-adapter.ts`
+- Modify: `src/components/Realizado/etapa/EtapaLoteRow.tsx`
+- Modify: `src/components/Realizado/etapa/EtapaWorklist.tsx` (passar `turnoLabel`)
+
+**Interfaces:**
+- Produces: carga JSON inclui `turnos: { numero, inicio, fim }[]` e `turnoAtivo: { numero, confirmadoEm, valido } | null`
+- `turnoLabel` = `'T1'|'T2'|'T3'` ou omitido se null
+
+- [ ] **Step 1: DTO + attach**
+
+```typescript
+export async function attachTurnoCarga<T extends object>(
+  etapa: ProducaoTurnoEtapaId,
+  payload: T,
+): Promise<T & ProducaoTurnoCargaDto>
+```
+
+`valido = decision.ativoValido`. `turnoAtivo` null se não há linha.
+
+- [ ] **Step 2: Services de painel**
+
+`getCargaCompleta`: `return attachTurnoCarga('fermentacao', { ... })`.
+
+Mapear `lote.turno` em `mapLoteToPainelEtapa`.
+
+- [ ] **Step 3: Linha de lote**
+
+Geist Mono, `text-xs text-text-muted`, `T1` entre o índice e a quantidade. Sem turno: não renderiza o span.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/types/painel-etapa.ts src/domain/types/painel-embalagem.ts src/domain/producao-turno/producao-turno-carga.ts src/lib/services/producao-turno-carga-attach.ts src/lib/services/painel-fermentacao-service.ts src/lib/services/painel-forno-service.ts src/lib/services/painel-embalagem-service.ts src/domain/producao-etapa src/domain/embalagem src/components/Realizado
+git commit -m "feat(turnos): expõe ativo na carga e rótulo T1–T3 na lista de lotes"
+```
+
+---
+
+### Task 10: Chip, sheet e gate do + lote
+
+**Files:**
+- Create: `src/components/Realizado/turno/TurnoAtivoChip.tsx`
+- Create: `src/components/Realizado/turno/TurnoEscolhaSheet.tsx`
+- Create: `src/components/Realizado/turno/useEtapaTurnoGate.ts`
+- Modify: `src/components/Realizado/etapa/EtapaToolbar.tsx` (`turnoChip?: ReactNode`)
+- Modify: `src/components/Realizado/RealizadoEtapa.tsx` (passa o slot)
+- Modify: `src/components/Realizado/etapa/types.ts` (`RealizadoEtapaProps.turnoChip`)
+- Modify: `src/hooks/useEtapaPainelCarga.ts` (guardar `turnos` + `turnoAtivo` da carga; fermentação e forno)
+- Modify: o fetch de `/api/painel/embalagem/carga` na page de embalagem (não usa `useEtapaPainelCarga`) para guardar os mesmos campos
+
+**Interfaces:**
+- Consumes: `buildTurnoSheetModel`, `ProducaoTurnoPrompt.decide` no **servidor já veio `valido`**; no client, se a carga tiver `turnoAtivo.valido === false` ou null → chip “Definir turno”. Para “dentro/fora da janela” no + lote, o client chama `ProducaoTurnoPrompt.decide` com `now` local + `turnos` da carga (relógio do tablet). Não confiar só no `valido` da carga para o caso 3 (hora extra): a carga pode estar stale. Sempre `decide` no clique do + lote.
+- PUT ` /api/producao/${etapa}/turno-ativo` `{ numero }`
+- Chip: `min-h-11` (≥44px), amber se válido, stone se “Definir turno”
+
+- [ ] **Step 1: Chip + sheet**
+
+`TurnoEscolhaSheet`: overlay `role="dialog"`, botões ≥44px, ações do model, Cancelar fecha sem callback de sucesso.
+
+Chip: `aria-label` `Turno ${n}` ou `Definir turno`. Ícone Material `schedule`.
+
+- [ ] **Step 2: `useEtapaTurnoGate`**
+
+Estado: `turnos`, `ativo` da carga; `sheet: TurnoSheetModel | null`; `pendingProceed: (() => void) | null`.
+
+`ensureTurnoThen(proceed)`:
+1. `decision = ProducaoTurnoPrompt.decide({ nowMs, agoraMin, turnos, ativo })`
+2. se `nenhum` → `proceed()`
+3. senão abre sheet; ao escolher numero → PUT; se ok, atualiza ativo local `{ numero, confirmadoEm: now ISO }`; `proceed()`; se PUT falhar, toast via `onError('Não foi possível trocar o turno.')` e **não** chama proceed
+4. Cancelar: limpa sheet, não proceed
+
+Chip onClick: sheet com lista dos turnos ligados (`definir` model), PUT, sem `proceed`.
+
+- [ ] **Step 3: Toolbar slot**
+
+À direita do título da etapa (linha 1), antes da data. Não em cada produto.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/Realizado/turno src/components/Realizado/etapa/EtapaToolbar.tsx src/components/Realizado/RealizadoEtapa.tsx src/components/Realizado/etapa/types.ts src/hooks/useEtapaPainelCarga.ts
+git commit -m "feat(turnos): chip, sheet e gate do novo lote"
+```
+
+---
+
+### Task 11: Ligar fermentação, forno e embalagem
+
+**Files:**
+- Modify: `src/app/realizado/fermentacao/page.tsx`
+- Modify: `src/app/realizado/forno/page.tsx`
+- Modify: `src/app/realizado/embalagem/page.tsx`
+
+A embalagem já renderiza `RealizadoEtapa` (~linha 391). Passar `turnoChip` igual fermentação/forno. Não mexer em `EmbalagemDashboard` nem em `RitmoCompactCard`.
+
+**Interfaces:**
+- `handleNovoLote` / `handleNovoLoteById` passam a `ensureTurnoThen(() => { /* open modal hoje */ })`
+- POST 409 `turno_requerido`: reabrir o sheet (`definir`) e não mostrar erro genérico
+
+- [ ] **Step 1: Fermentação**
+
+Ler `turnos`/`turnoAtivo` de `useEtapaPainelCarga`. Instanciar o gate. Passar chip em `RealizadoEtapa`. Envolver `handleNovoLote`.
+
+No POST de criar lote (o fetch existente): se `res.status === 409 && data.code === 'turno_requerido'`, chamar o mesmo sheet e abortar o spinner de sucesso.
+
+- [ ] **Step 2: Forno** — o mesmo, `etapa: 'forno'`.
+
+- [ ] **Step 3: Embalagem** — o mesmo, `etapa: 'embalagem'`, PUT `/api/producao/embalagem/turno-ativo`. A carga de embalagem já devolve `horarioInicioEmbalagem`; **manter**. Estender o `useState`/fetch da page (não o hook de ferm/forno) com `turnos` e `turnoAtivo`. `handleNovoLote` envolve `ensureTurnoThen`. Passar `turnoChip` em `<RealizadoEtapa>`.
+
+- [ ] **Step 4: `npm test -- src/domain/producao-turno src/domain/config-operacao src/lib/services/producao-turno-service.test.ts src/lib/services/fermentacao-lote-service.test.ts src/lib/auth/interno-route-access-map.test.ts`**
+
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/realizado src/hooks src/components/Realizado
+git commit -m "feat(turnos): liga chip e prompt nas telas de realizado"
+```
+
+---
+
+## Verificação manual (depois das 11 tasks)
+
+1. Config: cadastrar T2 na fermentação; ritmo/fluxo ainda abrem (janela = T1 início → T2 fim).
+2. Tablet fermentação: chip “Definir turno”; + lote abre `Qual turno?`; cancelar não abre modal.
+3. Escolher T1; segundo lote na janela não pergunta; linha mostra `T1`.
+4. Avançar o relógio (ou cadastro com janela já fechada) → `Ainda é o 1º turno?` / Continuar / Trocar.
+5. Chip troca antecipada para T2 sem lote; próximo lote carimba T2.
+6. Forno independente da fermentação.
+7. Lote antigo sem rótulo; editar não pede turno.
+
+---
+
+## Self-review (cobertura da spec)
+
+| Spec | Task |
+|------|------|
+| Tabela `config_operacao_turnos`, drop dos 6 clocks, T1 seed | 4 |
+| Snapshot deriva janela; ritmo/fluxo intactos | 3, 5 |
+| T1 obrigatório; T2/T3 sequência; vão ok; overlap não | 2, 3, 6 |
+| `producao_turno_ativo` por etapa | 7 |
+| Chip + troca antecipada | 10, 11 |
+| + lote primeiro dia / fora da janela / dentro | 2, 10, 11 |
+| Continuar atualiza `confirmado_em` | 7 (PUT mesmo numero) |
+| Carimbo no insert; update não mexe; null histórico | 8, 9 |
+| 409 `turno_requerido` | 8, 11 |
+| Dia operacional + vão pré-T1 = sem ativo | 1, 2 |
+| Config UI | 6 |
+| Lista `T1`–`T3` | 9 |
+| Fora: pessoa/PIN, ritmo-por-turno, TV, WhatsApp, resfriamento | — (não há task) |

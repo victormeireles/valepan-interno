@@ -1,0 +1,231 @@
+# Controle previsto × realizado no Fluxo de Produção
+
+Data: 2026-08-17  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+No dashboard `/realizado/fluxo-processo`, mostrar de relance **o objetivo do dia**, **onde a linha deveria estar agora** e **onde está**, e **qual etapa nasceu o desvio** — volume no card, hora a hora no gráfico, relógio por OP no detalhe.
+
+## Contexto
+
+A estimativa das OPs (`ordens_producao_estimativa`) já grava início/fim previstos por etapa. O Fluxo já mostra o realizado (volume, ritmo, barras por hora, gaps, ondas).
+
+Hoje o card só compara fermentação com o total do plano (`% do plano`) e o rodapé **Horas com lançamento** duplica a faixa *lançou* embaixo do gráfico, sem dizer se estamos atrasados.
+
+## Escopo
+
+Inclui:
+
+- Trocar o rodapé **Horas com lançamento** dos cards de etapa por **objetivo / deveria / Δ**, com o volume grande passando a ser o **realizado (está)**
+- Frase única de gargalo acima dos três cards
+- Overlay de previsto **por hora** nas barras (fantasma stone) + marcador **agora** no dia de hoje
+- Lista compacta de OPs da etapa ativa (previsto fim × último lançamento)
+- Manter aviso **digitado em bloco** nos cards e a faixa *lançou* sob o gráfico
+- Domínio puro + testes; payload do GET `/api/painel/fluxo-processo/carga` estendido; sem tabela nova
+
+Fora de escopo:
+
+- Reforecast do plano com o realizado
+- Tempo de troca de assadeira na estimativa
+- Estouro de turno no motor da OP
+- Gantt novo, aba/rota nova
+- Vínculo de lote de embalagem → OP (não existe); relógio da embalagem é FIFO (abaixo)
+
+## Decisão de abordagem
+
+**Faixa de controle nos cards atuais + overlay no gráfico que já existe** (aprovado).
+
+Descartado: enfiar tudo só nos cards (já densos); tela/aba separada (parte o realizado do plano).
+
+## Regras de negócio
+
+Fonte de verdade do volume no domínio: **unidades**. A UI converte com `FluxoDisplayScale` (LT / UN / CX), igual ao restante da tela.
+
+Conjunto de OPs do plano: o mesmo da estimativa (categorias visíveis na embalagem). OP sem linha em `ordens_producao_estimativa` não entra no objetivo.
+
+### Relógio de corte (`asOf`)
+
+- Data selecionada = **hoje (BR)**: `asOf` = agora em `America/Sao_Paulo`
+- Qualquer outro dia: `asOf` não interpola — **deveria = objetivo** (dia fechado)
+
+Antes do início previsto da primeira OP da etapa, deveria = 0. Não marcar atrasado por “ainda não começou”.
+
+### Objetivo
+
+Soma das unidades das OPs do conjunto, por etapa (ferm/forno/emb usam o mesmo volume de OP; embalagem no modo CX usa caixas da OP quando o scale já faria isso).
+
+### Deveria (acumulado)
+
+Para cada OP, na etapa:
+
+- `t <= inicioPrevisto` → 0
+- `t >= fimPrevisto` → volume da OP
+- senão → interpolação linear: `(t - inicio) / (fim - inicio) * volume`
+
+Inícios/fins:
+
+| Etapa | início | fim |
+|-------|--------|-----|
+| ferm | `fermentacaoInicioPrevisto` | `fermentacaoFimPrevisto` |
+| forno | `fornoInicioPrevisto` | `fornoFimPrevisto` |
+| emb | `embalagemInicioPrevisto` | `embalagemFimPrevisto` |
+
+Se `fim == inicio`, o volume inteiro cai no instante do início (hora correspondente no gráfico).
+
+Deveria do card = soma das OPs em `asOf`.
+
+### Está (acumulado)
+
+- Ferm / forno: volume da etapa no dia civil (o que o card já mostra)
+- Emb: volume da etapa **menos** OP do dia anterior (`opAnterior`). O rodapé *“X de OP de dd/mm”* permanece e **não entra no Δ**
+
+### Status do Δ
+
+`ratio = (está - deveria) / max(deveria, 1)`
+
+- `no plano` se `|ratio| <= 0,05` **ou** deveria = 0 e está = 0
+- `atrasado` se está < deveria e não é `no plano`
+- `adiantado` se está > deveria e não é `no plano`
+
+Nunca só cor: chip com texto (`atrasado` / `adiantado` / `no plano`) + número com sinal (`−1.800`). Cores: âmbar / esmeralda / stone. Ícone Material (`schedule` / `trending_up` / `check_circle`).
+
+### Gargalo
+
+Percorrer ferm → forno → emb. **Gargalo = primeira etapa `atrasada`.** Etapas seguintes não são acusadas mesmo com Δ negativo.
+
+Submotivo (primeiro que aplicar, na etapa gargalo):
+
+1. **Início tarde** — primeiro `produzidoEm` da etapa (só OPs da data) ≥ 15 min depois do menor `inicioPrevisto`
+2. **Ritmo baixo** — ritmo no lançamento &lt; 90% da capacidade informada da etapa
+3. **Buracos** — `gapTot` da etapa ≥ 15 min
+4. Senão: *“abaixo do previsto”*
+
+Frases (pt-BR, uma linha):
+
+- Com gargalo: *“O atraso nasceu na fermentação (início 38 min tarde).”*
+- Só adiantado, sem atrasado: *“Acima do previsto na {etapa}.”*
+- Tudo `no plano`: *“No plano.”*
+- Sem estimativa: *“Sem plano de horários — cadastre as metas do mês.”*
+
+### Previsto por hora (gráfico)
+
+Não usar acumulado nas barras (escala diferente). Para cada hora `H` (0–23), previsto = soma, nas OPs, de:
+
+`volume * overlap([H:00, H+1:00), [inicio, fim]) / duracao`
+
+Montar `matrizPrevisto` no mesmo formato da `matriz` (assadeira → 24 horas, em UN), para o scale converter LT/CX com o fator certo. O overlay é **uma** série fantasma (soma da hora), sem empilhar cor por assadeira.
+
+### Relógio por OP (etapa ativa)
+
+**Ferm e forno:** agrupar lotes por `ordemProducaoId`.
+
+- previsto fim = timestamp da estimativa
+- último lançamento = `max(produzidoEm)`; vazio = sem lançamento
+- Δ em minutos, com texto (`atrasada` / `adiantada` / `sem lançamento`)
+
+**Embalagem:** lote não tem OP. FIFO na data: OPs do dia por `ordemPlanejamento`; alocar lançamentos do dia civil com `dataOp` = data selecionada, em ordem de `produzidoEm`. Quando a OP completa o volume, o relógio de fim é o evento que fechou; se parcial, último evento alocado + `em andamento`. Rótulo visível: *“Embalagem por FIFO (lote sem OP).”*
+
+## UI
+
+Warm Industrial (stone, amber, Geist Mono em quantidade, Material Icons, pt-BR). Cards ≥44px de toque; card continua selecionando a etapa do gráfico (`aria-pressed`).
+
+### Frase de gargalo
+
+Entre o header e o grid de cards. Ícone + texto; `aria-live="polite"`.
+
+### Card de etapa
+
+```
+● Fermentação                         07:12 → 16:40
+
+  6.400 UN                      −1.800  atrasado
+  realizado                     vs deveria 8.200
+
+  [========        |    ]  78% do deveria
+                   ↑ marca do deveria
+
+  Objetivo 12.400 UN · ritmo 182 LT/h (meta 200)
+
+  ⚠ 12% digitado em bloco          ← só se houver
+```
+
+- Número grande = **está** (não repetir coluna “Volume”)
+- Barra: preenchido = está / deveria (cap 100% visual; se adiantado, preenchido 100% + chip adiantado). Traço vertical = 100% do deveria. Objetivo **não** entra na barra
+- Ritmo numa linha só (sai a coluna larga atual)
+- Remove `FluxoEtapaContinuidade` de horas / `/ N h` / “h sem lançar”
+- Mantém badge expansível de digitação em bloco
+- Emb: mantém linha de OP do dia anterior
+- Sem estimativa: realizado + mensagem de plano indisponível; barra e Δ ocultos
+- Deveria = 0 e está = 0: sem barra; chip `no plano` (ainda não começou)
+- Deveria = 0 e está &gt; 0: sem barra (não há teto); chip `adiantado` + Δ
+- Mobile: está + Δ primeiro; deveria/objetivo na linha de baixo; ritmo depois
+
+### Gráfico
+
+- Barras empilhadas por assadeira = realizado (igual hoje)
+- Fantasma stone atrás de cada hora = previsto daquela hora
+- Dia de hoje: linha vertical âmbar **agora** na hora corrente (rótulo `agora`; não usar no dia passado)
+- Legenda no gráfico (não só tooltip): realizado (assadeira) · previsto · agora
+- Tooltip e `aria-label` da barra: hora, previsto, realizado, Δ. Foco teclado já existe (`button`)
+- Faixa *lançou* permanece
+
+### Lista de OPs
+
+Abaixo do gráfico, só da etapa ativa. Densidade Linear: uma linha `# · produto · previsto · último · Δ`. Truncate + `title`. Vazia: *“Nenhuma OP no plano desta etapa.”*
+
+## Arquitetura
+
+Sem migration. Estender o payload atual.
+
+| Peça | Responsabilidade |
+|------|------------------|
+| `FluxoPrevistoAcumulado` | Interpolação linear OP × etapa em `asOf` |
+| `FluxoPrevistoHora` | Rateio do previsto nas 24 h + `matrizPrevisto` |
+| `FluxoControleStatus` | Δ e banda `atrasado` / `adiantado` / `no plano` |
+| `FluxoGargalo` | Primeira etapa atrasada + submotivo + frase |
+| `FluxoOpRelogio` | Ferm/forno por lote; embalagem FIFO |
+| `FluxoControleBuilder` | Orquestra e devolve `controle` |
+| `FluxoProcessoService` | Carrega estimativas do dia e passa ao builder |
+| `VpFluxoPayload.controle` | Números por etapa, frase, `matrizPrevisto`, OPs |
+| `FluxoEtapaCards` | Novo rodapé; volume = está |
+| `FluxoGargaloBanner` | Uma linha acima dos cards |
+| `FluxoBarrasHora` | Fantasma + agora + legenda/tooltip |
+| `FluxoOpRelogioList` | Lista sob o gráfico |
+| `FluxoEtapaContinuidade` | Só digitação em bloco (ou trecho equivalente) |
+
+`FluxoProcessoBuilder` atual continua responsável pelo realizado. Controle é composição ao lado, não god-class no builder.
+
+`asOf` injetável nos testes (não ler `Date.now()` no domínio).
+
+## Tratamento de erros / edge cases
+
+| Situação | Comportamento |
+|----------|----------------|
+| Sem metas do mês / sem estimativa | Frase de plano indisponível; cards só com realizado; gráfico sem fantasma |
+| OPs no dia mas conjunto da estimativa vazio | Objetivo 0; mesmo estado de sem plano se não houver nenhuma linha |
+| `asOf` antes do primeiro início | Deveria 0; está 0 → no plano; está &gt; 0 → adiantado; sem barra |
+| Duração prevista 0 | Volume no instante do início |
+| Emb com muito volume de OP anterior | Δ ignora esse volume; footnote explica |
+| Hoje sem nenhum lançamento e deveria &gt; 0 | Está 0 → atrasado |
+| Dia passado | Deveria = objetivo; sem linha *agora* |
+| Modo CX sem conversão do produto | Mesma regra do scale atual (produto some do modo CX) |
+
+## Testes
+
+- Interpolação: antes / no meio / depois; duração 0
+- Soma de OPs no `asOf`; dia passado força deveria = objetivo
+- Rateio horário: OP 10:00–12:00 com 200 un → 100 na hora 10 e 100 na 11
+- Status: ±5%; deveria 0 e está 0 = no plano
+- Gargalo: forno e emb atrasados + ferm atrasado → gargalo ferm; só emb atrasado → emb
+- Submotivo início tarde vs ritmo vs gaps
+- Relógio ferm: `max(produzidoEm)` por OP
+- FIFO emb: duas OPs, lançamentos em sequência preenchem a primeira e começam a segunda
+
+## Critérios de sucesso
+
+- Operação vê nos cards, na unidade ativa, objetivo / deveria / está / Δ com texto (não só cor)
+- Gráfico mostra previsto da **hora** alinhado às barras, com *agora* só hoje
+- Frase de gargalo aponta a primeira etapa atrasada
+- “Horas com lançamento” some dos cards; digitação em bloco e faixa *lançou* ficam
+- Sem estimativa a tela de realizado continua útil

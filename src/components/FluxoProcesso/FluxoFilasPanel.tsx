@@ -34,12 +34,14 @@ const TILES: FilaTileDef[] = [
     accent: '#C6A848',
   },
   { key: 'resfriando' as const, label: 'Resfriando', icon: 'ac_unit', showPrazo: true },
+  { key: 'embalado' as const, label: 'Embalado', icon: 'inventory_2', showPrazo: false },
 ];
 
 const TILE_ACCENT: Record<FluxoFilaKey, string> = {
   aProduzir: '#78716C',
   fermentando: '#C6A848',
   resfriando: '#44403C',
+  embalado: '#047857',
 };
 
 class FluxoFilasSubtitle {
@@ -49,6 +51,15 @@ class FluxoFilasSubtitle {
   }
 }
 
+function prazoMinDaFila(
+  key: FluxoFilaKey,
+  padrao: { camaraMin: number; resfrioMin: number },
+): number {
+  if (key === 'fermentando') return padrao.camaraMin;
+  if (key === 'resfriando') return padrao.resfrioMin;
+  return 0;
+}
+
 function detailIdFor(key: FluxoFilaKey): string {
   return `fluxo-fila-detalhe-${key}`;
 }
@@ -56,14 +67,16 @@ function detailIdFor(key: FluxoFilaKey): string {
 function FluxoFilasTileGrid({
   filas,
   filaAberta,
+  padrao,
   onToggle,
 }: {
   filas: NonNullable<VpFluxoPayload['filas']>;
   filaAberta: FluxoFilaKey | null;
+  padrao: { camaraMin: number; resfrioMin: number };
   onToggle: (key: FluxoFilaKey) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {TILES.map((tile) => {
         const resumo = filas[tile.key];
         return (
@@ -76,6 +89,7 @@ function FluxoFilasTileGrid({
             items={resumo.items}
             presoUn={resumo.presoUn}
             showPrazo={tile.showPrazo}
+            prazoMin={prazoMinDaFila(tile.key, padrao)}
             active={filaAberta === tile.key}
             onClick={() => onToggle(tile.key)}
             detailId={detailIdFor(tile.key)}
@@ -105,7 +119,12 @@ export default function FluxoFilasPanel({ fluxo }: FluxoFilasPanelProps) {
         <p className="py-3 text-sm text-text-muted">Sem OPs para este dia.</p>
       ) : (
         <div className="mt-3">
-          <FluxoFilasTileGrid filas={filas} filaAberta={filaAberta} onToggle={toggleFila} />
+          <FluxoFilasTileGrid
+            filas={filas}
+            filaAberta={filaAberta}
+            padrao={fluxo.padrao}
+            onToggle={toggleFila}
+          />
           {tileAtivo && filas ? (
             <div id={detailIdFor(tileAtivo.key)}>
               <FluxoFilaDetalheList
@@ -113,6 +132,7 @@ export default function FluxoFilasPanel({ fluxo }: FluxoFilasPanelProps) {
                 resumo={filas[tileAtivo.key]}
                 label={tileAtivo.label}
                 scale={scale}
+                prazoMin={prazoMinDaFila(tileAtivo.key, fluxo.padrao)}
                 onClose={() => setFilaAberta(null)}
               />
             </div>

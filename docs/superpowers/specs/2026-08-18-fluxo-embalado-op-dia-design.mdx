@@ -1,0 +1,281 @@
+# Embalado no fluxo: OPs do dia vs OP anterior
+
+Data: 2026-08-18  
+Status: aguardando revisão  
+Tela: `/realizado/fluxo-processo` — tile **Embalado** em **Pães em trânsito**
+
+## Objetivo
+
+O número grande de **Embalado** passa a ser o volume **realmente embalado das OPs do dia selecionado**, casado com a OP/produto do lote. Volume embalado hoje que pertence a OP de outro dia fica na **linha secundária** do tile (mesmo idioma dos cards de etapa) e numa segunda zona da lista.
+
+No exemplo do 18/08: Brioche 75g deixa de mostrar 81 CX (OP cheia via FIFO) e passa a mostrar **50 CX** (lotes daquela OP). O Gergelim Duo com 0 CX no painel de embalagem não aparece como 36 CX “embalado”.
+
+### Sucesso
+
+- Tile **Embalado** soma só lotes do dia cuja OP é do dia (categorias visíveis). Unidade = toggle LT / UN / CX do fluxo
+- Esse total deve coincidir com o painel de embalagem **quando ambos olham as mesmas OPs e a escala é CX em caixas lançadas**; não é contrato bit a bit (fluxo converte via UN; pacotes/arredondamento podem diferir)
+- Linha secundária do tile = lotes produzidos no dia cuja OP não é do dia (ou sem OP), no mesmo idioma dos cards de etapa
+- Lista em duas zonas; zona 2 rotula a data da OP
+- **Resfriando** da OP do dia consome o embalado real daquela OP, não o FIFO entre OPs
+- Painel `/realizado/embalagem` não muda nesta entrega
+
+## Contexto
+
+O tile **Embalado** (651 CX) e o painel de embalagem (427 CX) mediam coisas diferentes, e o fluxo ainda misturava as duas.
+
+1. **Painel de embalagem** soma lotes dos **pedidos/OPs do dia**. Brioche 75g = 50 CX da OP de hoje. Total 427 CX.
+2. **Filas WIP** carregam **todos** os lotes com `produzidoEm` no dia civil (incluindo OP de ontem) e **despejam em FIFO** nas OPs de hoje, sem casar produto. O volume extra (~224 CX) infla OPs que não embalaram aquilo. Brioche 75g vai a 81 (teto da OP); Gergelim Duo vai a 36 com 0 CX reais.
+
+A spec de filas (2026-08-17) definiu FIFO porque o lote de embalagem “não tem OP obrigatória”. No banco o lote **tem** `ordem_producao_id` / `pedido_embalagem_id`. O service de fluxo hoje **não copia** esse id para o evento de embalagem; o FIFO ignora o vínculo.
+
+O 81 do Brioche **não** é “50 de hoje + 31 de ontem daquele pão”. É a OP preenchida com volume misturado.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Telas | Só fluxo de produção, tile **Embalado** (e o efeito em **resfriando** da mesma fila) |
+| Atribuição | Casar lote → `ordemProducaoId` real |
+| Número grande | Soma dos lotes do dia cuja OP é do dia selecionado |
+| Extra no tile | Abaixo do número grande (não ao lado): `{n} de OP de DD/MM`, mesmo padrão dos cards de etapa; some se for 0 |
+| Lista | Duas zonas: OPs do dia; depois bloco por data da OP |
+| Zona 2 | Uma linha **por OP** (volume agregado), não por lote; badge neutral **OP 17/08** |
+| Lote sem OP | Entra na linha extra e em **Produzido hoje · Sem OP**, uma linha por produto |
+| Datas | Qualquer OP com `dataProducao ≠ dia`; não só “ontem” |
+| Outras filas | A produzir / fermentando inalteradas (conjunto = OPs do dia) |
+| Painel embalagem | Fora |
+| Relógio FIFO do **controle** (cards previsto × realizado) | Fora — continua FIFO |
+
+## Abordagem
+
+**Casar lote com a OP** (aprovado). FIFO deixa de alimentar o tile Embalado e o consumo de resfriando das filas.
+
+Descartado: só pintar o FIFO atual (81/651 continuam errados por produto). Descartado: esconder OP anterior (perde o pão embalado hoje que não é do plano do dia).
+
+## Regras de volume
+
+Fonte: unidades no domínio; UI converte com `FluxoDisplayScale`.
+
+Conjunto de lotes: os mesmos já carregados (`produzidoEm` no dia civil BR, categorias visíveis da embalagem).
+
+### OP do dia
+
+`ordemProducaoId` ∈ OPs com `dataProducao` = dia do fluxo (já filtradas por categoria visível).
+
+`embUn(op) = soma das unidades dos lotes de embalagem do dia com esse id`.
+
+Tile grande = soma de `embUn` dessas OPs. Linha na zona 1 só se `embUn > 0`.
+
+### OP anterior (produzida hoje)
+
+Lote do dia cuja OP existe e `dataProducao ≠ dia`. Tile `anteriorUn` inclui esse volume. Zona 2 agrupa por `dataProducao` da OP, data mais recente primeiro. Cabeçalho: **Produzido hoje · OP de 17/08** (`DD/MM` em pt-BR).
+
+Metadados da linha (nome, `#`, observação, assadeira) vêm da OP. O service **já** carrega `ordensExtra` pelos ids dos lotes; passar essas OPs ao builder das filas.
+
+### Sem OP
+
+Lote do dia sem `ordemProducaoId`. Soma em `anteriorUn`. Heading **Produzido hoje · Sem OP**. Uma linha **por `produtoNome`** (sem `#`). Não reduz resfriando de nenhuma OP.
+
+Lote com id de OP que o service não carregou: mesmo tratamento que sem OP.
+
+### Resfriando (OPs do dia)
+
+Por OP do dia: lotes de forno da OP, depois de consumir `embUn(op)` em FIFO **dentro da OP** (lote de forno mais antigo primeiro). Igual ao saldo atual, trocando o consumo FIFO-entre-OPs pelo embalado casado.
+
+Volume de OP anterior **não** reduz resfriando das OPs do dia.
+
+### A produzir / fermentando
+
+Sem mudança de regra.
+
+## UI
+
+Revisão contra o restante de `/realizado/fluxo-processo` e Valepan (Warm Industrial). Não inventar hierarquia nova: o extra de OP anterior **já existe** nos cards de etapa, no gráfico por hora e no percurso.
+
+### Padrão já na tela (copiar, não recriar)
+
+| Onde | Como o extra aparece |
+|------|----------------------|
+| `FluxoEtapaCardComControle` / `SemControle` (emb) | Abaixo do `text-xl` mono: `{n} de OP de {DD/MM}` em `mt-1 text-[11px] text-text-faint` |
+| `FluxoProducaoPorHora` | Sufixo na legenda: ` · {n} de OP de {DD/MM}` |
+| Prazo nas filas | Entre o número e **Ver lotes**: `mt-1 text-[12px] font-medium` amber-800 ou muted |
+| Relógio das OPs | Heading `mb-1.5 text-[11px] font-medium text-text-muted` — sentence case, sem uppercase de meter |
+| Preso na lista | `Badge tone="accent"` no slot `menu` do `ListRow` |
+
+Descartado: `+224 OP ant.` **ao lado** do número grande. No grid 2 col (mobile) dois totais na mesma linha competem com o `text-xl`, quebram e não conversam com os cards de etapa logo acima.
+
+### Tile Embalado
+
+Estrutura igual aos outros três tiles: ícone Material + rótulo → número → linha de apoio → **Ver lotes** + chevron.
+
+- Número grande: só OPs do dia (`totalUn`). `font-mono text-xl font-bold leading-none tabular-nums text-text-strong`. **Não** somar `items` da zona 2 no formatador atual (`formatFilaResumoQty` hoje soma tudo).
+- Linha de apoio, se `anteriorUn > 0`, no **mesmo slot** do prazo (fermentando/resfriando):
+
+```
+{qty} de OP de 17/08
+```
+
+Classes: `mt-1 text-[11px] text-text-faint` — iguais ao card de embalagem. `{qty}` em tabular-nums (mesmo `fmtQty` / unidade do toggle). Sem `+`. Sem “OP ant.”.
+
+Copy da linha:
+
+| Caso | Texto |
+|------|--------|
+| Uma data anterior | `{qty} de OP de 17/08` (usar o `DD/MM` real da OP; se for o dia imediatamente anterior, o resultado coincide com `diaAnteriorLabelFromDia`) |
+| Várias datas anteriores | `{qty} de OP anterior` |
+| Só lotes sem OP | `{qty} sem OP` |
+| Mix datas + sem OP | `{qty} de OP anterior` |
+| `anteriorUn === 0` | Não renderiza a linha |
+
+- A produzir / fermentando / resfriando: sem essa linha.
+- Ativo: borda amber + ring 12% (já existe). Chevron 150ms, `motion-reduce:transition-none`.
+- Alvo ≥44px já no `min-h-11` do botão; a linha extra não vira segundo botão.
+
+`aria-label` do tile (texto, não só cor): `Embalado, 427 CX, 224 CX de OP de 17/08`. Sem extra: `Embalado, 427 CX`.
+
+### Lista expandida
+
+Mesmo bloco: `mt-3 border-t border-stone-100 pt-3`. Cabeçalho `min-h-11` + `IconButton` fechar (já existe).
+
+Título: **Embalado — {qty do dia}** (`text-sm font-semibold text-text-strong`). Se houver extra, **segunda linha** no cabeçalho (não um segundo total na mesma frase):
+
+```
+{qty} de OP de 17/08
+```
+
+`text-[12px] text-text-muted` — mesmo peso da linha de prazo, para leitura no detalhe (o 11px faint do tile é denso demais num H-stack com o close).
+
+**Zona 1 — OPs do dia** (sem heading extra: é o conteúdo default, como hoje)
+
+`ListRow` intacto: `#` mono stone-400, título `text-text-strong`, subtítulo observação · `lote HH:mm`, volume `emphasize`. Sem badge de data.
+
+**Zona 2 — produzido hoje, OP de outro dia**
+
+Só se houver itens. Separador `border-t border-stone-100` + heading no padrão do relógio, não no uppercase de meter:
+
+```
+Produzido hoje · OP de 17/08
+```
+
+Classes: `mb-1.5 mt-3 text-[11px] font-medium text-text-muted`. Uma heading por `dataOp` (mais recente primeiro). Sem OP por último: **Produzido hoje · Sem OP**.
+
+Linha: o mesmo `ListRow` (zebra, hover amber-50). Não baixar opacidade nem `text-stone-600` no nome — o operador ainda precisa ler o pão (contraste). Hierarquia:
+
+- Volume **sem** `emphasize` (`text-stone-700`, já no `ListRow`)
+- `Badge tone="neutral"` no `menu`: **OP 17/08** ou **Sem OP** — mesmo slot do badge de prazo; tom neutral (stone), não amber (amber = preso)
+
+Subtítulo: observação/assadeira · hora do último lote. Não repetir a data no subtítulo (já está no heading + badge).
+
+Empty: **Nenhum item nesta fila.**
+
+### Hierarquia de leitura (glance)
+
+1. Tile: 427 CX (plano do dia) → 224 de OP de 17/08 (contexto) → Ver lotes
+2. Lista: OPs de hoje primeiro; bloco anterior só depois de um heading
+3. Cor não é o único sinal: data escrita + badge + posição na lista
+
+### Anti-padrões (não fazer)
+
+- Segundo `text-xl` ou `+` colado no total do dia
+- Uppercase tracking de meter (`LATAS`, `META`) em heading de zona
+- Badge amber na zona 2 (confunde com “acima do prazo”)
+- Emoji; ícone extra além do Material já no tile
+- Azul/slate; linha de apoio com `text-stone-400` no número grande (some no stone-50)
+- Animar height da lista; o expand já é troca de conteúdo no mesmo card
+
+## Contrato
+
+```ts
+type FluxoFilaItemOrigem = 'op_do_dia' | 'op_anterior' | 'sem_op';
+
+// campos novos em FluxoFilaItem
+dataOp: string | null; // YYYY-MM-DD; null em sem_op e nas filas sem data
+origem: FluxoFilaItemOrigem; // outras filas: sempre 'op_do_dia'
+
+// campos novos em FluxoFilaResumo
+anteriorUn: number; // 0 fora de embalado
+```
+
+`totalUn` = só OPs do dia (número grande). `items` = zona 1 + zona 2, já ordenados.
+
+Ordenação zona 1: igual hoje (`ordemPlanejamento`). Zona 2: por `dataOp` desc, depois `ordemPlanejamento`; `sem_op` por último.
+
+`FluxoFilasOpInput` ganha `dataProducao: string`.
+
+`FluxoApontamentoEvento` de embalagem **passa a enviar** `ordemProducaoId` quando o lote tiver id (hoje o map omite o campo). Comentário “embalagem permanece FIFO sem OP obrigatória” nas filas deixa de valer; o relógio do controle não usa esse id nesta entrega.
+
+## Arquitetura
+
+```text
+src/domain/fluxo-processo/filas/
+  fluxo-filas-emb-por-op.ts      // soma lotes por ordemProducaoId
+  fluxo-filas-emb-por-op.test.ts
+  fluxo-filas-builder.ts         // embalado + resfriando usam o mapa casado
+  fluxo-filas-types.ts           // origem, anteriorUn, dataProducao
+  fluxo-filas-fifo-emb.ts        // deixa de ser usado pelas filas; remover se nada mais importar
+
+src/lib/services/fluxo-processo-service.ts
+  // evento emb: ordemProducaoId = lote.pedidoEmbalagemId
+  // filasAttach: ops do dia + ops extra com lote emb hoje (categoria visível)
+
+src/components/FluxoProcesso/
+  FluxoFilaTile.tsx              // linha de apoio “de OP de DD/MM”; aria-label
+  FluxoFilaDetalheList.tsx       // duas zonas + heading tipo relógio
+  fluxo-fila-format.ts           // copy da linha / heading / badge
+  fluxo-processo-format.ts       // reutilizar DD/MM; não forçar “ontem” se a OP for mais antiga
+```
+
+`FluxoFilasEmbPorOp.somarPorOp(eventos)` → `Map<opId, un>` + `{ semOpUn, eventosSemOp }`.
+
+Builder:
+
+1. Classifica cada evento emb: id ∈ ops do dia → do_dia; id ∈ ops extra → anterior; sem id ou id desconhecido → sem_op.
+2. Monta items embalado das duas zonas.
+3. `resfriando`: `loteSaldo.restantes(fornoDaOp, embUnDaOp)`.
+
+`FluxoFilasVisibilidade`: ferm/forno continuam restritos às OPs do dia. Emb continua filtrado por **nome de produto visível** (para não perder OP anterior da mesma categoria). Não filtrar emb só por `opIds` do dia — isso apagaria a linha extra.
+
+`FluxoUnidadesConverter` das filas: incluir também as OPs extra (mesmo produto/assadeira) no fator, para lote de OP anterior não cair no fallback 48 un/caixa se o produto não estiver no plano de hoje.
+
+Sem tabela nova, sem rota nova, sem segundo fetch. `ordensExtra` já existe no service.
+
+Arquivos < 400 linhas; `FluxoFilaDetalheList` se passar de ~200 linhas, extrair `FluxoFilaDetalheZona`.
+
+## Erros e vazios
+
+| Situação | Comportamento |
+|----------|----------------|
+| Sem OP anterior | Tile sem linha extra; lista só zona 1 |
+| Só OP anterior, zero no dia | Grande = 0; linha extra visível; lista só zona 2 |
+| Lote sem OP | Linha extra + zona Sem OP |
+| OP extra não visível (categoria) | Lote não entra (filtro de produto) |
+| Conversão CX/LT/UN | Mesmo `FluxoDisplayScale` nos dois totais |
+
+## Testes (domínio, obrigatórios)
+
+1. OP do dia 81 un, 50 un de lotes com esse id → `embalado.totalUn = 50`; item do produto = 50; não 81
+2. 50 un na OP do dia + 31 un em OP `dataProducao` ontem → `totalUn = 50`, `anteriorUn = 31`; duas zonas
+3. Lotes só de outro produto/OP não aparecem na linha do Brioche
+4. OP do dia sem lote emb → não entra em embalado (nem a 0)
+5. Lote sem `ordemProducaoId` → `anteriorUn`, origem `sem_op`, linha por produto, não reduz resfriando
+6. Forno 80, emb casado 50 na mesma OP → resfriando = 30 nessa OP
+7. Emb de OP ontem não reduz resfriando da OP de hoje
+8. Formatador: `anteriorUn = 0` → sem linha; uma data → `{qty} de OP de 17/08`; várias → `{qty} de OP anterior`
+9. Duas datas anteriores → dois headings, mais recente primeiro
+10. `formatFilaResumoQty` do tile Embalado usa só `origem === 'op_do_dia'` (ou `totalUn`); não soma zona 2
+
+UI: testes do formatador (linha do tile, heading de zona, badge `OP 17/08`). Sem E2E neste ciclo.
+
+## Fora de escopo
+
+- Painel `/realizado/embalagem` e worklist
+- Cards previsto × realizado e relógio FIFO do controle
+- Duas zonas em fermentando / a produzir
+- Trazer OP de ontem para fermentando/resfriando (WIP físico de outro dia)
+- Casar lote de embalagem por nome de produto quando não há id (fica Sem OP)
+- Saídas / estoque (embalado ≠ expedido)
+- Mudar o subtítulo **Pães em trânsito**
+
+## Relação com a spec de filas
+
+Substitui, **só para embalado e para o consumo de resfriando**, a regra “FIFO entre OPs, sem casar produto” de `2026-08-17-fluxo-filas-wip-design.mdx`. O restante da spec de filas (prazos, a produzir, fermentando, `asOf`) permanece.

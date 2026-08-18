@@ -63,6 +63,8 @@ export type CargaEmbalagemResponse = {
   date: string;
   ultimaDataComDados: string | null;
   pedidos: PainelPedidoEmbalagem[];
+  horarioInicioEmbalagem: string;
+  dashboardDia: DashboardSnapshot[];
   comparacaoSemana: {
     date: string;
     items: DashboardSnapshot[];

@@ -24,3 +24,12 @@ export function formatDeltaReais(value: number): string {
   if (value < 0) return `−${abs}`;
   return abs;
 }
+
+export function formatMargemPercentual(value: number): string {
+  const formatted = Math.abs(value).toLocaleString('pt-BR', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  });
+  if (value < 0) return `−${formatted}%`;
+  return `${formatted}%`;
+}

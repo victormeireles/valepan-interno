@@ -53,6 +53,137 @@ export type Database = {
         }
         Relationships: []
       }
+      boleto_sync_manual_attempts: {
+        Row: {
+          attempted_at: string
+          id: string
+          pedido_id: string
+          usuario_id: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          id?: string
+          pedido_id: string
+          usuario_id?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          id?: string
+          pedido_id?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boleto_sync_manual_attempts_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_manual_attempts_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_manual_attempts_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boleto_sync_pendencias: {
+        Row: {
+          cliente_id: string
+          created_at: string
+          empresa_id: string
+          id: string
+          max_tentativas: number
+          next_attempt_at: string
+          nota_fiscal_id: string
+          pedido_id: string
+          status: string
+          tentativas: number
+          ultimo_erro: string | null
+          updated_at: string
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          max_tentativas?: number
+          next_attempt_at: string
+          nota_fiscal_id: string
+          pedido_id: string
+          status?: string
+          tentativas?: number
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          max_tentativas?: number
+          next_attempt_at?: string
+          nota_fiscal_id?: string
+          pedido_id?: string
+          status?: string
+          tentativas?: number
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boleto_sync_pendencias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_pendencias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_script_consignados_v"
+            referencedColumns: ["distribuidor_id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_pendencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_pendencias_nota_fiscal_id_fkey"
+            columns: ["nota_fiscal_id"]
+            isOneToOne: false
+            referencedRelation: "notas_fiscais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_pendencias_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boleto_sync_pendencias_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "relatorio_producao_pedidos_v"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boletos: {
         Row: {
           boleto_pdf_status: string
@@ -393,6 +524,7 @@ export type Database = {
           ativo: boolean | null
           cnpj: string | null
           codigo_cenario_imposto_erp: number | null
+          codigo_conta_corrente_erp: string | null
           comissao_consignado_percentual: number
           comissao_distribuidor_percentual: number
           created_at: string | null
@@ -456,6 +588,7 @@ export type Database = {
           ativo?: boolean | null
           cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          codigo_conta_corrente_erp?: string | null
           comissao_consignado_percentual?: number
           comissao_distribuidor_percentual?: number
           created_at?: string | null
@@ -519,6 +652,7 @@ export type Database = {
           ativo?: boolean | null
           cnpj?: string | null
           codigo_cenario_imposto_erp?: number | null
+          codigo_conta_corrente_erp?: string | null
           comissao_consignado_percentual?: number
           comissao_distribuidor_percentual?: number
           created_at?: string | null
@@ -1069,6 +1203,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      config_operacao: {
+        Row: {
+          horario_fim_embalagem: string
+          horario_fim_forno: string
+          horario_fim_producao: string
+          horario_inicio_embalagem: string
+          horario_inicio_forno: string
+          horario_inicio_producao: string
+          id: string
+          tempo_medio_fermentacao_min: number
+          tempo_medio_resfriamento_min: number
+          updated_at: string
+        }
+        Insert: {
+          horario_fim_embalagem?: string
+          horario_fim_forno?: string
+          horario_fim_producao?: string
+          horario_inicio_embalagem?: string
+          horario_inicio_forno?: string
+          horario_inicio_producao?: string
+          id?: string
+          tempo_medio_fermentacao_min?: number
+          tempo_medio_resfriamento_min?: number
+          updated_at?: string
+        }
+        Update: {
+          horario_fim_embalagem?: string
+          horario_fim_forno?: string
+          horario_fim_producao?: string
+          horario_inicio_embalagem?: string
+          horario_inicio_forno?: string
+          horario_inicio_producao?: string
+          id?: string
+          tempo_medio_fermentacao_min?: number
+          tempo_medio_resfriamento_min?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       distribuidor_parcelas_permitidas: {
         Row: {
@@ -2486,6 +2659,9 @@ export type Database = {
           faturamento_meta: number
           id: string
           margem_bruta_pct: number
+          produtividade_assadeiras_hora_forno: number
+          produtividade_assadeiras_hora_producao: number
+          produtividade_caixas_hora_embalagem: number
           updated_at: string
           updated_by: string | null
         }
@@ -2498,6 +2674,9 @@ export type Database = {
           faturamento_meta: number
           id?: string
           margem_bruta_pct: number
+          produtividade_assadeiras_hora_forno: number
+          produtividade_assadeiras_hora_producao: number
+          produtividade_caixas_hora_embalagem: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -2510,6 +2689,9 @@ export type Database = {
           faturamento_meta?: number
           id?: string
           margem_bruta_pct?: number
+          produtividade_assadeiras_hora_forno?: number
+          produtividade_assadeiras_hora_producao?: number
+          produtividade_caixas_hora_embalagem?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -3002,6 +3184,68 @@ export type Database = {
             columns: ["tipo_estoque_id"]
             isOneToOne: false
             referencedRelation: "tipos_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ordens_producao_estimativa: {
+        Row: {
+          camara_fim_previsto: string
+          embalagem_fim_previsto: string
+          embalagem_inicio_previsto: string
+          fermentacao_fim_previsto: string
+          fermentacao_inicio_previsto: string
+          forno_fim_previsto: string
+          forno_inicio_previsto: string
+          ordem_producao_id: string
+          resfriamento_fim_previsto: string
+          taxa_assadeiras_hora_forno: number
+          taxa_assadeiras_hora_producao: number
+          taxa_caixas_hora_embalagem: number
+          tempo_medio_fermentacao_min: number
+          tempo_medio_resfriamento_min: number
+          updated_at: string
+        }
+        Insert: {
+          camara_fim_previsto: string
+          embalagem_fim_previsto: string
+          embalagem_inicio_previsto: string
+          fermentacao_fim_previsto: string
+          fermentacao_inicio_previsto: string
+          forno_fim_previsto: string
+          forno_inicio_previsto: string
+          ordem_producao_id: string
+          resfriamento_fim_previsto: string
+          taxa_assadeiras_hora_forno: number
+          taxa_assadeiras_hora_producao: number
+          taxa_caixas_hora_embalagem: number
+          tempo_medio_fermentacao_min: number
+          tempo_medio_resfriamento_min: number
+          updated_at?: string
+        }
+        Update: {
+          camara_fim_previsto?: string
+          embalagem_fim_previsto?: string
+          embalagem_inicio_previsto?: string
+          fermentacao_fim_previsto?: string
+          fermentacao_inicio_previsto?: string
+          forno_fim_previsto?: string
+          forno_inicio_previsto?: string
+          ordem_producao_id?: string
+          resfriamento_fim_previsto?: string
+          taxa_assadeiras_hora_forno?: number
+          taxa_assadeiras_hora_producao?: number
+          taxa_caixas_hora_embalagem?: number
+          tempo_medio_fermentacao_min?: number
+          tempo_medio_resfriamento_min?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_estimativa_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: true
+            referencedRelation: "ordens_producao"
             referencedColumns: ["id"]
           },
         ]
@@ -5004,6 +5248,19 @@ export type Database = {
         Returns: boolean
       }
       auth_tem_papel: { Args: { p_papel: string }; Returns: boolean }
+      boleto_sync_manual_try_reserve: {
+        Args: {
+          p_cooldown_seconds: number
+          p_max_attempts_24h: number
+          p_pedido_id: string
+          p_usuario_id: string
+        }
+        Returns: {
+          code: string
+          ok: boolean
+          retry_after_seconds: number
+        }[]
+      }
       claim_next_whatsapp_pedido_mensagem: {
         Args: never
         Returns: {
@@ -5047,6 +5304,10 @@ export type Database = {
           nome: string
           unidade_resumida: string
         }[]
+      }
+      replace_insumo_distribuidores: {
+        Args: { p_insumo_id: string; p_items: Json }
+        Returns: undefined
       }
     }
     Enums: {

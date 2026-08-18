@@ -14,6 +14,7 @@ import {
   EstoqueResolverError,
 } from '@/lib/services/pedido-embalagem-service';
 import { ordemProducaoMetaService } from '@/lib/services/ordem-producao-meta-service';
+import { withCoalescedEstimativaRecalc } from '@/lib/services/estimativa-producao-recalc';
 
 export type MetaEmbalagemBatchPreviewItem = {
   linha: number;
@@ -301,6 +302,10 @@ export class MetaEmbalagemBatchService {
   }
 
   async apply(text: string): Promise<MetaEmbalagemBatchApplyResult> {
+    return withCoalescedEstimativaRecalc(() => this.applyBatch(text));
+  }
+
+  private async applyBatch(text: string): Promise<MetaEmbalagemBatchApplyResult> {
     const preview = await this.preview(text);
     if (!preview.canApply) {
       throw new Error('Corrija os erros antes de aplicar o lote');

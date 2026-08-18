@@ -3,7 +3,7 @@
 import type { CSSProperties } from 'react';
 import type { FluxoFilaItem, FluxoFilaKey } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import { useFluxoDisplay } from './fluxo-display-context';
-import { formatFilaResumoQty } from './fluxo-fila-format';
+import { formatAcimaDoPrazoLinha, formatFilaResumoQty, formatNenhumAcimaDoPrazo, FluxoFilaEmbaladoCopy } from './fluxo-fila-format';
 
 const AMBER_ACTIVE = '#D97706';
 
@@ -15,15 +15,16 @@ export type FluxoFilaTileProps = {
   items: FluxoFilaItem[];
   presoUn: number;
   showPrazo: boolean;
+  prazoMin?: number;
   active: boolean;
   onClick: () => void;
   detailId: string;
 };
 
 class FluxoFilaPrazoCopy {
-  static linha(presoUn: number, qtyLabel: string): string {
-    if (presoUn > 0) return `${qtyLabel} acima do prazo`;
-    return 'Nenhum acima do prazo';
+  static linha(presoUn: number, qtyLabel: string, prazoMin: number): string {
+    if (presoUn > 0) return formatAcimaDoPrazoLinha(qtyLabel, prazoMin);
+    return formatNenhumAcimaDoPrazo(prazoMin);
   }
 }
 
@@ -39,10 +40,12 @@ function FluxoFilaTilePrazoLine({
   showPrazo,
   items,
   presoUn,
+  prazoMin,
 }: {
   showPrazo: boolean;
   items: FluxoFilaItem[];
   presoUn: number;
+  prazoMin: number;
 }) {
   const { scale } = useFluxoDisplay();
   if (!showPrazo) return null;
@@ -55,7 +58,7 @@ function FluxoFilaTilePrazoLine({
         preso ? 'text-amber-800' : 'text-text-muted',
       ].join(' ')}
     >
-      {FluxoFilaPrazoCopy.linha(presoUn, qtyLabel)}
+      {FluxoFilaPrazoCopy.linha(presoUn, qtyLabel, prazoMin)}
     </p>
   );
 }
@@ -70,10 +73,22 @@ function tileClassName(active: boolean): string {
   ].join(' ');
 }
 
-function FluxoFilaTileAction({ active }: { active: boolean }) {
+class FluxoFilaAcaoCopy {
+  static label(filaKey: FluxoFilaKey): string {
+    return filaKey === 'aProduzir' ? 'Ver OPs' : 'Ver lotes';
+  }
+}
+
+function FluxoFilaTileAction({
+  active,
+  filaKey,
+}: {
+  active: boolean;
+  filaKey: FluxoFilaKey;
+}) {
   return (
     <span className="mt-2 inline-flex items-center gap-0.5 text-[13px] font-medium text-text-muted">
-      Ver OPs
+      {FluxoFilaAcaoCopy.label(filaKey)}
       <span
         className={[
           'material-icons text-lg transition-transform duration-150 motion-reduce:transition-none',
@@ -95,18 +110,27 @@ export default function FluxoFilaTile({
   items,
   presoUn,
   showPrazo,
+  prazoMin = 0,
   active,
   onClick,
   detailId,
 }: FluxoFilaTileProps) {
   const { scale } = useFluxoDisplay();
-  const volume = formatFilaResumoQty(items, scale);
+  const volume =
+    filaKey === 'embalado'
+      ? formatFilaResumoQty(items, scale, { origem: 'op_do_dia' })
+      : formatFilaResumoQty(items, scale);
+  const qtyAnt = formatFilaResumoQty(items, scale, { origem: 'nao_do_dia' });
+  const datas = FluxoFilaEmbaladoCopy.datasOpAnteriores(items);
+  const temAnterior = filaKey === 'embalado' && items.some((i) => i.origem !== 'op_do_dia');
+  const linhaApoio = temAnterior ? FluxoFilaEmbaladoCopy.linhaApoio(qtyAnt, datas) : null;
 
   return (
     <button
       type="button"
       aria-expanded={active}
       aria-controls={detailId}
+      aria-label={FluxoFilaEmbaladoCopy.ariaTile(label, volume, linhaApoio)}
       onClick={onClick}
       style={tileActiveStyle(active)}
       data-fila-key={filaKey}
@@ -121,8 +145,16 @@ export default function FluxoFilaTile({
       <p className="mt-2 font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
         {volume}
       </p>
-      <FluxoFilaTilePrazoLine showPrazo={showPrazo} items={items} presoUn={presoUn} />
-      <FluxoFilaTileAction active={active} />
+      {linhaApoio ? (
+        <p className="mt-1 text-[11px] text-text-faint">{linhaApoio}</p>
+      ) : null}
+      <FluxoFilaTilePrazoLine
+        showPrazo={showPrazo}
+        items={items}
+        presoUn={presoUn}
+        prazoMin={prazoMin}
+      />
+      <FluxoFilaTileAction active={active} filaKey={filaKey} />
     </button>
   );
 }

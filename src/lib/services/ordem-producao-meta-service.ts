@@ -15,6 +15,7 @@ import { estoqueResolverService } from '@/lib/services/estoque-resolver-service'
 export { EstoqueResolverError };
 
 import type { DerivedQuantidades } from '@/domain/producao/ordem-derivados';
+import { enqueueEstimativaRecalc } from '@/lib/services/estimativa-producao-recalc';
 
 export type CreateFromLatasInput = {
   dataProducao: string;
@@ -116,6 +117,7 @@ export class OrdemProducaoMetaService {
     await pedidoEmbalagemService.validatePayloadItems(input.tipoEstoque, [input.produto]);
     const upsert = await this.buildUpsertFromLatas(input);
     const [record] = await ordemProducaoRepository.upsertMany([upsert]);
+    await enqueueEstimativaRecalc(record.dataProducao);
     return record;
   }
 
@@ -159,6 +161,7 @@ export class OrdemProducaoMetaService {
         quantidade,
       },
     ]);
+    await enqueueEstimativaRecalc(record.dataProducao);
     return record;
   }
 
@@ -187,6 +190,7 @@ export class OrdemProducaoMetaService {
         quantidade: input.quantidade,
       },
     ]);
+    await enqueueEstimativaRecalc(record.dataProducao);
     return record;
   }
 
@@ -237,11 +241,13 @@ export class OrdemProducaoMetaService {
     const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(existing.produtoId);
     const quantidade = deriveQuantidadesFromUnidades({ unidades, boxUnits });
 
-    return ordemProducaoRepository.updateQuantidades(id, {
+    const record = await ordemProducaoRepository.updateQuantidades(id, {
       assadeiraId: '',
       assadeiras: 0,
       quantidade,
     });
+    await enqueueEstimativaRecalc(record.dataProducao);
+    return record;
   }
 
   async updateQuantidade(id: string, latas: number): Promise<OrdemProducaoRecord> {
@@ -257,11 +263,13 @@ export class OrdemProducaoMetaService {
       boxUnits: assadeira.boxUnits,
     });
 
-    return ordemProducaoRepository.updateQuantidades(id, {
+    const record = await ordemProducaoRepository.updateQuantidades(id, {
       assadeiraId: assadeira.assadeiraId,
       assadeiras: latas,
       quantidade,
     });
+    await enqueueEstimativaRecalc(record.dataProducao);
+    return record;
   }
 
   async updateFromForm(id: string, input: UpdateFromFormInput): Promise<OrdemProducaoRecord> {
@@ -298,7 +306,7 @@ export class OrdemProducaoMetaService {
       const boxUnits = await pedidoEmbalagemService.resolveBoxUnitsForProduto(produtoId);
       const quantidade = deriveQuantidadesFromUnidades({ unidades, boxUnits });
 
-      return ordemProducaoRepository.updatePedidoFields(id, {
+      const unidadesRecord = await ordemProducaoRepository.updatePedidoFields(id, {
         dataProducao: input.dataProducao,
         dataFabricacaoEtiqueta: input.dataEtiqueta,
         tipoEstoqueId,
@@ -309,6 +317,7 @@ export class OrdemProducaoMetaService {
         ordemPlanejamento: existing.ordemPlanejamento,
         quantidade,
       });
+      return this.recalcAfterChange(existing.dataProducao, unidadesRecord);
     }
 
     const assadeira = await pedidoEmbalagemService.resolveAssadeiraForProduto(
@@ -334,7 +343,7 @@ export class OrdemProducaoMetaService {
       boxUnits: assadeira.boxUnits,
     });
 
-    return ordemProducaoRepository.updatePedidoFields(id, {
+    const latasRecord = await ordemProducaoRepository.updatePedidoFields(id, {
       dataProducao: input.dataProducao,
       dataFabricacaoEtiqueta: input.dataEtiqueta,
       tipoEstoqueId,
@@ -345,6 +354,7 @@ export class OrdemProducaoMetaService {
       ordemPlanejamento: existing.ordemPlanejamento,
       quantidade,
     });
+    return this.recalcAfterChange(existing.dataProducao, latasRecord);
   }
 
   async updateFields(id: string, fields: UpdateFieldsInput): Promise<OrdemProducaoRecord> {
@@ -387,7 +397,7 @@ export class OrdemProducaoMetaService {
 
     await this.assertMetaNotBelowProduzido(id, assadeiras, assadeira, produtoId);
 
-    return ordemProducaoRepository.updatePedidoFields(id, {
+    const record = await ordemProducaoRepository.updatePedidoFields(id, {
       dataProducao: fields.dataProducao ?? existing.dataProducao,
       dataFabricacaoEtiqueta: fields.dataEtiqueta ?? existing.dataFabricacaoEtiqueta,
       tipoEstoqueId,
@@ -398,6 +408,7 @@ export class OrdemProducaoMetaService {
       ordemPlanejamento: existing.ordemPlanejamento,
       quantidade,
     });
+    return this.recalcAfterChange(existing.dataProducao, record);
   }
 
   async delete(id: string): Promise<void> {
@@ -412,6 +423,15 @@ export class OrdemProducaoMetaService {
     }
 
     await ordemProducaoRepository.deleteById(id);
+    await enqueueEstimativaRecalc(existing.dataProducao);
+  }
+
+  private async recalcAfterChange(
+    previousDate: string,
+    record: OrdemProducaoRecord,
+  ): Promise<OrdemProducaoRecord> {
+    await enqueueEstimativaRecalc(previousDate, record.dataProducao);
+    return record;
   }
 }
 

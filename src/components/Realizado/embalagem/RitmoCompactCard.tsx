@@ -12,6 +12,7 @@ type TerminoInfo =
   | { kind: 'indisponivel'; message: string };
 
 export type RitmoCompactCardProps = {
+  horaInicioLabel: string;
   horaFimLabel: string;
   ritmoValor: number;
   comparacaoOntem: ComparacaoCompacta | null;
@@ -83,6 +84,7 @@ function TerminoLegenda({ termino }: { termino: TerminoInfo }) {
 }
 
 export default function RitmoCompactCard({
+  horaInicioLabel,
   horaFimLabel,
   ritmoValor,
   comparacaoOntem,
@@ -103,7 +105,7 @@ export default function RitmoCompactCard({
             insights
           </span>
           <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-            Ritmo médio · 7h→{horaFimLabel}
+            Ritmo médio · {horaInicioLabel}→{horaFimLabel}
           </span>
         </div>
 

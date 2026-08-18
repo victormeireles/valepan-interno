@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { progressPctForArea, resolveGargaloAreaId, isAreaProducaoEncerrada } from './painel-producao-areas';
+import { progressPctForArea, resolveGargaloAreaId, isAreaProducaoEncerrada, expectedPctForArea } from './painel-producao-areas';
 import { statusOfProduct, tetoEmbalagem } from './painel-producao-status';
 import type { PainelProducaoAreaView, PainelProducaoProduct } from './painel-producao-types';
 
@@ -152,5 +152,29 @@ describe('progressPctForArea', () => {
   it('normaliza percentual', () => {
     expect(progressPctForArea({ done: 69, meta: 100 })).toBe(69);
     expect(progressPctForArea({ done: 120, meta: 100 })).toBe(100);
+  });
+});
+
+describe('expectedPctForArea', () => {
+  const embOvernight: PainelProducaoAreaView = {
+    id: 'emb',
+    name: 'Embalagem',
+    icon: 'inventory_2',
+    accent: '#9A6B43',
+    unit: 'cx',
+    done: 0,
+    meta: 100,
+    ritmo: 10,
+    ritmoOntem: 10,
+    ritmoSemana: 10,
+    janelaIni: '07:00',
+    janelaFim: '05:00',
+    janela: '7h → 5h',
+    producaoEncerrada: false,
+  };
+
+  it('usa 22h quando o fim é no dia seguinte', () => {
+    expect(expectedPctForArea(embOvernight, 10 * 60)).toBe(14);
+    expect(expectedPctForArea(embOvernight, 2 * 60)).toBe(86);
   });
 });

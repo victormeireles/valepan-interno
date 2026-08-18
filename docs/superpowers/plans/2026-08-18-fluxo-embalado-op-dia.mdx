@@ -1,0 +1,913 @@
+# Embalado no fluxo: OPs do dia vs OP anterior — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** O tile **Embalado** em Pães em trânsito mostra o volume casado das OPs do dia; lotes do dia cuja OP é de outra data vão para a linha `{n} de OP de DD/MM` e para uma segunda zona da lista; resfriando desconta o embalado real da OP.
+
+**Architecture:** Trocar `FluxoFilasFifoEmb` por `FluxoFilasEmbPorOp` (soma por `ordemProducaoId`). O builder classifica eventos em `op_do_dia` / `op_anterior` / `sem_op`. O service passa a copiar `ordemProducaoId` nos eventos de embalagem e envia OPs extra (lote hoje, `dataProducao ≠ dia`). UI reutiliza o idioma já usado nos cards de etapa.
+
+**Tech Stack:** TypeScript, Vitest, Next.js 15 App Router, React 19, Tailwind v4, design system Valepan.
+
+**Spec:** `docs/superpowers/specs/2026-08-18-fluxo-embalado-op-dia-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; quebrar ao se aproximar de 400. Funções < 40 linhas. SRP por classe/arquivo.
+- Volume no domínio em **unidades**; UI converte com `FluxoDisplayScale`.
+- Copy pt-BR da spec: `{qty} de OP de 17/08` (sem `+`, sem “OP ant.”). Badge zona 2: `tone="neutral"`. Amber só para prazo.
+- Tile: linha extra **abaixo** do `text-xl`, classes `mt-1 text-[11px] text-text-faint` (igual `FluxoEtapaCardComControle`).
+- Heading de zona: `mb-1.5 mt-3 text-[11px] font-medium text-text-muted` (igual “Relógio das OPs”).
+- A produzir / fermentando: regras inalteradas. Relógio FIFO do **controle**: fora. Painel `/realizado/embalagem`: fora.
+- Sem tabela nova, sem rota nova, sem segundo fetch.
+- Testes: `npx vitest run <arquivo>`. Sem E2E.
+- Commits: incluir no passo; se a sessão não pediu commit, **pular** o `git commit`.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Papel |
+|---------|--------|
+| `src/domain/fluxo-processo/filas/fluxo-filas-types.ts` | `origem`, `dataOp`, `anteriorUn`, `dataProducao`, `opsAnteriores` |
+| `src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.ts` | Soma lotes emb por `ordemProducaoId` + sem OP por produto |
+| `src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.test.ts` | Testes do casamento |
+| `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts` | Embalado em duas origens; resfriando consome `embUn` da OP |
+| `src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts` | Cenários da spec (incl. 50≠81, resfriando casado) |
+| `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts` | **Apagar** (só as filas usavam) |
+| `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts` | **Apagar** |
+| `src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.ts` | Manter ops extra se produto visível |
+| `src/lib/services/fluxo-filas-attach.ts` | Converter com OPs extra; passar `opsAnteriores` |
+| `src/lib/services/fluxo-filas-attach.test.ts` | OP de ontem no `anteriorUn` |
+| `src/lib/services/fluxo-processo-service.ts` | `ordemProducaoId` no evento emb; montar `opsAnteriores` |
+| `src/domain/fluxo-processo/fluxo-processo-types.ts` | Comentário de `ordemProducaoId` em embalagem |
+| `src/components/FluxoProcesso/fluxo-fila-format.ts` | `FluxoFilaEmbaladoCopy` + filtro de origem no resumo |
+| `src/components/FluxoProcesso/fluxo-fila-format.test.ts` | Copy e soma só do dia |
+| `src/components/FluxoProcesso/FluxoFilaTile.tsx` | Linha de apoio + `aria-label` |
+| `src/components/FluxoProcesso/FluxoFilaDetalheList.tsx` | Duas zonas |
+| `src/components/FluxoProcesso/FluxoFilaDetalheZona.tsx` | Heading + rows de uma zona (se a list passar de ~200 linhas) |
+
+---
+
+### Task 1: Tipos e defaults (testes atuais continuam verdes)
+
+**Files:**
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-types.ts`
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts` (`montarItem`, `montarResumo`)
+- Modify factories: `fluxo-filas-builder.test.ts`, `fluxo-filas-fifo-emb.test.ts`, `fluxo-filas-visibilidade.test.ts`, `fluxo-filas-attach.test.ts`, `fluxo-fila-format.test.ts`
+
+**Interfaces:**
+- Consumes: tipos atuais
+- Produces:
+  - `FluxoFilaItemOrigem = 'op_do_dia' | 'op_anterior' | 'sem_op'`
+  - `FluxoFilaItem.dataOp: string | null`
+  - `FluxoFilaItem.origem: FluxoFilaItemOrigem`
+  - `FluxoFilaResumo.anteriorUn: number`
+  - `FluxoFilasOpInput.dataProducao: string`
+  - `FluxoFilasBuilderInput.opsAnteriores: FluxoFilasOpInput[]`
+
+- [ ] **Step 1: Estender tipos**
+
+Em `fluxo-filas-types.ts`, adicionar e completar:
+
+```ts
+export type FluxoFilaItemOrigem = 'op_do_dia' | 'op_anterior' | 'sem_op';
+
+export type FluxoFilaItem = {
+  ordemProducaoId: string;
+  ordemPlanejamento: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  observacao: string;
+  volumeUn: number;
+  preso: boolean;
+  presoMin: number | null;
+  naFilaMin: number | null;
+  ultimoLoteEm: string | null;
+  dataOp: string | null;
+  origem: FluxoFilaItemOrigem;
+};
+
+export type FluxoFilaResumo = {
+  totalUn: number;
+  anteriorUn: number;
+  presoUn: number;
+  items: FluxoFilaItem[];
+};
+
+export type FluxoFilasOpInput = {
+  id: string;
+  ordemPlanejamento: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  observacao: string;
+  unidades: number;
+  latas: number;
+  caixas: number;
+  dataProducao: string;
+};
+
+export type FluxoFilasBuilderInput = {
+  ops: FluxoFilasOpInput[];
+  opsAnteriores: FluxoFilasOpInput[];
+  eventosFerm: FluxoControleEventoInput[];
+  eventosForno: FluxoControleEventoInput[];
+  eventosEmb: FluxoControleEventoInput[];
+  camaraMin: number;
+  resfrioMin: number;
+  asOfMs: number;
+};
+```
+
+- [ ] **Step 2: Defaults no builder**
+
+`montarItem` recebe `origem` e `dataOp` (default `op_do_dia` + `op.dataProducao`):
+
+```ts
+function montarItem(
+  op: FluxoFilasOpInput,
+  volumeUn: number,
+  preso: { preso: boolean; presoMin: number | null; naFilaMin: number | null },
+  ultimoLoteEm: string | null,
+  origem: FluxoFilaItemOrigem = 'op_do_dia',
+): FluxoFilaItem {
+  return {
+    ordemProducaoId: op.id,
+    ordemPlanejamento: op.ordemPlanejamento,
+    produtoNome: op.produtoNome,
+    assadeiraNome: op.assadeiraNome,
+    observacao: op.observacao,
+    volumeUn,
+    ...preso,
+    ultimoLoteEm,
+    dataOp: origem === 'sem_op' ? null : op.dataProducao,
+    origem,
+  };
+}
+
+function montarResumo(items: FluxoFilaItem[]): FluxoFilaResumo {
+  const totalUn = items
+    .filter((i) => i.origem === 'op_do_dia')
+    .reduce((t, i) => t + i.volumeUn, 0);
+  const anteriorUn = items
+    .filter((i) => i.origem !== 'op_do_dia')
+    .reduce((t, i) => t + i.volumeUn, 0);
+  const presoUn = items.filter((i) => i.preso).reduce((t, i) => t + i.volumeUn, 0);
+  return { totalUn, anteriorUn, presoUn, items };
+}
+```
+
+Em `build()`, default `opsAnteriores: input.opsAnteriores ?? []` não — o campo é obrigatório; o factory dos testes preenche `opsAnteriores: []`.
+
+- [ ] **Step 3: Atualizar factories**
+
+`op()` em `fluxo-filas-builder.test.ts`:
+
+```ts
+function op(partial: Partial<FluxoFilasOpInput> & Pick<FluxoFilasOpInput, 'id'>): FluxoFilasOpInput {
+  return {
+    ordemPlanejamento: 1,
+    produtoNome: 'Bun',
+    assadeiraNome: 'Bun',
+    observacao: '',
+    unidades: 100,
+    latas: 0,
+    caixas: 0,
+    dataProducao: DATE,
+    ...partial,
+  };
+}
+
+function baseInput(overrides: Partial<FluxoFilasBuilderInput> = {}): FluxoFilasBuilderInput {
+  return {
+    ops: [op({ id: 'op-1' })],
+    opsAnteriores: [],
+    eventosFerm: [],
+    eventosForno: [],
+    eventosEmb: [],
+    camaraMin: 180,
+    resfrioMin: 60,
+    asOfMs: Date.parse(iso('12:00')),
+    ...overrides,
+  };
+}
+```
+
+Mesmo `dataProducao: '2026-08-12'` (ou `DATE`) nos objetos literais de `fluxo-filas-attach.test.ts`, `fluxo-filas-visibilidade.test.ts`, `fluxo-filas-fifo-emb.test.ts`.
+
+Em `fluxo-fila-format.test.ts` `item()`:
+
+```ts
+dataOp: partial.dataOp ?? '2026-08-12',
+origem: partial.origem ?? 'op_do_dia',
+```
+
+- [ ] **Step 4: Rodar testes das filas**
+
+Run: `npx vitest run src/domain/fluxo-processo/filas src/lib/services/fluxo-filas-attach.test.ts src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+Expected: PASS (comportamento FIFO ainda; `anteriorUn` 0).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas src/lib/services/fluxo-filas-attach.test.ts src/components/FluxoProcesso/fluxo-fila-format.test.ts
+git commit -m "feat(fluxo): tipos de origem no embalado das filas"
+```
+
+---
+
+### Task 2: `FluxoFilasEmbPorOp` (casar lote → OP)
+
+**Files:**
+- Create: `src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.ts`
+- Test: `src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.test.ts`
+
+**Interfaces:**
+- Consumes: `FluxoControleEventoInput`
+- Produces: `FluxoFilasEmbPorOp.alocar(eventos) → FluxoFilasEmbAlocacao`
+
+```ts
+export type FluxoFilasEmbSemOpLinha = {
+  produtoNome: string;
+  assadeiraNome: string;
+  volumeUn: number;
+  ultimoLoteEm: string | null;
+};
+
+export type FluxoFilasEmbAlocacao = {
+  unPorOp: Map<string, number>;
+  ultimoLoteEmPorOp: Map<string, string>;
+  produtoNomePorOp: Map<string, string>;
+  assadeiraNomePorOp: Map<string, string>;
+  semOpPorProduto: Map<string, FluxoFilasEmbSemOpLinha>;
+};
+
+export class FluxoFilasEmbPorOp {
+  alocar(eventos: FluxoControleEventoInput[]): FluxoFilasEmbAlocacao
+}
+```
+
+Regra: se `evento.ordemProducaoId` truthy → soma em `unPorOp` e guarda o `produzidoEm` mais recente; senão agrega em `semOpPorProduto` pela chave `produtoNome`. **Não** preenche OP por FIFO.
+
+- [ ] **Step 1: Teste que falha**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { FluxoFilasEmbPorOp } from './fluxo-filas-emb-por-op';
+import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+
+const aloc = new FluxoFilasEmbPorOp();
+
+function ev(partial: Partial<FluxoControleEventoInput> & Pick<FluxoControleEventoInput, 'unidades'>): FluxoControleEventoInput {
+  return {
+    produtoNome: 'Bun',
+    assadeiraNome: 'Bun',
+    produzidoEm: '2026-08-18T10:00:00-03:00',
+    dataOp: '2026-08-18',
+    ...partial,
+  };
+}
+
+describe('FluxoFilasEmbPorOp', () => {
+  it('soma na OP do lote, não na primeira OP do plano', () => {
+    const map = aloc.alocar([
+      ev({ ordemProducaoId: 'op-4', unidades: 50, produtoNome: 'Brioche 75g' }),
+      ev({ ordemProducaoId: 'op-5', unidades: 377, produtoNome: 'Brioche 65g' }),
+    ]);
+    expect(map.unPorOp.get('op-4')).toBe(50);
+    expect(map.unPorOp.get('op-5')).toBe(377);
+    expect(map.unPorOp.size).toBe(2);
+  });
+
+  it('lote sem ordemProducaoId vai para semOpPorProduto', () => {
+    const map = aloc.alocar([
+      ev({ unidades: 10, produtoNome: 'Padrão' }),
+      ev({ unidades: 5, produtoNome: 'Padrão', produzidoEm: '2026-08-18T11:00:00-03:00' }),
+    ]);
+    expect(map.unPorOp.size).toBe(0);
+    expect(map.semOpPorProduto.get('Padrão')?.volumeUn).toBe(15);
+    expect(map.semOpPorProduto.get('Padrão')?.ultimoLoteEm).toBe('2026-08-18T11:00:00-03:00');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar teste**
+
+Run: `npx vitest run src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.test.ts`
+
+Expected: FAIL (módulo inexistente).
+
+- [ ] **Step 3: Implementar**
+
+`fluxo-filas-emb-por-op.ts` — classe única, funções < 40 linhas. Atualizar `ultimoLoteEmPorOp` se `Date.parse(produzidoEm)` for maior.
+
+- [ ] **Step 4: Rodar teste**
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.ts src/domain/fluxo-processo/filas/fluxo-filas-emb-por-op.test.ts
+git commit -m "feat(fluxo): casar embalagem das filas por OP"
+```
+
+---
+
+### Task 3: Builder — duas origens + resfriando casado
+
+**Files:**
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts`
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+- Delete: `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts`
+- Delete: `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts`
+
+**Interfaces:**
+- Consumes: `FluxoFilasEmbPorOp.alocar`
+- Produces: `filas.embalado.totalUn` = só `op_do_dia`; `anteriorUn` = resto; `resfriando` usa `unPorOp.get(op.id)`
+
+- [ ] **Step 1: Testes que falham (acrescentar ao builder.test.ts)**
+
+```ts
+it('embalado da OP do dia é o lote casado, não o teto da OP', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-75', unidades: 81, produtoNome: 'HB Brioche 75g' })],
+      eventosEmb: [
+        {
+          ordemProducaoId: 'op-75',
+          produtoNome: 'HB Brioche 75g',
+          assadeiraNome: 'Bun',
+          unidades: 50,
+          produzidoEm: iso('10:00'),
+          dataOp: DATE,
+        },
+      ],
+    }),
+  );
+  expect(result?.embalado.totalUn).toBe(50);
+  expect(result?.embalado.anteriorUn).toBe(0);
+  expect(result?.embalado.items[0]?.volumeUn).toBe(50);
+});
+
+it('lote de OP de ontem entra em anteriorUn, não no total do dia', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-hoje', unidades: 81, produtoNome: 'HB Brioche 75g' })],
+      opsAnteriores: [
+        op({
+          id: 'op-ontem',
+          unidades: 70,
+          produtoNome: 'HB Padrão',
+          dataProducao: '2026-08-17',
+          ordemPlanejamento: 7,
+        }),
+      ],
+      eventosEmb: [
+        {
+          ordemProducaoId: 'op-hoje',
+          produtoNome: 'HB Brioche 75g',
+          assadeiraNome: 'Bun',
+          unidades: 50,
+          produzidoEm: iso('10:00'),
+          dataOp: DATE,
+        },
+        {
+          ordemProducaoId: 'op-ontem',
+          produtoNome: 'HB Padrão',
+          assadeiraNome: 'Bun',
+          unidades: 31,
+          produzidoEm: iso('08:00'),
+          dataOp: '2026-08-17',
+        },
+      ],
+    }),
+  );
+  expect(result?.embalado.totalUn).toBe(50);
+  expect(result?.embalado.anteriorUn).toBe(31);
+  expect(result?.embalado.items.filter((i) => i.origem === 'op_do_dia')).toHaveLength(1);
+  expect(result?.embalado.items.find((i) => i.origem === 'op_anterior')?.dataOp).toBe('2026-08-17');
+});
+
+it('lote de outro produto não enche a OP do Brioche', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-75', unidades: 81, produtoNome: 'HB Brioche 75g', ordemPlanejamento: 4 })],
+      eventosEmb: [
+        {
+          ordemProducaoId: 'op-outro',
+          produtoNome: 'HB Padrão',
+          assadeiraNome: 'Bun',
+          unidades: 81,
+          produzidoEm: iso('10:00'),
+          dataOp: DATE,
+        },
+      ],
+    }),
+  );
+  expect(result?.embalado.totalUn).toBe(0);
+  expect(result?.embalado.items.some((i) => i.ordemProducaoId === 'op-75')).toBe(false);
+});
+
+it('resfriando consome emb casado da mesma OP', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-1', unidades: 100 })],
+      eventosFerm: [
+        { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('06:00'), dataOp: DATE },
+      ],
+      eventosForno: [
+        { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('10:00'), dataOp: DATE },
+      ],
+      eventosEmb: [
+        { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 50, produzidoEm: iso('11:00'), dataOp: DATE },
+      ],
+    }),
+  );
+  expect(result?.embalado.totalUn).toBe(50);
+  expect(result?.resfriando.totalUn).toBe(30);
+});
+
+it('emb de OP ontem não reduz resfriando de hoje', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-hoje', unidades: 100 })],
+      opsAnteriores: [op({ id: 'op-ontem', dataProducao: '2026-08-17', unidades: 50 })],
+      eventosFerm: [
+        { ordemProducaoId: 'op-hoje', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('06:00'), dataOp: DATE },
+      ],
+      eventosForno: [
+        { ordemProducaoId: 'op-hoje', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('10:00'), dataOp: DATE },
+      ],
+      eventosEmb: [
+        { ordemProducaoId: 'op-ontem', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 50, produzidoEm: iso('11:00'), dataOp: '2026-08-17' },
+      ],
+    }),
+  );
+  expect(result?.resfriando.totalUn).toBe(80);
+  expect(result?.embalado.anteriorUn).toBe(50);
+});
+
+it('lote sem OP entra em anteriorUn e não reduz resfriando', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-1', unidades: 100 })],
+      eventosFerm: [
+        { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('06:00'), dataOp: DATE },
+      ],
+      eventosForno: [
+        { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('10:00'), dataOp: DATE },
+      ],
+      eventosEmb: [
+        { produtoNome: 'Padrão', assadeiraNome: 'Bun', unidades: 20, produzidoEm: iso('11:00'), dataOp: DATE },
+      ],
+    }),
+  );
+  expect(result?.embalado.totalUn).toBe(0);
+  expect(result?.embalado.anteriorUn).toBe(20);
+  expect(result?.embalado.items[0]?.origem).toBe('sem_op');
+  expect(result?.resfriando.totalUn).toBe(80);
+});
+
+it('duas datas anteriores: items ordenados da mais recente para a mais antiga', () => {
+  const result = builder.build(
+    baseInput({
+      ops: [op({ id: 'op-hoje', unidades: 10 })],
+      opsAnteriores: [
+        op({ id: 'op-16', dataProducao: '2026-08-16', ordemPlanejamento: 1, produtoNome: 'A' }),
+        op({ id: 'op-17', dataProducao: '2026-08-17', ordemPlanejamento: 2, produtoNome: 'B' }),
+      ],
+      eventosEmb: [
+        { ordemProducaoId: 'op-16', produtoNome: 'A', assadeiraNome: 'Bun', unidades: 5, produzidoEm: iso('09:00'), dataOp: '2026-08-16' },
+        { ordemProducaoId: 'op-17', produtoNome: 'B', assadeiraNome: 'Bun', unidades: 7, produzidoEm: iso('10:00'), dataOp: '2026-08-17' },
+      ],
+    }),
+  );
+  const ants = result?.embalado.items.filter((i) => i.origem === 'op_anterior') ?? [];
+  expect(ants.map((i) => i.dataOp)).toEqual(['2026-08-17', '2026-08-16']);
+});
+```
+
+Substituir o teste `'resfriando = forno - emb FIFO'` (eventosEmb **sem** `ordemProducaoId`) pelo de `'resfriando consome emb casado da mesma OP'`. Sem id, o volume vira `sem_op` e não reduz resfriando.
+
+OP sem lote emb **não** gera item em embalado (já é o caso se `volumeUn <= 0` em `itemSemPrazo`).
+
+- [ ] **Step 2: Rodar testes**
+
+Run: `npx vitest run src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+
+Expected: FAIL nos novos (FIFO ainda enche / ignora id).
+
+- [ ] **Step 3: Implementar builder**
+
+Injetar `FluxoFilasEmbPorOp` no lugar de `FluxoFilasFifoEmb`.
+
+```ts
+export class FluxoFilasBuilder {
+  constructor(
+    private readonly embPorOp = new FluxoFilasEmbPorOp(),
+    private readonly loteSaldo = new FluxoFilasLoteSaldo(),
+  ) {}
+
+  build(input: FluxoFilasBuilderInput): FluxoFilasDia | null {
+    if (input.ops.length === 0) return null;
+    const ops = [...input.ops].sort((a, b) => a.ordemPlanejamento - b.ordemPlanejamento);
+    const aloc = this.embPorOp.alocar(input.eventosEmb);
+    const idsDia = new Set(ops.map((o) => o.id));
+    const opsAntById = new Map(input.opsAnteriores.map((o) => [o.id, o]));
+
+    // aProduzir / fermentando / resfriando: loop só em `ops` (dia)
+    // resfriando: loteSaldo.restantes(fornoDaOp, aloc.unPorOp.get(op.id) ?? 0)
+    // embalado zona 1: para cada op do dia com un > 0, item origem op_do_dia
+    // embalado zona 2: para cada opsAnteriores com un > 0, origem op_anterior
+    // embalado sem_op: aloc.semOpPorProduto → item sintético (id '', ordemPlanejamento 0, origem sem_op)
+    // ids em unPorOp que não estão em idsDia nem opsAntById → tratar como sem_op (agregar no produto do evento já está em semOp se sem id; se id desconhecido, somar numa linha sem_op daquele produto)
+  }
+}
+```
+
+Id desconhecido: chave em `unPorOp` fora de `idsDia` e `opsAntById` → item `origem: 'sem_op'` com `produtoNome` / `assadeiraNome` de `produtoNomePorOp` / `assadeiraNomePorOp`.
+
+Ordenação embalado (não usar `presoMin`):
+
+1. `op_do_dia` por `ordemPlanejamento`
+2. `op_anterior` por `dataOp` desc, depois `ordemPlanejamento`
+3. `sem_op` por último, por `produtoNome`
+
+Outras filas: `ordenarItems` atual (preso). `itemSemPrazo` de embalado do dia: `ultimoLoteEm` de `aloc.ultimoLoteEmPorOp`.
+
+- [ ] **Step 4: Apagar FIFO das filas**
+
+Remover import e arquivos `fluxo-filas-fifo-emb.ts` + teste. Confirmar `rg FluxoFilasFifoEmb` vazio.
+
+- [ ] **Step 5: Rodar testes**
+
+Run: `npx vitest run src/domain/fluxo-processo/filas`
+
+Expected: PASS. Sem referência a fifo-emb.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas
+git commit -m "feat(fluxo): filas casam embalado por OP e separam dia anterior"
+```
+
+---
+
+### Task 4: Copy e formatador de quantidade
+
+**Files:**
+- Modify: `src/components/FluxoProcesso/fluxo-fila-format.ts`
+- Modify: `src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+**Interfaces:**
+- Consumes: `FluxoFilaItem.origem`, `dataOp`
+- Produces:
+  - `formatFilaResumoQty(items, scale, options?: { presoOnly?: boolean; origem?: FluxoFilaItemOrigem | 'nao_do_dia' })`
+  - `FluxoFilaEmbaladoCopy.linhaApoio(qtyLabel: string, datasOp: string[]): string | null`
+  - `FluxoFilaEmbaladoCopy.headingZona(dataOp: string | null): string`
+  - `FluxoFilaEmbaladoCopy.badge(dataOp: string | null): string`
+  - `FluxoFilaEmbaladoCopy.ariaTile(filaLabel: string, qtyDia: string, linhaApoio: string | null): string`
+  - `FluxoFilaEmbaladoCopy.dataOpLabel(isoDate: string): string` → `17/08`
+  - `FluxoFilaEmbaladoCopy.datasOpAnteriores(items: FluxoFilaItem[]): string[]` — unique `dataOp` de origem `op_anterior`, ordenadas desc
+
+`linhaApoio`: se `qtyLabel` vazio não é problema (caller só chama se `anteriorUn > 0`).
+
+| `datasOp` | retorno |
+|-----------|---------|
+| `['2026-08-17']` | `{qty} de OP de 17/08` |
+| duas+ datas | `{qty} de OP anterior` |
+| `[]` (só sem_op) | `{qty} sem OP` |
+
+`ariaTile`: com linha → `Embalado, 427 CX, 224 CX de OP de 17/08`; sem → `Embalado, 427 CX`.
+
+- [ ] **Step 1: Testes que falham**
+
+```ts
+import { FluxoFilaEmbaladoCopy, formatFilaResumoQty } from './fluxo-fila-format';
+
+it('soma só origem do dia no total do tile', () => {
+  const scale = stubLtScale() as FluxoDisplayScale;
+  const items = [
+    item({ volumeUn: 100, assadeiraNome: 'A20', preso: false, origem: 'op_do_dia' }),
+    item({ volumeUn: 80, assadeiraNome: 'A20', preso: false, origem: 'op_anterior', dataOp: '2026-08-17' }),
+  ];
+  expect(formatFilaResumoQty(items, scale, { origem: 'op_do_dia' })).toBe('5 LT');
+  expect(formatFilaResumoQty(items, scale, { origem: 'nao_do_dia' })).toBe('4 LT');
+});
+
+describe('FluxoFilaEmbaladoCopy', () => {
+  it('uma data', () => {
+    expect(FluxoFilaEmbaladoCopy.linhaApoio('224 CX', ['2026-08-17'])).toBe('224 CX de OP de 17/08');
+  });
+  it('várias datas', () => {
+    expect(FluxoFilaEmbaladoCopy.linhaApoio('10 CX', ['2026-08-17', '2026-08-16'])).toBe('10 CX de OP anterior');
+  });
+  it('só sem OP', () => {
+    expect(FluxoFilaEmbaladoCopy.linhaApoio('10 CX', [])).toBe('10 CX sem OP');
+  });
+  it('heading e badge', () => {
+    expect(FluxoFilaEmbaladoCopy.headingZona('2026-08-17')).toBe('Produzido hoje · OP de 17/08');
+    expect(FluxoFilaEmbaladoCopy.headingZona(null)).toBe('Produzido hoje · Sem OP');
+    expect(FluxoFilaEmbaladoCopy.badge('2026-08-17')).toBe('OP 17/08');
+    expect(FluxoFilaEmbaladoCopy.badge(null)).toBe('Sem OP');
+  });
+});
+```
+
+Em `formatFilaResumoQty`, filtrar:
+
+```ts
+if (options?.origem === 'op_do_dia') selected = selected.filter((i) => i.origem === 'op_do_dia');
+if (options?.origem === 'nao_do_dia') selected = selected.filter((i) => i.origem !== 'op_do_dia');
+if (options?.origem === 'op_anterior' || options?.origem === 'sem_op') selected = selected.filter((i) => i.origem === options.origem);
+```
+
+Default (sem `origem`): soma todos — compatível com a produzir / fermentando / resfriando (todos `op_do_dia`).
+
+- [ ] **Step 2: Rodar**
+
+Run: `npx vitest run src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+Expected: FAIL.
+
+- [ ] **Step 3: Implementar** classe `FluxoFilaEmbaladoCopy` no mesmo arquivo (fica < 200 linhas). `dataOpLabel`: split `'YYYY-MM-DD'` → `DD/MM`.
+
+- [ ] **Step 4: Rodar** Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/FluxoProcesso/fluxo-fila-format.ts src/components/FluxoProcesso/fluxo-fila-format.test.ts
+git commit -m "feat(fluxo): copy de OP anterior no tile embalado"
+```
+
+---
+
+### Task 5: UI do tile e da lista
+
+**Files:**
+- Modify: `src/components/FluxoProcesso/FluxoFilaTile.tsx`
+- Modify: `src/components/FluxoProcesso/FluxoFilaDetalheList.tsx`
+- Create se a list passar de ~200 linhas: `src/components/FluxoProcesso/FluxoFilaDetalheZona.tsx`
+
+**Interfaces:**
+- Consumes: `resumo.anteriorUn`, `FluxoFilaEmbaladoCopy`, `formatFilaResumoQty(..., { origem })`
+- Produces: tile com linha de apoio; lista em zonas
+
+- [ ] **Step 1: Tile**
+
+`FluxoFilaTile` continua recebendo `items`. Número grande:
+
+```ts
+const volume =
+  filaKey === 'embalado'
+    ? formatFilaResumoQty(items, scale, { origem: 'op_do_dia' })
+    : formatFilaResumoQty(items, scale);
+```
+
+Linha de apoio (só `embalado`):
+
+```tsx
+function FluxoFilaTileAnteriorLine({ items }: { items: FluxoFilaItem[] }) {
+  const { scale } = useFluxoDisplay();
+  const qty = formatFilaResumoQty(items, scale, { origem: 'nao_do_dia' });
+  const datas = FluxoFilaEmbaladoCopy.datasOpAnteriores(items);
+  const temAnterior = items.some((i) => i.origem !== 'op_do_dia');
+  if (!temAnterior) return null;
+  return (
+    <p className="mt-1 text-[11px] text-text-faint">
+      {FluxoFilaEmbaladoCopy.linhaApoio(qty, datas)}
+    </p>
+  );
+}
+```
+
+Colocar **depois** do número, **antes** de `FluxoFilaTilePrazoLine` (embalado não tem prazo; fermentando não tem essa linha).
+
+`aria-label` no `<button>`:
+
+```ts
+const linha = temAnterior ? FluxoFilaEmbaladoCopy.linhaApoio(qtyAnt, datas) : null;
+aria-label={FluxoFilaEmbaladoCopy.ariaTile(label, volume, linha)}
+```
+
+- [ ] **Step 2: Lista**
+
+`FluxoFilaDetalheHeaderCopy.build` para `embalado`: título `Embalado — {qty do dia}`. Se houver `nao_do_dia`, **segunda linha** `<p className="text-[12px] text-text-muted">{linhaApoio}</p>` abaixo do título (o close fica na row do título `min-h-11`).
+
+Zona 1: `items.filter origem === op_do_dia` (ou todos se `filaKey !== 'embalado'`).
+
+Zona 2 só se `filaKey === 'embalado'`: agrupar `op_anterior` por `dataOp` (desc), depois grupo `sem_op`.
+
+Heading: `FluxoFilaEmbaladoCopy.headingZona(dataOp)`.
+
+Row zona 2: `ListRow` igual, `emphasize: false`, `menu={<Badge tone="neutral">{FluxoFilaEmbaladoCopy.badge(item.dataOp)}</Badge>}`, `index` omitido se `origem === 'sem_op'`.
+
+Zebra: continuar índice global (zona 1 depois zona 2).
+
+Não repetir data no subtítulo.
+
+- [ ] **Step 3: Conferir visual vs spec**
+
+- Sem `+` no tile
+- Sem uppercase tracking no heading
+- Badge zona 2 `neutral`, não `accent`
+- `motion-reduce` no chevron permanece
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/FluxoProcesso/FluxoFilaTile.tsx src/components/FluxoProcesso/FluxoFilaDetalheList.tsx src/components/FluxoProcesso/FluxoFilaDetalheZona.tsx
+git commit -m "feat(fluxo): UI embalado do dia vs OP anterior"
+```
+
+---
+
+### Task 6: Attach + service (dados reais)
+
+**Files:**
+- Modify: `src/lib/services/fluxo-filas-attach.ts`
+- Modify: `src/lib/services/fluxo-filas-attach.test.ts`
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.ts`
+- Modify: `src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.test.ts`
+- Modify: `src/lib/services/fluxo-processo-service.ts`
+- Modify: `src/domain/fluxo-processo/fluxo-processo-types.ts` (comentário `ordemProducaoId`)
+
+**Interfaces:**
+- Consumes: `opsAnteriores` no builder; `pedidoEmbalagemId` no lote
+- Produces: eventos emb com `ordemProducaoId`; converter inclui OPs extra
+
+- [ ] **Step 1: Teste attach que falha**
+
+Em `fluxo-filas-attach.test.ts`:
+
+```ts
+it('lotes de OP extra (outro dia) somam em anteriorUn', () => {
+  const fluxo = emptyFluxo();
+  new FluxoFilasServiceAttach().attach(fluxo, {
+    ops: [{
+      id: 'op-hoje',
+      ordemPlanejamento: 1,
+      produtoNome: 'HB Brioche 75g',
+      assadeiraNome: 'Bun',
+      observacao: '',
+      unidades: 81,
+      latas: 0,
+      caixas: 81,
+      dataProducao: DATE,
+    }],
+    opsAnteriores: [{
+      id: 'op-ontem',
+      ordemPlanejamento: 7,
+      produtoNome: 'HB Padrão',
+      assadeiraNome: 'Bun',
+      observacao: 'Lisa',
+      unidades: 70,
+      latas: 0,
+      caixas: 70,
+      dataProducao: '2026-08-17',
+    }],
+    fermentacao: [],
+    forno: [],
+    embalagem: [
+      {
+        produzidoEm: iso('10:00'),
+        produtoNome: 'HB Brioche 75g',
+        assadeiraNome: 'Bun',
+        unidades: 50,
+        caixas: 50,
+        dataOp: DATE,
+        ordemProducaoId: 'op-hoje',
+      },
+      {
+        produzidoEm: iso('08:00'),
+        produtoNome: 'HB Padrão',
+        assadeiraNome: 'Bun',
+        unidades: 31,
+        caixas: 31,
+        dataOp: '2026-08-17',
+        ordemProducaoId: 'op-ontem',
+      },
+    ],
+    camaraMin: 180,
+    resfrioMin: 60,
+    asOfMs: Date.parse(iso('12:00')),
+  });
+  expect(fluxo.filas?.embalado.totalUn).toBe(50);
+  expect(fluxo.filas?.embalado.anteriorUn).toBe(31);
+});
+```
+
+Estender `FluxoFilasAttachInput` com `opsAnteriores?: FluxoFilasOpInput[]` (default `[]`).
+
+Visibilidade: não filtrar `opsAnteriores` por `opIdsVisiveis` (são de outro dia). Filtrar extra por `produtoNomesVisiveis`. Emb continua por nome de produto.
+
+Teste visibilidade: OP extra `HB 80g` permanece em `opsAnteriores`; `Pão de Forma` cai.
+
+- [ ] **Step 2: Rodar**
+
+Run: `npx vitest run src/lib/services/fluxo-filas-attach.test.ts src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.test.ts`
+
+Expected: FAIL até plugar `opsAnteriores`.
+
+- [ ] **Step 3: Attach**
+
+```ts
+attach(fluxo, input) {
+  const recorte = this.recorteVisivel(input);
+  fluxo.filas = this.builder.build({
+    ops: recorte.ops,
+    opsAnteriores: recorte.opsAnteriores,
+    eventosFerm: recorte.eventosFerm,
+    eventosForno: recorte.eventosForno,
+    eventosEmb: recorte.eventosEmb,
+    camaraMin: input.camaraMin,
+    resfrioMin: input.resfrioMin,
+    asOfMs: input.asOfMs,
+  });
+}
+```
+
+`FluxoFilasEventoResolver`: `new FluxoUnidadesConverter([...ops, ...opsAnteriores].map(...))`.
+
+`FluxoFilasVisibilidade.restringir` passa a receber `opsAnteriores` e devolve filtrado por `produtoNomesVisiveis` (não por `opIdsVisiveis`). Ferm/forno: só ids do dia.
+
+- [ ] **Step 4: Service**
+
+No map de `embalagem`:
+
+```ts
+ordemProducaoId: ordemId,
+```
+
+Comentário em `FluxoApontamentoEvento`: *Presente em ferm/forno; embalagem envia quando o lote tem `pedidoEmbalagemId` (filas casam por OP).*
+
+Depois de `filasOps`, montar extras:
+
+```ts
+const idsDia = new Set(ordensFilas.map((o) => o.id));
+const nomesVisiveis = produtoNomesVisiveisDe(produtos, categoriasVisiveis);
+const filasOpsAnteriores = [...ordemById.values()]
+  .filter((o) => o.dataProducao !== date && !idsDia.has(o.id))
+  .filter((o) => nomesVisiveis.has(resolveProduto(o.produtoId, o)))
+  .map((o) => ({
+    id: o.id,
+    ordemPlanejamento: o.ordemPlanejamento,
+    produtoNome: resolveProduto(o.produtoId, o),
+    assadeiraNome: resolveAssadeira(o) || FLUXO_ASSADEIRA_SEM,
+    observacao: o.observacao ?? '',
+    unidades: o.quantidade.unidades,
+    latas: o.assadeiras,
+    caixas: o.quantidade.caixas,
+    dataProducao: o.dataProducao,
+  }));
+```
+
+Incluir `dataProducao: o.dataProducao` em `filasOps`. Passar `opsAnteriores: filasOpsAnteriores` no `filasAttach.attach`.
+
+`ordemById` já inclui `ordensExtra` via `collectOrdemIds` (emb usa `pedidoEmbalagemId`).
+
+- [ ] **Step 5: Rodar testes**
+
+Run: `npx vitest run src/domain/fluxo-processo/filas src/lib/services/fluxo-filas-attach.test.ts src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/services/fluxo-filas-attach.ts src/lib/services/fluxo-filas-attach.test.ts src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.ts src/domain/fluxo-processo/filas/fluxo-filas-visibilidade.test.ts src/lib/services/fluxo-processo-service.ts src/domain/fluxo-processo/fluxo-processo-types.ts
+git commit -m "feat(fluxo): ligar lotes de embalagem à OP no payload das filas"
+```
+
+---
+
+## Verificação manual
+
+1. `/realizado/fluxo-processo` no dia de hoje, escala CX.
+2. Tile Embalado: número grande ≈ painel embalagem (OPs do dia); linha `N de OP de DD/MM` se houver lote de OP antiga hoje.
+3. Brioche 75g na lista **não** mostra o teto da OP se só parte foi embalada.
+4. Gergelim Duo com 0 CX reais **não** aparece como embalado do dia.
+5. Expandir: zona 1 = OPs do dia; zona 2 = heading + badge `OP 17/08`.
+6. Cards previsto × realizado e relógio FIFO **não** mudam de regra nesta entrega.
+7. Fermentando / resfriando / a produzir: layout igual; resfriando da OP do dia cai quando o embalado **daquela** OP sobe.
+
+---
+
+## Cobertura da spec
+
+| Requisito | Task |
+|-----------|------|
+| Casar lote → OP | 2, 3 |
+| totalUn = OPs do dia | 3, 4 |
+| anteriorUn + linha `{n} de OP de DD/MM` | 3, 4, 5 |
+| Lista duas zonas + badge | 5 |
+| Sem OP por produto | 2, 3, 5 |
+| Resfriando casado | 3 |
+| `ordemProducaoId` no evento emb | 6 |
+| OPs extra + converter | 6 |
+| Não filtrar emb só por ids do dia | 6 |
+| Apagar FIFO das filas | 3 |
+| Painel embalagem / controle FIFO | fora |

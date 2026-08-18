@@ -27,6 +27,7 @@ import { insumoControleEstoqueFilter } from '@/domain/insumos/insumo-controle-es
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
+import { toInsumoHistoricoIsoRange, INSUMO_HISTORICO_LIMITE } from '@/domain/insumos/insumo-historico-periodo';
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
 import { insumoEntradaFatorRecalcIntegracaoService } from '@/lib/services/insumo-entrada-fator-recalc-integracao-service';
@@ -128,9 +129,17 @@ export async function getInsumoEstoqueDashboard(): Promise<InsumoEstoqueDashboar
   return { ...saldosPage, ...mapeamentoPage };
 }
 
-export async function getInsumoMovimentos(insumoId: string) {
+export async function getInsumoMovimentos(
+  insumoId: string,
+  periodo: { de: string; ate: string },
+) {
   await requireInternoModulo('interno_insumos', 'ler');
-  return insumoEstoqueRepository.listMovimentos(insumoId);
+  const { createdAtDe, createdAtAte } = toInsumoHistoricoIsoRange(periodo.de, periodo.ate);
+  return insumoEstoqueRepository.listMovimentos(insumoId, {
+    createdAtDe,
+    createdAtAte,
+    limit: INSUMO_HISTORICO_LIMITE,
+  });
 }
 
 export async function getInsumoPendencias() {

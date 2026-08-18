@@ -1,9 +1,11 @@
 import type { EmbalagemDashboardItem } from '@/components/Realizado/EmbalagemDashboard';
+import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 import {
+  derivarUnidadeEmbalagem,
   derivarUnidadePrincipal,
   pedidoUsaCaixasOuPacotes,
 } from '@/domain/embalagem/painel-quantidade';
@@ -98,4 +100,22 @@ export function snapshotsToDashboardItems(
     pedidoPacotes: s.pedidoPacotes,
     producaoUpdatedAt: s.producaoUpdatedAt,
   }));
+}
+
+export function lotesEmbToDashboardSnapshots(
+  lotes: EmbalagemLoteRecord[],
+): DashboardSnapshot[] {
+  const items: DashboardSnapshot[] = [];
+  for (const lote of lotes) {
+    const { valor } = derivarUnidadeEmbalagem(lote.quantidade);
+    if (valor <= 0) continue;
+    items.push({
+      caixas: lote.quantidade.caixas,
+      pacotes: lote.quantidade.pacotes,
+      pedidoCaixas: 0,
+      pedidoPacotes: 0,
+      producaoUpdatedAt: lote.produzidoEm,
+    });
+  }
+  return items;
 }

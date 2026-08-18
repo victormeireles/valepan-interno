@@ -6,6 +6,7 @@ import {
   formatDeltaPercentual,
   formatDeltaReais,
 } from '@/components/ProdutosConfig/produto-custo-format';
+import ProdutoCustoSimuladorMargem from '@/components/ProdutosConfig/ProdutoCustoSimuladorMargem';
 import type {
   ProdutoCustoComparacao,
   ProdutoCustoTipoReceita,
@@ -77,6 +78,11 @@ export default function ProdutoCustoSimuladorResultado({ comparacao }: Props) {
       <p className={`font-mono tabular-nums text-sm ${deltaClass}`}>
         Diferença: {formatDeltaReais(comparacao.deltaReais)} ({formatDeltaPercentual(comparacao.deltaPercentual)})
       </p>
+
+      <ProdutoCustoSimuladorMargem
+        custoAntes={comparacao.antes.custoUnitario}
+        custoDepois={comparacao.depois.custoUnitario}
+      />
     </section>
   );
 }

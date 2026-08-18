@@ -6,6 +6,7 @@ import {
 import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import type {
   OrdensProducaoListResponse,
+  OrdemProducaoEstimativaView,
   OrdemProducaoPainelItem,
 } from '@/domain/types/ordens-producao-painel';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
@@ -13,6 +14,9 @@ import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
+import { estimativaProducaoService } from '@/lib/services/estimativa-producao-service';
+import { toEstimativaView } from '@/domain/estimativa-producao/estimativa-producao-format';
+import type { EstimativaRecalcStatus } from '@/domain/estimativa-producao/estimativa-producao-types';
 
 type AssadeiraRow = { id: string; nome: string };
 
@@ -28,9 +32,13 @@ export class OrdensProducaoPainelService {
       return {
         date,
         resumo: { totalOrdens: 0, totalLatas: 0, totalUnidades: 0, totalCaixas: 0 },
+        estimativaDisponivel: true,
         ordens: [],
       };
     }
+
+    const status = await this.syncEstimativa(date);
+    const estimativaById = await this.loadEstimativaById(ordens.map((ordem) => ordem.id));
 
     const tipoIds = [...new Set(ordens.map((o) => o.tipoEstoqueId))];
     const produtoIds = [...new Set(ordens.map((o) => o.produtoId))];
@@ -54,14 +62,33 @@ export class OrdensProducaoPainelService {
         produtoNomeById,
         assadeiraNomeById,
         defaultAssadeiraByProduto,
+        estimativaById.get(ordem.id) ?? null,
       ),
     );
 
     return {
       date,
       resumo: this.buildResumo(items),
+      estimativaDisponivel: status !== 'sem_produtividade',
       ordens: items,
     };
+  }
+
+  private async syncEstimativa(date: string): Promise<EstimativaRecalcStatus> {
+    try {
+      const result = await estimativaProducaoService.recalcForDate(date);
+      return result.status;
+    } catch (error) {
+      console.warn('[OrdensProducaoPainelService] Falha ao recalcular estimativa', error);
+      return 'ok';
+    }
+  }
+
+  private async loadEstimativaById(
+    ids: string[],
+  ): Promise<Map<string, OrdemProducaoEstimativaView>> {
+    const rows = await estimativaProducaoService.listByOrdemIds(ids);
+    return new Map(rows.map((row) => [row.ordemProducaoId, toEstimativaView(row)]));
   }
 
   private async loadAssadeiraNames(ids: string[]): Promise<AssadeiraRow[]> {
@@ -96,6 +123,7 @@ export class OrdensProducaoPainelService {
     produtoNomeById: Map<string, string>,
     assadeiraNomeById: Map<string, string>,
     defaultAssadeiraByProduto: Map<string, string>,
+    estimativa: OrdemProducaoEstimativaView | null,
   ): OrdemProducaoPainelItem {
     const modoQuantidade = resolveModoQuantidade(ordem.assadeiraId, ordem.assadeiras);
     const unidades = ordem.quantidade.unidades;
@@ -129,6 +157,7 @@ export class OrdensProducaoPainelService {
         unidades,
         caixas,
       }),
+      estimativa,
     };
   }
 

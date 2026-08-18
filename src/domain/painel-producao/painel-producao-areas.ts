@@ -1,8 +1,5 @@
-import {
-  PAINEL_PRODUCAO_AREA_WINDOWS,
-  PAINEL_PRODUCAO_STAGES,
-} from './painel-producao-constants';
-import { toMinutesFromClock } from './painel-producao-time';
+import { PAINEL_PRODUCAO_STAGES } from './painel-producao-constants';
+import { janelaExpectedFraction } from './painel-producao-time';
 import type {
   PainelProducaoAreaId,
   PainelProducaoAreaView,
@@ -10,7 +7,8 @@ import type {
   PainelProducaoRitmoEntry,
 } from './painel-producao-types';
 import { buildRitmoComparisons } from './painel-producao-ritmo';
-import { brazilSevenAmUtcMs } from '@/lib/utils/date-utils';
+import type { PainelProducaoAreaWindow } from './painel-producao-windows';
+import { brazilClockUtcMs } from '@/lib/utils/date-utils';
 
 const STAGE_KEY: Record<PainelProducaoAreaId, 'ferm' | 'forno' | 'emb'> = {
   ferm: 'ferm',
@@ -47,24 +45,21 @@ export function buildAreasFromProducts(
   ritmoEntriesByArea: Record<PainelProducaoAreaId, PainelProducaoRitmoEntry[]>,
   ritmoEntriesOntemByArea: Record<PainelProducaoAreaId, PainelProducaoRitmoEntry[]>,
   ritmoEntriesSemanaByArea: Record<PainelProducaoAreaId, PainelProducaoRitmoEntry[]>,
-  dateISO: string,
   dateOntem: string | null,
-  dateSemana: string,
-  referenceEndMs: number,
+  referenceEndMs: number | null,
+  windows: Record<PainelProducaoAreaId, PainelProducaoAreaWindow>,
 ): PainelProducaoAreaView[] {
   return PAINEL_PRODUCAO_STAGES.map((stage) => {
     const key = stage.key;
     const stageKey = STAGE_KEY[key];
     const done = products.reduce((sum, product) => sum + product[stageKey].done, 0);
     const meta = products.reduce((sum, product) => sum + product[stageKey].meta, 0);
-    const window = PAINEL_PRODUCAO_AREA_WINDOWS[key];
+    const window = windows[key];
     const ritmos = buildRitmoComparisons(
       ritmoEntriesByArea[key],
       ritmoEntriesOntemByArea[key],
       ritmoEntriesSemanaByArea[key],
-      dateISO,
       dateOntem,
-      dateSemana,
       referenceEndMs,
     );
 
@@ -88,9 +83,7 @@ export function resolveGargaloAreaId(
   agoraMin: number,
 ): PainelProducaoAreaId {
   const worst = areas.reduce<{ id: PainelProducaoAreaId; v: number } | null>((acc, area) => {
-    const ini = toMinutesFromClock(area.janelaIni);
-    const fim = toMinutesFromClock(area.janelaFim);
-    const expected = Math.min(1, Math.max(0, (agoraMin - ini) / (fim - ini)));
+    const expected = janelaExpectedFraction(agoraMin, area.janelaIni, area.janelaFim);
     const shortfall = area.meta > 0 ? area.done / area.meta - expected : 0;
     if (acc == null || shortfall < acc.v) {
       return { id: area.id, v: shortfall };
@@ -102,16 +95,14 @@ export function resolveGargaloAreaId(
 }
 
 export function resolveReferenceEndMs(dateISO: string, agoraMin: number): number {
-  const startMs = brazilSevenAmUtcMs(dateISO);
   const hour = Math.floor(agoraMin / 60);
   const minute = agoraMin % 60;
-  return startMs + (hour * 60 + minute) * 60_000;
+  const clock = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  return brazilClockUtcMs(dateISO, clock);
 }
 
 export function expectedPctForArea(area: PainelProducaoAreaView, agoraMin: number): number {
-  const ini = toMinutesFromClock(area.janelaIni);
-  const fim = toMinutesFromClock(area.janelaFim);
-  return Math.round(Math.min(1, Math.max(0, (agoraMin - ini) / (fim - ini))) * 100);
+  return Math.round(janelaExpectedFraction(agoraMin, area.janelaIni, area.janelaFim) * 100);
 }
 
 export function progressPctForArea(area: Pick<PainelProducaoAreaView, 'done' | 'meta'>): number {

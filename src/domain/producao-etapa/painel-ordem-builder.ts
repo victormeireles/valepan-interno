@@ -22,6 +22,7 @@ export type BuildPainelOrdemInput = {
   tipoEstoque: string;
   assadeiraNome?: string;
   temMultiplasAssadeirasCadastradas?: boolean;
+  incluirNosTotais?: boolean;
   fermentacaoProduzido?: number;
   fornoProduzido?: number;
 };
@@ -48,6 +49,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     tipoEstoque,
     assadeiraNome,
     temMultiplasAssadeirasCadastradas,
+    incluirNosTotais,
     fermentacaoProduzido,
     fornoProduzido,
   } = input;
@@ -106,6 +108,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     cascata,
     assadeiraNome: ordem.assadeiraId ? assadeiraNome : undefined,
     temMultiplasAssadeirasCadastradas: temMultiplasAssadeirasCadastradas === true,
+    incluirNosTotais: incluirNosTotais !== false,
     lotes: lotes.map(mapLoteToPainelEtapa),
   };
 }

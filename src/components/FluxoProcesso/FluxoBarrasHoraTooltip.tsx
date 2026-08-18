@@ -6,6 +6,7 @@ import type { FluxoHoraLegendaItem } from './FluxoHoraLegendaBuilder';
 type FluxoBarrasHoraTooltipProps = {
   hora: number;
   total: number;
+  previsto: number;
   unitLabel: string;
   mode: FluxoDisplayMode;
   itens: FluxoHoraLegendaItem[];
@@ -18,11 +19,13 @@ type FluxoBarrasHoraTooltipProps = {
 export default function FluxoBarrasHoraTooltip({
   hora,
   total,
+  previsto,
   unitLabel,
   mode,
   itens,
 }: FluxoBarrasHoraTooltipProps) {
   const hh = String(hora).padStart(2, '0');
+  const delta = total - previsto;
 
   return (
     <div
@@ -36,6 +39,11 @@ export default function FluxoBarrasHoraTooltip({
       <div className="font-mono text-[12px] font-bold tabular-nums text-text-strong">
         {hh}:00 · {fmtQty(total, mode)} {unitLabel}
       </div>
+
+      <p className="mt-1 font-mono text-[10px] tabular-nums text-text-muted">
+        previsto {fmtQty(previsto, mode)} · realizado {fmtQty(total, mode)} · Δ{' '}
+        {fmtQty(delta, mode)}
+      </p>
 
       {itens.length === 0 ? (
         <p className="mt-1.5 text-[11px] text-text-muted">Sem apontamento</p>

@@ -10,7 +10,6 @@ import {
 } from '@/domain/painel-producao/painel-producao-areas';
 import {
   buildPainelProducaoProduct,
-  collectRitmoEntriesFromProducts,
 } from '@/domain/painel-producao/painel-producao-builder';
 import type {
   CargaPainelProducaoResponse,
@@ -22,6 +21,7 @@ import {
   formatOpLabelFromDate,
 } from '@/domain/painel-producao/painel-producao-time';
 import { sortPorOrdemPlanejamento } from '@/domain/realizado/ordem-planejamento-sort';
+import type { FluxoRitmoLotesDia } from '@/lib/services/fluxo-processo-ritmo-attach';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
@@ -32,6 +32,10 @@ import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
+import { configOperacaoService } from '@/lib/services/config-operacao-service';
+import { windowsFromConfig } from '@/domain/painel-producao/painel-producao-windows';
+import { fluxoEtapaRitmoEntriesMapper } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
+import { ritmoLotesDiaLoader } from '@/lib/services/ritmo-lotes-dia-loader';
 import {
   addCalendarDaysISO,
   formatWeekdayDayMonthBr,
@@ -46,44 +50,41 @@ export class PainelProducaoService {
 
   async getCargaCompleta(date: string): Promise<CargaPainelProducaoResponse> {
     const dateSemana = addCalendarDaysISO(date, -7);
-    const [ultimaDataComDados, dateAnterior] = await Promise.all([
+    const [ultimaDataComDados, dateAnterior, config, lotesHoje] = await Promise.all([
       ordemProducaoRepository.findUltimaDataComPedidos(7),
       ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
+      configOperacaoService.getConfig(),
+      ritmoLotesDiaLoader.load(date),
     ]);
+    const lotesComparacao = await ritmoLotesDiaLoader.loadComparacao(dateSemana, dateAnterior);
 
-    const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
+    const datesToLoad = [date];
     const ordensByDate = await ordemProducaoRepository.listByDatasProducao(datesToLoad);
     const allOrdens = [...ordensByDate.values()].flat();
     const ctx = await this.loadContext(allOrdens);
 
-    const buildForDate = (targetDate: string) =>
-      this.buildProductsForOrdens(
-        this.filterOrdens(ordensByDate.get(targetDate) ?? [], ctx.categoriaPorProduto, ctx.categoriasVisiveis),
-        ctx,
-      );
-
-    const productsMain = buildForDate(date);
-    const productsSemana = buildForDate(dateSemana);
-    const productsAnterior = dateAnterior ? buildForDate(dateAnterior) : [];
+    const productsMain = this.buildProductsForOrdens(
+      this.filterOrdens(ordensByDate.get(date) ?? [], ctx.categoriaPorProduto, ctx.categoriasVisiveis),
+      ctx,
+    );
 
     const hoje = getTodayISOInBrazilTimezone();
     const { hour, minute } = date === hoje ? getBrazilHourMinuteNow() : { hour: 18, minute: 0 };
     const agoraMin = hour * 60 + minute;
-    const referenceEndMs = resolveReferenceEndMs(date, agoraMin);
+    const referenceEndMs = date === hoje ? resolveReferenceEndMs(date, agoraMin) : null;
 
-    const ritmoMain = this.collectRitmoMaps(productsMain, ctx.lotes);
-    const ritmoSemana = this.collectRitmoMaps(productsSemana, ctx.lotes);
-    const ritmoAnterior = this.collectRitmoMaps(productsAnterior, ctx.lotes);
+    const ritmoMain = this.entriesFromLotesDia(lotesHoje);
+    const ritmoSemana = this.entriesFromLotesDia(lotesComparacao.semana);
+    const ritmoAnterior = this.entriesFromLotesDia(lotesComparacao.ontem);
 
     const areas = buildAreasFromProducts(
       productsMain,
       ritmoMain,
       ritmoAnterior,
       ritmoSemana,
-      date,
       dateAnterior,
-      dateSemana,
       referenceEndMs,
+      windowsFromConfig(config),
     );
 
     const painel: PainelProducaoData = {
@@ -98,14 +99,11 @@ export class PainelProducaoService {
     return { date, ultimaDataComDados, painel };
   }
 
-  private collectRitmoMaps(
-    products: PainelProducaoProduct[],
-    lotes: PainelProducaoContext['lotes'],
-  ) {
+  private entriesFromLotesDia(dia: FluxoRitmoLotesDia) {
     return {
-      ferm: collectRitmoEntriesFromProducts(products, 'ferm', lotes),
-      forno: collectRitmoEntriesFromProducts(products, 'forno', lotes),
-      emb: collectRitmoEntriesFromProducts(products, 'emb', lotes),
+      ferm: fluxoEtapaRitmoEntriesMapper.fromFermFornoLotes(dia.ferm),
+      forno: fluxoEtapaRitmoEntriesMapper.fromFermFornoLotes(dia.forno),
+      emb: fluxoEtapaRitmoEntriesMapper.fromEmbLotes(dia.emb),
     };
   }
 

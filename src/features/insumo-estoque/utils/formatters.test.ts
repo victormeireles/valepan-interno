@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatCoberturaDias,
   formatInsumoQuantidadeArredondada,
+  origemMovimentoLabel,
 } from './formatters';
 
 describe('formatInsumoQuantidadeArredondada', () => {
@@ -29,5 +30,11 @@ describe('formatCoberturaDias', () => {
     expect(formatCoberturaDias(360)).toBe('360 d');
     expect(formatCoberturaDias(361)).toBe('>360 d');
     expect(formatCoberturaDias(900)).toBe('>360 d');
+  });
+});
+
+describe('origemMovimentoLabel', () => {
+  it('resume bloco com etapas misturadas como Produção', () => {
+    expect(origemMovimentoLabel('producao')).toBe('Produção');
   });
 });

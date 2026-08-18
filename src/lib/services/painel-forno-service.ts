@@ -3,7 +3,7 @@ import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
 import { somarAssadeirasLotes } from '@/domain/embalagem/painel-embalagem-enrichment';
-import { ordensToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
+import { lotesToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
 import { sortOrdensPorPlanejamento } from '@/domain/realizado/etapa-painel-adapter';
 import type {
   CargaEtapaResponse,
@@ -17,6 +17,8 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+import { brazilCivilDayRangeIso } from '@/lib/services/ritmo-lotes-dia-loader';
+import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
 
 type AssadeiraRow = { id: string; nome: string };
 
@@ -36,10 +38,12 @@ export class PainelFornoService {
       fornoLoteRepository.listByOrdemProducaoIds(ordemIds),
       fermentacaoLoteRepository.listByOrdemProducaoIds(ordemIds),
     ]);
+    const visivelOrdemIds = await etapaPainelRecorteLoader.visivelOrdemIds(ordens, []);
     const ordensPainel = await this.buildOrdensPainel(
       ordens,
       lotesByOrdem,
       fermentacaoLotesByOrdem,
+      visivelOrdemIds,
     );
 
     return { date, ordens: ordensPainel };
@@ -53,12 +57,16 @@ export class PainelFornoService {
       ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
     ]);
 
-    const datesToLoad = [date, dateSemana, ...(dateAnterior ? [dateAnterior] : [])];
-    const ordensByDate = await ordemProducaoRepository.listByDatasProducao(datesToLoad);
-    const allOrdens = [...ordensByDate.values()].flat();
-    const allOrdemIds = allOrdens.map((ordem) => ordem.id);
+    const [ordens, lotesDia, lotesSemana, lotesAnterior] = await Promise.all([
+      ordemProducaoRepository.listByDataProducao(date),
+      this.listLotesDoDia(date),
+      this.listLotesDoDia(dateSemana),
+      dateAnterior ? this.listLotesDoDia(dateAnterior) : Promise.resolve([]),
+    ]);
+
+    const allOrdemIds = ordens.map((ordem) => ordem.id);
     const [lotesByOrdem, fermentacaoLotesByOrdem] =
-      allOrdens.length > 0
+      ordens.length > 0
         ? await Promise.all([
             fornoLoteRepository.listByOrdemProducaoIds(allOrdemIds),
             fermentacaoLoteRepository.listByOrdemProducaoIds(allOrdemIds),
@@ -68,45 +76,50 @@ export class PainelFornoService {
             new Map<string, FermentacaoLoteRecord[]>(),
           ];
 
-    const [ordensMain, ordensSemana, ordensAnterior] = await Promise.all([
-      this.buildOrdensPainel(
-        ordensByDate.get(date) ?? [],
-        lotesByOrdem,
-        fermentacaoLotesByOrdem,
-      ),
-      this.buildOrdensPainel(
-        ordensByDate.get(dateSemana) ?? [],
-        lotesByOrdem,
-        fermentacaoLotesByOrdem,
-      ),
-      dateAnterior
-        ? this.buildOrdensPainel(
-            ordensByDate.get(dateAnterior) ?? [],
-            lotesByOrdem,
-            fermentacaoLotesByOrdem,
-          )
-        : Promise.resolve([]),
+    const visivelOrdemIds = await etapaPainelRecorteLoader.visivelOrdemIds(ordens, [
+      ...lotesDia,
+      ...lotesSemana,
+      ...lotesAnterior,
     ]);
+    const ordensMain = await this.buildOrdensPainel(
+      ordens,
+      lotesByOrdem,
+      fermentacaoLotesByOrdem,
+      visivelOrdemIds,
+    );
 
     return {
       date,
       ultimaDataComDados,
       ordens: ordensMain,
+      dashboardDia: lotesToDashboardSnapshots(
+        lotesDia.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+      ),
       comparacaoSemana: {
         date: dateSemana,
-        items: ordensToDashboardSnapshots(ordensSemana),
+        items: lotesToDashboardSnapshots(
+          lotesSemana.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+        ),
       },
       comparacaoAnterior: {
         date: dateAnterior,
-        items: ordensToDashboardSnapshots(ordensAnterior),
+        items: lotesToDashboardSnapshots(
+          lotesAnterior.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+        ),
       },
     };
+  }
+
+  private listLotesDoDia(dateISO: string) {
+    const { startIso, endIso } = brazilCivilDayRangeIso(dateISO);
+    return fornoLoteRepository.listByProduzidoEmRange(startIso, endIso);
   }
 
   private async buildOrdensPainel(
     ordens: OrdemProducaoRecord[],
     lotesByOrdem: Map<string, FermentacaoLoteRecord[]>,
     fermentacaoLotesByOrdem: Map<string, FermentacaoLoteRecord[]>,
+    visivelOrdemIds: Set<string>,
   ): Promise<PainelOrdemEtapa[]> {
     if (ordens.length === 0) return [];
 
@@ -128,6 +141,7 @@ export class PainelFornoService {
             : undefined,
           temMultiplasAssadeirasCadastradas:
             (opcoesByProdutoId.get(ordem.produtoId) ?? 0) > 1,
+          incluirNosTotais: visivelOrdemIds.has(ordem.id),
           fermentacaoProduzido: somarAssadeirasLotes(
             fermentacaoLotesByOrdem.get(ordem.id) ?? [],
           ),

@@ -8,6 +8,10 @@ import type {
   FluxoProdutoAssadeira,
   VpFluxoPayload,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
+import {
+  buildCapacidadeContext,
+  fluxoProdutividadeCapacidade,
+} from '@/domain/fluxo-processo/fluxo-produtividade-capacidade';
 import { formatCompactNumber } from '@/lib/utils/format-compact-number';
 
 export type FluxoDisplayMode = 'un' | 'lt' | 'cx';
@@ -113,9 +117,32 @@ export class FluxoDisplayScale {
     return unidades / factor;
   }
 
+  /**
+   * Volume do controle em assadeiras (LT) → modo de exibição.
+   * matrizPrevisto é sempre em LT, em todas as etapas.
+   */
+  fromNativo(
+    volume: number,
+    _etapa: FluxoEtapaKey,
+    assadeiraNome?: string,
+  ): number {
+    void _etapa;
+    if (volume <= 0) return 0;
+    if (this.mode === 'lt') return volume;
+    const unPorLt = this.unPorLata(assadeiraNome);
+    if (unPorLt <= 0) return 0;
+    const un = volume * unPorLt;
+    if (this.mode === 'un') return un;
+    const unPorCx = this.unPorCaixa(assadeiraNome);
+    return unPorCx > 0 ? un / unPorCx : 0;
+  }
+
   etapaTotal(etapa: FluxoEtapaKey): number {
     if (this.mode === 'un') {
       return this.fluxo.etapas.find((e) => e.key === etapa)?.un ?? 0;
+    }
+    if (this.mode === 'cx' && etapa === 'emb') {
+      return this.fluxo.etapas.find((e) => e.key === 'emb')?.volOperacional ?? 0;
     }
     if (this.mode === 'cx') {
       let total = 0;
@@ -139,17 +166,7 @@ export class FluxoDisplayScale {
 
   opAnteriorTotal(): number {
     if (this.mode === 'un') return this.fluxo.opAnterior.un;
-    if (this.mode === 'cx') {
-      let total = 0;
-      for (const ass of this.fluxo.assadeiras) {
-        for (const p of ass.produtos) {
-          const f = this.unPorCaixaProduto(p.nome);
-          if (f == null || f <= 0 || p.embAnt <= 0) continue;
-          total += p.embAnt / f;
-        }
-      }
-      return total;
-    }
+    if (this.mode === 'cx') return this.fluxo.opAnterior.volOperacional;
     let total = 0;
     for (const ass of this.fluxo.ordemAss) {
       const horas = this.fluxo.matrizAnt.emb[ass] ?? [];
@@ -164,6 +181,16 @@ export class FluxoDisplayScale {
   }
 
   capacidade(etapa: FluxoEtapaKey): number {
+    const meta = this.fluxo.produtividade;
+    if (meta) {
+      return fluxoProdutividadeCapacidade.displayCapacidade(
+        etapa,
+        this.mode,
+        meta,
+        buildCapacidadeContext(this.fluxo),
+      );
+    }
+
     const cap = FLUXO_CAPACIDADE_INFORMADA[etapa];
     if (this.mode === 'un') return cap.un;
     if (this.mode === 'cx') {
@@ -178,6 +205,17 @@ export class FluxoDisplayScale {
     let total = 0;
     for (const ass of this.fluxo.ordemAss) {
       total += this.celula(etapa, ass, hour);
+    }
+    return total;
+  }
+
+  horaPrevisto(etapa: FluxoEtapaKey, hour: number): number {
+    if (!this.fluxo.controle) return 0;
+    const matrizPrevisto = this.fluxo.controle.matrizPrevisto;
+    let total = 0;
+    for (const ass of this.fluxo.ordemAss) {
+      const nativo = matrizPrevisto[etapa][ass]?.[hour] ?? 0;
+      total += this.fromNativo(nativo, etapa, ass);
     }
     return total;
   }
@@ -239,10 +277,20 @@ export class FluxoDisplayScale {
     let max = 1;
     for (const k of ['ferm', 'forno', 'emb'] as FluxoEtapaKey[]) {
       for (let h = 0; h < 24; h++) {
-        max = Math.max(max, this.horaTotal(k, h));
+        max = Math.max(max, this.horaTotal(k, h), this.horaPrevisto(k, h));
       }
     }
     return max;
+  }
+
+  private unPorLata(assadeiraNome?: string): number {
+    if (!assadeiraNome) return this.avgUnPorLata;
+    return this.unPorLataByAss.get(assadeiraNome) ?? this.avgUnPorLata;
+  }
+
+  private unPorCaixa(assadeiraNome?: string): number {
+    if (!assadeiraNome) return this.avgUnPorCaixa;
+    return this.unPorCaixaByAss.get(assadeiraNome) ?? this.avgUnPorCaixa;
   }
 
   private unPorCaixaProduto(produtoNome: string): number | null {

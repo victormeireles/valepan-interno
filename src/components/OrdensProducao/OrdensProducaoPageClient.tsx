@@ -17,6 +17,7 @@ export default function OrdensProducaoPageClient() {
     setFilterDate,
     ordens,
     resumo,
+    estimativaDisponivel,
     loading,
     error,
     toast,
@@ -63,6 +64,7 @@ export default function OrdensProducaoPageClient() {
         totalLatas={resumo.totalLatas}
         totalUnidades={resumo.totalUnidades}
         totalCaixas={resumo.totalCaixas}
+        estimativaIndisponivel={resumo.totalOrdens > 0 && !estimativaDisponivel}
         onImport={() => setBatchOpen(true)}
         onNewOrder={openCreate}
       />

@@ -1,7 +1,10 @@
 import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
-import { FluxoFilasFifoEmb } from './fluxo-filas-fifo-emb';
+import { FluxoFilasEmbItems } from './fluxo-filas-emb-items';
+import { FluxoFilasEmbPorOp } from './fluxo-filas-emb-por-op';
+import { FluxoFilasLoteSaldo } from './fluxo-filas-lote-saldo';
 import type {
   FluxoFilaItem,
+  FluxoFilaItemOrigem,
   FluxoFilaResumo,
   FluxoFilasBuilderInput,
   FluxoFilasDia,
@@ -9,62 +12,70 @@ import type {
 } from './fluxo-filas-types';
 
 type OpFilas = {
-  aProduzir?: FluxoFilaItem;
-  fermentando?: FluxoFilaItem;
-  resfriando?: FluxoFilaItem;
+  aProduzir: FluxoFilaItem[];
+  fermentando: FluxoFilaItem[];
+  resfriando: FluxoFilaItem[];
+  embalado: FluxoFilaItem[];
 };
 
-function somaUn(eventos: FluxoControleEventoInput[], opId: string): number {
-  return eventos
-    .filter((e) => e.ordemProducaoId === opId)
-    .reduce((t, e) => t + e.unidades, 0);
+function lotesDaOp(
+  eventos: FluxoControleEventoInput[],
+  opId: string,
+): FluxoControleEventoInput[] {
+  return eventos.filter((e) => e.ordemProducaoId === opId);
 }
 
-function maxProduzidoEm(eventos: FluxoControleEventoInput[], opId: string): string | null {
-  const daOp = eventos.filter((e) => e.ordemProducaoId === opId);
-  if (daOp.length === 0) return null;
-  return daOp.reduce(
-    (max, ev) => (Date.parse(ev.produzidoEm) > Date.parse(max) ? ev.produzidoEm : max),
-    daOp[0].produzidoEm,
-  );
+function somaUn(eventos: FluxoControleEventoInput[], opId: string): number {
+  return lotesDaOp(eventos, opId).reduce((t, e) => t + e.unidades, 0);
 }
 
 function calcPreso(
-  wipUn: number,
-  ultimoLoteEm: string | null,
+  volumeUn: number,
+  loteEm: string,
   tempoMin: number,
   asOfMs: number,
-): { preso: boolean; presoMin: number | null } {
-  if (wipUn <= 0 || ultimoLoteEm === null) return { preso: false, presoMin: null };
-  const limiteMs = Date.parse(ultimoLoteEm) + tempoMin * 60_000;
-  if (asOfMs <= limiteMs) return { preso: false, presoMin: null };
+): { preso: boolean; presoMin: number | null; naFilaMin: number } {
+  const naFilaMin = Math.max(0, Math.floor((asOfMs - Date.parse(loteEm)) / 60_000));
+  if (volumeUn <= 0) return { preso: false, presoMin: null, naFilaMin };
+  const limiteMs = Date.parse(loteEm) + tempoMin * 60_000;
+  if (asOfMs <= limiteMs) return { preso: false, presoMin: null, naFilaMin };
   return {
     preso: true,
     presoMin: Math.floor((asOfMs - limiteMs) / 60_000),
+    naFilaMin,
   };
 }
 
 function montarItem(
   op: FluxoFilasOpInput,
   volumeUn: number,
-  preso: { preso: boolean; presoMin: number | null },
+  preso: { preso: boolean; presoMin: number | null; naFilaMin: number | null },
   ultimoLoteEm: string | null,
+  origem: FluxoFilaItemOrigem = 'op_do_dia',
 ): FluxoFilaItem {
   return {
     ordemProducaoId: op.id,
     ordemPlanejamento: op.ordemPlanejamento,
     produtoNome: op.produtoNome,
     assadeiraNome: op.assadeiraNome,
+    observacao: op.observacao,
     volumeUn,
     ...preso,
     ultimoLoteEm,
+    dataOp: origem === 'sem_op' ? null : op.dataProducao,
+    origem,
   };
 }
 
 function montarResumo(items: FluxoFilaItem[]): FluxoFilaResumo {
-  const totalUn = items.reduce((t, i) => t + i.volumeUn, 0);
+  const totalUn = items
+    .filter((i) => i.origem === 'op_do_dia')
+    .reduce((t, i) => t + i.volumeUn, 0);
+  const anteriorUn = items
+    .filter((i) => i.origem !== 'op_do_dia')
+    .reduce((t, i) => t + i.volumeUn, 0);
   const presoUn = items.filter((i) => i.preso).reduce((t, i) => t + i.volumeUn, 0);
-  return { totalUn, presoUn, items };
+  return { totalUn, anteriorUn, presoUn, items };
 }
 
 function ordenarItems(items: FluxoFilaItem[]): FluxoFilaItem[] {
@@ -77,28 +88,49 @@ function ordenarItems(items: FluxoFilaItem[]): FluxoFilaItem[] {
 }
 
 export class FluxoFilasBuilder {
-  constructor(private readonly fifoEmb = new FluxoFilasFifoEmb()) {}
+  constructor(
+    private readonly embPorOp = new FluxoFilasEmbPorOp(),
+    private readonly loteSaldo = new FluxoFilasLoteSaldo(),
+    private readonly embItems = new FluxoFilasEmbItems(),
+  ) {}
 
   build(input: FluxoFilasBuilderInput): FluxoFilasDia | null {
     if (input.ops.length === 0) return null;
     const ops = [...input.ops].sort((a, b) => a.ordemPlanejamento - b.ordemPlanejamento);
-    const embPorOp = this.fifoEmb.alocarUnidades(ops, input.eventosEmb);
+    const aloc = this.embPorOp.alocar(input.eventosEmb);
+    const idsDia = new Set(ops.map((o) => o.id));
+    const idsAnt = new Set(input.opsAnteriores.map((o) => o.id));
 
     const aProduzir: FluxoFilaItem[] = [];
     const fermentando: FluxoFilaItem[] = [];
     const resfriando: FluxoFilaItem[] = [];
+    const embaladoDia: FluxoFilaItem[] = [];
 
     for (const op of ops) {
-      const filas = this.classificarOp(op, input, embPorOp.get(op.id) ?? 0);
-      if (filas.aProduzir) aProduzir.push(filas.aProduzir);
-      if (filas.fermentando) fermentando.push(filas.fermentando);
-      if (filas.resfriando) resfriando.push(filas.resfriando);
+      const embUn = aloc.unPorOp.get(op.id) ?? 0;
+      const filas = this.classificarOp(
+        op,
+        input,
+        embUn,
+        aloc.ultimoLoteEmPorOp.get(op.id) ?? null,
+      );
+      aProduzir.push(...filas.aProduzir);
+      fermentando.push(...filas.fermentando);
+      resfriando.push(...filas.resfriando);
+      embaladoDia.push(...filas.embalado);
     }
+
+    const embalado = [
+      ...ordenarItems(embaladoDia),
+      ...this.embItems.anteriores(input.opsAnteriores, aloc, idsDia),
+      ...this.embItems.semOp(aloc, idsDia, idsAnt),
+    ];
 
     return {
       aProduzir: montarResumo(ordenarItems(aProduzir)),
       fermentando: montarResumo(ordenarItems(fermentando)),
       resfriando: montarResumo(ordenarItems(resfriando)),
+      embalado: montarResumo(embalado),
     };
   }
 
@@ -106,35 +138,46 @@ export class FluxoFilasBuilder {
     op: FluxoFilasOpInput,
     input: FluxoFilasBuilderInput,
     embUn: number,
+    embLoteEm: string | null,
   ): OpFilas {
     const fermUn = somaUn(input.eventosFerm, op.id);
     const fornoUn = somaUn(input.eventosForno, op.id);
-    if (fermUn === 0) {
-      return { aProduzir: montarItem(op, op.unidades, { preso: false, presoMin: null }, null) };
-    }
-
-    const filas: OpFilas = {};
-    const wipFerm = Math.max(0, fermUn - fornoUn);
-    if (wipFerm > 0) {
-      const ultimoFerm = maxProduzidoEm(input.eventosFerm, op.id);
-      filas.fermentando = montarItem(
+    return {
+      aProduzir: this.itemSemPrazo(op, Math.max(0, op.unidades - fermUn)),
+      fermentando: this.itensDeLotes(
         op,
-        wipFerm,
-        calcPreso(wipFerm, ultimoFerm, input.camaraMin, input.asOfMs),
-        ultimoFerm,
-      );
-    }
-
-    const wipResfrio = Math.max(0, fornoUn - embUn);
-    if (wipResfrio > 0) {
-      const ultimoForno = maxProduzidoEm(input.eventosForno, op.id);
-      filas.resfriando = montarItem(
+        this.loteSaldo.restantes(lotesDaOp(input.eventosFerm, op.id), fornoUn),
+        input.camaraMin,
+        input.asOfMs,
+      ),
+      resfriando: this.itensDeLotes(
         op,
-        wipResfrio,
-        calcPreso(wipResfrio, ultimoForno, input.resfrioMin, input.asOfMs),
-        ultimoForno,
-      );
-    }
-    return filas;
+        this.loteSaldo.restantes(lotesDaOp(input.eventosForno, op.id), embUn),
+        input.resfrioMin,
+        input.asOfMs,
+      ),
+      embalado: this.embItems.doDia(op, embUn, embLoteEm),
+    };
+  }
+
+  private itemSemPrazo(op: FluxoFilasOpInput, volumeUn: number): FluxoFilaItem[] {
+    if (volumeUn <= 0) return [];
+    return [montarItem(op, volumeUn, { preso: false, presoMin: null, naFilaMin: null }, null)];
+  }
+
+  private itensDeLotes(
+    op: FluxoFilasOpInput,
+    lotes: { produzidoEm: string; volumeUn: number }[],
+    tempoMin: number,
+    asOfMs: number,
+  ): FluxoFilaItem[] {
+    return lotes.map((lote) =>
+      montarItem(
+        op,
+        lote.volumeUn,
+        calcPreso(lote.volumeUn, lote.produzidoEm, tempoMin, asOfMs),
+        lote.produzidoEm,
+      ),
+    );
   }
 }

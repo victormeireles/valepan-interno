@@ -15,5 +15,5 @@ export function buildOrdemProdutoMeta(ordem: OrdemProducaoPainelItem): string {
 
 export function buildOrdemMobileDetails(ordem: OrdemProducaoPainelItem): string {
   const etiqueta = formatISODateBrNoYear(ordem.dataEtiqueta);
-  return `${buildOrdemAssadeiraLabel(ordem)} • ${ordem.tipoEstoque} • ${etiqueta}`;
+  return `${ordem.tipoEstoque} • ${etiqueta}`;
 }

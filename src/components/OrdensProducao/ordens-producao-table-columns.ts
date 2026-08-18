@@ -9,8 +9,8 @@ export const ORDENS_PRODUCAO_TABLE_COLUMN_WIDTHS = [
   '3%', // seleção
   '2.5%', // arrastar
   '2%', // prioridade
+  '12%', // assadeira — antes do produto para identificação rápida
   '36%', // produto — coluna principal
-  '12%', // assadeira
   '8%', // cliente
   '5%', // data etiqueta
   '12%', // obs

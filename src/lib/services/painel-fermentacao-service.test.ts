@@ -8,6 +8,9 @@ const listByDatasProducao = vi.fn();
 const findUltimaDataComPedidos = vi.fn();
 const findDataAnteriorComPedidos = vi.fn();
 const listByOrdemProducaoIds = vi.fn();
+const listByProduzidoEmRange = vi.fn();
+const findByIdsOrdens = vi.fn();
+const getIdsVisiveisEmbalagem = vi.fn();
 const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
@@ -19,12 +22,20 @@ vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
     listByDatasProducao: (...args: unknown[]) => listByDatasProducao(...args),
     findUltimaDataComPedidos: (...args: unknown[]) => findUltimaDataComPedidos(...args),
     findDataAnteriorComPedidos: (...args: unknown[]) => findDataAnteriorComPedidos(...args),
+    findByIds: (...args: unknown[]) => findByIdsOrdens(...args),
   },
 }));
 
 vi.mock('@/data/producao-etapa/FermentacaoLoteRepository', () => ({
   fermentacaoLoteRepository: {
     listByOrdemProducaoIds: (...args: unknown[]) => listByOrdemProducaoIds(...args),
+    listByProduzidoEmRange: (...args: unknown[]) => listByProduzidoEmRange(...args),
+  },
+}));
+
+vi.mock('@/domain/categorias/categoria-visibilidade-manager', () => ({
+  categoriaVisibilidadeManager: {
+    getIdsVisiveisEmbalagem: (...args: unknown[]) => getIdsVisiveisEmbalagem(...args),
   },
 }));
 
@@ -109,6 +120,7 @@ describe('PainelFermentacaoService.getPainelForDate', () => {
       {
         id: 'prod-1',
         nome: 'HB Brioche 65g',
+        categoriaId: 'cat-hamb',
         unidadeNomeResumido: 'UN',
         codigo: 'HB65',
         unitBarcode: null,
@@ -123,6 +135,8 @@ describe('PainelFermentacaoService.getPainelForDate', () => {
       error: null,
     });
     countOpcoesByProdutoIds.mockResolvedValue(new Map([['prod-1', 1]]));
+    findByIdsOrdens.mockResolvedValue([]);
+    getIdsVisiveisEmbalagem.mockResolvedValue(new Set(['cat-hamb']));
   });
 
   it('retorna ordens vazias quando não há ordens', async () => {
@@ -177,6 +191,7 @@ describe('PainelFermentacaoService.getCargaCompleta', () => {
       {
         id: 'prod-1',
         nome: 'HB Brioche 65g',
+        categoriaId: 'cat-hamb',
         unidadeNomeResumido: 'UN',
         codigo: 'HB65',
         unitBarcode: null,
@@ -191,22 +206,19 @@ describe('PainelFermentacaoService.getCargaCompleta', () => {
       error: null,
     });
     countOpcoesByProdutoIds.mockResolvedValue(new Map([['prod-1', 1]]));
+    findByIdsOrdens.mockResolvedValue([]);
+    getIdsVisiveisEmbalagem.mockResolvedValue(new Set(['cat-hamb']));
     findUltimaDataComPedidos.mockResolvedValue('2026-06-17');
     findDataAnteriorComPedidos.mockResolvedValue('2026-06-16');
   });
 
-  it('retorna ordens e snapshots de comparação', async () => {
+  it('retorna ordens e snapshots do dia civil do apontamento', async () => {
     const ordem = makeOrdem('op-1');
-    listByDatasProducao.mockResolvedValue(
-      new Map([
-        ['2026-06-17', [ordem]],
-        ['2026-06-10', [ordem]],
-        ['2026-06-16', [ordem]],
-      ]),
-    );
+    listByDataProducao.mockResolvedValue([ordem]);
     listByOrdemProducaoIds.mockResolvedValue(
       new Map([['op-1', [makeLote('l1', 3)]]]),
     );
+    listByProduzidoEmRange.mockResolvedValue([makeLote('l1', 3)]);
 
     const result = await painelFermentacaoService.getCargaCompleta('2026-06-17');
 
@@ -215,9 +227,9 @@ describe('PainelFermentacaoService.getCargaCompleta', () => {
     expect(result.ordens).toHaveLength(1);
     expect(result.comparacaoSemana.date).toBe('2026-06-10');
     expect(result.comparacaoAnterior.date).toBe('2026-06-16');
-    expect(result.comparacaoSemana.items).toEqual([
-      { assadeiras: 0, pedidoAssadeiras: 10 },
+    expect(result.dashboardDia).toEqual([
       { assadeiras: 3, pedidoAssadeiras: 0, produzidoEm: '2026-06-17T10:00:00Z' },
     ]);
+    expect(result.comparacaoSemana.items).toEqual(result.dashboardDia);
   });
 });

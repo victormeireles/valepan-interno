@@ -1,4 +1,6 @@
-import type { PainelProducaoAreaId, PainelProducaoStatus } from './painel-producao-types';
+import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
+import type { PainelProducaoStatus } from './painel-producao-types';
+import { windowsFromConfig } from './painel-producao-windows';
 
 export const PAINEL_PRODUCAO_STAGES = [
   { key: 'ferm' as const, name: 'Fermentação', icon: 'bakery_dining', accent: '#C6A848' },
@@ -6,14 +8,7 @@ export const PAINEL_PRODUCAO_STAGES = [
   { key: 'emb' as const, name: 'Embalagem', icon: 'inventory_2', accent: '#9A6B43' },
 ];
 
-export const PAINEL_PRODUCAO_AREA_WINDOWS: Record<
-  PainelProducaoAreaId,
-  { janelaIni: string; janelaFim: string; janela: string }
-> = {
-  ferm: { janelaIni: '07:00', janelaFim: '18:00', janela: '7h → 18h' },
-  forno: { janelaIni: '07:00', janelaFim: '18:00', janela: '7h → 18h' },
-  emb: { janelaIni: '07:00', janelaFim: '21:50', janela: '7h → 21h50' },
-};
+export const PAINEL_PRODUCAO_AREA_WINDOWS = windowsFromConfig(DEFAULT_CONFIG_OPERACAO);
 
 export const PAINEL_PRODUCAO_STATUS_ORDER: PainelProducaoStatus[] = [
   'aguardando',

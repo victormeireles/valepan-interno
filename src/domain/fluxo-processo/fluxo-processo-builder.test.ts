@@ -153,7 +153,7 @@ describe('FluxoQualidadeBlocoCalculator', () => {
     expect(result.lancamentos).toHaveLength(0);
   });
 
-  it('marca lançamento único acima do limite (ex.: forno > 20 LT)', () => {
+  it('marca lançamento único acima do limite (ex.: forno > 40 LT)', () => {
     const calc = new FluxoQualidadeBlocoCalculator(20);
     const result = calc.compute([
       {
@@ -319,6 +319,7 @@ describe('FluxoProcessoBuilder', () => {
     };
 
     const payload = new FluxoProcessoBuilder().build(input);
+    expect(payload.controle).toBeNull();
     expect(payload.filas).toBeNull();
     expect(payload.etapas.find((e) => e.key === 'ferm')!.un).toBe(2400);
     expect(payload.etapas.find((e) => e.key === 'forno')!.un).toBe(960);
@@ -327,6 +328,27 @@ describe('FluxoProcessoBuilder', () => {
     expect(sumMatrizEtapa(payload.matriz, 'ferm')).toBe(2400);
     expect(sumMatrizEtapa(payload.matrizAnt, 'emb')).toBe(480);
     expect(() => assertMatrizFechaComEtapas(payload)).not.toThrow();
+  });
+
+  it('usa tempos médios informados no padrao', () => {
+    const payload = new FluxoProcessoBuilder().build({
+      dateISO: '2026-08-12',
+      planoUn: 100,
+      ordensDia: [
+        {
+          produtoNome: 'Broa',
+          assadeiraNome: 'N/A',
+          unidades: 100,
+          latas: 0,
+          caixas: 0,
+        },
+      ],
+      fermentacao: [],
+      forno: [],
+      embalagem: [],
+      padrao: { camaraMin: 210, resfrioMin: 40 },
+    });
+    expect(payload.padrao).toEqual({ camaraMin: 210, resfrioMin: 40 });
   });
 
   it('invariante matriz×card em payload sintético completo', () => {

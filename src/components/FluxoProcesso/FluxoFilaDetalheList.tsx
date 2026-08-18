@@ -1,64 +1,53 @@
 'use client';
 
-import { Badge } from '@/components/ui/Badge';
 import { IconButton } from '@/components/ui/IconButton';
-import { ListRow } from '@/components/ui/ListRow';
 import type {
-  FluxoFilaItem,
   FluxoFilaKey,
   FluxoFilaResumo,
 } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoDisplayScale } from './fluxo-display-scale';
-import { formatFilaQty, formatFilaResumoQty, formatPresoDuracao } from './fluxo-fila-format';
+import { FluxoFilaDetalheZona, FluxoFilaEmbaladoZonas } from './FluxoFilaDetalheZona';
+import {
+  FluxoFilaEmbaladoCopy,
+  formatAcimaDoPrazoLinha,
+  formatFilaResumoQty,
+} from './fluxo-fila-format';
 
 type FluxoFilaDetalheListProps = {
   filaKey: FluxoFilaKey;
   resumo: FluxoFilaResumo;
   label: string;
   scale: FluxoDisplayScale;
+  prazoMin: number;
   onClose: () => void;
 };
 
 class FluxoFilaDetalheHeaderCopy {
-  static build(
+  static titulo(
     label: string,
     resumo: FluxoFilaResumo,
     scale: FluxoDisplayScale,
     showPrazo: boolean,
+    prazoMin: number,
+    filaKey: FluxoFilaKey,
   ): string {
-    const total = formatFilaResumoQty(resumo.items, scale);
+    const total =
+      filaKey === 'embalado'
+        ? formatFilaResumoQty(resumo.items, scale, { origem: 'op_do_dia' })
+        : formatFilaResumoQty(resumo.items, scale);
     if (!showPrazo) return `${label} — ${total}`;
     const preso = formatFilaResumoQty(resumo.items, scale, { presoOnly: true });
-    return `${label} — ${total} · ${preso} acima do prazo`;
+    return `${label} — ${total} · ${formatAcimaDoPrazoLinha(preso, prazoMin)}`;
   }
-}
 
-function presoBadge(item: FluxoFilaItem): string | null {
-  if (!item.preso || item.presoMin == null) return null;
-  return `preso há ${formatPresoDuracao(item.presoMin)}`;
-}
-
-function FluxoFilaDetalheRow({
-  item,
-  scale,
-  even,
-}: {
-  item: FluxoFilaItem;
-  scale: FluxoDisplayScale;
-  even: boolean;
-}) {
-  const volume = formatFilaQty(item.volumeUn, scale, item.assadeiraNome, item.produtoNome);
-  const preso = presoBadge(item);
-  return (
-    <ListRow
-      even={even}
-      index={`#${item.ordemPlanejamento}`}
-      title={item.produtoNome}
-      subtitle={item.assadeiraNome}
-      columns={[{ value: volume, width: '5.5rem', emphasize: true }]}
-      menu={preso ? <Badge tone="accent">{preso}</Badge> : undefined}
-    />
-  );
+  static linhaAnterior(resumo: FluxoFilaResumo, scale: FluxoDisplayScale): string | null {
+    if (resumo.anteriorUn <= 0) return null;
+    const qty = formatFilaResumoQty(resumo.items, scale, { origem: 'nao_do_dia' });
+    return FluxoFilaEmbaladoCopy.linhaApoio(
+      qty,
+      FluxoFilaEmbaladoCopy.datasOpAnteriores(resumo.items),
+    );
+  }
 }
 
 export default function FluxoFilaDetalheList({
@@ -66,28 +55,56 @@ export default function FluxoFilaDetalheList({
   resumo,
   label,
   scale,
+  prazoMin,
   onClose,
 }: FluxoFilaDetalheListProps) {
-  const showPrazo = filaKey !== 'aProduzir';
-  const header = FluxoFilaDetalheHeaderCopy.build(label, resumo, scale, showPrazo);
+  const showPrazo = filaKey === 'fermentando' || filaKey === 'resfriando';
+  const titulo = FluxoFilaDetalheHeaderCopy.titulo(
+    label,
+    resumo,
+    scale,
+    showPrazo,
+    prazoMin,
+    filaKey,
+  );
+  const linhaAnterior =
+    filaKey === 'embalado' ? FluxoFilaDetalheHeaderCopy.linhaAnterior(resumo, scale) : null;
   const vazio = resumo.items.length === 0;
+  const part =
+    filaKey === 'embalado'
+      ? FluxoFilaEmbaladoZonas.particionar(resumo.items)
+      : { doDia: resumo.items, grupos: [] };
 
   return (
     <div className="mt-3 border-t border-stone-100 pt-3">
-      <div className="mb-2 flex min-h-11 items-center gap-2">
-        <p className="min-w-0 flex-1 text-sm font-semibold text-text-strong">{header}</p>
+      <div className="mb-2 flex min-h-11 items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-text-strong">{titulo}</p>
+          {linhaAnterior ? (
+            <p className="text-[12px] text-text-muted">{linhaAnterior}</p>
+          ) : null}
+        </div>
         <IconButton icon="close" label="Fechar lista" variant="ghost" size="lg" onClick={onClose} />
       </div>
       {vazio ? (
-        <p className="py-3 text-sm text-text-muted">Nenhuma OP nesta fila.</p>
+        <p className="py-3 text-sm text-text-muted">Nenhum item nesta fila.</p>
       ) : (
         <div>
-          {resumo.items.map((item, i) => (
-            <FluxoFilaDetalheRow
-              key={item.ordemProducaoId}
-              item={item}
+          <FluxoFilaDetalheZona
+            items={part.doDia}
+            scale={scale}
+            filaKey={filaKey}
+            evenStart={0}
+          />
+          {part.grupos.map((grupo, gi) => (
+            <FluxoFilaDetalheZona
+              key={grupo.dataOp ?? 'sem-op'}
+              heading={FluxoFilaEmbaladoCopy.headingZona(grupo.dataOp)}
+              items={grupo.items}
               scale={scale}
-              even={i % 2 === 1}
+              filaKey={filaKey}
+              zonaAnterior
+              evenStart={FluxoFilaEmbaladoZonas.evenStart(part.doDia.length, part.grupos, gi)}
             />
           ))}
         </div>

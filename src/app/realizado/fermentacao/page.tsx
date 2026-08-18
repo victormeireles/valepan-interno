@@ -10,7 +10,7 @@ import {
   buildFermentacaoWorklistData,
   FERMENTACAO_ETAPA_CONFIG,
 } from '@/domain/producao-etapa/fermentacao-etapa-adapter';
-import { buildOrdensEtapaToolbarMetrics } from '@/domain/producao-etapa/build-etapa-toolbar-metrics';
+import { toolbarMetricsEtapaDiaCivil } from '@/domain/producao-etapa/etapa-totais-visiveis';
 import {
   splitOrdensPorFinalizacao,
   type PainelLoteItemEtapa,
@@ -232,11 +232,12 @@ export default function ProducaoFermentacaoPage() {
 
   const toolbarMetrics = useMemo(
     () =>
-      buildOrdensEtapaToolbarMetrics(
+      toolbarMetricsEtapaDiaCivil(
         ordens,
         FERMENTACAO_ETAPA_CONFIG.unit.toUpperCase(),
+        dashboardItems,
       ),
-    [ordens],
+    [ordens, dashboardItems],
   );
 
   const worklist = useMemo(

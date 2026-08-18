@@ -1,4 +1,7 @@
+import type { FluxoControleDia } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
 import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import type { FluxoEtapaRitmo } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
+import type { FluxoProdutividadeMeta } from '@/domain/fluxo-processo/fluxo-produtividade-capacidade';
 
 export type FluxoEtapaKey = 'ferm' | 'forno' | 'emb';
 
@@ -14,7 +17,7 @@ export type FluxoBlocoProduto = {
   assadeiraNome: string;
 };
 
-/** Lançamento único acima do limite operacional da etapa (> 40 LT ferm, > 20 LT forno ou > 55 CX emb). */
+/** Lançamento único acima do limite operacional da etapa (> 40 LT ferm/forno ou > 55 CX emb). */
 export type FluxoBlocoLancamento = {
   ini: number;
   fim: number;
@@ -38,6 +41,8 @@ export type FluxoEtapaResumo = {
   blocoPct: number;
   /** Principais lançamentos acima do limite (ordenado por volume). */
   blocoLancamentos: FluxoBlocoLancamento[];
+  /** Volume operacional do dia (LT em ferm/forno, CX em emb). */
+  volOperacional: number;
 };
 
 export type FluxoMatrizHoras = Record<string, number[]>;
@@ -118,6 +123,8 @@ export type FluxoLeadStats = {
 export type FluxoOpAnterior = {
   un: number;
   eventos: number;
+  /** Embalagem de OP anterior, em caixas. */
+  volOperacional: number;
 };
 
 export type VpFluxoPayload = {
@@ -142,6 +149,12 @@ export type VpFluxoPayload = {
    * Produtos ausentes não entram no modo CX.
    */
   unPorCaixaByProduto: Record<string, number>;
+  /** Taxas de metas_mensais_produtividade do mês do dia; null se indisponível. */
+  produtividade: FluxoProdutividadeMeta | null;
+  /** Ritmo nativo (LT/h ferm/forno, CX/h emb) vs ontem e D-7. */
+  ritmoPorEtapa: Record<FluxoEtapaKey, FluxoEtapaRitmo> | null;
+  /** Preenchido pelo service após o builder (realizado-only). */
+  controle: FluxoControleDia | null;
   /** Filas WIP (a produzir / fermentando / resfriando); null se não há OPs do dia. */
   filas: FluxoFilasDia | null;
 };
@@ -155,7 +168,7 @@ export type FluxoApontamentoEvento = {
   caixas?: number;
   /** Data da OP (YYYY-MM-DD). Embalagem usa para matrizAnt. */
   dataOp?: string;
-  /** Presente em ferm/forno; embalagem permanece FIFO sem OP obrigatória. */
+  /** Presente em ferm/forno; embalagem envia quando o lote tem `pedidoEmbalagemId` (filas casam por OP). */
   ordemProducaoId?: string;
 };
 
@@ -174,6 +187,7 @@ export type FluxoBuilderInput = {
   fermentacao: FluxoApontamentoEvento[];
   forno: FluxoApontamentoEvento[];
   embalagem: FluxoApontamentoEvento[];
+  padrao?: { camaraMin: number; resfrioMin: number };
 };
 
 export type CargaFluxoProcessoResponse = {
