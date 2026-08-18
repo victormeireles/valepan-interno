@@ -1,0 +1,207 @@
+# Rastreio de turnos na produção
+
+Data: 2026-08-18  
+Status: aguardando revisão
+
+## Objetivo
+
+Carimbar **qual turno** (1, 2 ou 3) lançou cada lote de fermentação, forno e embalagem, e mostrar na tela da etapa **qual turno está ativo** — sem identificar pessoa. O tablet é compartilhado; a unidade de rastreio é o turno da etapa, não a conta de login.
+
+### Sucesso da v1
+
+- Cada lote novo grava `turno` 1, 2 ou 3
+- Chip na tela de realizado da etapa mostra o turno ativo (ou “Definir turno”)
+- Primeiro lote do dia operacional pede o turno antes do formulário
+- Lote com o relógio fora da janela do turno ativo pergunta: continuar neste ou trocar
+- Configuração de operação cadastra até 3 turnos por etapa; ritmo e fluxo seguem com **uma** janela derivada
+
+## Contexto
+
+Hoje `fermentacao_lotes`, `forno_lotes` e `embalagem_lotes` não têm autor nem turno. A sessão do tablet é da **área** (conta compartilhada). PIN de operador ficou fora do controle de acesso v1.
+
+`config_operacao` guarda um par início/fim por etapa (“1º turno”), usado por ritmo, fluxo e estimativa. A embalagem já pode atravessar meia-noite (`fim < início`).
+
+`TurnoRadio` (1 | 2) existe e **não é usado**.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Identidade | Só o número do turno. “Mesma pessoa” = hora extra neste turno |
+| Onde vive o ativo | Por etapa, no servidor (fermentação pode estar no 2º e o forno no 1º) |
+| Config | Até 3 turnos por etapa; T1 obrigatório; T2/T3 em sequência |
+| Ritmo / fluxo | Sem reescrita: janela única = início do T1 → fim do último turno ligado |
+| Quando pergunta | No **+ lote**, não num popup de relógio |
+| Troca antecipada | Chip na toolbar, grava o ativo na hora |
+| Pessoa / PIN / `usuario_id` no lote | Fora da v1 |
+| Resfriamento | Fora (não tem lote) |
+| Relatório, filtro, TV, WhatsApp | Fora da v1 |
+
+## Abordagem
+
+**Turno ativo da etapa + carimbo no lote** (aprovado).
+
+Descartado: inferir só pelo último lote (quebra troca antecipada e “continuar neste”). Descartado: tabela de sessão de turno com início/fim (relatório futuro).
+
+## Arquitetura
+
+```text
+config_operacao (tempos médios)
+  └── config_operacao_turnos (etapa, numero, inicio, fim)
+
+producao_turno_ativo (1 linha / etapa): numero + confirmado_em
+
+POST lote → se ativo válido neste dia operacional → carimba turno
+          → senão 409 turno_requerido → sheet → PUT ativo → POST de novo
+```
+
+Relógio e “dia operacional” usam `America/Sao_Paulo`.
+
+Ritmo, fluxo e estimativa **não** leem a tabela de turnos. Continuam recebendo no snapshot os seis campos atuais (`horarioInicioProducao` … `horarioFimEmbalagem`), **derivados** no mapper: início = T1 da etapa; fim = fim do último turno ligado da etapa.
+
+## Schema
+
+### `config_operacao_turnos`
+
+| Coluna | Tipo | Notas |
+|--------|------|-------|
+| `id` | uuid PK | |
+| `etapa` | text | `fermentacao` \| `forno` \| `embalagem` |
+| `numero` | smallint | 1, 2 ou 3 |
+| `inicio` | time | NOT NULL |
+| `fim` | time | NOT NULL, `<> inicio` (overnight permitido) |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | |
+
+Unique `(etapa, numero)`. T1 sempre tem linha nas três etapas. T2/T3 existem só se ligados. Não pode haver T3 sem T2 (serviço recusa; não inserir `numero = 3` sem o `2` na mesma etapa).
+
+Na mesma etapa: **vão permitido, sobreposição não**. Fronteira `fim(N) = início(N+1)` é válida; o instante da fronteira pertence ao turno seguinte (`[inicio, fim)`).
+
+### `config_operacao`
+
+Remove os seis campos de relógio (`horario_inicio_producao` … `horario_fim_embalagem`) depois de copiar cada par para o T1 da etapa correspondente. Permanecem `tempo_medio_fermentacao_min`, `tempo_medio_resfriamento_min`, `updated_at`.
+
+Seed de migração: T1 fermentação/forno/embalagem = valores atuais das colunas; sem T2/T3.
+
+### `producao_turno_ativo`
+
+| Coluna | Tipo | Notas |
+|--------|------|-------|
+| `etapa` | text PK | `fermentacao` \| `forno` \| `embalagem` |
+| `numero` | smallint | 1, 2 ou 3 |
+| `confirmado_em` | timestamptz | NOT NULL |
+
+Upsert por etapa.
+
+### Lotes
+
+`turno smallint NULL` em `fermentacao_lotes`, `forno_lotes`, `embalagem_lotes`. CHECK `turno IN (1, 2, 3)`. Lotes antigos ficam `null`. Insert novo: NOT NULL na prática (a API recusa sem ativo válido); a coluna permanece nullable por causa do histórico.
+
+Edição de lote **não** altera `turno`.
+
+### RLS
+
+Nas três tabelas novas / colunas: RLS ligado.
+
+- `config_operacao_turnos`: SELECT autenticado `USING (true)`; INSERT/UPDATE/DELETE só `(SELECT is_admin())`. Escrita real no app continua via service role após gate de `/config`.
+- `producao_turno_ativo`: SELECT/INSERT/UPDATE autenticado `USING (true)` / `WITH CHECK (true)` (tablet precisa gravar); DELETE só admin.
+- Políticas de lote existentes: só incluir a coluna; não mudar quem insere.
+
+## Regras de negócio
+
+### Dia operacional da etapa
+
+Início = ocorrência mais recente do **início do T1** que seja `<= agora`.  
+Fim = o **fim do último turno ligado**, no relógio, a partir desse início (se o fim civil for “antes” do início, atravessa meia-noite). Buracos entre turnos **entram** no dia operacional; não entram na janela de nenhum turno.
+
+Ativo **válido neste dia** se `confirmado_em >= início do dia operacional` **e** o `numero` ainda existe na config.
+
+Se a config desligar o turno que estava ativo, o ativo fica inválido: chip “Definir turno”; próximo + lote pede de novo.
+
+### Chip
+
+- Ativo válido → `Turno N`
+- Inválido / inexistente → `Definir turno`
+- Toque abre sheet com **só** os turnos ligados; escolher faz PUT imediato (troca antecipada, sem lote)
+- Fora da janela o chip **não** muda sozinho
+
+### + lote (antes do modal de quantidade)
+
+1. Sem ativo válido neste dia → sheet `Qual turno?` com a lista dos ligados. Confirmar → PUT → abre o modal. Cancelar → não abre lote.
+2. Ativo válido e agora **dentro** da janela desse turno → não pergunta; POST carimba o número.
+3. Ativo válido e agora **fora** da janela (hora extra, buraco entre turnos, já entrou o próximo, depois do último) → sheet `Ainda é o Nº turno?`
+   - **Continuar no Nº** → PUT `confirmado_em = agora` (mesmo número) → abre o modal. O aviso **volta** no próximo lote que ainda estiver fora da janela.
+   - **Trocar** → se o relógio cai em outro turno ligado, CTA principal `Trocar para o Mº`; senão (buraco / depois do último) a mesma lista do chip. PUT do novo número → modal.
+   - Cancelar → não abre lote.
+
+Dois tablets da mesma etapa compartilham o ativo no servidor: o último PUT vale.
+
+### Fora da janela
+
+Agora está na janela do turno `N` se está no intervalo `[inicio, fim)` dessa linha, com a mesma regra overnight já usada em `config_operacao` (`fim < inicio` = atravessa meia-noite).
+
+Buraco (T1 acaba 14:00, T2 começa 14:30, agora 14:10): fora da janela do ativo → pergunta.
+
+### Config UI (`/config/operacao`)
+
+Some o bloco “1º turno”. Três blocos (Fermentação, Forno, Embalagem):
+
+- T1: início e fim obrigatórios
+- Interruptor “2º turno”; se ligado, início/fim + interruptor “3º turno”
+- T3 só habilitável com T2 ligado
+- Fim = início → inválido; fim < início → dia seguinte (texto de ajuda igual ao atual)
+
+Tempos médios inalterados.
+
+Salvar inválido não grava. Mensagens: “Ligue o 2º turno antes do 3º.” / “Início e fim do turno não podem ser iguais.” / “Os turnos desta etapa se sobrepõem.”
+
+## Interface (realizado)
+
+- Um chip **na toolbar da etapa** (não em cada produto): alvo ≥44px; ativo amber; “Definir turno” stone
+- O **+ lote** continua em cada card de produto; se o prompt for necessário, o sheet abre **antes** do modal daquele card
+- Sheet: pt-BR operacional, Material Icons, sem emoji estrutural
+- Linha de lote: rótulo `T1` / `T2` / `T3` em Geist Mono; lote `turno` null não mostra rótulo
+- Telas: `/realizado/fermentacao`, `/realizado/forno`, `/realizado/embalagem`
+
+Não entra em fluxo, TV, WhatsApp, lista de OPs.
+
+## APIs e componentes
+
+| Unidade | Papel |
+|---------|--------|
+| Domínio `producao-turno` | Dia operacional, “dentro da janela”, se o + lote deve perguntar, opções do sheet |
+| `ConfigOperacaoMapper` | Lê turnos; deriva os seis horários do snapshot antigo; valida sequência T1→T2→T3 |
+| `ProducaoTurnoAtivoRepository` | Get/upsert por etapa |
+| GET realizado da etapa | Inclui `turnoAtivo` + `turnos` (numero, inicio, fim) para chip/sheet sem roundtrip extra |
+| PUT `/api/producao/turno-ativo` | Body `{ etapa, numero }` (continuar = mesmo numero, atualiza `confirmado_em`) |
+| POST lote (ferm/forno/emb) | Carimba `turno` do ativo válido; senão **409** `{ code: 'turno_requerido' }` — a UI abre o sheet e não grava |
+
+Falha no PUT do ativo: toast “Não foi possível trocar o turno.”; o modal de lote não abre.
+
+Payload 409 com duas abas / cliente antigo: a UI trata igual ao “sem ativo”.
+
+## Testes
+
+Unitário no domínio:
+
+- Janela do dia = T1 início → último ligado, overnight
+- Dentro vs fora; buraco; T3 overnight
+- Primeiro lote do dia vs seguinte no mesmo turno
+- Continuar (mantém numero, atualiza confirmação) vs trocar
+- T3 sem T2 inválido; sobreposição inválida; vão permitido
+- Lote `turno` null não quebra lista/soma
+- Snapshot deriva os seis horários; ritmo/fluxo não precisam de teste novo além do mapper
+
+Serviço: POST lote carimba; 409 sem ativo válido; ativo da fermentação ≠ forno.
+
+UI: os três estados do sheet (definir / dentro da janela / fora). Sem E2E de tablet.
+
+## Fora de escopo
+
+- Nome de operador, PIN, kiosk, `criado_por_usuario_id`
+- Sessão de turno com horário de abertura/fechamento
+- Ritmo, fluxo ou estimativa “por turno”
+- Filtro/relatório por turno, TV, WhatsApp
+- Resfriamento, saídas, estoque
+- Backfill de lotes antigos
+- Sincronização em tempo real entre tablets além do último PUT no servidor
