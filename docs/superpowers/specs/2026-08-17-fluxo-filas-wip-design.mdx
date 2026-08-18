@@ -1,0 +1,296 @@
+# Filas WIP no Fluxo de Produção
+
+Data: 2026-08-17  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+No dashboard `/realizado/fluxo-processo`, mostrar de relance **quanto pão está parado entre etapas agora**:
+
+- volume **a produzir** (OPs do dia sem nenhum realizado de fermentação)
+- volume **fermentando**, com quantos já passaram do prazo físico de câmara
+- volume **resfriando**, com quantos já passaram do prazo físico de resfriamento
+
+Clicar num tile abre a lista das **OPs** daquela fila, para ver quais pães estão presos.
+
+## Contexto
+
+A tela de fluxo é analítica (read-only), alimentada por `GET /api/painel/fluxo-processo/carga`. Já existem cards previsto × realizado (ferm / forno / emb), banner de gargalo e gráfico hora a hora.
+
+Resfriamento **não é etapa apontável**. Câmara e resfrio existem só como tempos médios em `config_operacao` (`tempoMedioFermentacaoMin`, `tempoMedioResfriamentoMin`) e como buffers na estimativa da OP. O prazo deste painel **não** usa o plano da OP (`camaraFimPrevisto` / `resfriamentoFimPrevisto`).
+
+O painel de produção (`/realizado/painel-producao`) deriva status por produto/OP, mas conta itens, não volume em trânsito, e não marca estouro de prazo físico.
+
+Lotes de fermentação e forno têm `ordemProducaoId`. Lotes de embalagem **não** têm vínculo obrigatório com OP; o volume embalado é alocado às OPs por **FIFO**, igual ao relógio do controle.
+
+## Escopo
+
+Inclui:
+
+- Painel de 3 filas abaixo dos cards de etapa e acima de **Produção por hora**
+- Cálculo de WIP por OP + subcontador de prazo físico (câmara / resfrio)
+- Detalhe por OP ao clicar no tile (painel expandível, sem modal)
+- Volume no domínio em **unidades**; UI converte com `FluxoDisplayScale` (LT / UN / CX)
+- Domínio puro + testes; payload do GET `/api/painel/fluxo-processo/carga` estendido com `fluxo.filas`
+- Sem tabela nova, sem rota nova, sem segundo fetch
+
+Fora de escopo:
+
+- Prazo pelo plano da OP (critério A)
+- Hover/tooltip como interação primária
+- Link para telas de realizado (fermentação / forno / embalagem)
+- Notificação, alerta sonoro ou badge no menu
+- Filtro por assadeira no painel
+- Mostrar o saldo planejado restante de OPs já iniciadas (só entra o que já foi apontado, ou a OP inteira se ainda não começou)
+- Reforecast, Gantt, ou mudança no motor de estimativa
+
+## Decisão de abordagem
+
+**Estender o payload do fluxo com módulo `filas`** (aprovado).
+
+Descartado: segunda chamada ao painel de produção (dois fetches, regra de prazo ausente); calcular só no client (payload atual não traz lotes por OP).
+
+## Regras de negócio
+
+Fonte de verdade do volume no domínio: **unidades**. A UI converte com `FluxoDisplayScale`, igual ao restante da tela.
+
+Conjunto de OPs: o mesmo do fluxo do dia (categorias visíveis). Não exige linha em `ordens_producao_estimativa` — uma OP sem estimativa ainda entra nas filas se tiver (ou não tiver) lotes.
+
+### Relógio de corte (`asOf`)
+
+- Data selecionada = **hoje (BR)**: `asOf` = agora em `America/Sao_Paulo`
+- Qualquer outro dia: `asOf` = fim do dia civil BR (23:59:59.999 nesse fuso) — snapshot “como estava ao fim do dia”
+
+O subtítulo do painel no dia passado: **Situação ao fim do dia**.
+
+### A produzir
+
+Entra a OP inteira (volume planejado em unidades) quando **não existe nenhum lote de fermentação** daquela OP.
+
+Não tem subcontador de prazo.
+
+OPs já iniciadas (pelo menos um lote de fermentação) **não** colocam o saldo planejado restante nesta fila. Esse saldo não aparece em nenhum dos três tiles.
+
+### Fermentando
+
+Por OP: `wipUn = max(0, fermUn − fornoUn)`.
+
+- `fermUn` = soma das unidades dos lotes de fermentação da OP
+- `fornoUn` = soma das unidades dos lotes de forno da OP
+
+OP com `wipUn == 0` não entra na lista.
+
+### Resfriando
+
+Por OP: `wipUn = max(0, fornoUn − embAlocadoUn)`.
+
+`embAlocadoUn` vem da alocação **FIFO** dos lotes de embalagem do dia às OPs do dia, na ordem de `ordemPlanejamento` (mesma regra do relógio em `fluxo-op-relogio.ts`). Lote de embalagem sem `ordemProducaoId` é consumido nessa fila; não se tenta casar por produto.
+
+OP com `wipUn == 0` não entra na lista.
+
+### Prazo físico (critério B)
+
+Tempos de `config_operacao` (já expostos em `fluxo.padrao`):
+
+| Fila | Relógio dispara em | Tempo |
+|------|--------------------|--------|
+| Fermentando | último lote de **fermentação** da OP (`produzidoEm` mais recente) | `camaraMin` (`tempoMedioFermentacaoMin`, padrão 180) |
+| Resfriando | último lote de **forno** da OP | `resfrioMin` (`tempoMedioResfriamentoMin`, padrão 60) |
+
+A OP está **presa** quando `wipUn > 0` e `asOf > ultimoLoteEm + tempoMedio`.
+
+`presoMin` = minutos inteiros de `asOf − (ultimoLoteEm + tempoMedio)`, só quando preso; senão `null`.
+
+O relógio usa o **último lote da OP na etapa de origem**, não o envelhecimento lote a lote. Um lançamento novo na mesma OP zera o atraso daquela fila.
+
+A produzir não calcula prazo.
+
+### Totais do tile
+
+- `totalUn` = soma de `volumeUn` dos itens da fila
+- `presoUn` = soma de `volumeUn` dos itens com `preso === true` (só fermentando e resfriando; a produzir = 0)
+
+### Ordenação do detalhe
+
+Itens ordenados por `presoMin` decrescente (mais crítico primeiro). Empate: `ordemPlanejamento` crescente. Itens sem prazo (a produzir, ou ainda dentro do tempo) ficam depois dos presos, por `ordemPlanejamento`.
+
+## Contrato de dados
+
+```ts
+type FluxoFilasDia = {
+  aProduzir: FluxoFilaResumo;
+  fermentando: FluxoFilaResumo;
+  resfriando: FluxoFilaResumo;
+};
+
+type FluxoFilaResumo = {
+  totalUn: number;
+  presoUn: number; // 0 em aProduzir
+  items: FluxoFilaItem[];
+};
+
+type FluxoFilaItem = {
+  ordemProducaoId: string;
+  ordemPlanejamento: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  volumeUn: number;
+  preso: boolean;
+  presoMin: number | null;
+  ultimoLoteEm: string | null; // ISO; null em a produzir
+};
+```
+
+`VpFluxoPayload.filas: FluxoFilasDia | null`
+
+`filas` é `null` só se não houver OPs no conjunto do dia. Nesse caso o painel mostra empty: **Sem OPs para este dia.** Não omitir o bloco — o operador precisa ver que a ausência é do dia, não um bug de layout.
+
+## UI
+
+### Posição
+
+Entre `FluxoEtapaCards` e `FluxoProducaoPorHora`.
+
+```
+Header
+Banner gargalo
+3 cards de etapa (ferm / forno / emb)
+Painel Filas WIP          ← novo
+Produção por hora
+Percurso / ondas
+```
+
+### Bloco — `FluxoFilasPanel`
+
+Card branco, `rounded-xl`, borda stone-200, sombra suave.
+
+- Título: **Pães em trânsito**
+- Subtítulo hoje: **Volume nas filas entre etapas, agora**
+- Subtítulo outro dia: **Situação ao fim do dia**
+
+Três tiles em grid (`1 col` mobile, `3 cols` desktop), alvo de toque ≥44px.
+
+| Tile | Ícone Material | Destaque |
+|------|----------------|----------|
+| A produzir | `schedule` | stone |
+| Fermentando | `bakery_dining` | dourado `#C6A848` |
+| Resfriando | `ac_unit` | stone-700 |
+
+Cada tile mostra:
+
+1. Rótulo da fila (sentence case)
+2. Volume total em font-mono tabular-nums (grande), na unidade do toggle
+3. Sub-linha de prazo só em fermentando / resfriando:
+   - `Y > 0`: **{n} LT acima do prazo** (amber-800)
+   - `Y == 0`: **Nenhum acima do prazo** (stone-muted)
+4. Ação: **Ver OPs** + chevron
+
+Tile ativo: borda amber + ring suave (mesmo padrão dos cards de etapa). Não depende de hover.
+
+### Detalhe ao clicar
+
+Painel expandível **abaixo dos três tiles**, no mesmo card. Sem modal, sem drawer lateral (não existe Sheet no design system).
+
+- Clicar num tile abre a lista daquela fila
+- Clicar no tile ativo fecha
+- Clicar noutro tile troca a lista
+- Botão fechar (`close`, com `aria-label`) no cabeçalho da lista
+
+Cabeçalho da lista: **Fermentando — 340 LT · 80 LT acima do prazo** (números via scale).
+
+Uma linha por OP (`ListRow`):
+
+- Índice: `#` + `ordemPlanejamento`
+- Título: nome do produto
+- Subtítulo: nome da assadeira
+- Coluna volume (mono)
+- Se preso: badge **preso há {duração}** (amber)
+
+Duração: `{N} min` se menos de 60 minutos; `{H} h {M} min` se 60 minutos ou mais.
+
+Empty da fila: **Nenhuma OP nesta fila.**
+
+A lista não navega para outra tela.
+
+### Acessibilidade
+
+- Tile é `button` (não `div` clicável)
+- `aria-expanded` no tile; `aria-controls` apontando para o painel de detalhe
+- Ícones decorativos com `aria-hidden`
+- Cor do prazo acompanhada de texto (“acima do prazo” / “preso há”)
+- Transição 120–180ms; respeitar `prefers-reduced-motion`
+
+## Arquitetura
+
+### Domínio (puro)
+
+```
+src/domain/fluxo-processo/filas/
+  fluxo-filas-types.ts
+  fluxo-filas-builder.ts
+  fluxo-filas-builder.test.ts
+```
+
+`FluxoFilasBuilder.build(input)` recebe:
+
+- OPs do dia (id, ordemPlanejamento, produto, assadeira, unidades)
+- eventos ferm / forno / emb (já no formato `FluxoApontamentoEvento` / controle)
+- `camaraMin`, `resfrioMin`
+- `asOfMs`
+
+Não lê relógio, config ou Supabase.
+
+### Integração
+
+Anexar `fluxo.filas` no mesmo ponto em que o controle é anexado (`fluxo-processo-controle-attach.ts` ou attach dedicado `fluxo-filas-attach.ts` se o arquivo passar de ~200 linhas).
+
+O service já carrega OPs, lotes e `config_operacao`. Reutilizar. Sem query extra.
+
+### UI
+
+```
+src/components/FluxoProcesso/
+  FluxoFilasPanel.tsx
+  FluxoFilaTile.tsx
+  FluxoFilaDetalheList.tsx
+  fluxo-fila-format.ts
+```
+
+`FluxoProcessoScreen` só insere `<FluxoFilasPanel fluxo={fluxo} />` entre cards e gráfico. Estado do tile aberto fica no panel.
+
+Arquivos existentes de cards / gráfico / controle **não** mudam de responsabilidade.
+
+## Erros e vazios
+
+| Situação | Comportamento |
+|----------|----------------|
+| Sem OPs no dia | `filas = null`; empty **Sem OPs para este dia.** |
+| Fila sem itens | Tile com `0`; detalhe **Nenhuma OP nesta fila.** |
+| Config sem tempos | Usar `FLUXO_PADRAO` (180 / 60), igual ao restante do fluxo |
+| Emb sem casamento por OP | FIFO; não falhar o payload |
+| Fetch da carga falha | Sem mudança: a tela já trata loading/erro do page client |
+
+## Testes
+
+Domínio, obrigatórios:
+
+1. OP sem lote de fermentação → volume planejado em **a produzir**; não aparece nas outras filas
+2. OP com ferm 100 e forno 40 → **fermentando** = 60
+3. Último lote ferm + `camaraMin` anterior a `asOf` e wip > 0 → preso; `presoUn` inclui esse volume
+4. Último lote ferm + `camaraMin` ainda não chegou em `asOf` → não preso
+5. Novo lote ferm depois do estouro → deixa de estar preso (relógio no último lote)
+6. forno 80, emb FIFO 30 na primeira OP → **resfriando** = 50 nessa OP
+7. Último lote forno + `resfrioMin` anterior a `asOf` e wip > 0 → preso em resfriando
+8. OP já iniciada (ferm parcial) não joga saldo planejado em **a produzir**
+9. Dia passado: `asOf` = fim do dia civil; prazo calculado contra esse instante
+
+UI: formatação de duração e conversão de unidade via `fluxo-fila-format` (testes unitários do formatador). Sem teste E2E neste ciclo.
+
+## Arquivos tocados (previsto)
+
+- `src/domain/fluxo-processo/fluxo-processo-types.ts` — campo `filas`
+- `src/lib/services/fluxo-processo-controle-attach.ts` (ou attach novo) + teste
+- `src/components/FluxoProcesso/FluxoProcessoScreen.tsx` — encaixe do panel
+- arquivos novos listados acima
+
+Não alterar contratos de CRUD de lote, estimativa, nem o painel de produção.
