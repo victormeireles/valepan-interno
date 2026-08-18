@@ -6,6 +6,7 @@ import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/flux
 import { FluxoDisplayContext } from './fluxo-display-context';
 import { FluxoDisplayScale, type FluxoDisplayMode } from './fluxo-display-scale';
 import FluxoEtapaCards from './FluxoEtapaCards';
+import FluxoFilasPanel from './FluxoFilasPanel';
 import FluxoPercursoSection from './FluxoPercursoSection';
 import FluxoProcessoHeader from './FluxoProcessoHeader';
 import FluxoProducaoPorHora from './FluxoProducaoPorHora';
@@ -60,6 +61,8 @@ function FluxoProcessoScreenBody({
         ].join(' ')}
       >
         <FluxoEtapaCards fluxo={fluxo} etapaAtiva={etapa} onSelect={setEtapa} />
+
+        <FluxoFilasPanel fluxo={fluxo} />
 
         <FluxoProducaoPorHora fluxo={fluxo} etapa={etapa} onEtapaChange={setEtapa} />
 
