@@ -15,6 +15,7 @@ const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
 const countOpcoesByProdutoIds = vi.fn();
+const mockGetEstado = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
@@ -74,6 +75,12 @@ vi.mock('@/lib/clients/supabase-client-factory', () => ({
         })),
       })),
     })),
+  },
+}));
+
+vi.mock('@/lib/services/producao-turno-service', () => ({
+  producaoTurnoService: {
+    getEstado: (...args: unknown[]) => mockGetEstado(...args),
   },
 }));
 
@@ -217,6 +224,16 @@ describe('PainelFornoService.getCargaCompleta', () => {
     getIdsVisiveisEmbalagem.mockResolvedValue(new Set(['cat-hamb']));
     findUltimaDataComPedidos.mockResolvedValue('2026-06-17');
     findDataAnteriorComPedidos.mockResolvedValue('2026-06-16');
+    mockGetEstado.mockResolvedValue({
+      ativo: null,
+      decision: {
+        kind: 'definir',
+        ativoValido: false,
+        numeroAtivo: null,
+        turnoVigente: null,
+      },
+      turnos: [{ numero: 1, inicio: '07:00', fim: '18:00' }],
+    });
   });
 
   it('retorna ordens e snapshots do dia civil do apontamento', async () => {
@@ -236,5 +253,8 @@ describe('PainelFornoService.getCargaCompleta', () => {
     expect(result.dashboardDia).toEqual([
       { assadeiras: 3, pedidoAssadeiras: 0, produzidoEm: '2026-06-17T10:00:00Z' },
     ]);
+    expect(result.turnos).toEqual([{ numero: 1, inicio: '07:00', fim: '18:00' }]);
+    expect(result.turnoAtivo).toBeNull();
+    expect(mockGetEstado).toHaveBeenCalledWith('forno', expect.any(Date));
   });
 });

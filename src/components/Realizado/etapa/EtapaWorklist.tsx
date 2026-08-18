@@ -133,6 +133,7 @@ export default function EtapaWorklist({
                     horario={lote.horario}
                     hasPhoto={lote.hasPhoto}
                     photoColor={lote.photoColor}
+                    turnoLabel={lote.turnoLabel}
                     onPhotoClick={
                       lote.hasPhoto ? () => handlePhotoClick(lote.id) : undefined
                     }

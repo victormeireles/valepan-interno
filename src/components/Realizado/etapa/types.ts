@@ -65,6 +65,7 @@ export type EtapaLoteItem = {
   isDeleting?: boolean;
   isLast?: boolean;
   editLabel?: string;
+  turnoLabel?: string;
 };
 
 export type EtapaProductItem = {

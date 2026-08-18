@@ -77,4 +77,43 @@ describe('buildEtapaOrdemWorklistData', () => {
 
     expect(worklist.gruposAtivos[0]?.products[0]?.assadeira).toBe('24');
   });
+
+  it('define turnoLabel T2 quando o lote tem turno 2', () => {
+    const worklist = buildWorklist([
+      ordemBase({
+        lotes: [
+          {
+            loteId: 'l1',
+            modo: 'parcial',
+            assadeiras: 3,
+            unidades: 0,
+            produzidoEm: '2026-06-18T10:00:00Z',
+            turno: 2,
+          },
+        ],
+      }),
+    ]);
+
+    expect(worklist.gruposAtivos[0]?.products[0]?.lotes[0]?.turnoLabel).toBe('T2');
+  });
+
+  it('omite turnoLabel quando o lote não tem turno', () => {
+    const worklist = buildWorklist([
+      ordemBase({
+        lotes: [
+          {
+            loteId: 'l1',
+            modo: 'parcial',
+            assadeiras: 3,
+            unidades: 0,
+            produzidoEm: '2026-06-18T10:00:00Z',
+            turno: null,
+          },
+        ],
+      }),
+    ]);
+
+    expect(worklist.gruposAtivos[0]?.products[0]?.lotes[0]?.turnoLabel).toBeUndefined();
+  });
 });
+

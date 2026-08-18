@@ -15,6 +15,7 @@ import {
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import type { ProductionStatus } from '@/domain/types/realizado';
 import { QuantityBreakdown } from '@/domain/valueObjects/QuantityBreakdown';
+import { turnoLabelFromNumero } from '@/domain/producao-turno/producao-turno-carga';
 import { formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 import { buildEtapaCadeiaBarras } from './build-etapa-cadeia-barras';
 import { shouldShowAssadeiraNomeTag } from './should-show-assadeira-nome-tag';
@@ -82,6 +83,7 @@ function mapOrdemToProduct(
       isDeleting: deletingLoteId === lote.loteId,
       isLast: loteIndex === ordem.lotes.length - 1,
       editLabel: `Editar lote ${loteIndex + 1} de ${ordem.produto}`,
+      turnoLabel: turnoLabelFromNumero(lote.turno),
     };
   });
 
