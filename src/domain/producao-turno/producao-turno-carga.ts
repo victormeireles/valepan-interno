@@ -21,3 +21,13 @@ export function turnoLabelFromNumero(
   if (turno !== 1 && turno !== 2 && turno !== 3) return undefined;
   return `T${turno}`;
 }
+
+export function readTurnoCarga(payload: {
+  turnos?: ProducaoTurnoCadastrado[];
+  turnoAtivo?: ProducaoTurnoCargaAtivo | null;
+}): ProducaoTurnoCargaDto {
+  return {
+    turnos: Array.isArray(payload.turnos) ? payload.turnos : [],
+    turnoAtivo: payload.turnoAtivo ?? null,
+  };
+}

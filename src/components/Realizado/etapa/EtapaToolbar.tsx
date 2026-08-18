@@ -9,6 +9,7 @@ import {
   pageShellPaddingX,
 } from '@/components/ui/page-shell';
 import { getEtapaAccentClasses, getEtapaToolbarBackgroundStyle } from './etapa-accent';
+import type { ReactNode } from 'react';
 import type { RealizadoEtapaConfig, RealizadoEtapaToolbarMetrics } from './types';
 
 const BAR_TRACK =
@@ -23,6 +24,7 @@ type EtapaToolbarProps = {
   metrics: RealizadoEtapaToolbarMetrics;
   hasMeta?: boolean;
   onExtraAction?: () => void;
+  turnoChip?: ReactNode;
 };
 
 export default function EtapaToolbar({
@@ -32,6 +34,7 @@ export default function EtapaToolbar({
   metrics,
   hasMeta = true,
   onExtraAction,
+  turnoChip,
 }: EtapaToolbarProps) {
   const accent = getEtapaAccentClasses(config.accent);
   const toolbarBg = getEtapaToolbarBackgroundStyle(config.pageBackground, config.accent);
@@ -82,6 +85,8 @@ export default function EtapaToolbar({
               </h1>
             </div>
           </div>
+
+          {turnoChip}
 
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:hidden">
             {config.extraActionLabel && onExtraAction ? (
