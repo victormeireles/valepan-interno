@@ -41,4 +41,37 @@ describe('assertTurnosEtapaValidos', () => {
       ]),
     ).toBeNull();
   });
+
+  it('rejeita overnight que atravessa o T1 do dia seguinte', () => {
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 3, inicio: '22:00', fim: '08:00' },
+      ]),
+    ).toBe('Os turnos desta etapa se sobrepõem.');
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '14:00', fim: '22:00' },
+        { numero: 3, inicio: '22:00', fim: '08:00' },
+      ]),
+    ).toBe('Os turnos desta etapa se sobrepõem.');
+  });
+
+  it('aceita T3 22–05 (termina antes do próximo T1) e fronteira 07:00', () => {
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '14:00', fim: '22:00' },
+        { numero: 3, inicio: '22:00', fim: '05:00' },
+      ]),
+    ).toBeNull();
+    expect(
+      assertTurnosEtapaValidos([
+        { numero: 1, inicio: '07:00', fim: '14:00' },
+        { numero: 2, inicio: '14:00', fim: '22:00' },
+        { numero: 3, inicio: '22:00', fim: '07:00' },
+      ]),
+    ).toBeNull();
+  });
 });

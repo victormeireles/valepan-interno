@@ -11,21 +11,28 @@ const turnos = [
 const resolver = new ProducaoTurnoDiaResolver();
 
 describe('ProducaoTurnoDiaResolver', () => {
-  it('às 15:00 usa o T1 de hoje', () => {
+  it('às 15:00 usa o T1 de hoje até o próximo T1', () => {
     const now = brazilClockUtcMs('2026-08-18', '15:00');
     const dia = resolver.resolve(now, turnos);
     expect(dia?.startMs).toBe(brazilClockUtcMs('2026-08-18', '07:00'));
-    expect(dia?.endMs).toBe(brazilClockUtcMs('2026-08-19', '05:00'));
+    expect(dia?.endMs).toBe(brazilClockUtcMs('2026-08-19', '07:00'));
   });
 
   it('às 02:00 ainda é o dia que começou ontem às 07:00', () => {
     const now = brazilClockUtcMs('2026-08-19', '02:00');
     const dia = resolver.resolve(now, turnos);
     expect(dia?.startMs).toBe(brazilClockUtcMs('2026-08-18', '07:00'));
+    expect(dia?.endMs).toBe(brazilClockUtcMs('2026-08-19', '07:00'));
   });
 
-  it('às 06:00 (vão após o último) retorna null', () => {
+  it('às 06:00 ainda é o dia de ontem (vão até o próximo T1)', () => {
     const now = brazilClockUtcMs('2026-08-19', '06:00');
-    expect(resolver.resolve(now, turnos)).toBeNull();
+    const dia = resolver.resolve(now, turnos);
+    expect(dia?.startMs).toBe(brazilClockUtcMs('2026-08-18', '07:00'));
+    expect(dia?.endMs).toBe(brazilClockUtcMs('2026-08-19', '07:00'));
+  });
+
+  it('sem turnos retorna null', () => {
+    expect(resolver.resolve(brazilClockUtcMs('2026-08-18', '15:00'), [])).toBeNull();
   });
 });

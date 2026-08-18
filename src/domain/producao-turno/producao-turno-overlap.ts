@@ -2,12 +2,24 @@ import { toMinutesFromClock } from '@/domain/painel-producao/painel-producao-tim
 import type { ProducaoTurnoCadastrado } from './producao-turno-types';
 
 const MINUTES_PER_DAY = 24 * 60;
+const OVERLAP_MESSAGE = 'Os turnos desta etapa se sobrepõem.';
 
-/** Offset no eixo desde T1.inicio; clocks antes de T1.inicio somam 24h (overnight). */
-function axisMinutes(clock: string, t1InicioMin: number): number {
-  let minutes = toMinutesFromClock(clock);
-  if (minutes < t1InicioMin) minutes += MINUTES_PER_DAY;
-  return minutes;
+/** Offset no eixo; se o relógio for antes do início anterior, soma 24h (monotônico). */
+function axisMinutes(clock: string, previousStartOnAxis: number): number {
+  const minutes = toMinutesFromClock(clock);
+  return minutes < previousStartOnAxis ? minutes + MINUTES_PER_DAY : minutes;
+}
+
+function placeOnAxis(
+  sorted: ProducaoTurnoCadastrado[],
+): Array<{ inicio: number; fim: number }> {
+  let previousStart = toMinutesFromClock(sorted[0].inicio);
+  return sorted.map((turno) => {
+    const inicio = axisMinutes(turno.inicio, previousStart);
+    const fim = axisMinutes(turno.fim, inicio);
+    previousStart = inicio;
+    return { inicio, fim };
+  });
 }
 
 export function assertTurnosEtapaValidos(turnos: ProducaoTurnoCadastrado[]): string | null {
@@ -18,27 +30,27 @@ export function assertTurnosEtapaValidos(turnos: ProducaoTurnoCadastrado[]): str
     return 'O 1º turno é obrigatório.';
   }
 
-  if (numeros.has(3) && !numeros.has(2)) {
-    return 'Ligue o 2º turno antes do 3º.';
-  }
-
   for (const turno of sorted) {
     if (turno.inicio === turno.fim) {
       return 'Início e fim do turno não podem ser iguais.';
     }
   }
 
-  const t1 = sorted.find((t) => t.numero === 1)!;
-  const t1InicioMin = toMinutesFromClock(t1.inicio);
-
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const current = sorted[i];
-    const next = sorted[i + 1];
-    const fimAtual = axisMinutes(current.fim, t1InicioMin);
-    const inicioProximo = axisMinutes(next.inicio, t1InicioMin);
-    if (inicioProximo < fimAtual) {
-      return 'Os turnos desta etapa se sobrepõem.';
+  const axis = placeOnAxis(sorted);
+  for (let i = 0; i < axis.length - 1; i++) {
+    if (axis[i + 1].inicio < axis[i].fim) {
+      return OVERLAP_MESSAGE;
     }
+  }
+
+  const t1InicioMin = toMinutesFromClock(sorted[0].inicio);
+  const lastFim = axis[axis.length - 1].fim;
+  if (lastFim > t1InicioMin + MINUTES_PER_DAY) {
+    return OVERLAP_MESSAGE;
+  }
+
+  if (numeros.has(3) && !numeros.has(2)) {
+    return 'Ligue o 2º turno antes do 3º.';
   }
 
   return null;

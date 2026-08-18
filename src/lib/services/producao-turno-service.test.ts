@@ -99,6 +99,22 @@ describe('ProducaoTurnoService.requireNumero', () => {
 
     expect(numero).toBe(1);
   });
+
+  it('T1 07–18 só, confirmado às 08:00, requireNumero às 19:00 retorna 1', async () => {
+    const snapshot = snapshotComTurnos([
+      { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '18:00' },
+      { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
+      { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+    ]);
+    const service = createService(
+      new FakeTurnoAtivoRepository({ fermentacao: t1ConfirmadoHoje }),
+      snapshot,
+    );
+
+    const numero = await service.requireNumero('fermentacao', at('19:00'));
+
+    expect(numero).toBe(1);
+  });
 });
 
 describe('ProducaoTurnoService.confirm', () => {
