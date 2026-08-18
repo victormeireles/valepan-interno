@@ -16,6 +16,7 @@ import {
   type PainelLoteItemEtapa,
 } from '@/domain/realizado/etapa-painel-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import { useRealizadoTurnoUi } from '@/components/Realizado/turno/useRealizadoTurnoUi';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useEtapaPainelCarga } from '@/hooks/useEtapaPainelCarga';
 import { useEtapaReabrirOp } from '@/hooks/useEtapaReabrirOp';
@@ -49,6 +50,8 @@ export default function ProducaoFornoPage() {
     dashboardWeek,
     comparisonWeekDate,
     dateComparisonPrev,
+    turnos,
+    turnoAtivo,
     refreshOrdensOnly,
   } = useEtapaPainelCarga({
     etapa: 'forno',
@@ -56,6 +59,14 @@ export default function ProducaoFornoPage() {
     setSelectedDate,
     producaoModalOpen,
   });
+
+  const { turnoChip, turnoSheet, ensureTurnoThen, onTurnoRequerido } =
+    useRealizadoTurnoUi({
+      etapa: 'forno',
+      turnos,
+      turnoAtivo,
+      onError: (msg) => setMessage(msg),
+    });
 
   useEffect(() => {
     setSelectedDate(latestDate);
@@ -106,13 +117,15 @@ export default function ProducaoFornoPage() {
   );
 
   const handleNovoLote = useCallback((ordem: PainelOrdemEtapa) => {
-    setCreatingLoteOrdemId(ordem.ordemProducaoId);
-    setSelectedOrdem(ordem);
-    setEditingLote(null);
-    setIsNewLoteModal(true);
-    setProducaoModalOpen(true);
-    setCreatingLoteOrdemId(null);
-  }, []);
+    ensureTurnoThen(() => {
+      setCreatingLoteOrdemId(ordem.ordemProducaoId);
+      setSelectedOrdem(ordem);
+      setEditingLote(null);
+      setIsNewLoteModal(true);
+      setProducaoModalOpen(true);
+      setCreatingLoteOrdemId(null);
+    });
+  }, [ensureTurnoThen]);
 
   const handleDeleteLote = useCallback(
     async (lote: PainelLoteItemEtapa) => {
@@ -343,6 +356,7 @@ export default function ProducaoFornoPage() {
           onEditLote: handleEditLoteById,
           onDeleteLote: handleDeleteLoteById,
         }}
+        turnoChip={turnoChip}
       />
 
       {reabrirDialogProps ? (
@@ -365,6 +379,7 @@ export default function ProducaoFornoPage() {
         ordemProducaoId={selectedOrdem?.ordemProducaoId}
         pedidoQuantidades={selectedPedidoQuantidades}
         loading={producaoLoading}
+        onTurnoRequerido={onTurnoRequerido}
         mode="forno"
         modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}
         metaReferencia={selectedOrdem?.metaReferencia}
@@ -372,6 +387,8 @@ export default function ProducaoFornoPage() {
         produzidoAtual={selectedOrdem?.produzido || 0}
         etapaUnidade={(selectedOrdem?.unidade || 'lt').toUpperCase()}
       />
+
+      {turnoSheet}
     </>
   );
 }

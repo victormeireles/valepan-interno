@@ -1,12 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import EtapaReabrirConfirmDialog from '@/components/Realizado/etapa/EtapaReabrirConfirmDialog';
-import {
-  snapshotsToDashboardItems,
-} from '@/domain/embalagem/painel-dashboard-adapter';
+import { useRealizadoTurnoUi } from '@/components/Realizado/turno/useRealizadoTurnoUi';
 import { splitPedidosEmbalagemPorStatus } from '@/domain/embalagem/embalagem-painel-adapter';
 import {
   buildEmbalagemLoteLookup,
@@ -16,16 +14,11 @@ import {
 } from '@/domain/embalagem/embalagem-etapa-adapter';
 import { buildEmbalagemToolbarMetrics } from '@/domain/embalagem/build-embalagem-toolbar-metrics';
 import type { PainelLoteItem } from '@/domain/realizado/painel-pedido-adapter';
-import type {
-  DashboardSnapshot,
-  PainelPedidoEmbalagem,
-} from '@/domain/types/painel-embalagem';
+import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import { ProducaoData } from '@/domain/types';
+import { useEmbalagemPainelCarga } from '@/hooks/useEmbalagemPainelCarga';
 import { useEmbalagemReabrirOp } from '@/hooks/useEmbalagemReabrirOp';
-import {
-  addCalendarDaysISO,
-  getTodayISOInBrazilTimezone,
-} from '@/lib/utils/date-utils';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
   const message = error instanceof Error ? error.message : fallback;
@@ -40,10 +33,6 @@ function formatQuantidade(caixas: number, pacotes: number): string {
 }
 
 export default function ProducaoEmbalagemPage() {
-  const initialDateResolved = useRef(false);
-  const [pedidos, setPedidos] = useState<PainelPedidoEmbalagem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => getTodayISOInBrazilTimezone());
   const [producaoModalOpen, setProducaoModalOpen] = useState(false);
@@ -52,103 +41,34 @@ export default function ProducaoEmbalagemPage() {
   const [producaoLoading, setProducaoLoading] = useState(false);
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   const [deletingLoteId, setDeletingLoteId] = useState<string | null>(null);
-  const [comparisonWeekItems, setComparisonWeekItems] = useState(
-    snapshotsToDashboardItems([]),
-  );
-  const [comparisonPrevItems, setComparisonPrevItems] = useState(
-    snapshotsToDashboardItems([]),
-  );
-  const [comparisonWeekDate, setComparisonWeekDate] = useState<string>(() =>
-    addCalendarDaysISO(getTodayISOInBrazilTimezone(), -7),
-  );
-  const [dateComparisonPrev, setDateComparisonPrev] = useState<string | null>(null);
-  const [dashboardDiaItems, setDashboardDiaItems] = useState(
-    snapshotsToDashboardItems([]),
-  );
 
-  const applyCargaResponse = useCallback(
-    (
-      data: {
-        pedidos: PainelPedidoEmbalagem[];
-        ultimaDataComDados: string | null;
-        dashboardDia?: DashboardSnapshot[];
-        comparacaoSemana: { date: string; items: DashboardSnapshot[] };
-        comparacaoAnterior: { date: string | null; items: DashboardSnapshot[] };
-      },
-      currentDate: string,
-    ) => {
-      if (
-        !initialDateResolved.current &&
-        data.ultimaDataComDados &&
-        data.ultimaDataComDados !== currentDate
-      ) {
-        initialDateResolved.current = true;
-        setSelectedDate(data.ultimaDataComDados);
-        return;
-      }
-      initialDateResolved.current = true;
-      setPedidos(data.pedidos);
-      setComparisonWeekDate(data.comparacaoSemana.date);
-      setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
-      setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
-      setDateComparisonPrev(data.comparacaoAnterior.date);
-      setDashboardDiaItems(snapshotsToDashboardItems(data.dashboardDia ?? []));
-    },
-    [],
-  );
+  const {
+    pedidos,
+    loading,
+    refreshing,
+    dashboardDiaItems,
+    comparisonWeekItems,
+    comparisonPrevItems,
+    comparisonWeekDate,
+    dateComparisonPrev,
+    turnos,
+    turnoAtivo,
+    loadCargaEmbalagem,
+    refreshPedidosOnly,
+  } = useEmbalagemPainelCarga({
+    selectedDate,
+    setSelectedDate,
+    producaoModalOpen,
+    setMessage,
+  });
 
-  const loadCargaEmbalagem = useCallback(
-    async (showSpinner: boolean) => {
-      if (showSpinner) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
-      }
-      try {
-        const res = await fetch(`/api/painel/embalagem/carga?date=${selectedDate}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-        applyCargaResponse(data, selectedDate);
-      } catch (err) {
-        if (showSpinner) {
-          setMessage(getVisibleErrorMessage(err, 'Erro ao carregar o painel'));
-        } else {
-          console.error('Erro ao recarregar carga embalagem:', err);
-        }
-      } finally {
-        if (showSpinner) setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [selectedDate, applyCargaResponse],
-  );
-
-  const refreshPedidosOnly = useCallback(async (): Promise<PainelPedidoEmbalagem[]> => {
-    setRefreshing(true);
-    try {
-      const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
-      const nextPedidos = (data.pedidos || []) as PainelPedidoEmbalagem[];
-      setPedidos(nextPedidos);
-      return nextPedidos;
-    } catch (err) {
-      console.error('Erro ao recarregar pedidos:', err);
-      return [];
-    } finally {
-      setRefreshing(false);
-    }
-  }, [selectedDate]);
-
-  useEffect(() => {
-    void loadCargaEmbalagem(true);
-  }, [selectedDate, loadCargaEmbalagem]);
-
-  useEffect(() => {
-    if (producaoModalOpen) return;
-    const interval = setInterval(() => void loadCargaEmbalagem(false), 60_000);
-    return () => clearInterval(interval);
-  }, [selectedDate, producaoModalOpen, loadCargaEmbalagem]);
+  const { turnoChip, turnoSheet, ensureTurnoThen, onTurnoRequerido } =
+    useRealizadoTurnoUi({
+      etapa: 'embalagem',
+      turnos,
+      turnoAtivo,
+      onError: (msg) => setMessage(msg),
+    });
 
   const pedidoLookup = useMemo(() => buildEmbalagemPedidoLookup(pedidos), [pedidos]);
   const loteLookup = useMemo(() => buildEmbalagemLoteLookup(pedidos), [pedidos]);
@@ -232,32 +152,34 @@ export default function ProducaoEmbalagemPage() {
   );
 
   const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
-    setIsNewLoteModal(true);
-    setEditingItem({
-      pedidoEmbalagemId: pedido.pedidoEmbalagemId,
-      cliente: pedido.cliente,
-      produto: pedido.produto,
-      observacao: pedido.observacao,
-      congelado: pedido.congelado ?? 'Não',
-      unidade: pedido.unidade,
-      aProduzir: pedido.aProduzir,
-      produzido: 0,
-      dataFabricacao: pedido.dataFabricacao,
-      caixas: 0,
-      pacotes: 0,
-      unidades: 0,
-      kg: 0,
-      pedidoCaixas: pedido.pedido.caixas,
-      pedidoPacotes: pedido.pedido.pacotes,
-      pedidoUnidades: pedido.pedido.unidades,
-      pedidoKg: pedido.pedido.kg,
-      metaCaixas: pedido.pedido.caixas,
-      metaPacotes: pedido.pedido.pacotes,
-      metaUnidades: pedido.pedido.unidades,
-      metaKg: pedido.pedido.kg,
+    ensureTurnoThen(() => {
+      setIsNewLoteModal(true);
+      setEditingItem({
+        pedidoEmbalagemId: pedido.pedidoEmbalagemId,
+        cliente: pedido.cliente,
+        produto: pedido.produto,
+        observacao: pedido.observacao,
+        congelado: pedido.congelado ?? 'Não',
+        unidade: pedido.unidade,
+        aProduzir: pedido.aProduzir,
+        produzido: 0,
+        dataFabricacao: pedido.dataFabricacao,
+        caixas: 0,
+        pacotes: 0,
+        unidades: 0,
+        kg: 0,
+        pedidoCaixas: pedido.pedido.caixas,
+        pedidoPacotes: pedido.pedido.pacotes,
+        pedidoUnidades: pedido.pedido.unidades,
+        pedidoKg: pedido.pedido.kg,
+        metaCaixas: pedido.pedido.caixas,
+        metaPacotes: pedido.pedido.pacotes,
+        metaUnidades: pedido.pedido.unidades,
+        metaKg: pedido.pedido.kg,
+      });
+      setProducaoModalOpen(true);
     });
-    setProducaoModalOpen(true);
-  }, []);
+  }, [ensureTurnoThen]);
 
   const handleNovoLoteById = useCallback(
     (pedidoEmbalagemId: string) => {
@@ -418,6 +340,7 @@ export default function ProducaoEmbalagemPage() {
           onEditLote: handleEditLoteById,
           onDeleteLote: handleDeleteLoteById,
         }}
+        turnoChip={turnoChip}
       />
 
       {reabrirDialogProps ? (
@@ -435,6 +358,7 @@ export default function ProducaoEmbalagemPage() {
         onSave={handleSaveProducao}
         onInsumoConsumoAviso={handleInsumoConsumoAviso}
         onSaveSuccess={refreshPainelData}
+        onTurnoRequerido={onTurnoRequerido}
         initialData={
           editingItem
             ? {
@@ -487,6 +411,8 @@ export default function ProducaoEmbalagemPage() {
         loading={producaoLoading}
         mode="embalagem"
       />
+
+      {turnoSheet}
     </>
   );
 }

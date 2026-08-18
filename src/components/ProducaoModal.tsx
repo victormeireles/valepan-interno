@@ -13,6 +13,7 @@ import {
 import { EmbalagemLoteModalShell } from './EmbalagemLoteModal';
 import EmbalagemDiscardSheet from './EmbalagemLoteModal/EmbalagemDiscardSheet';
 import { hasProducaoDraftChanged } from '@/domain/realizado/producao-draft-changes';
+import { isTurnoRequeridoHttp } from '@/domain/producao-turno/turno-requerido-http';
 import {
   aplicarAtalhoLotePadrao,
   aplicarAtalhoLoteValor,
@@ -34,6 +35,7 @@ interface ProducaoModalProps {
     options?: { continuaProduzindo?: boolean },
   ) => Promise<void>;
   onSaveSuccess?: () => Promise<void>;
+  onTurnoRequerido?: () => void;
   onInsumoConsumoAviso?: (avisos: string[]) => void;
   initialData?: ProducaoData;
   loading?: boolean;
@@ -73,6 +75,7 @@ export default function ProducaoModal({
   onClose,
   onSave,
   onSaveSuccess,
+  onTurnoRequerido,
   onInsumoConsumoAviso,
   initialData,
   loading = false,
@@ -358,6 +361,10 @@ export default function ProducaoModal({
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (isTurnoRequeridoHttp(res.status, data)) {
+        onTurnoRequerido?.();
+        return;
+      }
       if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
 
       const createdLoteId = data.loteId as string | undefined;
@@ -390,6 +397,7 @@ export default function ProducaoModal({
     buildLotePayload,
     uploadPendingPhotos,
     onSaveSuccess,
+    onTurnoRequerido,
     onInsumoConsumoAviso,
     onClose,
     totalQtyVisivel,
