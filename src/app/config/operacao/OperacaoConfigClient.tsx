@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
 
-type Draft = Omit<ConfigOperacaoSnapshot, 'updatedAt'>;
+type Draft = Omit<ConfigOperacaoSnapshot, 'updatedAt' | 'turnos'>;
 
 const TURNO_ROWS: {
   inicioKey: keyof Draft;

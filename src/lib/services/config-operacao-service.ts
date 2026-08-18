@@ -7,12 +7,31 @@ import type {
   ConfigOperacaoPatch,
   ConfigOperacaoRow,
   ConfigOperacaoSnapshot,
+  ConfigOperacaoTurnoRow,
 } from '@/domain/config-operacao/config-operacao-types';
 
 const SELECT_COLUMNS =
   'horario_inicio_producao, horario_fim_producao, horario_inicio_forno, horario_fim_forno, horario_inicio_embalagem, horario_fim_embalagem, tempo_medio_fermentacao_min, tempo_medio_resfriamento_min, updated_at';
 
 const CACHE_TTL_MS = 30_000;
+
+type ConfigOperacaoLegacyClockRow = ConfigOperacaoRow & {
+  horario_inicio_producao: string;
+  horario_fim_producao: string;
+  horario_inicio_forno: string;
+  horario_fim_forno: string;
+  horario_inicio_embalagem: string;
+  horario_fim_embalagem: string;
+};
+
+function snapshotFromLegacyRow(data: ConfigOperacaoLegacyClockRow): ConfigOperacaoSnapshot {
+  const turnos: ConfigOperacaoTurnoRow[] = [
+    { etapa: 'fermentacao', numero: 1, inicio: data.horario_inicio_producao, fim: data.horario_fim_producao },
+    { etapa: 'forno', numero: 1, inicio: data.horario_inicio_forno, fim: data.horario_fim_forno },
+    { etapa: 'embalagem', numero: 1, inicio: data.horario_inicio_embalagem, fim: data.horario_fim_embalagem },
+  ];
+  return configOperacaoMapper.composeSnapshot(data, turnos);
+}
 
 let cachedSnapshot: ConfigOperacaoSnapshot | null = null;
 let cacheExpiresAt = 0;
@@ -46,7 +65,7 @@ export class ConfigOperacaoService {
       return DEFAULT_CONFIG_OPERACAO;
     }
 
-    const snapshot = configOperacaoMapper.mapRowToSnapshot(data as ConfigOperacaoRow);
+    const snapshot = snapshotFromLegacyRow(data as ConfigOperacaoLegacyClockRow);
     cachedSnapshot = snapshot;
     cacheExpiresAt = now + CACHE_TTL_MS;
     return snapshot;
@@ -86,7 +105,7 @@ export class ConfigOperacaoService {
     }
 
     this.invalidateCache();
-    return configOperacaoMapper.mapRowToSnapshot(data as ConfigOperacaoRow);
+    return snapshotFromLegacyRow(data as ConfigOperacaoLegacyClockRow);
   }
 }
 
