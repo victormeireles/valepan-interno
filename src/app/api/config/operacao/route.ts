@@ -35,7 +35,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json(snapshot);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
-    const status = message.includes('deve') ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: statusFromConfigError(message) });
   }
+}
+
+function statusFromConfigError(message: string): number {
+  const isClientError =
+    message.includes('deve') ||
+    message.includes('iguais') ||
+    message.includes('sobrepõem') ||
+    message.includes('obrigatório') ||
+    message.includes('Ligue o 2º');
+  return isClientError ? 400 : 500;
 }
