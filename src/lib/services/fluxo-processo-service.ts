@@ -1,5 +1,5 @@
 import { FluxoProcessoBuilder } from '@/domain/fluxo-processo/fluxo-processo-builder';
-import { FLUXO_ASSADEIRA_SEM } from '@/domain/fluxo-processo/fluxo-processo-constants';
+import { FLUXO_ASSADEIRA_SEM, FLUXO_PADRAO } from '@/domain/fluxo-processo/fluxo-processo-constants';
 import type {
   CargaFluxoProcessoResponse,
   FluxoApontamentoEvento,
@@ -17,7 +17,6 @@ import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { FluxoFilasServiceAttach } from '@/lib/services/fluxo-filas-attach';
-import { FluxoFilasTemposResolver } from '@/lib/services/fluxo-filas-tempos';
 import {
   addCalendarDaysISO,
   brazilDayEndUtcMs,
@@ -32,7 +31,6 @@ type AssadeiraRow = { id: string; nome: string };
 export class FluxoProcessoService {
   private readonly builder = new FluxoProcessoBuilder();
   private readonly filasAttach = new FluxoFilasServiceAttach();
-  private readonly filasTempos = new FluxoFilasTemposResolver();
 
   constructor(private readonly productService = new SupabaseProductService()) {}
 
@@ -40,14 +38,13 @@ export class FluxoProcessoService {
     const startIso = brazilDayStartIso(date);
     const endIso = brazilDayStartIso(addCalendarDaysISO(date, 1));
 
-    const [ultimaDataComDados, fermLotes, fornoLotes, embLotes, ordensDia, temposFilas] =
+    const [ultimaDataComDados, fermLotes, fornoLotes, embLotes, ordensDia] =
       await Promise.all([
         ordemProducaoRepository.findUltimaDataComPedidos(14),
         fermentacaoLoteRepository.listByProduzidoEmRange(startIso, endIso),
         fornoLoteRepository.listByProduzidoEmRange(startIso, endIso),
         embalagemLoteRepository.listByProduzidoEmRange(startIso, endIso),
         ordemProducaoRepository.listByDataProducao(date),
-        this.filasTempos.resolve(),
       ]);
 
     const ordemIds = collectOrdemIds(fermLotes, fornoLotes, embLotes, ordensDia);
@@ -163,8 +160,8 @@ export class FluxoProcessoService {
       fermentacao,
       forno,
       embalagem,
-      camaraMin: temposFilas.camaraMin,
-      resfrioMin: temposFilas.resfrioMin,
+      camaraMin: FLUXO_PADRAO.camaraMin,
+      resfrioMin: FLUXO_PADRAO.resfrioMin,
       asOfMs: filasAsOfMs,
     });
     return { date, ultimaDataComDados, fluxo };

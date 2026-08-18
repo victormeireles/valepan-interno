@@ -1,9 +1,9 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { FluxoFilaKey } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import type { FluxoFilaItem, FluxoFilaKey } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import { useFluxoDisplay } from './fluxo-display-context';
-import { formatFilaQty } from './fluxo-fila-format';
+import { formatFilaResumoQty } from './fluxo-fila-format';
 
 const AMBER_ACTIVE = '#D97706';
 
@@ -12,7 +12,7 @@ export type FluxoFilaTileProps = {
   label: string;
   icon: string;
   accentColor: string;
-  totalUn: number;
+  items: FluxoFilaItem[];
   presoUn: number;
   showPrazo: boolean;
   active: boolean;
@@ -37,14 +37,16 @@ function tileActiveStyle(active: boolean): CSSProperties | undefined {
 
 function FluxoFilaTilePrazoLine({
   showPrazo,
+  items,
   presoUn,
 }: {
   showPrazo: boolean;
+  items: FluxoFilaItem[];
   presoUn: number;
 }) {
   const { scale } = useFluxoDisplay();
   if (!showPrazo) return null;
-  const qtyLabel = formatFilaQty(presoUn, scale, '', '');
+  const qtyLabel = formatFilaResumoQty(items, scale, { presoOnly: true });
   const preso = presoUn > 0;
   return (
     <p
@@ -90,7 +92,7 @@ export default function FluxoFilaTile({
   label,
   icon,
   accentColor,
-  totalUn,
+  items,
   presoUn,
   showPrazo,
   active,
@@ -98,7 +100,7 @@ export default function FluxoFilaTile({
   detailId,
 }: FluxoFilaTileProps) {
   const { scale } = useFluxoDisplay();
-  const volume = formatFilaQty(totalUn, scale, '', '');
+  const volume = formatFilaResumoQty(items, scale);
 
   return (
     <button
@@ -119,7 +121,7 @@ export default function FluxoFilaTile({
       <p className="mt-2 font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
         {volume}
       </p>
-      <FluxoFilaTilePrazoLine showPrazo={showPrazo} presoUn={presoUn} />
+      <FluxoFilaTilePrazoLine showPrazo={showPrazo} items={items} presoUn={presoUn} />
       <FluxoFilaTileAction active={active} />
     </button>
   );

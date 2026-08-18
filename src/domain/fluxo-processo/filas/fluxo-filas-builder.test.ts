@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { brazilDayEndUtcMs } from '@/lib/utils/date-utils';
 import { FluxoFilasBuilder } from './fluxo-filas-builder';
 import type { FluxoFilasBuilderInput, FluxoFilasOpInput } from './fluxo-filas-types';
 
@@ -145,5 +146,27 @@ describe('FluxoFilasBuilder', () => {
 
   it('retorna null sem OPs', () => {
     expect(builder.build(baseInput({ ops: [] }))).toBeNull();
+  });
+
+  it('dia passado: asOf no fim do dia civil marca preso se limite já passou', () => {
+    const eventosFerm = [
+      {
+        ordemProducaoId: 'op-1',
+        produtoNome: 'Bun',
+        assadeiraNome: 'Bun',
+        unidades: 100,
+        produzidoEm: iso('20:00'),
+        dataOp: DATE,
+      },
+    ];
+    const noFim = builder.build(
+      baseInput({ eventosFerm, asOfMs: brazilDayEndUtcMs(DATE) }),
+    );
+    expect(noFim?.fermentando.items[0].preso).toBe(true);
+
+    const antesDoLimite = builder.build(
+      baseInput({ eventosFerm, asOfMs: Date.parse(iso('22:00')) }),
+    );
+    expect(antesDoLimite?.fermentando.items[0].preso).toBe(false);
   });
 });

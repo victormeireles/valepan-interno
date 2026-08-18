@@ -9,7 +9,7 @@ import type {
   FluxoFilaResumo,
 } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoDisplayScale } from './fluxo-display-scale';
-import { formatFilaQty, formatPresoDuracao } from './fluxo-fila-format';
+import { formatFilaQty, formatFilaResumoQty, formatPresoDuracao } from './fluxo-fila-format';
 
 type FluxoFilaDetalheListProps = {
   filaKey: FluxoFilaKey;
@@ -26,9 +26,9 @@ class FluxoFilaDetalheHeaderCopy {
     scale: FluxoDisplayScale,
     showPrazo: boolean,
   ): string {
-    const total = formatFilaQty(resumo.totalUn, scale, '', '');
+    const total = formatFilaResumoQty(resumo.items, scale);
     if (!showPrazo) return `${label} — ${total}`;
-    const preso = formatFilaQty(resumo.presoUn, scale, '', '');
+    const preso = formatFilaResumoQty(resumo.items, scale, { presoOnly: true });
     return `${label} — ${total} · ${preso} acima do prazo`;
   }
 }

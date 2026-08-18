@@ -73,7 +73,7 @@ function FluxoFilasTileGrid({
             label={tile.label}
             icon={tile.icon}
             accentColor={tile.accent ?? TILE_ACCENT[tile.key]}
-            totalUn={resumo.totalUn}
+            items={resumo.items}
             presoUn={resumo.presoUn}
             showPrazo={tile.showPrazo}
             active={filaAberta === tile.key}
