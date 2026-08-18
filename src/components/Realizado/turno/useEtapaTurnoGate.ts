@@ -5,7 +5,10 @@ import {
   confirmEtapaTurnoAtivo,
   TURNO_TROCA_ERRO,
 } from '@/domain/producao-turno/etapa-turno-ativo-client';
-import { EtapaTurnoGate } from '@/domain/producao-turno/etapa-turno-gate';
+import {
+  EtapaTurnoGate,
+  preferTurnoAtivoCarga,
+} from '@/domain/producao-turno/etapa-turno-gate';
 import type { ProducaoTurnoCargaAtivo } from '@/domain/producao-turno/producao-turno-carga';
 import type { TurnoSheetModel } from '@/domain/producao-turno/producao-turno-sheet-model';
 import type {
@@ -34,7 +37,7 @@ export function useEtapaTurnoGate({
   const pendingProceed = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    setAtivo(turnoAtivo);
+    setAtivo((local) => preferTurnoAtivoCarga(local, turnoAtivo));
   }, [turnoAtivo]);
 
   const chip = gate.resolveChip(ativo);
@@ -63,9 +66,10 @@ export function useEtapaTurnoGate({
   }, [gate, turnos]);
 
   const cancelSheet = useCallback(() => {
+    if (saving) return;
     pendingProceed.current = null;
     setSheet(null);
-  }, []);
+  }, [saving]);
 
   const chooseNumero = useCallback(
     async (numero: ProducaoTurnoNumero) => {

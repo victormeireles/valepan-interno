@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { brazilClockUtcMs } from '@/lib/utils/date-utils';
 import { TURNO_TROCA_ERRO } from './etapa-turno-ativo-client';
-import { EtapaTurnoGate } from './etapa-turno-gate';
+import { EtapaTurnoGate, preferTurnoAtivoCarga } from './etapa-turno-gate';
 import { readTurnoCarga, type ProducaoTurnoCargaAtivo } from './producao-turno-carga';
 import type { ProducaoTurnoCadastrado } from './producao-turno-types';
 
@@ -105,6 +105,30 @@ describe('EtapaTurnoGate.planChipSheet', () => {
       { numero: 1, label: 'Turno 1', primary: false },
       { numero: 2, label: 'Turno 2', primary: false },
     ]);
+  });
+});
+
+describe('preferTurnoAtivoCarga', () => {
+  const localRecente = ativoHoje(2, '15:05');
+  const cargaStale = ativoHoje(1, '08:00');
+  const cargaMaisNova = ativoHoje(2, '15:10');
+
+  it('local nulo → usa carga (primeiro load, inclusive nula)', () => {
+    expect(preferTurnoAtivoCarga(null, cargaStale)).toEqual(cargaStale);
+    expect(preferTurnoAtivoCarga(null, null)).toBeNull();
+  });
+
+  it('carga nula com local set → mantém local (poll sem row não apaga PUT)', () => {
+    expect(preferTurnoAtivoCarga(localRecente, null)).toEqual(localRecente);
+  });
+
+  it('carga com confirmadoEm mais antigo → mantém local', () => {
+    expect(preferTurnoAtivoCarga(localRecente, cargaStale)).toEqual(localRecente);
+  });
+
+  it('carga com confirmadoEm igual ou mais novo → usa carga', () => {
+    expect(preferTurnoAtivoCarga(localRecente, localRecente)).toEqual(localRecente);
+    expect(preferTurnoAtivoCarga(localRecente, cargaMaisNova)).toEqual(cargaMaisNova);
   });
 });
 

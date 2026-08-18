@@ -20,6 +20,15 @@ export type EtapaTurnoEnsurePlan =
   | { action: 'proceed' }
   | { action: 'open'; sheet: TurnoSheetModel };
 
+export function preferTurnoAtivoCarga(
+  local: ProducaoTurnoCargaAtivo | null,
+  fromCarga: ProducaoTurnoCargaAtivo | null,
+): ProducaoTurnoCargaAtivo | null {
+  if (!local) return fromCarga;
+  if (!fromCarga) return local;
+  return fromCarga.confirmadoEm >= local.confirmadoEm ? fromCarga : local;
+}
+
 function toPromptAtivo(
   ativo: ProducaoTurnoCargaAtivo | null,
 ): ProducaoTurnoAtivo | null {

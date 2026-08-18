@@ -23,7 +23,7 @@ export default function TurnoEscolhaSheet({
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-stone-900/50 p-4 sm:items-center"
       role="presentation"
-      onClick={onCancelar}
+      onClick={saving ? undefined : onCancelar}
     >
       <div
         role="dialog"
