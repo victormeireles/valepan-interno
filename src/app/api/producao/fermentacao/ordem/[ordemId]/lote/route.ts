@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
+import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import { fermentacaoLoteService } from '@/lib/services/fermentacao-lote-service';
 import { notifyEtapaProductionAfterLoteSave } from '@/lib/services/etapa-production-notification';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
@@ -67,6 +68,12 @@ export async function POST(
       insumoConsumo,
     });
   } catch (error) {
+    if (error instanceof TurnoRequeridoError) {
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        { status: 409 },
+      );
+    }
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }

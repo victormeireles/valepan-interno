@@ -18,6 +18,7 @@ import { insumoConsumoEmbalagemService } from '@/lib/services/insumo-consumo-emb
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { saidaMovimentoService } from '@/lib/services/saida-movimento-service';
+import { producaoTurnoService } from '@/lib/services/producao-turno-service';
 
 export { EstoqueResolverError };
 
@@ -88,6 +89,7 @@ export class EmbalagemLoteService {
   async criarLotePorPedidoEmbalagem(
     input: CriarLotePorPedidoInput,
   ): Promise<EmbalagemLoteComConsumo> {
+    const turno = await producaoTurnoService.requireNumero('embalagem', new Date());
     const pedido = await pedidoEmbalagemRepository.findById(input.pedidoEmbalagemId);
     if (!pedido) {
       throw new Error('Pedido de embalagem não encontrado');
@@ -119,6 +121,7 @@ export class EmbalagemLoteService {
       produzidoEm,
       obsEmbalagem: input.obsEmbalagem ?? null,
       fotos: input.fotos,
+      turno,
     });
 
     await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
+import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import {
   embalagemLoteService,
   EstoqueResolverError,
@@ -135,6 +136,12 @@ export async function POST(
       throw dbError;
     }
   } catch (error) {
+    if (error instanceof TurnoRequeridoError) {
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        { status: 409 },
+      );
+    }
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
