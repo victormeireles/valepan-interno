@@ -82,6 +82,23 @@ describe('ProducaoTurnoService.requireNumero', () => {
     await expect(thrown).rejects.toBeInstanceOf(TurnoRequeridoError);
     await expect(thrown).rejects.toMatchObject({ code: 'turno_requerido' });
   });
+
+  it('T1 confirmado hoje fora da janela (19:00) ainda retorna 1', async () => {
+    const snapshot = snapshotComTurnos([
+      { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '14:00' },
+      { etapa: 'fermentacao', numero: 2, inicio: '14:00', fim: '22:00' },
+      { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
+      { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+    ]);
+    const service = createService(
+      new FakeTurnoAtivoRepository({ fermentacao: t1ConfirmadoHoje }),
+      snapshot,
+    );
+
+    const numero = await service.requireNumero('fermentacao', at('19:00'));
+
+    expect(numero).toBe(1);
+  });
 });
 
 describe('ProducaoTurnoService.confirm', () => {

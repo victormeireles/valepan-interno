@@ -68,7 +68,7 @@ export class ProducaoTurnoService {
     now: Date,
   ): Promise<ProducaoTurnoNumero> {
     const { decision } = await this.getEstado(etapa, now);
-    if (decision.kind !== 'nenhum' || decision.numeroAtivo == null) {
+    if (!decision.ativoValido || decision.numeroAtivo == null) {
       throw new TurnoRequeridoError();
     }
     return decision.numeroAtivo;
