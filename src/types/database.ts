@@ -1206,39 +1206,51 @@ export type Database = {
       }
       config_operacao: {
         Row: {
-          horario_fim_embalagem: string
-          horario_fim_forno: string
-          horario_fim_producao: string
-          horario_inicio_embalagem: string
-          horario_inicio_forno: string
-          horario_inicio_producao: string
           id: string
           tempo_medio_fermentacao_min: number
           tempo_medio_resfriamento_min: number
           updated_at: string
         }
         Insert: {
-          horario_fim_embalagem?: string
-          horario_fim_forno?: string
-          horario_fim_producao?: string
-          horario_inicio_embalagem?: string
-          horario_inicio_forno?: string
-          horario_inicio_producao?: string
           id?: string
           tempo_medio_fermentacao_min?: number
           tempo_medio_resfriamento_min?: number
           updated_at?: string
         }
         Update: {
-          horario_fim_embalagem?: string
-          horario_fim_forno?: string
-          horario_fim_producao?: string
-          horario_inicio_embalagem?: string
-          horario_inicio_forno?: string
-          horario_inicio_producao?: string
           id?: string
           tempo_medio_fermentacao_min?: number
           tempo_medio_resfriamento_min?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      config_operacao_turnos: {
+        Row: {
+          created_at: string
+          etapa: string
+          fim: string
+          id: string
+          inicio: string
+          numero: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          etapa: string
+          fim: string
+          id?: string
+          inicio: string
+          numero: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          etapa?: string
+          fim?: string
+          id?: string
+          inicio?: string
+          numero?: number
           updated_at?: string
         }
         Relationships: []
@@ -1372,6 +1384,7 @@ export type Database = {
           produto_id: string
           produzido_em: string
           tipo_estoque_id: string
+          turno: number | null
           unidades: number
         }
         Insert: {
@@ -1400,6 +1413,7 @@ export type Database = {
           produto_id: string
           produzido_em?: string
           tipo_estoque_id: string
+          turno?: number | null
           unidades?: number
         }
         Update: {
@@ -1428,6 +1442,7 @@ export type Database = {
           produto_id?: string
           produzido_em?: string
           tipo_estoque_id?: string
+          turno?: number | null
           unidades?: number
         }
         Relationships: [
@@ -1973,6 +1988,7 @@ export type Database = {
           ordem_producao_id: string
           producao_anterior: Json | null
           produzido_em: string
+          turno: number | null
           unidades: number
         }
         Insert: {
@@ -1986,6 +2002,7 @@ export type Database = {
           ordem_producao_id: string
           producao_anterior?: Json | null
           produzido_em?: string
+          turno?: number | null
           unidades?: number
         }
         Update: {
@@ -1999,6 +2016,7 @@ export type Database = {
           ordem_producao_id?: string
           producao_anterior?: Json | null
           produzido_em?: string
+          turno?: number | null
           unidades?: number
         }
         Relationships: [
@@ -2023,6 +2041,7 @@ export type Database = {
           ordem_producao_id: string
           producao_anterior: Json | null
           produzido_em: string
+          turno: number | null
           unidades: number
         }
         Insert: {
@@ -2036,6 +2055,7 @@ export type Database = {
           ordem_producao_id: string
           producao_anterior?: Json | null
           produzido_em?: string
+          turno?: number | null
           unidades?: number
         }
         Update: {
@@ -2049,6 +2069,7 @@ export type Database = {
           ordem_producao_id?: string
           producao_anterior?: Json | null
           produzido_em?: string
+          turno?: number | null
           unidades?: number
         }
         Relationships: [
@@ -3742,6 +3763,24 @@ export type Database = {
           is_sistema?: boolean
           nome?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      producao_turno_ativo: {
+        Row: {
+          confirmado_em: string
+          etapa: string
+          numero: number
+        }
+        Insert: {
+          confirmado_em: string
+          etapa: string
+          numero: number
+        }
+        Update: {
+          confirmado_em?: string
+          etapa?: string
+          numero?: number
         }
         Relationships: []
       }
