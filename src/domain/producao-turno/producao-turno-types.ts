@@ -16,3 +16,19 @@ export type ProducaoTurnoDia = {
   startMs: number;
   endMs: number;
 };
+
+export type ProducaoTurnoPromptKind = 'nenhum' | 'definir' | 'confirmar_fora';
+
+export type ProducaoTurnoPromptInput = {
+  nowMs: number;
+  agoraMin: number;
+  turnos: ProducaoTurnoCadastrado[];
+  ativo: ProducaoTurnoAtivo | null;
+};
+
+export type ProducaoTurnoPromptDecision = {
+  kind: ProducaoTurnoPromptKind;
+  ativoValido: boolean;
+  numeroAtivo: ProducaoTurnoNumero | null;
+  turnoVigente: ProducaoTurnoNumero | null;
+};
