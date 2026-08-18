@@ -7,42 +7,19 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
+import OperacaoTurnosSection from './OperacaoTurnosSection';
+import {
+  operacaoTurnoDraftManager,
+  type OperacaoFormDraft,
+} from './operacao-turno-draft';
 
-type Draft = Omit<ConfigOperacaoSnapshot, 'updatedAt' | 'turnos'>;
-
-const TURNO_ROWS: {
-  inicioKey: keyof Draft;
-  fimKey: keyof Draft;
-  label: string;
-}[] = [
-  {
-    inicioKey: 'horarioInicioProducao',
-    fimKey: 'horarioFimProducao',
-    label: 'Fermentação',
-  },
-  { inicioKey: 'horarioInicioForno', fimKey: 'horarioFimForno', label: 'Forno' },
-  {
-    inicioKey: 'horarioInicioEmbalagem',
-    fimKey: 'horarioFimEmbalagem',
-    label: 'Embalagem',
-  },
-];
-
-function snapshotToDraft(snapshot: ConfigOperacaoSnapshot): Draft {
-  return {
-    horarioInicioProducao: snapshot.horarioInicioProducao,
-    horarioFimProducao: snapshot.horarioFimProducao,
-    horarioInicioForno: snapshot.horarioInicioForno,
-    horarioFimForno: snapshot.horarioFimForno,
-    horarioInicioEmbalagem: snapshot.horarioInicioEmbalagem,
-    horarioFimEmbalagem: snapshot.horarioFimEmbalagem,
-    tempoMedioFermentacaoMin: snapshot.tempoMedioFermentacaoMin,
-    tempoMedioResfriamentoMin: snapshot.tempoMedioResfriamentoMin,
-  };
-}
+const HEADER_DESCRIPTION =
+  'Turnos por etapa e tempos médios usados no painel e no fluxo.';
 
 export default function OperacaoConfigClient() {
-  const [draft, setDraft] = useState<Draft>(snapshotToDraft(DEFAULT_CONFIG_OPERACAO));
+  const [draft, setDraft] = useState<OperacaoFormDraft>(
+    operacaoTurnoDraftManager.fromSnapshot(DEFAULT_CONFIG_OPERACAO),
+  );
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,14 +27,18 @@ export default function OperacaoConfigClient() {
     null,
   );
 
+  const applySnapshot = (snapshot: ConfigOperacaoSnapshot) => {
+    setDraft(operacaoTurnoDraftManager.fromSnapshot(snapshot));
+    setUpdatedAt(snapshot.updatedAt);
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/config/operacao');
       const data = (await res.json()) as ConfigOperacaoSnapshot & { error?: string };
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar');
-      setDraft(snapshotToDraft(data));
-      setUpdatedAt(data.updatedAt);
+      applySnapshot(data);
     } catch (err) {
       setMessage({
         type: 'err',
@@ -72,11 +53,10 @@ export default function OperacaoConfigClient() {
     void load();
   }, [load]);
 
-  const setClock = (key: keyof Draft, value: string) => {
-    setDraft((current) => ({ ...current, [key]: value }));
-  };
-
-  const setMinutes = (key: 'tempoMedioFermentacaoMin' | 'tempoMedioResfriamentoMin', value: string) => {
+  const setMinutes = (
+    key: 'tempoMedioFermentacaoMin' | 'tempoMedioResfriamentoMin',
+    value: string,
+  ) => {
     const parsed = Number(value);
     setDraft((current) => ({
       ...current,
@@ -92,15 +72,14 @@ export default function OperacaoConfigClient() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...draft,
+          ...operacaoTurnoDraftManager.toPatch(draft),
           tempoMedioFermentacaoMin: Number(draft.tempoMedioFermentacaoMin),
           tempoMedioResfriamentoMin: Number(draft.tempoMedioResfriamentoMin),
         }),
       });
       const data = (await res.json()) as ConfigOperacaoSnapshot & { error?: string };
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
-      setDraft(snapshotToDraft(data));
-      setUpdatedAt(data.updatedAt);
+      applySnapshot(data);
       setMessage({ type: 'ok', text: 'Parâmetros salvos.' });
     } catch (err) {
       setMessage({
@@ -112,11 +91,13 @@ export default function OperacaoConfigClient() {
     }
   };
 
+  const busy = loading || saving;
+
   return (
     <div className="max-w-2xl">
       <ConfigPageHeader
         title="Operação"
-        description="Horários do 1º turno e tempos médios usados no painel e no fluxo."
+        description={HEADER_DESCRIPTION}
         icon="schedule"
       />
 
@@ -132,38 +113,11 @@ export default function OperacaoConfigClient() {
           </p>
         ) : null}
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-stone-800">1º turno</h2>
-          <p className="text-xs text-stone-500">
-            Se o fim for menor que o início, vale o dia seguinte (ex.: 7h → 5h).
-          </p>
-          <div className="space-y-3">
-            {TURNO_ROWS.map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr_1fr] sm:items-end"
-              >
-                <p className="text-sm font-medium text-stone-700 sm:pb-2.5">{row.label}</p>
-                <Input
-                  type="time"
-                  label="Início"
-                  numeric
-                  value={draft[row.inicioKey]}
-                  onChange={(event) => setClock(row.inicioKey, event.target.value)}
-                  disabled={loading || saving}
-                />
-                <Input
-                  type="time"
-                  label="Fim"
-                  numeric
-                  value={draft[row.fimKey]}
-                  onChange={(event) => setClock(row.fimKey, event.target.value)}
-                  disabled={loading || saving}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+        <OperacaoTurnosSection
+          drafts={draft.etapas}
+          disabled={busy}
+          onChange={(etapas) => setDraft((current) => ({ ...current, etapas }))}
+        />
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-stone-800">Tempos médios</h2>
@@ -178,7 +132,7 @@ export default function OperacaoConfigClient() {
               onChange={(event) =>
                 setMinutes('tempoMedioFermentacaoMin', event.target.value)
               }
-              disabled={loading || saving}
+              disabled={busy}
             />
             <Input
               type="number"
@@ -190,7 +144,7 @@ export default function OperacaoConfigClient() {
               onChange={(event) =>
                 setMinutes('tempoMedioResfriamentoMin', event.target.value)
               }
-              disabled={loading || saving}
+              disabled={busy}
             />
           </div>
         </section>
@@ -203,7 +157,7 @@ export default function OperacaoConfigClient() {
           ) : (
             <span />
           )}
-          <Button type="button" onClick={() => void handleSave()} disabled={loading || saving}>
+          <Button type="button" onClick={() => void handleSave()} disabled={busy}>
             {saving ? 'Salvando…' : 'Salvar'}
           </Button>
         </div>
