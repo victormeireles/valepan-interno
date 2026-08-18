@@ -1,0 +1,883 @@
+# Filas WIP no Fluxo de Produção — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Painel "Pães em trânsito" no `/realizado/fluxo-processo` com três filas (a produzir / fermentando / resfriando), prazo físico por último lote + tempo médio, e detalhe por OP ao clicar.
+
+**Architecture:** Domínio puro `FluxoFilasBuilder` calcula WIP por OP a partir dos lotes já carregados; FIFO de embalagem espelha `fluxo-op-relogio.ts`. Service anexa `fluxo.filas` no mesmo GET de carga (sem query extra). UI usa `FluxoDisplayScale.fromUn` para LT/UN/CX e painel expandível abaixo dos tiles.
+
+**Tech Stack:** TypeScript, Vitest, Next.js 15 App Router, React 19, Tailwind v4, design system Valepan (pt-BR, Material Icons, Geist Mono tabular-nums).
+
+**Spec:** `docs/superpowers/specs/2026-08-17-fluxo-filas-wip-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; quebrar ao se aproximar de 400. Funções < 40 linhas. SRP por classe/arquivo.
+- Volume no domínio sempre em **unidades**; UI converte com `FluxoDisplayScale` (toggle LT / UN / CX).
+- Prazo físico: `asOf > ultimoLoteEm + tempoMedio` (critério B); **não** usar horários previstos da OP.
+- Tempos: `camaraMin` / `resfrioMin` de `config_operacao`; fallback `FLUXO_PADRAO` (180 / 60).
+- `asOf` hoje BR = `Date.now()`; dia passado = fim do dia civil BR (`23:59:59.999 -03:00`).
+- OPs do filas = **todas** as OPs do dia (não filtrar por estimativa, diferente do controle).
+- Embalagem: alocação FIFO por `ordemPlanejamento` (mesma regra do relógio).
+- Interação: clique/toque no tile; sem hover como primário; sem modal/drawer lateral.
+- Copy pt-BR exata da spec ("Pães em trânsito", "acima do prazo", "preso há", etc.).
+- Sem tabela nova, sem rota nova, sem segundo fetch, sem links para telas de realizado.
+- Testes: Vitest (`npm test -- <arquivo>`). Sem E2E neste ciclo.
+- Commits: incluir no passo; se a sessão não pediu commit, pular o `git commit`.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/fluxo-processo/filas/fluxo-filas-types.ts` | Tipos `FluxoFilasDia`, `FluxoFilaResumo`, `FluxoFilaItem`, inputs |
+| `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts` | FIFO emb → unidades alocadas por OP |
+| `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts` | Testes FIFO |
+| `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts` | Cálculo das 3 filas + prazo físico |
+| `src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts` | 9 cenários da spec |
+| `src/lib/utils/date-utils.ts` | `brazilDayEndUtcMs(dateISO)` |
+| `src/lib/utils/date-utils.test.ts` | Teste do helper |
+| `src/lib/services/fluxo-filas-attach.ts` | Anexa `fluxo.filas` ao payload |
+| `src/lib/services/fluxo-filas-attach.test.ts` | Integração attach + payload |
+| `src/domain/fluxo-processo/fluxo-processo-types.ts` | Campo `filas` em `VpFluxoPayload` |
+| `src/lib/services/fluxo-processo-service.ts` | Chama attach + `filasAsOfMs` |
+| `src/components/FluxoProcesso/fluxo-fila-format.ts` | Duração "preso há", qty formatada |
+| `src/components/FluxoProcesso/fluxo-fila-format.test.ts` | Testes formatador |
+| `src/components/FluxoProcesso/FluxoFilaTile.tsx` | Tile clicável de uma fila |
+| `src/components/FluxoProcesso/FluxoFilaDetalheList.tsx` | Lista expandível de OPs |
+| `src/components/FluxoProcesso/FluxoFilasPanel.tsx` | Orquestra tiles + detalhe |
+| `src/components/FluxoProcesso/FluxoProcessoScreen.tsx` | Encaixa panel entre cards e gráfico |
+
+---
+
+### Task 1: Tipos de domínio + helper fim do dia BR
+
+**Files:**
+- Create: `src/domain/fluxo-processo/filas/fluxo-filas-types.ts`
+- Modify: `src/lib/utils/date-utils.ts`
+- Test: `src/lib/utils/date-utils.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `FluxoFilaKey = 'aProduzir' | 'fermentando' | 'resfriando'`
+  - `FluxoFilaItem`, `FluxoFilaResumo`, `FluxoFilasDia` (conforme spec)
+  - `FluxoFilasOpInput` — `{ id, ordemPlanejamento, produtoNome, assadeiraNome, unidades }`
+  - `FluxoFilasBuilderInput` — ops + eventos ferm/forno/emb + camaraMin/resfrioMin + asOfMs
+  - `brazilDayEndUtcMs(isoDate: string): number`
+
+- [ ] **Step 1: Write types**
+
+Create `src/domain/fluxo-processo/filas/fluxo-filas-types.ts`:
+
+```typescript
+import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+
+export type FluxoFilaKey = 'aProduzir' | 'fermentando' | 'resfriando';
+
+export type FluxoFilaItem = {
+  ordemProducaoId: string;
+  ordemPlanejamento: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  volumeUn: number;
+  preso: boolean;
+  presoMin: number | null;
+  ultimoLoteEm: string | null;
+};
+
+export type FluxoFilaResumo = {
+  totalUn: number;
+  presoUn: number;
+  items: FluxoFilaItem[];
+};
+
+export type FluxoFilasDia = {
+  aProduzir: FluxoFilaResumo;
+  fermentando: FluxoFilaResumo;
+  resfriando: FluxoFilaResumo;
+};
+
+export type FluxoFilasOpInput = {
+  id: string;
+  ordemPlanejamento: number;
+  produtoNome: string;
+  assadeiraNome: string;
+  unidades: number;
+};
+
+export type FluxoFilasBuilderInput = {
+  ops: FluxoFilasOpInput[];
+  eventosFerm: FluxoControleEventoInput[];
+  eventosForno: FluxoControleEventoInput[];
+  eventosEmb: FluxoControleEventoInput[];
+  camaraMin: number;
+  resfrioMin: number;
+  asOfMs: number;
+};
+```
+
+- [ ] **Step 2: Write failing test for `brazilDayEndUtcMs`**
+
+Add to `src/lib/utils/date-utils.test.ts`:
+
+```typescript
+import { brazilDayEndUtcMs } from './date-utils';
+
+it('brazilDayEndUtcMs retorna 23:59:59.999 no fuso BR', () => {
+  const ms = brazilDayEndUtcMs('2026-08-12');
+  expect(new Date(ms).toISOString()).toBe('2026-08-13T02:59:59.999Z');
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npm test -- src/lib/utils/date-utils.test.ts`
+Expected: FAIL — `brazilDayEndUtcMs` is not defined
+
+- [ ] **Step 4: Implement helper**
+
+Add to `src/lib/utils/date-utils.ts`:
+
+```typescript
+/** Fim do dia civil BR (23:59:59.999) como epoch ms UTC. */
+export function brazilDayEndUtcMs(isoDate: string): number {
+  return Date.parse(`${isoDate}T23:59:59.999-03:00`);
+}
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npm test -- src/lib/utils/date-utils.test.ts`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas/fluxo-filas-types.ts src/lib/utils/date-utils.ts src/lib/utils/date-utils.test.ts
+git commit -m "feat(fluxo): tipos das filas WIP e helper fim do dia BR"
+```
+
+---
+
+### Task 2: FIFO embalagem → unidades por OP
+
+**Files:**
+- Create: `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts`
+- Test: `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts`
+
+**Interfaces:**
+- Consumes: `FluxoFilasOpInput`, `FluxoControleEventoInput`
+- Produces:
+  - `class FluxoFilasFifoEmb`
+    - `alocarUnidades(ops: FluxoFilasOpInput[], eventosEmb: FluxoControleEventoInput[]): Map<string, number>`
+
+- [ ] **Step 1: Write failing test**
+
+Create `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts`:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { FluxoFilasFifoEmb } from './fluxo-filas-fifo-emb';
+import type { FluxoFilasOpInput } from './fluxo-filas-types';
+
+const fifo = new FluxoFilasFifoEmb();
+
+const ops: FluxoFilasOpInput[] = [
+  { id: 'op-1', ordemPlanejamento: 1, produtoNome: 'A', assadeiraNome: 'X', unidades: 100 },
+  { id: 'op-2', ordemPlanejamento: 2, produtoNome: 'B', assadeiraNome: 'Y', unidades: 50 },
+];
+
+describe('FluxoFilasFifoEmb', () => {
+  it('aloca emb parcial na primeira OP e resto na segunda', () => {
+    const map = fifo.alocarUnidades(ops, [
+      {
+        ordemProducaoId: undefined,
+        produtoNome: 'A',
+        assadeiraNome: 'X',
+        unidades: 120,
+        produzidoEm: '2026-08-12T14:00:00-03:00',
+        dataOp: '2026-08-12',
+      },
+    ]);
+    expect(map.get('op-1')).toBe(100);
+    expect(map.get('op-2')).toBe(20);
+  });
+
+  it('retorna zero para OPs sem emb', () => {
+    const map = fifo.alocarUnidades(ops, []);
+    expect(map.get('op-1')).toBe(0);
+    expect(map.get('op-2')).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm test -- src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts`
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implement FIFO**
+
+Create `src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts`:
+
+```typescript
+import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+import type { FluxoFilasOpInput } from './fluxo-filas-types';
+
+export class FluxoFilasFifoEmb {
+  alocarUnidades(
+    ops: FluxoFilasOpInput[],
+    eventosEmb: FluxoControleEventoInput[],
+  ): Map<string, number> {
+    const sortedOps = [...ops].sort(
+      (a, b) => a.ordemPlanejamento - b.ordemPlanejamento,
+    );
+    const sortedEv = [...eventosEmb].sort(
+      (a, b) => Date.parse(a.produzidoEm) - Date.parse(b.produzidoEm),
+    );
+    const alocado = new Map<string, number>();
+    for (const op of sortedOps) alocado.set(op.id, 0);
+    let opIdx = 0;
+    let restante = sortedOps[0]?.unidades ?? 0;
+    for (const ev of sortedEv) {
+      let pendente = ev.unidades;
+      while (pendente > 0 && opIdx < sortedOps.length) {
+        const op = sortedOps[opIdx];
+        const take = Math.min(pendente, restante);
+        alocado.set(op.id, (alocado.get(op.id) ?? 0) + take);
+        pendente -= take;
+        restante -= take;
+        if (restante === 0) {
+          opIdx += 1;
+          restante = sortedOps[opIdx]?.unidades ?? 0;
+        }
+      }
+    }
+    return alocado;
+  }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm test -- src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.ts src/domain/fluxo-processo/filas/fluxo-filas-fifo-emb.test.ts
+git commit -m "feat(fluxo): FIFO de embalagem para filas WIP"
+```
+
+---
+
+### Task 3: FluxoFilasBuilder (domínio principal)
+
+**Files:**
+- Create: `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts`
+- Test: `src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+
+**Interfaces:**
+- Consumes: `FluxoFilasBuilderInput`, `FluxoFilasFifoEmb`
+- Produces:
+  - `class FluxoFilasBuilder`
+    - `build(input: FluxoFilasBuilderInput): FluxoFilasDia | null` — `null` se `ops.length === 0`
+
+- [ ] **Step 1: Write failing tests (cenários 1–4 da spec)**
+
+Create `src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts` with helpers:
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { FluxoFilasBuilder } from './fluxo-filas-builder';
+import type { FluxoFilasBuilderInput, FluxoFilasOpInput } from './fluxo-filas-types';
+
+const DATE = '2026-08-12';
+const builder = new FluxoFilasBuilder();
+
+function iso(hhmm: string): string {
+  return `${DATE}T${hhmm}:00-03:00`;
+}
+
+function op(partial: Partial<FluxoFilasOpInput> & Pick<FluxoFilasOpInput, 'id'>): FluxoFilasOpInput {
+  return {
+    ordemPlanejamento: 1,
+    produtoNome: 'Bun',
+    assadeiraNome: 'Bun',
+    unidades: 100,
+    ...partial,
+  };
+}
+
+function baseInput(overrides: Partial<FluxoFilasBuilderInput> = {}): FluxoFilasBuilderInput {
+  return {
+    ops: [op({ id: 'op-1' })],
+    eventosFerm: [],
+    eventosForno: [],
+    eventosEmb: [],
+    camaraMin: 180,
+    resfrioMin: 60,
+    asOfMs: Date.parse(iso('12:00')),
+    ...overrides,
+  };
+}
+
+describe('FluxoFilasBuilder', () => {
+  it('OP sem fermentação entra em a produzir', () => {
+    const result = builder.build(baseInput());
+    expect(result?.aProduzir.totalUn).toBe(100);
+    expect(result?.aProduzir.items).toHaveLength(1);
+    expect(result?.fermentando.totalUn).toBe(0);
+    expect(result?.resfriando.totalUn).toBe(0);
+  });
+
+  it('fermentando = ferm - forno', () => {
+    const result = builder.build(
+      baseInput({
+        eventosFerm: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 100, produzidoEm: iso('06:00'), dataOp: DATE },
+        ],
+        eventosForno: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 40, produzidoEm: iso('09:00'), dataOp: DATE },
+        ],
+      }),
+    );
+    expect(result?.aProduzir.totalUn).toBe(0);
+    expect(result?.fermentando.totalUn).toBe(60);
+  });
+
+  it('marca preso quando último lote ferm + camaraMin < asOf', () => {
+    const result = builder.build(
+      baseInput({
+        eventosFerm: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 100, produzidoEm: iso('06:00'), dataOp: DATE },
+        ],
+        asOfMs: Date.parse(iso('12:00')), // 6h depois > 180min
+      }),
+    );
+    expect(result?.fermentando.presoUn).toBe(100);
+    expect(result?.fermentando.items[0].presoMin).toBe(180);
+  });
+
+  it('não marca preso dentro do prazo de câmara', () => {
+    const result = builder.build(
+      baseInput({
+        eventosFerm: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 100, produzidoEm: iso('11:30'), dataOp: DATE },
+        ],
+        asOfMs: Date.parse(iso('12:00')),
+      }),
+    );
+    expect(result?.fermentando.presoUn).toBe(0);
+    expect(result?.fermentando.items[0].preso).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npm test -- src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+Expected: FAIL — module not found
+
+- [ ] **Step 3: Implement builder (mínimo para passar 1–4)**
+
+Create `src/domain/fluxo-processo/filas/fluxo-filas-builder.ts`:
+
+```typescript
+import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+import { FluxoFilasFifoEmb } from './fluxo-filas-fifo-emb';
+import type {
+  FluxoFilaItem,
+  FluxoFilaResumo,
+  FluxoFilasBuilderInput,
+  FluxoFilasDia,
+  FluxoFilasOpInput,
+} from './fluxo-filas-types';
+
+function somaUn(eventos: FluxoControleEventoInput[], opId: string): number {
+  return eventos
+    .filter((e) => e.ordemProducaoId === opId)
+    .reduce((t, e) => t + e.unidades, 0);
+}
+
+function maxProduzidoEm(eventos: FluxoControleEventoInput[], opId: string): string | null {
+  const daOp = eventos.filter((e) => e.ordemProducaoId === opId);
+  if (daOp.length === 0) return null;
+  return daOp.reduce(
+    (max, ev) => (Date.parse(ev.produzidoEm) > Date.parse(max) ? ev.produzidoEm : max),
+    daOp[0].produzidoEm,
+  );
+}
+
+function calcPreso(
+  wipUn: number,
+  ultimoLoteEm: string | null,
+  tempoMin: number,
+  asOfMs: number,
+): { preso: boolean; presoMin: number | null } {
+  if (wipUn <= 0 || ultimoLoteEm === null) return { preso: false, presoMin: null };
+  const limiteMs = Date.parse(ultimoLoteEm) + tempoMin * 60_000;
+  if (asOfMs <= limiteMs) return { preso: false, presoMin: null };
+  return {
+    preso: true,
+    presoMin: Math.floor((asOfMs - limiteMs) / 60_000),
+  };
+}
+
+function montarResumo(items: FluxoFilaItem[]): FluxoFilaResumo {
+  const totalUn = items.reduce((t, i) => t + i.volumeUn, 0);
+  const presoUn = items.filter((i) => i.preso).reduce((t, i) => t + i.volumeUn, 0);
+  return { totalUn, presoUn, items };
+}
+
+function ordenarItems(items: FluxoFilaItem[]): FluxoFilaItem[] {
+  return [...items].sort((a, b) => {
+    const aPreso = a.presoMin ?? -1;
+    const bPreso = b.presoMin ?? -1;
+    if (bPreso !== aPreso) return bPreso - aPreso;
+    return a.ordemPlanejamento - b.ordemPlanejamento;
+  });
+}
+
+export class FluxoFilasBuilder {
+  constructor(private readonly fifoEmb = new FluxoFilasFifoEmb()) {}
+
+  build(input: FluxoFilasBuilderInput): FluxoFilasDia | null {
+    if (input.ops.length === 0) return null;
+    const ops = [...input.ops].sort((a, b) => a.ordemPlanejamento - b.ordemPlanejamento);
+    const embPorOp = this.fifoEmb.alocarUnidades(ops, input.eventosEmb);
+
+    const aProduzir: FluxoFilaItem[] = [];
+    const fermentando: FluxoFilaItem[] = [];
+    const resfriando: FluxoFilaItem[] = [];
+
+    for (const op of ops) {
+      const fermUn = somaUn(input.eventosFerm, op.id);
+      const fornoUn = somaUn(input.eventosForno, op.id);
+      const embUn = embPorOp.get(op.id) ?? 0;
+
+      if (fermUn === 0) {
+        aProduzir.push({
+          ordemProducaoId: op.id,
+          ordemPlanejamento: op.ordemPlanejamento,
+          produtoNome: op.produtoNome,
+          assadeiraNome: op.assadeiraNome,
+          volumeUn: op.unidades,
+          preso: false,
+          presoMin: null,
+          ultimoLoteEm: null,
+        });
+        continue;
+      }
+
+      const wipFerm = Math.max(0, fermUn - fornoUn);
+      if (wipFerm > 0) {
+        const ultimoFerm = maxProduzidoEm(input.eventosFerm, op.id);
+        const presoFerm = calcPreso(wipFerm, ultimoFerm, input.camaraMin, input.asOfMs);
+        fermentando.push({
+          ordemProducaoId: op.id,
+          ordemPlanejamento: op.ordemPlanejamento,
+          produtoNome: op.produtoNome,
+          assadeiraNome: op.assadeiraNome,
+          volumeUn: wipFerm,
+          ...presoFerm,
+          ultimoLoteEm: ultimoFerm,
+        });
+      }
+
+      const wipResfrio = Math.max(0, fornoUn - embUn);
+      if (wipResfrio > 0) {
+        const ultimoForno = maxProduzidoEm(input.eventosForno, op.id);
+        const presoResfrio = calcPreso(wipResfrio, ultimoForno, input.resfrioMin, input.asOfMs);
+        resfriando.push({
+          ordemProducaoId: op.id,
+          ordemPlanejamento: op.ordemPlanejamento,
+          produtoNome: op.produtoNome,
+          assadeiraNome: op.assadeiraNome,
+          volumeUn: wipResfrio,
+          ...presoResfrio,
+          ultimoLoteEm: ultimoForno,
+        });
+      }
+    }
+
+    return {
+      aProduzir: montarResumo(ordenarItems(aProduzir)),
+      fermentando: montarResumo(ordenarItems(fermentando)),
+      resfriando: montarResumo(ordenarItems(resfriando)),
+    };
+  }
+}
+```
+
+- [ ] **Step 4: Run tests — expect PASS for 1–4**
+
+Run: `npm test -- src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+
+- [ ] **Step 5: Add tests 5–9 and fix if needed**
+
+Append to the same test file:
+
+```typescript
+  it('novo lote ferm zera preso', () => {
+    const result = builder.build(
+      baseInput({
+        eventosFerm: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 50, produzidoEm: iso('06:00'), dataOp: DATE },
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 50, produzidoEm: iso('11:50'), dataOp: DATE },
+        ],
+        asOfMs: Date.parse(iso('12:00')),
+      }),
+    );
+    expect(result?.fermentando.presoUn).toBe(0);
+  });
+
+  it('resfriando = forno - emb FIFO', () => {
+    const result = builder.build(
+      baseInput({
+        ops: [
+          op({ id: 'op-1', unidades: 100, ordemPlanejamento: 1 }),
+          op({ id: 'op-2', unidades: 50, ordemPlanejamento: 2, produtoNome: 'HB' }),
+        ],
+        eventosForno: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('10:00'), dataOp: DATE },
+        ],
+        eventosEmb: [
+          { produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 30, produzidoEm: iso('11:00'), dataOp: DATE },
+        ],
+      }),
+    );
+    expect(result?.resfriando.items.find((i) => i.ordemProducaoId === 'op-1')?.volumeUn).toBe(50);
+  });
+
+  it('marca preso em resfriando', () => {
+    const result = builder.build(
+      baseInput({
+        eventosForno: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 80, produzidoEm: iso('06:00'), dataOp: DATE },
+        ],
+        asOfMs: Date.parse(iso('12:00')),
+      }),
+    );
+    expect(result?.resfriando.presoUn).toBe(80);
+  });
+
+  it('OP iniciada não entra em a produzir com saldo restante', () => {
+    const result = builder.build(
+      baseInput({
+        ops: [op({ id: 'op-1', unidades: 100 })],
+        eventosFerm: [
+          { ordemProducaoId: 'op-1', produtoNome: 'Bun', assadeiraNome: 'Bun', unidades: 20, produzidoEm: iso('06:00'), dataOp: DATE },
+        ],
+      }),
+    );
+    expect(result?.aProduzir.totalUn).toBe(0);
+  });
+
+  it('retorna null sem OPs', () => {
+    expect(builder.build(baseInput({ ops: [] }))).toBeNull();
+  });
+```
+
+Run: `npm test -- src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts`
+Expected: PASS (all 9)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/fluxo-processo/filas/fluxo-filas-builder.ts src/domain/fluxo-processo/filas/fluxo-filas-builder.test.ts
+git commit -m "feat(fluxo): builder das filas WIP com prazo físico"
+```
+
+---
+
+### Task 4: Anexar `fluxo.filas` ao payload da carga
+
+**Files:**
+- Create: `src/lib/services/fluxo-filas-attach.ts`
+- Create: `src/lib/services/fluxo-filas-attach.test.ts`
+- Modify: `src/domain/fluxo-processo/fluxo-processo-types.ts`
+- Modify: `src/lib/services/fluxo-processo-service.ts`
+
+**Interfaces:**
+- Consumes: `FluxoFilasBuilder`, `FluxoControleAttachOrdem`, `FluxoApontamentoEvento`
+- Produces:
+  - `class FluxoFilasServiceAttach`
+    - `attach(fluxo: VpFluxoPayload, input: FluxoFilasAttachInput): void`
+  - `FluxoFilasAttachInput` — ops + eventos + camaraMin/resfrioMin + asOfMs
+  - `VpFluxoPayload.filas: FluxoFilasDia | null`
+
+- [ ] **Step 1: Add `filas` to payload type**
+
+In `src/domain/fluxo-processo/fluxo-processo-types.ts`, import `FluxoFilasDia` and add to `VpFluxoPayload`:
+
+```typescript
+import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+
+// inside VpFluxoPayload:
+filas: FluxoFilasDia | null;
+```
+
+Ensure `FluxoProcessoBuilder.build()` initializes `filas: null` on the returned payload.
+
+- [ ] **Step 2: Write attach + failing integration test**
+
+Create `src/lib/services/fluxo-filas-attach.ts`:
+
+```typescript
+import { FluxoFilasBuilder } from '@/domain/fluxo-processo/filas/fluxo-filas-builder';
+import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+import type { FluxoFilasOpInput } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import type { FluxoApontamentoEvento, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
+
+export type FluxoFilasAttachInput = {
+  ops: FluxoFilasOpInput[];
+  fermentacao: FluxoApontamentoEvento[];
+  forno: FluxoApontamentoEvento[];
+  embalagem: FluxoApontamentoEvento[];
+  camaraMin: number;
+  resfrioMin: number;
+  asOfMs: number;
+};
+
+export class FluxoFilasServiceAttach {
+  constructor(private readonly builder = new FluxoFilasBuilder()) {}
+
+  attach(fluxo: VpFluxoPayload, input: FluxoFilasAttachInput): void {
+    fluxo.filas = this.builder.build({
+      ops: input.ops,
+      eventosFerm: toEvento(input.fermentacao),
+      eventosForno: toEvento(input.forno),
+      eventosEmb: toEvento(input.embalagem),
+      camaraMin: input.camaraMin,
+      resfrioMin: input.resfrioMin,
+      asOfMs: input.asOfMs,
+    });
+  }
+}
+
+function toEvento(rows: FluxoApontamentoEvento[]): FluxoControleEventoInput[] {
+  return rows.map((r) => ({
+    ordemProducaoId: r.ordemProducaoId,
+    produtoNome: r.produtoNome,
+    assadeiraNome: r.assadeiraNome,
+    unidades: r.unidades,
+    produzidoEm: r.produzidoEm,
+    dataOp: r.dataOp ?? '',
+  }));
+}
+```
+
+Create `src/lib/services/fluxo-filas-attach.test.ts` mirroring `fluxo-processo-controle-attach.test.ts` — build empty fluxo, call attach with one OP sem fermentação, assert `fluxo.filas?.aProduzir.totalUn === 100`.
+
+- [ ] **Step 3: Wire service**
+
+In `src/lib/services/fluxo-processo-service.ts`:
+
+```typescript
+import { FluxoFilasServiceAttach } from '@/lib/services/fluxo-filas-attach';
+import { brazilDayEndUtcMs, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+
+// in class:
+private readonly filasAttach = new FluxoFilasServiceAttach();
+
+// after controleAttach.attach(...):
+const todayISO = getTodayISOInBrazilTimezone();
+const filasAsOfMs = date === todayISO ? Date.now() : brazilDayEndUtcMs(date);
+const filasOps = ordensControle.map((o) => ({
+  id: o.id,
+  ordemPlanejamento: o.ordemPlanejamento,
+  produtoNome: o.produtoNome,
+  assadeiraNome: o.assadeiraNome,
+  unidades: o.unidades,
+}));
+this.filasAttach.attach(fluxo, {
+  ops: filasOps,
+  fermentacao,
+  forno,
+  embalagem,
+  camaraMin: config.tempoMedioFermentacaoMin,
+  resfrioMin: config.tempoMedioResfriamentoMin,
+  asOfMs: filasAsOfMs,
+});
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `npm test -- src/lib/services/fluxo-filas-attach.test.ts src/domain/fluxo-processo/fluxo-processo-builder.test.ts`
+Expected: PASS (fix builder tests if `filas: null` assertion needed)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/fluxo-processo/fluxo-processo-types.ts src/domain/fluxo-processo/fluxo-processo-builder.ts src/lib/services/fluxo-filas-attach.ts src/lib/services/fluxo-filas-attach.test.ts src/lib/services/fluxo-processo-service.ts
+git commit -m "feat(fluxo): anexa filas WIP ao payload da carga"
+```
+
+---
+
+### Task 5: Formatadores UI
+
+**Files:**
+- Create: `src/components/FluxoProcesso/fluxo-fila-format.ts`
+- Test: `src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `formatPresoDuracao(presoMin: number): string` — `"42 min"` ou `"2 h 15 min"`
+  - `formatFilaQty(un: number, scale: FluxoDisplayScale, assadeiraNome: string, produtoNome: string): string` — ex. `"340 LT"`
+
+- [ ] **Step 1: Write failing tests**
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { formatPresoDuracao } from './fluxo-fila-format';
+
+describe('formatPresoDuracao', () => {
+  it('minutos curtos', () => {
+    expect(formatPresoDuracao(42)).toBe('42 min');
+  });
+  it('horas e minutos', () => {
+    expect(formatPresoDuracao(135)).toBe('2 h 15 min');
+  });
+});
+```
+
+- [ ] **Step 2: Implement**
+
+```typescript
+import type { FluxoDisplayScale } from './fluxo-display-scale';
+import { fmtQty } from './fluxo-display-scale';
+
+export function formatPresoDuracao(presoMin: number): string {
+  if (presoMin < 60) return `${presoMin} min`;
+  const h = Math.floor(presoMin / 60);
+  const m = presoMin % 60;
+  return m > 0 ? `${h} h ${m} min` : `${h} h`;
+}
+
+export function formatFilaQty(
+  un: number,
+  scale: FluxoDisplayScale,
+  assadeiraNome: string,
+  produtoNome: string,
+): string {
+  const qty = scale.fromUn(un, assadeiraNome, produtoNome);
+  return `${fmtQty(qty)} ${scale.unitLabel.toUpperCase()}`;
+}
+```
+
+- [ ] **Step 3: Run tests — PASS**
+
+Run: `npm test -- src/components/FluxoProcesso/fluxo-fila-format.test.ts`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/components/FluxoProcesso/fluxo-fila-format.ts src/components/FluxoProcesso/fluxo-fila-format.test.ts
+git commit -m "feat(fluxo): formatadores do painel de filas WIP"
+```
+
+---
+
+### Task 6: Componentes UI do painel
+
+**Files:**
+- Create: `src/components/FluxoProcesso/FluxoFilaTile.tsx`
+- Create: `src/components/FluxoProcesso/FluxoFilaDetalheList.tsx`
+- Create: `src/components/FluxoProcesso/FluxoFilasPanel.tsx`
+- Modify: `src/components/FluxoProcesso/FluxoProcessoScreen.tsx`
+
+**Interfaces:**
+- Consumes: `FluxoFilasDia`, `FluxoFilaKey`, `FluxoDisplayScale` via `useFluxoDisplay()`
+- Produces: React components rendered between etapa cards and gráfico
+
+- [ ] **Step 1: Implement `FluxoFilaTile`**
+
+Props: `{ filaKey, label, icon, accentColor, totalUn, presoUn, showPrazo, active, onClick, detailId }`
+
+- `button` with `aria-expanded={active}`, `aria-controls={detailId}`, `min-h-11`
+- Volume grande `font-mono tabular-nums`
+- Sub-linha prazo só se `showPrazo`: amber se `presoUn > 0`, muted se zero
+- Texto "Ver OPs" + chevron `expand_more` rotacionado quando ativo
+
+- [ ] **Step 2: Implement `FluxoFilaDetalheList`**
+
+Props: `{ filaKey, resumo, label, scale, onClose }`
+
+- Cabeçalho: `{label} — {total} · {preso} acima do prazo` (omitir parte preso se showPrazo false)
+- `ListRow` por item: `#ordemPlanejamento`, produto, assadeira, volume, badge preso
+- Empty: "Nenhuma OP nesta fila."
+- Botão fechar com `aria-label="Fechar lista"`
+
+- [ ] **Step 3: Implement `FluxoFilasPanel`**
+
+Props: `{ fluxo: VpFluxoPayload }`
+
+State: `filaAberta: FluxoFilaKey | null`
+
+```typescript
+const TILES = [
+  { key: 'aProduzir' as const, label: 'A produzir', icon: 'schedule', showPrazo: false },
+  { key: 'fermentando' as const, label: 'Fermentando', icon: 'bakery_dining', showPrazo: true, accent: '#C6A848' },
+  { key: 'resfriando' as const, label: 'Resfriando', icon: 'ac_unit', showPrazo: true },
+];
+```
+
+- Sempre renderizar o card (mesmo `filas === null` → empty "Sem OPs para este dia.")
+- Subtítulo: hoje vs "Situação ao fim do dia" (`extractCalendarDate(fluxo.dia) === getTodayISOInBrazilTimezone()`)
+- Toggle tile: clicar ativo fecha; outro tile troca
+
+- [ ] **Step 4: Wire screen**
+
+In `FluxoProcessoScreen.tsx`, between `FluxoEtapaCards` and `FluxoProducaoPorHora`:
+
+```tsx
+<FluxoFilasPanel fluxo={fluxo} />
+```
+
+- [ ] **Step 5: Manual smoke test**
+
+Run: `npm run dev`
+Open: `/realizado/fluxo-processo`
+Verify: painel aparece abaixo dos cards; tiles clicáveis; lista expande; volumes mudam com toggle LT/UN/CX.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/components/FluxoProcesso/FluxoFilaTile.tsx src/components/FluxoProcesso/FluxoFilaDetalheList.tsx src/components/FluxoProcesso/FluxoFilasPanel.tsx src/components/FluxoProcesso/FluxoProcessoScreen.tsx
+git commit -m "feat(fluxo): painel Pães em trânsito com detalhe por OP"
+```
+
+---
+
+## Self-review (spec coverage)
+
+| Requisito spec | Task |
+|----------------|------|
+| 3 filas WIP | Task 3 |
+| Prazo físico critério B | Task 3 |
+| FIFO emb | Task 2 |
+| Toggle LT/UN/CX | Task 5–6 |
+| Detalhe por OP, clique | Task 6 |
+| Posição abaixo cards | Task 6 |
+| `asOf` hoje vs fim do dia | Task 1 + 4 |
+| Sem OPs → empty visível | Task 3 + 6 |
+| Acessibilidade tiles | Task 6 |
+| 9 testes domínio | Task 3 |
+| Sem rota/tabela nova | Task 4 |
+
+Nenhum placeholder TBD restante.
+
+---
+
+## Execução
+
+Plano salvo. Duas opções:
+
+1. **Subagent-Driven (recomendado)** — subagent por task, revisão entre tasks
+2. **Inline Execution** — executar nesta sessão com checkpoints
+
+Qual abordagem prefere?
