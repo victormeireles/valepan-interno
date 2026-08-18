@@ -23,7 +23,7 @@ export async function PATCH(request: Request) {
     const patch = configOperacaoMapper.parsePatch(body);
     if (!patch) {
       return NextResponse.json(
-        { error: 'Body inválido: informe horários HH:mm e tempos inteiros em minutos' },
+        { error: 'Body inválido: informe turnos (array) e tempos inteiros em minutos' },
         { status: 400 },
       );
     }
