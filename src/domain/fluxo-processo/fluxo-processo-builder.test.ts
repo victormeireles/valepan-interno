@@ -319,6 +319,7 @@ describe('FluxoProcessoBuilder', () => {
     };
 
     const payload = new FluxoProcessoBuilder().build(input);
+    expect(payload.filas).toBeNull();
     expect(payload.etapas.find((e) => e.key === 'ferm')!.un).toBe(2400);
     expect(payload.etapas.find((e) => e.key === 'forno')!.un).toBe(960);
     expect(payload.etapas.find((e) => e.key === 'emb')!.un).toBe(1440);

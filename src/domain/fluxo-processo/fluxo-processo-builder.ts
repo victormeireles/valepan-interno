@@ -167,6 +167,7 @@ export class FluxoProcessoBuilder {
       opAnterior: { un: opAnteriorUn, eventos: opAnteriorEventos },
       trocas: { forno: countTrocasAssadeira(forno) },
       unPorCaixaByProduto: converter.knownUnPorCaixaByProduto(),
+      filas: null,
     };
   }
 

@@ -1,3 +1,5 @@
+import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+
 export type FluxoEtapaKey = 'ferm' | 'forno' | 'emb';
 
 export type FluxoGap = {
@@ -140,6 +142,8 @@ export type VpFluxoPayload = {
    * Produtos ausentes não entram no modo CX.
    */
   unPorCaixaByProduto: Record<string, number>;
+  /** Filas WIP (a produzir / fermentando / resfriando); null se não há OPs do dia. */
+  filas: FluxoFilasDia | null;
 };
 
 export type FluxoApontamentoEvento = {
@@ -151,6 +155,8 @@ export type FluxoApontamentoEvento = {
   caixas?: number;
   /** Data da OP (YYYY-MM-DD). Embalagem usa para matrizAnt. */
   dataOp?: string;
+  /** Presente em ferm/forno; embalagem permanece FIFO sem OP obrigatória. */
+  ordemProducaoId?: string;
 };
 
 export type FluxoOrdemFatorInput = {

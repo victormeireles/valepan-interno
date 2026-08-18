@@ -1,5 +1,5 @@
 import { FluxoProcessoBuilder } from '@/domain/fluxo-processo/fluxo-processo-builder';
-import { FLUXO_ASSADEIRA_SEM } from '@/domain/fluxo-processo/fluxo-processo-constants';
+import { FLUXO_ASSADEIRA_SEM, FLUXO_PADRAO } from '@/domain/fluxo-processo/fluxo-processo-constants';
 import type {
   CargaFluxoProcessoResponse,
   FluxoApontamentoEvento,
@@ -16,7 +16,12 @@ import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLote
 import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
-import { addCalendarDaysISO } from '@/lib/utils/date-utils';
+import { FluxoFilasServiceAttach } from '@/lib/services/fluxo-filas-attach';
+import {
+  addCalendarDaysISO,
+  brazilDayEndUtcMs,
+  getTodayISOInBrazilTimezone,
+} from '@/lib/utils/date-utils';
 
 type AssadeiraRow = { id: string; nome: string };
 
@@ -25,6 +30,7 @@ type AssadeiraRow = { id: string; nome: string };
  */
 export class FluxoProcessoService {
   private readonly builder = new FluxoProcessoBuilder();
+  private readonly filasAttach = new FluxoFilasServiceAttach();
 
   constructor(private readonly productService = new SupabaseProductService()) {}
 
@@ -99,6 +105,7 @@ export class FluxoProcessoService {
         unidades: l.unidades,
         latas: l.assadeiras,
         dataOp: ordem?.dataProducao,
+        ordemProducaoId: l.ordemProducaoId,
       };
     });
 
@@ -111,6 +118,7 @@ export class FluxoProcessoService {
         unidades: l.unidades,
         latas: l.assadeiras,
         dataOp: ordem?.dataProducao,
+        ordemProducaoId: l.ordemProducaoId,
       };
     });
 
@@ -137,6 +145,24 @@ export class FluxoProcessoService {
     };
 
     const fluxo = this.builder.build(input);
+    const todayISO = getTodayISOInBrazilTimezone();
+    const filasAsOfMs = date === todayISO ? Date.now() : brazilDayEndUtcMs(date);
+    const filasOps = ordensDia.map((o) => ({
+      id: o.id,
+      ordemPlanejamento: o.ordemPlanejamento,
+      produtoNome: resolveProduto(o.produtoId, o),
+      assadeiraNome: resolveAssadeira(o) || FLUXO_ASSADEIRA_SEM,
+      unidades: o.quantidade.unidades,
+    }));
+    this.filasAttach.attach(fluxo, {
+      ops: filasOps,
+      fermentacao,
+      forno,
+      embalagem,
+      camaraMin: FLUXO_PADRAO.camaraMin,
+      resfrioMin: FLUXO_PADRAO.resfrioMin,
+      asOfMs: filasAsOfMs,
+    });
     return { date, ultimaDataComDados, fluxo };
   }
 
