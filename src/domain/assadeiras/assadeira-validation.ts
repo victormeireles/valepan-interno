@@ -1,7 +1,17 @@
 import { z } from 'zod';
+import { AssadeiraCor } from './assadeira-cor';
 
 const emptyToNull = (v: unknown) =>
   typeof v === 'string' && v.trim() === '' ? null : v;
+
+const normalizeCorHex = (value: unknown) => {
+  if (value == null) return AssadeiraCor.FALLBACK;
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return AssadeiraCor.FALLBACK;
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  return withHash.toUpperCase();
+};
 
 export const assadeiraFormSchema = z.object({
   nome: z.string().trim().min(1, 'Nome é obrigatório').max(100),
@@ -24,6 +34,12 @@ export const assadeiraFormSchema = z.object({
     .positive('Diâmetro deve ser positivo')
     .nullable()
     .optional(),
+  cor_hex: z.preprocess(
+    normalizeCorHex,
+    z
+      .string()
+      .regex(AssadeiraCor.HEX_PATTERN, 'Use um hexadecimal no formato #RRGGBB'),
+  ),
 });
 
 export type AssadeiraFormData = z.infer<typeof assadeiraFormSchema>;

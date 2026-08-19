@@ -17,6 +17,7 @@ export type Database = {
       assadeiras: {
         Row: {
           ativo: boolean
+          cor_hex: string
           created_at: string
           descricao: string | null
           diametro_buracos_mm: number | null
@@ -29,6 +30,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean
+          cor_hex?: string
           created_at?: string
           descricao?: string | null
           diametro_buracos_mm?: number | null
@@ -41,6 +43,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean
+          cor_hex?: string
           created_at?: string
           descricao?: string | null
           diametro_buracos_mm?: number | null

@@ -25,7 +25,14 @@ export default function AssadeirasMobileList({ items, onRowClick }: Props) {
           className={`${configMobileRowClass(index)} ${!item.ativo ? 'opacity-60' : ''}`}
         >
           <div className="min-w-0">
-            <p className="truncate font-semibold text-stone-900">{item.nome}</p>
+            <p className="flex min-w-0 items-center gap-2 truncate font-semibold text-stone-900">
+              <span
+                className="h-3.5 w-3.5 shrink-0 rounded-full border border-stone-200"
+                style={{ background: item.cor_hex }}
+                aria-hidden="true"
+              />
+              <span className="truncate">{item.nome}</span>
+            </p>
             <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
               <div>
                 <dt className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">

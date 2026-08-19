@@ -29,10 +29,10 @@ export function getPresetRange(
   return { de, ate };
 }
 
-/** Alinha com /estoque/auditoria: dia civil em UTC na query string. */
+/** Dia civil em America/Sao_Paulo (offset fixo -03:00). */
 export function dateInputsToIsoRange(de: string, ate: string): { de: string; ate: string } {
   return {
-    de: `${de}T00:00:00.000Z`,
-    ate: `${ate}T23:59:59.999Z`,
+    de: `${de}T00:00:00.000-03:00`,
+    ate: `${ate}T23:59:59.999-03:00`,
   };
 }

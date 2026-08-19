@@ -80,6 +80,7 @@ export default function EtapaWorklist({
         metaOpLabel={product.metaOpLabel}
         congelado={product.congelado}
         assadeira={product.assadeira}
+        assadeiraCorHex={product.assadeiraCorHex}
         cliente={product.cliente ?? (group.hideHeader ? group.cliente : undefined)}
         observacao={product.observacao ?? (group.hideHeader ? group.observacao : undefined)}
         dataEtiqueta={product.dataEtiqueta}

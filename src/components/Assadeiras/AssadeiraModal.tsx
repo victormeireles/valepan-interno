@@ -8,6 +8,8 @@ import {
   type Assadeira,
 } from '@/app/actions/assadeiras-actions';
 import AssadeiraCapacityPreview from '@/components/Assadeiras/AssadeiraCapacityPreview';
+import AssadeiraCorField from '@/components/Assadeiras/AssadeiraCorField';
+import { AssadeiraCor, assadeiraCor } from '@/domain/assadeiras/assadeira-cor';
 
 type AssadeiraModalProps = {
   isOpen: boolean;
@@ -35,6 +37,7 @@ export default function AssadeiraModal({
   const [ordem, setOrdem] = useState(0);
   const [ativo, setAtivo] = useState(true);
   const [diametro, setDiametro] = useState<number | ''>('');
+  const [corHex, setCorHex] = useState(AssadeiraCor.FALLBACK);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,6 +57,7 @@ export default function AssadeiraModal({
         ordem: assadeira?.ordem ?? 0,
         ativo: assadeira?.ativo ?? true,
         diametro: (assadeira?.diametro_buracos_mm ?? '') as number | '',
+        corHex: assadeira?.cor_hex ?? '#C6A848',
       };
       setNome(next.nome);
       setDescricao(next.descricao);
@@ -62,6 +66,7 @@ export default function AssadeiraModal({
       setOrdem(next.ordem);
       setAtivo(next.ativo);
       setDiametro(next.diametro);
+      setCorHex(next.corHex);
       setShowAdvanced(Boolean(assadeira?.diametro_buracos_mm || (assadeira?.ordem ?? 0) > 0));
       setError('');
       setFieldErrors({});
@@ -83,6 +88,7 @@ export default function AssadeiraModal({
       ordem,
       ativo,
       diametro,
+      corHex,
     });
     setDirty(current !== initialSnapshot.current);
   }, [
@@ -94,6 +100,7 @@ export default function AssadeiraModal({
     ordem,
     ativo,
     diametro,
+    corHex,
   ]);
 
   if (!isOpen && !animating) return null;
@@ -109,6 +116,10 @@ export default function AssadeiraModal({
     }
     if (diametro !== '' && (typeof diametro !== 'number' || diametro <= 0)) {
       errors.diametro_buracos_mm = 'Diâmetro deve ser positivo';
+    }
+    const hexCandidate = corHex.trim().startsWith('#') ? corHex.trim() : `#${corHex.trim()}`;
+    if (!assadeiraCor.isValid(hexCandidate)) {
+      errors.cor_hex = 'Use um hexadecimal no formato #RRGGBB';
     }
     return errors;
   };
@@ -135,6 +146,7 @@ export default function AssadeiraModal({
       ordem,
       ativo,
       diametro_buracos_mm: diametro === '' ? null : diametro,
+      cor_hex: assadeiraCor.normalize(corHex),
     };
 
     try {
@@ -261,6 +273,11 @@ export default function AssadeiraModal({
                   className={inputClassName}
                 />
               </div>
+              <AssadeiraCorField
+                value={corHex}
+                onChange={setCorHex}
+                error={fieldErrors.cor_hex}
+              />
             </fieldset>
 
             <fieldset className="space-y-4">

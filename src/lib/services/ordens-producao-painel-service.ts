@@ -18,7 +18,7 @@ import { estimativaProducaoService } from '@/lib/services/estimativa-producao-se
 import { toEstimativaView } from '@/domain/estimativa-producao/estimativa-producao-format';
 import type { EstimativaRecalcStatus } from '@/domain/estimativa-producao/estimativa-producao-types';
 
-type AssadeiraRow = { id: string; nome: string };
+type AssadeiraRow = { id: string; nome: string; cor_hex: string | null };
 
 export class OrdensProducaoPainelService {
   constructor(
@@ -54,6 +54,9 @@ export class OrdensProducaoPainelService {
     const tipoNomeById = new Map(tipos.map((t) => [t.id, t.nome]));
     const produtoNomeById = new Map(produtos.map((p) => [p.id, p.nome]));
     const assadeiraNomeById = new Map(assadeiras.map((a) => [a.id, a.nome]));
+    const assadeiraCorById = new Map(
+      assadeiras.map((a) => [a.id, a.cor_hex ?? '']),
+    );
 
     const items = ordens.map((ordem) =>
       this.mapOrdemToPainelItem(
@@ -61,6 +64,7 @@ export class OrdensProducaoPainelService {
         tipoNomeById,
         produtoNomeById,
         assadeiraNomeById,
+        assadeiraCorById,
         defaultAssadeiraByProduto,
         estimativaById.get(ordem.id) ?? null,
       ),
@@ -97,7 +101,7 @@ export class OrdensProducaoPainelService {
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const { data, error } = await supabase
       .from('assadeiras')
-      .select('id, nome')
+      .select('id, nome, cor_hex')
       .in('id', ids);
 
     if (error) {
@@ -122,6 +126,7 @@ export class OrdensProducaoPainelService {
     tipoNomeById: Map<string, string>,
     produtoNomeById: Map<string, string>,
     assadeiraNomeById: Map<string, string>,
+    assadeiraCorById: Map<string, string>,
     defaultAssadeiraByProduto: Map<string, string>,
     estimativa: OrdemProducaoEstimativaView | null,
   ): OrdemProducaoPainelItem {
@@ -130,6 +135,9 @@ export class OrdensProducaoPainelService {
     const caixas = ordem.quantidade.caixas;
     const assadeiraNome = ordem.assadeiraId
       ? assadeiraNomeById.get(ordem.assadeiraId)
+      : undefined;
+    const assadeiraCorHex = ordem.assadeiraId
+      ? assadeiraCorById.get(ordem.assadeiraId) || undefined
       : undefined;
     const assadeiraVariant = resolveAssadeiraDisplayVariant({
       assadeiraId: ordem.assadeiraId,
@@ -148,6 +156,7 @@ export class OrdensProducaoPainelService {
       modoQuantidade,
       assadeiras: ordem.assadeiras,
       assadeiraNome,
+      assadeiraCorHex,
       assadeiraVariant,
       unidades,
       caixas,

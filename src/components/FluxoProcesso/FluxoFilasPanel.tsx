@@ -90,6 +90,7 @@ function FluxoFilasTileGrid({
             presoUn={resumo.presoUn}
             showPrazo={tile.showPrazo}
             prazoMin={prazoMinDaFila(tile.key, padrao)}
+            ultimoLote={resumo.ultimoLote}
             active={filaAberta === tile.key}
             onClick={() => onToggle(tile.key)}
             detailId={detailIdFor(tile.key)}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { EstoqueMovimentoOrigem, EstoqueMovimentoRecord } from '@/domain/types/estoque-db';
 import { ORIGEM_COLORS, ORIGEM_LABELS } from '@/domain/estoque/movimento-display';
+import { dateInputsToIsoRange } from '@/lib/utils/estoque-date-range';
 import { formatQuantidade } from '@/lib/utils/quantidade-formatter';
 
 function formatDateTime(iso: string): string {
@@ -35,8 +36,8 @@ export default function EstoqueAuditoriaPage() {
     try {
       const params = new URLSearchParams();
       if (origem) params.set('origem', origem);
-      if (de) params.set('de', `${de}T00:00:00.000Z`);
-      if (ate) params.set('ate', `${ate}T23:59:59.999Z`);
+      if (de) params.set('de', dateInputsToIsoRange(de, de).de);
+      if (ate) params.set('ate', dateInputsToIsoRange(ate, ate).ate);
       params.set('limit', '200');
 
       const res = await fetch(`/api/estoque/movimentos?${params.toString()}`, {

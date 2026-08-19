@@ -2,6 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { CSSProperties } from 'react';
 import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
 import { ordemAssadeiraVisual } from '@/components/OrdensProducao/ordem-assadeira-visual';
 import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
@@ -66,9 +67,12 @@ export default function OrdemProducaoTableRow({
     >
       <td
         className={`${ordensProducaoTableCheckboxCellClass} ${ordemAssadeiraVisual.resolveRailClass(
-          ordem.assadeiraNome,
           ordem.assadeiraVariant,
         )}`}
+        style={
+          ordemAssadeiraVisual.resolve(ordem.assadeiraVariant, ordem.assadeiraCorHex)
+            ?.cssVar as CSSProperties | undefined
+        }
       >
         <OrdemProducaoRowCheckbox
           checked={selected}
@@ -96,6 +100,7 @@ export default function OrdemProducaoTableRow({
         <OrdemProducaoAssadeiraCell
           variant={ordem.assadeiraVariant}
           nome={ordem.assadeiraNome}
+          corHex={ordem.assadeiraCorHex}
         />
       </td>
 

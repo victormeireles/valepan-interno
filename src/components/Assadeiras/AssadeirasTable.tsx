@@ -106,7 +106,14 @@ export default function AssadeirasTable({
               onKeyDown={(event) => handleRowKeyDown(event, () => onRowClick(item))}
             >
               <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
-                {item.nome}
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-stone-200"
+                    style={{ background: item.cor_hex }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{item.nome}</span>
+                </span>
               </td>
               <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
                 {item.unidades_por_assadeira == null

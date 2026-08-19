@@ -2,10 +2,12 @@ import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/
 import { FluxoFilasEmbItems } from './fluxo-filas-emb-items';
 import { FluxoFilasEmbPorOp } from './fluxo-filas-emb-por-op';
 import { FluxoFilasLoteSaldo } from './fluxo-filas-lote-saldo';
+import { FluxoFilaUltimoLotePicker } from './fluxo-fila-ultimo-lote';
 import type {
   FluxoFilaItem,
   FluxoFilaItemOrigem,
   FluxoFilaResumo,
+  FluxoFilaUltimoLote,
   FluxoFilasBuilderInput,
   FluxoFilasDia,
   FluxoFilasOpInput,
@@ -67,7 +69,10 @@ function montarItem(
   };
 }
 
-function montarResumo(items: FluxoFilaItem[]): FluxoFilaResumo {
+function montarResumo(
+  items: FluxoFilaItem[],
+  ultimoLote: FluxoFilaUltimoLote | null,
+): FluxoFilaResumo {
   const totalUn = items
     .filter((i) => i.origem === 'op_do_dia')
     .reduce((t, i) => t + i.volumeUn, 0);
@@ -75,7 +80,7 @@ function montarResumo(items: FluxoFilaItem[]): FluxoFilaResumo {
     .filter((i) => i.origem !== 'op_do_dia')
     .reduce((t, i) => t + i.volumeUn, 0);
   const presoUn = items.filter((i) => i.preso).reduce((t, i) => t + i.volumeUn, 0);
-  return { totalUn, anteriorUn, presoUn, items };
+  return { totalUn, anteriorUn, presoUn, items, ultimoLote };
 }
 
 function ordenarItems(items: FluxoFilaItem[]): FluxoFilaItem[] {
@@ -127,10 +132,19 @@ export class FluxoFilasBuilder {
     ];
 
     return {
-      aProduzir: montarResumo(ordenarItems(aProduzir)),
-      fermentando: montarResumo(ordenarItems(fermentando)),
-      resfriando: montarResumo(ordenarItems(resfriando)),
-      embalado: montarResumo(embalado),
+      aProduzir: montarResumo(ordenarItems(aProduzir), null),
+      fermentando: montarResumo(
+        ordenarItems(fermentando),
+        FluxoFilaUltimoLotePicker.fromEventos(input.eventosFerm),
+      ),
+      resfriando: montarResumo(
+        ordenarItems(resfriando),
+        FluxoFilaUltimoLotePicker.fromEventos(input.eventosForno),
+      ),
+      embalado: montarResumo(
+        embalado,
+        FluxoFilaUltimoLotePicker.fromEventos(input.eventosEmb),
+      ),
     };
   }
 

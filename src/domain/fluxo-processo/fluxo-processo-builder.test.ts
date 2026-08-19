@@ -468,4 +468,25 @@ describe('FluxoProcessoBuilder', () => {
     expect(emb.blocoLancamentos).toHaveLength(1);
     expect(emb.blocoLancamentos[0].un).toBe(2880);
   });
+
+  it('usa cores cadastradas no lugar do mapa fixo', () => {
+    const payload = new FluxoProcessoBuilder().build({
+      dateISO: '2026-08-12',
+      planoUn: 100,
+      ordensDia: [
+        {
+          produtoNome: 'HB Bun',
+          assadeiraNome: 'Bun',
+          unidades: 100,
+          latas: 4,
+          caixas: 2,
+        },
+      ],
+      fermentacao: [],
+      forno: [],
+      embalagem: [],
+      coresByNome: { Bun: '#112233' },
+    });
+    expect(payload.cores.Bun).toBe('#112233');
+  });
 });

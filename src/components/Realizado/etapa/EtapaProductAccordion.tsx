@@ -20,6 +20,7 @@ export type EtapaProductAccordionProps = {
   metaOpLabel?: string;
   congelado?: boolean;
   assadeira?: string;
+  assadeiraCorHex?: string;
   cliente?: string;
   observacao?: string;
   dataEtiqueta?: string;
@@ -56,6 +57,7 @@ export default function EtapaProductAccordion({
   metaOpLabel,
   congelado,
   assadeira,
+  assadeiraCorHex,
   cliente,
   observacao,
   dataEtiqueta,
@@ -117,6 +119,7 @@ export default function EtapaProductAccordion({
         dataEtiqueta={dataEtiqueta}
         metaItems={metaItems}
         assadeira={assadeira}
+        assadeiraCorHex={assadeiraCorHex}
         horario={horario}
         producedLabel={producedLabel}
         targetLabel={targetLabel}

@@ -20,6 +20,7 @@ export type OrdemProducaoPainelItem = {
   modoQuantidade: ModoQuantidadeOrdem;
   assadeiras: number;
   assadeiraNome?: string;
+  assadeiraCorHex?: string;
   assadeiraVariant: AssadeiraDisplayVariant;
   unidades: number;
   caixas: number;

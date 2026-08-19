@@ -130,7 +130,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       },
     ]);
     assadeirasIn.mockResolvedValue({
-      data: [{ id: 'ass-1', nome: 'Lata 40' }],
+      data: [{ id: 'ass-1', nome: 'Lata 40', cor_hex: '#B45309' }],
       error: null,
     });
     recalcForDate.mockResolvedValue({ status: 'ok' });
@@ -167,6 +167,7 @@ describe('OrdensProducaoPainelService.getListForDate', () => {
       modoQuantidade: 'latas',
       assadeiras: 12,
       assadeiraNome: 'Lata 40',
+      assadeiraCorHex: '#B45309',
       assadeiraVariant: 'padrao',
       unidades: 480,
       caixas: 20,

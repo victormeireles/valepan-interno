@@ -2,6 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { CSSProperties } from 'react';
 import OrdemProducaoAssadeiraCell from '@/components/OrdensProducao/OrdemProducaoAssadeiraCell';
 import { ordemAssadeiraVisual } from '@/components/OrdensProducao/ordem-assadeira-visual';
 import OrdemProducaoDragHandle from '@/components/OrdensProducao/OrdemProducaoDragHandle';
@@ -35,10 +36,12 @@ export default function OrdemProducaoMobileRow({
     isDragging,
   } = useSortable({ id: ordem.id });
 
+  const visual = ordemAssadeiraVisual.resolve(ordem.assadeiraVariant, ordem.assadeiraCorHex);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
+    ...(visual?.cssVar ?? {}),
+  } as CSSProperties;
 
   const latasValue =
     ordem.modoQuantidade === 'latas' && ordem.assadeiras > 0 ? ordem.assadeiras : null;
@@ -50,7 +53,6 @@ export default function OrdemProducaoMobileRow({
       ref={setNodeRef}
       style={style}
       className={`${ordensProducaoRowClass} grid grid-cols-[auto_auto_1fr_auto] gap-x-2 gap-y-1 px-3 ${ordemAssadeiraVisual.resolveRailClass(
-        ordem.assadeiraNome,
         ordem.assadeiraVariant,
       )} ${
         isDragging ? 'relative z-10 bg-surface shadow-[0_12px_24px_-6px_rgb(28_25_23/0.18)] ring-1 ring-amber-200/80' : ''
@@ -85,6 +87,7 @@ export default function OrdemProducaoMobileRow({
               <OrdemProducaoAssadeiraCell
                 variant={ordem.assadeiraVariant}
                 nome={ordem.assadeiraNome}
+                corHex={ordem.assadeiraCorHex}
               />
             </span>
           ) : null}

@@ -61,7 +61,7 @@ export class FluxoProcessoBuilder {
     const emb = this.resolve(input.embalagem, converter, 'emb', input.dateISO);
 
     const ordemAss = this.buildOrdemAss([ferm, forno, emb], input.ordensDia);
-    const cores = this.buildCores(ordemAss);
+    const cores = this.buildCores(ordemAss, input.coresByNome);
 
     const byEtapa: Record<FluxoEtapaKey, FluxoMatrizEntry[]> = {
       ferm: ferm.map((e) => ({
@@ -259,10 +259,14 @@ export class FluxoProcessoBuilder {
     return [...withoutNa, ...extra.filter((a) => a !== FLUXO_ASSADEIRA_SEM), ...(hasNa ? [FLUXO_ASSADEIRA_SEM] : [])];
   }
 
-  private buildCores(ordemAss: string[]): Record<string, string> {
+  private buildCores(
+    ordemAss: string[],
+    cadastradas?: Record<string, string>,
+  ): Record<string, string> {
     const cores: Record<string, string> = {};
     for (const a of ordemAss) {
-      cores[a] = FLUXO_ASSADEIRA_CORES[a] ?? FLUXO_COR_ASSADEIRA_FALLBACK;
+      cores[a] =
+        cadastradas?.[a] ?? FLUXO_ASSADEIRA_CORES[a] ?? FLUXO_COR_ASSADEIRA_FALLBACK;
     }
     return cores;
   }

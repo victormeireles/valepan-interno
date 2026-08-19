@@ -20,7 +20,7 @@ import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 import { brazilCivilDayRangeIso } from '@/lib/services/ritmo-lotes-dia-loader';
 import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
 
-type AssadeiraRow = { id: string; nome: string };
+type AssadeiraRow = { id: string; nome: string; cor_hex: string | null };
 
 export class PainelFornoService {
   constructor(
@@ -139,6 +139,9 @@ export class PainelFornoService {
           assadeiraNome: ordem.assadeiraId
             ? names.assadeiraNomeById.get(ordem.assadeiraId)
             : undefined,
+          assadeiraCorHex: ordem.assadeiraId
+            ? names.assadeiraCorById.get(ordem.assadeiraId)
+            : undefined,
           temMultiplasAssadeirasCadastradas:
             (opcoesByProdutoId.get(ordem.produtoId) ?? 0) > 1,
           incluirNosTotais: visivelOrdemIds.has(ordem.id),
@@ -165,6 +168,7 @@ export class PainelFornoService {
       tipoNomeById: new Map(tipos.map((t) => [t.id, t.nome])),
       produtoNomeById: new Map(produtos.map((p) => [p.id, p.nome])),
       assadeiraNomeById: new Map(assadeiras.map((a) => [a.id, a.nome])),
+      assadeiraCorById: new Map(assadeiras.map((a) => [a.id, a.cor_hex ?? ''])),
     };
   }
 
@@ -174,7 +178,7 @@ export class PainelFornoService {
     const supabase = supabaseClientFactory.createServiceRoleClient();
     const { data, error } = await supabase
       .from('assadeiras')
-      .select('id, nome')
+      .select('id, nome, cor_hex')
       .in('id', ids);
 
     if (error) {

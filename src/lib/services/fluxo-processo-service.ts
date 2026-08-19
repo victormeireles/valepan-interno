@@ -7,6 +7,7 @@ import {
   RecorteVisivelEmbalagem,
   produtoNomesVisiveisDe,
 } from '@/domain/categorias/recorte-visivel-embalagem';
+import { assadeiraCor } from '@/domain/assadeiras/assadeira-cor';
 import { FluxoProcessoBuilder } from '@/domain/fluxo-processo/fluxo-processo-builder';
 import { FLUXO_ASSADEIRA_SEM, FLUXO_PADRAO } from '@/domain/fluxo-processo/fluxo-processo-constants';
 import type {
@@ -43,7 +44,7 @@ import {
   getTodayISOInBrazilTimezone,
 } from '@/lib/utils/date-utils';
 
-type AssadeiraRow = { id: string; nome: string };
+type AssadeiraRow = { id: string; nome: string; cor_hex: string | null };
 
 /**
  * Carrega apontamentos do dia civil BR e monta o payload VP_FLUXO.
@@ -194,6 +195,7 @@ export class FluxoProcessoService {
         camaraMin: config.tempoMedioFermentacaoMin ?? FLUXO_PADRAO.camaraMin,
         resfrioMin: config.tempoMedioResfriamentoMin ?? FLUXO_PADRAO.resfrioMin,
       },
+      coresByNome: assadeiraCor.indexByNome(assadeiras),
     };
 
     const fluxo = this.builder.build(input);
@@ -284,7 +286,7 @@ export class FluxoProcessoService {
   private async loadAssadeiraNames(ids: string[]): Promise<AssadeiraRow[]> {
     if (ids.length === 0) return [];
     const supabase = supabaseClientFactory.createServiceRoleClient();
-    const { data, error } = await supabase.from('assadeiras').select('id, nome').in('id', ids);
+    const { data, error } = await supabase.from('assadeiras').select('id, nome, cor_hex').in('id', ids);
     if (error) throw new Error(`Erro ao carregar assadeiras: ${error.message}`);
     return (data ?? []) as AssadeiraRow[];
   }

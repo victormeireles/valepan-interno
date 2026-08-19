@@ -18,6 +18,7 @@ export type Assadeira = {
   ordem: number;
   ativo: boolean;
   diametro_buracos_mm: number | null;
+  cor_hex: string;
   created_at: string;
   updated_at: string;
 };
@@ -72,6 +73,7 @@ export async function createAssadeira(
       ordem: parsed.data.ordem ?? 0,
       ativo: parsed.data.ativo ?? true,
       diametro_buracos_mm: parsed.data.diametro_buracos_mm ?? null,
+      cor_hex: parsed.data.cor_hex,
     })
     .select()
     .single();
@@ -82,6 +84,10 @@ export async function createAssadeira(
   }
 
   revalidatePath('/config/assadeiras');
+  revalidatePath('/ordens-producao');
+  revalidatePath('/realizado/fluxo-processo');
+  revalidatePath('/realizado/fermentacao');
+  revalidatePath('/realizado/forno');
   return { success: true, data: data as Assadeira };
 }
 
@@ -109,6 +115,7 @@ export async function updateAssadeira(
       ordem: parsed.data.ordem ?? 0,
       ativo: parsed.data.ativo ?? true,
       diametro_buracos_mm: parsed.data.diametro_buracos_mm ?? null,
+      cor_hex: parsed.data.cor_hex,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -121,6 +128,10 @@ export async function updateAssadeira(
   }
 
   revalidatePath('/config/assadeiras');
+  revalidatePath('/ordens-producao');
+  revalidatePath('/realizado/fluxo-processo');
+  revalidatePath('/realizado/fermentacao');
+  revalidatePath('/realizado/forno');
   return { success: true, data: data as Assadeira };
 }
 
@@ -142,5 +153,9 @@ export async function deactivateAssadeira(
   }
 
   revalidatePath('/config/assadeiras');
+  revalidatePath('/ordens-producao');
+  revalidatePath('/realizado/fluxo-processo');
+  revalidatePath('/realizado/fermentacao');
+  revalidatePath('/realizado/forno');
   return { success: true, data: data as Assadeira };
 }

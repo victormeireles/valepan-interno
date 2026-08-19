@@ -54,6 +54,7 @@ function ProductBadges({ congelado, hasPhoto, onProductPhotoClick }: ProductBadg
 export type EtapaProductTitleProps = {
   produto: string;
   assadeira?: string;
+  assadeiraCorHex?: string;
   tipoEstoqueCliente?: string;
   showTipoEstoqueMarcaBadge?: boolean;
   dataEtiqueta?: string;
@@ -65,6 +66,7 @@ export type EtapaProductTitleProps = {
 export default function EtapaProductTitle({
   produto,
   assadeira,
+  assadeiraCorHex,
   tipoEstoqueCliente,
   showTipoEstoqueMarcaBadge = false,
   dataEtiqueta,
@@ -79,7 +81,7 @@ export default function EtapaProductTitle({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {assadeira ? <AssadeiraNomeBadge nome={assadeira} /> : null}
+      {assadeira ? <AssadeiraNomeBadge nome={assadeira} corHex={assadeiraCorHex} /> : null}
       <span className="text-base font-semibold leading-snug tracking-[-0.004em] text-text-strong">
         {produto}
       </span>

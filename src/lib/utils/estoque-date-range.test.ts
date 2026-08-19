@@ -28,10 +28,18 @@ describe('getPresetRange', () => {
 });
 
 describe('dateInputsToIsoRange', () => {
-  it('converte inicio e fim do dia para ISO UTC', () => {
+  it('converte inicio e fim do dia civil em Brasilia', () => {
     const { de, ate } = dateInputsToIsoRange('2026-06-03', '2026-06-03');
-    expect(de).toBe('2026-06-03T00:00:00.000Z');
-    expect(ate).toBe('2026-06-03T23:59:59.999Z');
+    expect(de).toBe('2026-06-03T00:00:00.000-03:00');
+    expect(ate).toBe('2026-06-03T23:59:59.999-03:00');
+  });
+
+  it('inclui movimentos depois das 21h no mesmo dia civil BR', () => {
+    const { de, ate } = dateInputsToIsoRange('2026-08-18', '2026-08-18');
+    const saidaApos21h = new Date('2026-08-19T00:06:32.994Z').getTime();
+
+    expect(new Date(de).getTime()).toBeLessThanOrEqual(saidaApos21h);
+    expect(new Date(ate).getTime()).toBeGreaterThanOrEqual(saidaApos21h);
   });
 });
 

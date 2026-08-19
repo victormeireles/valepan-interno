@@ -188,6 +188,8 @@ export type FluxoBuilderInput = {
   forno: FluxoApontamentoEvento[];
   embalagem: FluxoApontamentoEvento[];
   padrao?: { camaraMin: number; resfrioMin: number };
+  /** Cores cadastradas por nome de assadeira (#RRGGBB). */
+  coresByNome?: Record<string, string>;
 };
 
 export type CargaFluxoProcessoResponse = {

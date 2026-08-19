@@ -10,6 +10,7 @@ describe('assadeiraFormSchema', () => {
     ordem: 0,
     ativo: true,
     diametro_buracos_mm: null,
+    cor_hex: '#C6A848',
   };
 
   it('aceita payload válido', () => {
@@ -40,5 +41,26 @@ describe('assadeiraFormSchema', () => {
     if (result.success) {
       expect(result.data.descricao).toBeNull();
     }
+  });
+
+  it('normaliza cor hexadecimal para #RRGGBB', () => {
+    const result = parseAssadeiraForm({ ...valid, cor_hex: 'c6a848' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cor_hex).toBe('#C6A848');
+    }
+  });
+
+  it('usa fallback quando a cor vem vazia', () => {
+    const result = parseAssadeiraForm({ ...valid, cor_hex: '' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cor_hex).toBe('#A8A29E');
+    }
+  });
+
+  it('rejeita hexadecimal inválido', () => {
+    expect(parseAssadeiraForm({ ...valid, cor_hex: '#FFF' }).success).toBe(false);
+    expect(parseAssadeiraForm({ ...valid, cor_hex: 'azul' }).success).toBe(false);
   });
 });

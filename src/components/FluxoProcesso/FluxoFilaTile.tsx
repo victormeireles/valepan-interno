@@ -1,9 +1,20 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { FluxoFilaItem, FluxoFilaKey } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import { Badge } from '@/components/ui/Badge';
+import type {
+  FluxoFilaItem,
+  FluxoFilaKey,
+  FluxoFilaUltimoLote,
+} from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import type { FluxoDisplayScale } from './fluxo-display-scale';
 import { useFluxoDisplay } from './fluxo-display-context';
-import { formatAcimaDoPrazoLinha, formatFilaResumoQty, formatNenhumAcimaDoPrazo, FluxoFilaEmbaladoCopy } from './fluxo-fila-format';
+import {
+  formatAcimaDoPrazoBadge,
+  formatFilaResumoQty,
+  FluxoFilaEmbaladoCopy,
+  FluxoFilaUltimoLoteCopy,
+} from './fluxo-fila-format';
 
 const AMBER_ACTIVE = '#D97706';
 
@@ -16,17 +27,11 @@ export type FluxoFilaTileProps = {
   presoUn: number;
   showPrazo: boolean;
   prazoMin?: number;
+  ultimoLote: FluxoFilaUltimoLote | null;
   active: boolean;
   onClick: () => void;
   detailId: string;
 };
-
-class FluxoFilaPrazoCopy {
-  static linha(presoUn: number, qtyLabel: string, prazoMin: number): string {
-    if (presoUn > 0) return formatAcimaDoPrazoLinha(qtyLabel, prazoMin);
-    return formatNenhumAcimaDoPrazo(prazoMin);
-  }
-}
 
 function tileActiveStyle(active: boolean): CSSProperties | undefined {
   if (!active) return undefined;
@@ -34,33 +39,6 @@ function tileActiveStyle(active: boolean): CSSProperties | undefined {
     border: `1px solid ${AMBER_ACTIVE}`,
     boxShadow: `0 0 0 3px color-mix(in srgb, ${AMBER_ACTIVE} 12%, transparent)`,
   };
-}
-
-function FluxoFilaTilePrazoLine({
-  showPrazo,
-  items,
-  presoUn,
-  prazoMin,
-}: {
-  showPrazo: boolean;
-  items: FluxoFilaItem[];
-  presoUn: number;
-  prazoMin: number;
-}) {
-  const { scale } = useFluxoDisplay();
-  if (!showPrazo) return null;
-  const qtyLabel = formatFilaResumoQty(items, scale, { presoOnly: true });
-  const preso = presoUn > 0;
-  return (
-    <p
-      className={[
-        'mt-1 text-[12px] font-medium',
-        preso ? 'text-amber-800' : 'text-text-muted',
-      ].join(' ')}
-    >
-      {FluxoFilaPrazoCopy.linha(presoUn, qtyLabel, prazoMin)}
-    </p>
-  );
 }
 
 function tileClassName(active: boolean): string {
@@ -77,6 +55,67 @@ class FluxoFilaAcaoCopy {
   static label(filaKey: FluxoFilaKey): string {
     return filaKey === 'aProduzir' ? 'Ver OPs' : 'Ver lotes';
   }
+}
+
+class FluxoFilaTileAlerts {
+  static prazo(
+    showPrazo: boolean,
+    presoUn: number,
+    items: FluxoFilaItem[],
+    prazoMin: number,
+    scale: FluxoDisplayScale,
+  ): string | null {
+    if (!showPrazo || presoUn <= 0) return null;
+    const qty = formatFilaResumoQty(items, scale, { presoOnly: true, compact: true });
+    return formatAcimaDoPrazoBadge(qty, prazoMin);
+  }
+
+  static anterior(
+    filaKey: FluxoFilaKey,
+    items: FluxoFilaItem[],
+    scale: FluxoDisplayScale,
+  ): string | null {
+    if (filaKey !== 'embalado') return null;
+    if (!items.some((i) => i.origem !== 'op_do_dia')) return null;
+    const qty = formatFilaResumoQty(items, scale, { origem: 'nao_do_dia', compact: true });
+    return FluxoFilaEmbaladoCopy.badgeApoio(qty, FluxoFilaEmbaladoCopy.datasOpAnteriores(items));
+  }
+}
+
+function FluxoFilaTileAlertBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'danger' | 'warning';
+}) {
+  return (
+    <Badge
+      tone={tone}
+      pill={false}
+      numeric
+      aria-hidden
+      className="shrink-0 px-1.5 py-0.5 text-[11px] leading-none"
+    >
+      {label}
+    </Badge>
+  );
+}
+
+function FluxoFilaTileUltimoLote({ lote }: { lote: FluxoFilaUltimoLote | null }) {
+  const { scale } = useFluxoDisplay();
+  if (!lote) return null;
+  const { qty, produto, hora } = FluxoFilaUltimoLoteCopy.partes(lote, scale);
+  return (
+    <p
+      className="mt-1 flex min-w-0 items-baseline gap-1 text-[11px] text-text-muted"
+      title={FluxoFilaUltimoLoteCopy.linha(lote, scale)}
+    >
+      <span className="shrink-0 font-mono tabular-nums text-text-strong">{qty}</span>
+      <span className="min-w-0 truncate">{produto}</span>
+      <span className="shrink-0 font-mono tabular-nums">{hora}</span>
+    </p>
+  );
 }
 
 function FluxoFilaTileAction({
@@ -111,6 +150,7 @@ export default function FluxoFilaTile({
   presoUn,
   showPrazo,
   prazoMin = 0,
+  ultimoLote,
   active,
   onClick,
   detailId,
@@ -120,17 +160,18 @@ export default function FluxoFilaTile({
     filaKey === 'embalado'
       ? formatFilaResumoQty(items, scale, { origem: 'op_do_dia' })
       : formatFilaResumoQty(items, scale);
-  const qtyAnt = formatFilaResumoQty(items, scale, { origem: 'nao_do_dia' });
-  const datas = FluxoFilaEmbaladoCopy.datasOpAnteriores(items);
-  const temAnterior = filaKey === 'embalado' && items.some((i) => i.origem !== 'op_do_dia');
-  const linhaApoio = temAnterior ? FluxoFilaEmbaladoCopy.linhaApoio(qtyAnt, datas) : null;
+  const alertaPrazo = FluxoFilaTileAlerts.prazo(showPrazo, presoUn, items, prazoMin, scale);
+  const alertaAnterior = FluxoFilaTileAlerts.anterior(filaKey, items, scale);
+  const alerta = alertaPrazo ?? alertaAnterior;
+  const alertaTone = alertaPrazo ? 'danger' : 'warning';
+  const ultimoLinha = ultimoLote ? FluxoFilaUltimoLoteCopy.linha(ultimoLote, scale) : null;
 
   return (
     <button
       type="button"
       aria-expanded={active}
       aria-controls={detailId}
-      aria-label={FluxoFilaEmbaladoCopy.ariaTile(label, volume, linhaApoio)}
+      aria-label={FluxoFilaEmbaladoCopy.ariaTile(label, volume, alerta, ultimoLinha)}
       onClick={onClick}
       style={tileActiveStyle(active)}
       data-fila-key={filaKey}
@@ -142,18 +183,13 @@ export default function FluxoFilaTile({
         </span>
         <span className="text-[15px] font-bold tracking-tight text-text-strong">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
-        {volume}
-      </p>
-      {linhaApoio ? (
-        <p className="mt-1 text-[11px] text-text-faint">{linhaApoio}</p>
-      ) : null}
-      <FluxoFilaTilePrazoLine
-        showPrazo={showPrazo}
-        items={items}
-        presoUn={presoUn}
-        prazoMin={prazoMin}
-      />
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <p className="font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
+          {volume}
+        </p>
+        {alerta ? <FluxoFilaTileAlertBadge label={alerta} tone={alertaTone} /> : null}
+      </div>
+      <FluxoFilaTileUltimoLote lote={ultimoLote} />
       <FluxoFilaTileAction active={active} filaKey={filaKey} />
     </button>
   );

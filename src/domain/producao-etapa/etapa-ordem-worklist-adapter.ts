@@ -95,6 +95,7 @@ function mapOrdemToProduct(
     id: ordem.ordemProducaoId,
     produto: ordem.produto,
     assadeira: showAssadeira ? ordem.assadeiraNome?.trim() : undefined,
+    assadeiraCorHex: showAssadeira ? ordem.assadeiraCorHex : undefined,
     observacao: observacao || undefined,
     somaProduzido: ordem.produzido,
     somaAProduzir: ordem.aProduzir,

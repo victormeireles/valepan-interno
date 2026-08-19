@@ -19,11 +19,20 @@ export type FluxoFilaItem = {
   origem: FluxoFilaItemOrigem;
 };
 
+export type FluxoFilaUltimoLote = {
+  produtoNome: string;
+  assadeiraNome: string;
+  volumeUn: number;
+  produzidoEm: string;
+};
+
 export type FluxoFilaResumo = {
   totalUn: number;
   anteriorUn: number;
   presoUn: number;
   items: FluxoFilaItem[];
+  /** Último apontamento da etapa (ferm/forno/emb); null em a produzir. */
+  ultimoLote: FluxoFilaUltimoLote | null;
 };
 
 export type FluxoFilasDia = {

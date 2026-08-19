@@ -77,4 +77,16 @@ describe('buildEtapaOrdemWorklistData', () => {
 
     expect(worklist.gruposAtivos[0]?.products[0]?.assadeira).toBe('24');
   });
+
+  it('propaga a cor cadastrada da assadeira no badge', () => {
+    const worklist = buildWorklist([
+      ordemBase({
+        assadeiraNome: '24',
+        assadeiraCorHex: '#6B7233',
+        temMultiplasAssadeirasCadastradas: true,
+      }),
+    ]);
+
+    expect(worklist.gruposAtivos[0]?.products[0]?.assadeiraCorHex).toBe('#6B7233');
+  });
 });

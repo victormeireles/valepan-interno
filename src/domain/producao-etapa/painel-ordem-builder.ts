@@ -21,6 +21,7 @@ export type BuildPainelOrdemInput = {
   produto: string;
   tipoEstoque: string;
   assadeiraNome?: string;
+  assadeiraCorHex?: string;
   temMultiplasAssadeirasCadastradas?: boolean;
   incluirNosTotais?: boolean;
   fermentacaoProduzido?: number;
@@ -48,6 +49,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     produto,
     tipoEstoque,
     assadeiraNome,
+    assadeiraCorHex,
     temMultiplasAssadeirasCadastradas,
     incluirNosTotais,
     fermentacaoProduzido,
@@ -107,6 +109,7 @@ export function buildPainelOrdem(input: BuildPainelOrdemInput): PainelOrdemEtapa
     finalizada,
     cascata,
     assadeiraNome: ordem.assadeiraId ? assadeiraNome : undefined,
+    assadeiraCorHex: ordem.assadeiraId ? assadeiraCorHex : undefined,
     temMultiplasAssadeirasCadastradas: temMultiplasAssadeirasCadastradas === true,
     incluirNosTotais: incluirNosTotais !== false,
     lotes: lotes.map(mapLoteToPainelEtapa),

@@ -29,6 +29,8 @@ export type PainelOrdemEtapa = {
   finalizada: boolean;
   cascata?: EtapaCascataDisplay;
   assadeiraNome?: string;
+  /** Cor cadastrada da assadeira (#RRGGBB). */
+  assadeiraCorHex?: string;
   /** Produto com >1 assadeira cadastrada (exceção/regra) — controla a tag no card. */
   temMultiplasAssadeirasCadastradas?: boolean;
   /** false = fora do recorte hamb/hot (Broa, pão). Toolbar e totais LT ignoram. */

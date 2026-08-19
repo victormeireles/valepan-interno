@@ -18,6 +18,7 @@ export type EtapaProductCardHeaderProps = {
   onProductPhotoClick?: () => void;
   /** Tag da assadeira à frente do nome (só com >1 opção cadastrada no produto). */
   assadeira?: string;
+  assadeiraCorHex?: string;
   /** Cliente inline, observação — entre produto e progresso no desktop */
   metaItems?: string[];
   /** Data da etiqueta (dd/mm) — badge destacado quando ≠ data da OP. */
@@ -219,6 +220,7 @@ export default function EtapaProductCardHeader({
   hasPhoto,
   onProductPhotoClick,
   assadeira,
+  assadeiraCorHex,
   metaItems = [],
   dataEtiqueta,
   tipoEstoqueCliente,
@@ -264,6 +266,7 @@ export default function EtapaProductCardHeader({
   const titleProps = {
     produto,
     assadeira,
+    assadeiraCorHex,
     tipoEstoqueCliente,
     showTipoEstoqueMarcaBadge,
     dataEtiqueta,
