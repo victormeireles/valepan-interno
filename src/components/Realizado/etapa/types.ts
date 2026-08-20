@@ -65,6 +65,7 @@ export type EtapaLoteItem = {
   isDeleting?: boolean;
   isLast?: boolean;
   editLabel?: string;
+  turnoLabel?: string;
 };
 
 export type EtapaProductItem = {
@@ -191,6 +192,8 @@ export type RealizadoEtapaProps = {
   /** Substitui config.hasMeta quando informado */
   hasMeta?: boolean;
   onExtraAction?: () => void;
+  /** Chip de turno à direita do título da etapa, antes da data */
+  turnoChip?: ReactNode;
   /** Slot opcional após o conteúdo principal (ex.: modal backdrop) */
   overlaySlot?: ReactNode;
   /** Funde os cards de ritmo e previsão em um único card compacto (embalagem) */

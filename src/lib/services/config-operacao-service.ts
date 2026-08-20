@@ -7,12 +7,22 @@ import type {
   ConfigOperacaoPatch,
   ConfigOperacaoRow,
   ConfigOperacaoSnapshot,
+  ConfigOperacaoTurno,
+  ConfigOperacaoTurnoRow,
 } from '@/domain/config-operacao/config-operacao-types';
+import type { Database } from '@/types/database';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-const SELECT_COLUMNS =
-  'horario_inicio_producao, horario_fim_producao, horario_inicio_forno, horario_fim_forno, horario_inicio_embalagem, horario_fim_embalagem, tempo_medio_fermentacao_min, tempo_medio_resfriamento_min, updated_at';
+const SELECT_CONFIG =
+  'id, tempo_medio_fermentacao_min, tempo_medio_resfriamento_min, updated_at';
+const SELECT_TURNOS = 'etapa, numero, inicio, fim';
+const TURNOS_ETAPAS = ['fermentacao', 'forno', 'embalagem'] as const;
 
 const CACHE_TTL_MS = 30_000;
+
+type ServiceClient = SupabaseClient<Database>;
+
+type ConfigOperacaoTableRow = Database['public']['Tables']['config_operacao']['Row'];
 
 let cachedSnapshot: ConfigOperacaoSnapshot | null = null;
 let cacheExpiresAt = 0;
@@ -29,26 +39,11 @@ export class ConfigOperacaoService {
       return cachedSnapshot;
     }
 
-    const client = supabaseClientFactory.createServiceRoleClient();
-    const { data, error } = await client
-      .from('config_operacao')
-      .select(SELECT_COLUMNS)
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('[ConfigOperacaoService] Erro ao ler config:', error.message);
-      return DEFAULT_CONFIG_OPERACAO;
+    const snapshot = await this.loadSnapshot();
+    if (snapshot !== DEFAULT_CONFIG_OPERACAO) {
+      cachedSnapshot = snapshot;
+      cacheExpiresAt = now + CACHE_TTL_MS;
     }
-
-    if (!data) {
-      console.warn('[ConfigOperacaoService] Nenhuma linha de config encontrada');
-      return DEFAULT_CONFIG_OPERACAO;
-    }
-
-    const snapshot = configOperacaoMapper.mapRowToSnapshot(data as ConfigOperacaoRow);
-    cachedSnapshot = snapshot;
-    cacheExpiresAt = now + CACHE_TTL_MS;
     return snapshot;
   }
 
@@ -61,33 +56,128 @@ export class ConfigOperacaoService {
     }
 
     const client = supabaseClientFactory.createServiceRoleClient();
-    const { data: existing, error: readError } = await client
+    const id = await this.requireConfigId(client);
+    await this.persistMinutes(client, id, next);
+    if (patch.turnos) {
+      await this.replaceTurnos(client, patch.turnos);
+    }
+
+    this.invalidateCache();
+    return this.getConfig();
+  }
+
+  private async loadSnapshot(): Promise<ConfigOperacaoSnapshot> {
+    const client = supabaseClientFactory.createServiceRoleClient();
+    const row = await this.fetchConfigRow(client);
+    if (!row) return DEFAULT_CONFIG_OPERACAO;
+    const turnos = await this.fetchTurnos(client);
+    if (!turnos) return DEFAULT_CONFIG_OPERACAO;
+    return configOperacaoMapper.composeSnapshot(toMapperRow(row), turnos);
+  }
+
+  private async fetchConfigRow(
+    client: ServiceClient,
+  ): Promise<ConfigOperacaoTableRow | null> {
+    const { data, error } = await client
+      .from('config_operacao')
+      .select(SELECT_CONFIG)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[ConfigOperacaoService] Erro ao ler config:', error.message);
+      return null;
+    }
+    if (!data) {
+      console.warn('[ConfigOperacaoService] Nenhuma linha de config encontrada');
+      return null;
+    }
+    return data;
+  }
+
+  private async fetchTurnos(
+    client: ServiceClient,
+  ): Promise<ConfigOperacaoTurnoRow[] | null> {
+    const { data, error } = await client
+      .from('config_operacao_turnos')
+      .select(SELECT_TURNOS);
+
+    if (error) {
+      console.warn('[ConfigOperacaoService] Erro ao ler turnos:', error.message);
+      return null;
+    }
+    return data ?? [];
+  }
+
+  private async requireConfigId(client: ServiceClient): Promise<string> {
+    const { data, error } = await client
       .from('config_operacao')
       .select('id')
       .limit(1)
       .maybeSingle();
 
-    if (readError || !existing?.id) {
+    if (error || !data?.id) {
       throw new Error('Configuração de operação não encontrada no banco');
     }
+    return data.id;
+  }
 
-    const { data, error } = await client
+  private async persistMinutes(
+    client: ServiceClient,
+    id: string,
+    snapshot: ConfigOperacaoSnapshot,
+  ): Promise<void> {
+    const { error } = await client
       .from('config_operacao')
       .update({
-        ...configOperacaoMapper.snapshotToRow(next),
+        ...configOperacaoMapper.snapshotToRow(snapshot),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', existing.id)
-      .select(SELECT_COLUMNS)
-      .single();
+      .eq('id', id);
 
-    if (error || !data) {
-      throw new Error(error?.message ?? 'Falha ao atualizar configuração de operação');
+    if (error) {
+      throw new Error(error.message ?? 'Falha ao atualizar configuração de operação');
+    }
+  }
+
+  private async replaceTurnos(
+    client: ServiceClient,
+    turnos: ConfigOperacaoTurno[],
+  ): Promise<void> {
+    const { error: deleteError } = await client
+      .from('config_operacao_turnos')
+      .delete()
+      .in('etapa', [...TURNOS_ETAPAS]);
+
+    if (deleteError) {
+      throw new Error(deleteError.message ?? 'Falha ao substituir turnos de operação');
     }
 
-    this.invalidateCache();
-    return configOperacaoMapper.mapRowToSnapshot(data as ConfigOperacaoRow);
+    const { error: insertError } = await client
+      .from('config_operacao_turnos')
+      .insert(turnos.map(toTurnoInsert));
+
+    if (insertError) {
+      throw new Error(insertError.message ?? 'Falha ao gravar turnos de operação');
+    }
   }
+}
+
+function toMapperRow(row: ConfigOperacaoTableRow): ConfigOperacaoRow {
+  return {
+    tempo_medio_fermentacao_min: row.tempo_medio_fermentacao_min,
+    tempo_medio_resfriamento_min: row.tempo_medio_resfriamento_min,
+    updated_at: row.updated_at,
+  };
+}
+
+function toTurnoInsert(turno: ConfigOperacaoTurno) {
+  return {
+    etapa: turno.etapa,
+    numero: turno.numero,
+    inicio: turno.inicio,
+    fim: turno.fim,
+  };
 }
 
 export const configOperacaoService = new ConfigOperacaoService();

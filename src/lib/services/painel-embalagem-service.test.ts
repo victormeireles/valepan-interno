@@ -80,4 +80,17 @@ describe('mapLoteToPainel', () => {
     expect(mapped.loteId).toBe('l1');
     expect(mapped.quantidade.caixas).toBe(50);
   });
+
+  it('propaga turno do lote', () => {
+    const mapped = mapLoteToPainel({ ...makeLote('l1', 50), turno: 3 }, 'Não');
+
+    expect(mapped.turno).toBe(3);
+  });
+
+  it('propaga turno nulo em lote antigo', () => {
+    const mapped = mapLoteToPainel({ ...makeLote('l1', 50), turno: null }, 'Não');
+
+    expect(mapped.turno).toBeNull();
+  });
 });
+

@@ -198,6 +198,18 @@ export function hoursRemainingUntilClockTodayBr(endHour: number, endMinute: numb
   return (end - cur) / 60;
 }
 
+export function brazilClockMinutes(now: Date): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+  return hour * 60 + minute;
+}
+
 /** Data civil YYYY-MM-DD (America/São_Paulo) para um instante UTC. */
 export function getBrazilDateISOFromInstant(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', {

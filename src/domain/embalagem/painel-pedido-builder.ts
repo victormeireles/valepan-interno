@@ -38,6 +38,7 @@ export function mapLoteToPainel(
     palletFotoUrl: lote.fotos?.palletFotoUrl,
     palletFotoId: lote.fotos?.palletFotoId,
     palletFotoUploadedAt: lote.fotos?.palletFotoUploadedAt,
+    turno: lote.turno ?? null,
   };
 }
 

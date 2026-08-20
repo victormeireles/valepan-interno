@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  brazilClockMinutes,
   brazilClockUtcMs,
   brazilDayEndUtcMs,
   brazilSevenAmUtcMs,
@@ -63,6 +64,12 @@ describe('brazilDayEndUtcMs', () => {
   it('brazilDayEndUtcMs retorna 23:59:59.999 no fuso BR', () => {
     const ms = brazilDayEndUtcMs('2026-08-12');
     expect(new Date(ms).toISOString()).toBe('2026-08-13T02:59:59.999Z');
+  });
+});
+
+describe('brazilClockMinutes', () => {
+  it('retorna minutos desde meia-noite no fuso BR', () => {
+    expect(brazilClockMinutes(new Date('2026-08-18T18:00:00.000Z'))).toBe(15 * 60);
   });
 });
 

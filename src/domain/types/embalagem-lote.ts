@@ -1,4 +1,5 @@
 import type { Quantidade } from './inventario';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 
 export type EmbalagemLoteModo = 'parcial' | 'substituicao' | 'importado';
 
@@ -28,9 +29,11 @@ export interface EmbalagemLoteInsert {
   obsEmbalagem?: string | null;
   fotos?: EmbalagemLoteFotos;
   producaoAnterior?: Quantidade | null;
+  turno: ProducaoTurnoNumero;
 }
 
-export interface EmbalagemLoteRecord extends EmbalagemLoteInsert {
+export interface EmbalagemLoteRecord extends Omit<EmbalagemLoteInsert, 'turno'> {
   id: string;
   createdAt: string;
+  turno?: ProducaoTurnoNumero | null;
 }

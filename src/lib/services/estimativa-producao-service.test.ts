@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
+import {
+  configOperacaoMapper,
+  DEFAULT_CONFIG_OPERACAO,
+} from '@/domain/config-operacao/config-operacao-mapper';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import { EstimativaProducaoService } from './estimativa-producao-service';
 
@@ -55,12 +58,15 @@ describe('EstimativaProducaoService.recalcForDate', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    getConfig.mockResolvedValue({
-      ...DEFAULT_CONFIG_OPERACAO,
-      horarioInicioProducao: '00:00',
-      horarioInicioForno: '04:00',
-      horarioInicioEmbalagem: '07:00',
-    });
+    getConfig.mockResolvedValue(
+      configOperacaoMapper.mergeSnapshot(DEFAULT_CONFIG_OPERACAO, {
+        turnos: [
+          { etapa: 'fermentacao', numero: 1, inicio: '00:00', fim: '18:00' },
+          { etapa: 'forno', numero: 1, inicio: '04:00', fim: '18:00' },
+          { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+        ],
+      }),
+    );
     listProdutividade.mockResolvedValue([rates]);
     replaceForOrdens.mockResolvedValue(undefined);
     deleteForOrdemIds.mockResolvedValue(undefined);

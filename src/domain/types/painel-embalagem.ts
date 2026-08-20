@@ -1,5 +1,7 @@
 import type { EtapaCadeiaBarra } from '@/components/Realizado/etapa/etapa-cadeia-progresso-types';
 import type { EtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
+import type { ProducaoTurnoCargaDto } from '@/domain/producao-turno/producao-turno-carga';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 import type { Quantidade } from '@/domain/types/inventario';
 
 export type PainelLoteEmbalagem = {
@@ -19,6 +21,7 @@ export type PainelLoteEmbalagem = {
   palletFotoUrl?: string;
   palletFotoId?: string;
   palletFotoUploadedAt?: string;
+  turno?: ProducaoTurnoNumero | null;
 };
 
 export type PainelPedidoEmbalagem = {
@@ -73,4 +76,4 @@ export type CargaEmbalagemResponse = {
     date: string | null;
     items: DashboardSnapshot[];
   };
-};
+} & ProducaoTurnoCargaDto;

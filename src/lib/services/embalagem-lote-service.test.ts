@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ORDEM_ETAPA_STATUS } from '@/domain/producao-etapa/ordem-etapa-status-defaults';
+import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 
 const mockFindLoteById = vi.fn();
 const mockUpdateLoteById = vi.fn();
+const mockInsert = vi.fn();
 const mockFindTipoById = vi.fn();
 const mockFindProdutoById = vi.fn();
 const mockAplicarDelta = vi.fn();
@@ -10,12 +12,13 @@ const mockFindPedidoById = vi.fn();
 const mockSumQuantidadeByPedidoId = vi.fn();
 const mockAssertEtapaNaoFinalizada = vi.fn();
 const mockAplicarAposSalvarLote = vi.fn();
+const mockRequireNumero = vi.fn();
 
 vi.mock('@/data/embalagem/EmbalagemLoteRepository', () => ({
   embalagemLoteRepository: {
     findById: (...args: unknown[]) => mockFindLoteById(...args),
     updateById: (...args: unknown[]) => mockUpdateLoteById(...args),
-    insert: vi.fn(),
+    insert: (...args: unknown[]) => mockInsert(...args),
     deleteById: vi.fn(),
     sumQuantidadeByPedidoId: (...args: unknown[]) => mockSumQuantidadeByPedidoId(...args),
   },
@@ -77,6 +80,11 @@ vi.mock('@/lib/services/insumo-consumo-embalagem-service', () => ({
     estornar: vi.fn().mockResolvedValue({ aplicado: true, avisos: [] }),
   },
 }));
+vi.mock('@/lib/services/producao-turno-service', () => ({
+  producaoTurnoService: {
+    requireNumero: (...args: unknown[]) => mockRequireNumero(...args),
+  },
+}));
 
 describe('EmbalagemLoteService', () => {
   beforeEach(() => {
@@ -92,6 +100,10 @@ describe('EmbalagemLoteService', () => {
     });
     mockFindPedidoById.mockResolvedValue({
       id: 'pedido-1',
+      dataProducao: '2026-08-18',
+      dataFabricacaoEtiqueta: '2026-08-18',
+      tipoEstoqueId: 'tipo-1',
+      produtoId: 'produto-1',
       ...DEFAULT_ORDEM_ETAPA_STATUS,
     });
     mockFindTipoById.mockResolvedValue({ id: 'tipo-1', nome: 'Cliente' });
@@ -104,6 +116,8 @@ describe('EmbalagemLoteService', () => {
       kg: 0,
     });
     mockAplicarAposSalvarLote.mockResolvedValue({ id: 'pedido-1' });
+    mockRequireNumero.mockResolvedValue(1);
+    mockInsert.mockResolvedValue({ id: 'lote-new' });
   });
 
   it('rejeita atualização com todas as quantidades zeradas', async () => {
@@ -117,5 +131,34 @@ describe('EmbalagemLoteService', () => {
 
     expect(mockUpdateLoteById).not.toHaveBeenCalled();
     expect(mockAplicarDelta).not.toHaveBeenCalled();
+  });
+
+  it('carimba o turno ativo ao criar lote', async () => {
+    const { embalagemLoteService } = await import('./embalagem-lote-service');
+
+    await embalagemLoteService.criarLotePorPedidoEmbalagem({
+      pedidoEmbalagemId: 'pedido-1',
+      clienteNome: 'Cliente',
+      produtoNome: 'Produto',
+      quantidade: { caixas: 1, pacotes: 0, unidades: 0, kg: 0 },
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
+  });
+
+  it('não insere lote quando o turno do dia é inválido', async () => {
+    mockRequireNumero.mockRejectedValue(new TurnoRequeridoError());
+    const { embalagemLoteService } = await import('./embalagem-lote-service');
+
+    await expect(
+      embalagemLoteService.criarLotePorPedidoEmbalagem({
+        pedidoEmbalagemId: 'pedido-1',
+        clienteNome: 'Cliente',
+        produtoNome: 'Produto',
+        quantidade: { caixas: 1, pacotes: 0, unidades: 0, kg: 0 },
+      }),
+    ).rejects.toBeInstanceOf(TurnoRequeridoError);
+
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });

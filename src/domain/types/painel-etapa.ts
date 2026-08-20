@@ -1,5 +1,7 @@
 import type { EtapaCascataDisplay } from '@/domain/producao-etapa/etapa-cascata-display';
 import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
+import type { ProducaoTurnoCargaDto } from '@/domain/producao-turno/producao-turno-carga';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 import type { ProducaoLoteModo } from '@/domain/types/fermentacao-lote';
 
 export type ModoQuantidadePainelEtapa = 'assadeiras' | 'unidades';
@@ -47,6 +49,7 @@ export type PainelLoteEtapa = {
   fotoUrl?: string;
   fotoId?: string;
   fotoUploadedAt?: string;
+  turno?: ProducaoTurnoNumero | null;
 };
 
 export type EtapaDashboardSnapshot = {
@@ -64,4 +67,4 @@ export type CargaEtapaResponse = {
   dashboardDia: EtapaDashboardSnapshot[];
   comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
   comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
-};
+} & ProducaoTurnoCargaDto;

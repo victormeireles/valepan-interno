@@ -1,4 +1,5 @@
 import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 
 export type ProducaoLoteModo = 'parcial' | 'substituicao';
 
@@ -16,9 +17,11 @@ export interface FermentacaoLoteInsert {
   produzidoEm: string;
   fotos?: EtapaLoteFotos;
   producaoAnterior?: EtapaQuantidade | null;
+  turno: ProducaoTurnoNumero;
 }
 
-export interface FermentacaoLoteRecord extends FermentacaoLoteInsert {
+export interface FermentacaoLoteRecord extends Omit<FermentacaoLoteInsert, 'turno'> {
   id: string;
   createdAt: string;
+  turno?: ProducaoTurnoNumero | null;
 }

@@ -19,6 +19,7 @@ import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 import { brazilCivilDayRangeIso } from '@/lib/services/ritmo-lotes-dia-loader';
 import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
+import { attachTurnoCarga } from '@/lib/services/producao-turno-carga-attach';
 
 type AssadeiraRow = { id: string; nome: string; cor_hex: string | null };
 
@@ -88,7 +89,7 @@ export class PainelFornoService {
       visivelOrdemIds,
     );
 
-    return {
+    return attachTurnoCarga('forno', {
       date,
       ultimaDataComDados,
       ordens: ordensMain,
@@ -107,7 +108,7 @@ export class PainelFornoService {
           lotesAnterior.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
         ),
       },
-    };
+    });
   }
 
   private listLotesDoDia(dateISO: string) {

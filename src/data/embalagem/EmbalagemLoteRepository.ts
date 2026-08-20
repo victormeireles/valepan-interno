@@ -54,6 +54,7 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
     pallet_foto_id: fotos?.palletFotoId ?? null,
     pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
+    turno: input.turno,
   } as LoteInsertCompat;
 }
 
@@ -91,6 +92,7 @@ function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
       palletFotoUploadedAt: row.pallet_foto_uploaded_at ?? undefined,
     },
     producaoAnterior: row.producao_anterior as EmbalagemLoteInsert['producaoAnterior'],
+    turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null,
   };
 }
 

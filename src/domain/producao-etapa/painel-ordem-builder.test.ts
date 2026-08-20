@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPainelOrdem } from './painel-ordem-builder';
+import { buildPainelOrdem, mapLoteToPainelEtapa } from './painel-ordem-builder';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import { DEFAULT_ORDEM_ETAPA_STATUS } from './ordem-etapa-status-defaults';
@@ -156,3 +156,17 @@ describe('buildPainelOrdem', () => {
   });
 });
 
+
+describe('mapLoteToPainelEtapa', () => {
+  it('propaga turno do lote', () => {
+    const mapped = mapLoteToPainelEtapa({ ...lotes[0], turno: 2 });
+
+    expect(mapped.turno).toBe(2);
+  });
+
+  it('propaga turno nulo em lote antigo', () => {
+    const mapped = mapLoteToPainelEtapa({ ...lotes[0], turno: null });
+
+    expect(mapped.turno).toBeNull();
+  });
+});

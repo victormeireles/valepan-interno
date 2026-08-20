@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   snapshotsToDashboardItems,
 } from '@/domain/producao-etapa/painel-dashboard-adapter';
+import {
+  readTurnoCarga,
+  type ProducaoTurnoCargaAtivo,
+  type ProducaoTurnoCargaDto,
+} from '@/domain/producao-turno/producao-turno-carga';
+import type { ProducaoTurnoCadastrado } from '@/domain/producao-turno/producao-turno-types';
 import type {
   EtapaDashboardSnapshot,
   PainelOrdemEtapa,
@@ -16,7 +22,7 @@ type EtapaPainelCargaResponse = {
   dashboardDia?: EtapaDashboardSnapshot[];
   comparacaoSemana: { date: string; items: EtapaDashboardSnapshot[] };
   comparacaoAnterior: { date: string | null; items: EtapaDashboardSnapshot[] };
-};
+} & Partial<ProducaoTurnoCargaDto>;
 
 type UseEtapaPainelCargaOptions = {
   etapa: 'fermentacao' | 'forno';
@@ -54,6 +60,8 @@ export function useEtapaPainelCarga({
   const [dashboardItems, setDashboardItems] = useState(
     snapshotsToDashboardItems([]),
   );
+  const [turnos, setTurnos] = useState<ProducaoTurnoCadastrado[]>([]);
+  const [turnoAtivo, setTurnoAtivo] = useState<ProducaoTurnoCargaAtivo | null>(null);
 
   const applyCargaResponse = useCallback(
     (data: EtapaPainelCargaResponse, currentDate: string) => {
@@ -69,6 +77,9 @@ export function useEtapaPainelCarga({
 
       initialDateResolved.current = true;
       setOrdens(data.ordens);
+      const turnoCarga = readTurnoCarga(data);
+      setTurnos(turnoCarga.turnos);
+      setTurnoAtivo(turnoCarga.turnoAtivo);
       setComparisonWeekDate(data.comparacaoSemana.date);
       setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
       setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
@@ -140,6 +151,8 @@ export function useEtapaPainelCarga({
     dashboardWeek: comparisonWeekItems,
     comparisonWeekDate,
     dateComparisonPrev,
+    turnos,
+    turnoAtivo,
     refreshOrdensOnly,
   };
 }

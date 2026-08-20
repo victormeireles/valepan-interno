@@ -29,6 +29,7 @@ export default function RealizadoEtapa({
   callbacks,
   hasMeta: hasMetaProp,
   onExtraAction,
+  turnoChip,
   overlaySlot,
   ritmoCompacto = false,
 }: RealizadoEtapaProps) {
@@ -47,6 +48,7 @@ export default function RealizadoEtapa({
         metrics={toolbar}
         hasMeta={hasMeta}
         onExtraAction={onExtraAction}
+        turnoChip={turnoChip}
       />
 
       <div className="pb-10 pt-4">

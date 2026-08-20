@@ -33,6 +33,7 @@ import {
 import { configOperacaoService } from '@/lib/services/config-operacao-service';
 import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 import { brazilCivilDayRangeIso } from '@/lib/services/ritmo-lotes-dia-loader';
+import { attachTurnoCarga } from '@/lib/services/producao-turno-carga-attach';
 
 export { buildPainelPedido, mapLoteToPainel } from '@/domain/embalagem/painel-pedido-builder';
 
@@ -193,7 +194,7 @@ export class PainelEmbalagemService {
       ctx.categoriasVisiveis,
     );
 
-    return {
+    return attachTurnoCarga('embalagem', {
       date,
       ultimaDataComDados,
       pedidos: pedidosMain,
@@ -207,7 +208,7 @@ export class PainelEmbalagemService {
         date: dateAnterior,
         items: lotesEmbToDashboardSnapshots(recorte.lotesPorProduto(lotesAnterior)),
       },
-    };
+    });
   }
 
   private listLotesDoDia(dateISO: string) {

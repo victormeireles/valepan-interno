@@ -20,6 +20,7 @@ import {
 } from '@/domain/realizado/painel-pedido-adapter';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { ProductionStatus } from '@/domain/types/realizado';
+import { turnoLabelFromNumero } from '@/domain/producao-turno/producao-turno-carga';
 import { formatISODateBrNoYear, formatLocalTimeHHmm } from '@/lib/utils/date-utils';
 
 export const EMBALAGEM_ETAPA_CONFIG: RealizadoEtapaConfig = {
@@ -144,6 +145,7 @@ function mapPedidoToProduct(
       isDeleting: deletingLoteId === embalagemItem.loteId,
       isLast: loteIndex === pedido.lotes.length - 1,
       editLabel: `Editar lote ${loteIndex + 1} de ${embalagemItem.produto}`,
+      turnoLabel: turnoLabelFromNumero(lote.turno),
     };
   });
 

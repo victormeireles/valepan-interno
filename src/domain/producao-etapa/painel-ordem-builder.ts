@@ -38,6 +38,7 @@ export function mapLoteToPainelEtapa(lote: FermentacaoLoteRecord): PainelLoteEta
     fotoUrl: lote.fotos?.fotoUrl,
     fotoId: lote.fotos?.fotoId,
     fotoUploadedAt: lote.fotos?.fotoUploadedAt,
+    turno: lote.turno ?? null,
   };
 }
 

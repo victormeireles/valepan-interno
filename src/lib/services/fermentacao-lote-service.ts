@@ -16,6 +16,7 @@ import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import { etapaFinalizacaoService } from '@/lib/services/etapa-finalizacao-service';
 import { insumoConsumoProducaoService } from '@/lib/services/insumo-consumo-producao-service';
+import { producaoTurnoService } from '@/lib/services/producao-turno-service';
 
 export type CriarLotePorOrdemInput = {
   ordemProducaoId: string;
@@ -102,6 +103,7 @@ export class FermentacaoLoteService {
   async criarLotePorOrdem(
     input: CriarLotePorOrdemInput,
   ): Promise<FermentacaoLoteOperacaoResultado> {
+    const turno = await producaoTurnoService.requireNumero('fermentacao', new Date());
     const ordem = await ordemProducaoRepository.findById(input.ordemProducaoId);
     if (!ordem) {
       throw new Error('Ordem de produção não encontrada');
@@ -120,6 +122,7 @@ export class FermentacaoLoteService {
       unidades: input.quantidade.unidades,
       produzidoEm: new Date().toISOString(),
       fotos: input.fotos,
+      turno,
     });
 
     await aplicarFinalizacaoAposSalvar(ordem, input.continuaProduzindo);

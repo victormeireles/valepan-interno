@@ -39,6 +39,7 @@ function toDbInsert(input: FermentacaoLoteInsert): LoteInsertRow {
     foto_id: fotos?.fotoId ?? null,
     foto_uploaded_at: fotos?.fotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
+    turno: input.turno,
   };
 }
 
@@ -57,6 +58,7 @@ function fromDbRow(row: LoteRow): FermentacaoLoteRecord {
       fotoUploadedAt: row.foto_uploaded_at ?? undefined,
     },
     producaoAnterior: row.producao_anterior as FermentacaoLoteInsert['producaoAnterior'],
+    turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null,
   };
 }
 
