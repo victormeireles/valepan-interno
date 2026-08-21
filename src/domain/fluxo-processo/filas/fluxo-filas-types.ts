@@ -1,8 +1,10 @@
 import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
 
-export type FluxoFilaKey = 'aProduzir' | 'fermentando' | 'resfriando' | 'embalado';
+export type FluxoFilaKey = 'aProduzir' | 'fermentando' | 'resfriando' | 'embalado' | 'perdas';
 
 export type FluxoFilaItemOrigem = 'op_do_dia' | 'op_anterior' | 'sem_op';
+
+export type FluxoFilaPerdaOrigem = 'fermentacao' | 'forno' | 'embalagem';
 
 export type FluxoFilaItem = {
   ordemProducaoId: string;
@@ -17,6 +19,8 @@ export type FluxoFilaItem = {
   ultimoLoteEm: string | null;
   dataOp: string | null;
   origem: FluxoFilaItemOrigem;
+  /** Preenchido só na fila Perdas: etapa cujo fechamento gerou o saldo. */
+  perdaOrigem: FluxoFilaPerdaOrigem | null;
 };
 
 export type FluxoFilaUltimoLote = {
@@ -40,6 +44,7 @@ export type FluxoFilasDia = {
   fermentando: FluxoFilaResumo;
   resfriando: FluxoFilaResumo;
   embalado: FluxoFilaResumo;
+  perdas: FluxoFilaResumo;
 };
 
 export type FluxoFilasOpInput = {
@@ -52,6 +57,9 @@ export type FluxoFilasOpInput = {
   latas: number;
   caixas: number;
   dataProducao: string;
+  fermentacaoFinalizada?: boolean;
+  fornoFinalizada?: boolean;
+  embalagemFinalizada?: boolean;
 };
 
 export type FluxoFilasBuilderInput = {

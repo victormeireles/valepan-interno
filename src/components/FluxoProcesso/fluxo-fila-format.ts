@@ -2,6 +2,7 @@ import type {
   FluxoFilaItem,
   FluxoFilaItemOrigem,
   FluxoFilaKey,
+  FluxoFilaPerdaOrigem,
   FluxoFilaUltimoLote,
 } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import { formatBrazilHourMinuteLabel } from '@/lib/utils/date-utils';
@@ -142,6 +143,23 @@ export class FluxoFilaEmbaladoCopy {
       if (item.origem === 'op_anterior' && item.dataOp) datas.add(item.dataOp);
     }
     return [...datas].sort((a, b) => b.localeCompare(a));
+  }
+}
+
+const PERDA_LABEL: Record<FluxoFilaPerdaOrigem, { badge: string; heading: string }> = {
+  fermentacao: { badge: 'não fermentado', heading: 'Não fermentado' },
+  forno: { badge: 'não assado', heading: 'Não assado' },
+  embalagem: { badge: 'não embalado', heading: 'Não embalado' },
+};
+
+export class FluxoFilaPerdasCopy {
+  static badge(origem: FluxoFilaPerdaOrigem | null): string | null {
+    if (!origem) return null;
+    return PERDA_LABEL[origem].badge;
+  }
+
+  static heading(origem: FluxoFilaPerdaOrigem): string {
+    return PERDA_LABEL[origem].heading;
   }
 }
 

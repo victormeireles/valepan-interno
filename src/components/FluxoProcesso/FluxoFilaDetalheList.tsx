@@ -6,9 +6,10 @@ import type {
   FluxoFilaResumo,
 } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoDisplayScale } from './fluxo-display-scale';
-import { FluxoFilaDetalheZona, FluxoFilaEmbaladoZonas } from './FluxoFilaDetalheZona';
+import { FluxoFilaDetalheZona, FluxoFilaEmbaladoZonas, FluxoFilaPerdasZonas } from './FluxoFilaDetalheZona';
 import {
   FluxoFilaEmbaladoCopy,
+  FluxoFilaPerdasCopy,
   formatAcimaDoPrazoLinha,
   formatFilaResumoQty,
 } from './fluxo-fila-format';
@@ -87,7 +88,22 @@ export default function FluxoFilaDetalheList({
         <IconButton icon="close" label="Fechar lista" variant="ghost" size="lg" onClick={onClose} />
       </div>
       {vazio ? (
-        <p className="py-3 text-sm text-text-muted">Nenhum item nesta fila.</p>
+        <p className="py-3 text-sm text-text-muted">
+          {filaKey === 'perdas' ? 'Nenhuma perda neste dia.' : 'Nenhum item nesta fila.'}
+        </p>
+      ) : filaKey === 'perdas' ? (
+        <div>
+          {FluxoFilaPerdasZonas.particionar(resumo.items).map((zona, gi, zonas) => (
+            <FluxoFilaDetalheZona
+              key={zona.origem}
+              heading={FluxoFilaPerdasCopy.heading(zona.origem)}
+              items={zona.items}
+              scale={scale}
+              filaKey={filaKey}
+              evenStart={FluxoFilaPerdasZonas.evenStart(zonas, gi)}
+            />
+          ))}
+        </div>
       ) : (
         <div>
           <FluxoFilaDetalheZona

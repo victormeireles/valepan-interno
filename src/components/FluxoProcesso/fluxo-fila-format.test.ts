@@ -11,6 +11,7 @@ import {
   formatPresoDuracao,
   formatPresoDuracaoCompacta,
   FluxoFilaEmbaladoCopy,
+  FluxoFilaPerdasCopy,
   FluxoFilaUltimoLoteCopy,
 } from './fluxo-fila-format';
 
@@ -76,6 +77,7 @@ function item(
     ultimoLoteEm: partial.ultimoLoteEm ?? null,
     dataOp: partial.dataOp ?? '2026-08-12',
     origem: partial.origem ?? 'op_do_dia',
+    perdaOrigem: partial.perdaOrigem ?? null,
     presoMin: partial.presoMin ?? null,
     ...partial,
   };
@@ -180,6 +182,18 @@ describe('FluxoFilaEmbaladoCopy', () => {
       '2026-08-17',
       '2026-08-16',
     ]);
+  });
+});
+
+describe('FluxoFilaPerdasCopy', () => {
+  it('badge e heading por etapa de origem', () => {
+    expect(FluxoFilaPerdasCopy.badge('fermentacao')).toBe('não fermentado');
+    expect(FluxoFilaPerdasCopy.badge('forno')).toBe('não assado');
+    expect(FluxoFilaPerdasCopy.badge('embalagem')).toBe('não embalado');
+    expect(FluxoFilaPerdasCopy.badge(null)).toBeNull();
+    expect(FluxoFilaPerdasCopy.heading('fermentacao')).toBe('Não fermentado');
+    expect(FluxoFilaPerdasCopy.heading('forno')).toBe('Não assado');
+    expect(FluxoFilaPerdasCopy.heading('embalagem')).toBe('Não embalado');
   });
 });
 

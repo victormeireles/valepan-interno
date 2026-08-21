@@ -24,6 +24,7 @@ function montar(
     ultimoLoteEm,
     dataOp: origem === 'sem_op' ? null : op.dataProducao,
     origem,
+    perdaOrigem: null,
   };
 }
 

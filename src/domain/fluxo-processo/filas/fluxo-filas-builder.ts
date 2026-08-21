@@ -2,6 +2,7 @@ import type { FluxoControleEventoInput } from '@/domain/fluxo-processo/controle/
 import { FluxoFilasEmbItems } from './fluxo-filas-emb-items';
 import { FluxoFilasEmbPorOp } from './fluxo-filas-emb-por-op';
 import { FluxoFilasLoteSaldo } from './fluxo-filas-lote-saldo';
+import { FluxoFilasPerdas, type FluxoOpFilasParciais } from './fluxo-filas-perdas';
 import { FluxoFilaUltimoLotePicker } from './fluxo-fila-ultimo-lote';
 import type {
   FluxoFilaItem,
@@ -12,13 +13,6 @@ import type {
   FluxoFilasDia,
   FluxoFilasOpInput,
 } from './fluxo-filas-types';
-
-type OpFilas = {
-  aProduzir: FluxoFilaItem[];
-  fermentando: FluxoFilaItem[];
-  resfriando: FluxoFilaItem[];
-  embalado: FluxoFilaItem[];
-};
 
 function lotesDaOp(
   eventos: FluxoControleEventoInput[],
@@ -66,6 +60,7 @@ function montarItem(
     ultimoLoteEm,
     dataOp: origem === 'sem_op' ? null : op.dataProducao,
     origem,
+    perdaOrigem: null,
   };
 }
 
@@ -97,6 +92,7 @@ export class FluxoFilasBuilder {
     private readonly embPorOp = new FluxoFilasEmbPorOp(),
     private readonly loteSaldo = new FluxoFilasLoteSaldo(),
     private readonly embItems = new FluxoFilasEmbItems(),
+    private readonly filasPerdas = new FluxoFilasPerdas(),
   ) {}
 
   build(input: FluxoFilasBuilderInput): FluxoFilasDia | null {
@@ -109,6 +105,7 @@ export class FluxoFilasBuilder {
     const aProduzir: FluxoFilaItem[] = [];
     const fermentando: FluxoFilaItem[] = [];
     const resfriando: FluxoFilaItem[] = [];
+    const perdas: FluxoFilaItem[] = [];
     const embaladoDia: FluxoFilaItem[] = [];
 
     for (const op of ops) {
@@ -122,6 +119,7 @@ export class FluxoFilasBuilder {
       aProduzir.push(...filas.aProduzir);
       fermentando.push(...filas.fermentando);
       resfriando.push(...filas.resfriando);
+      perdas.push(...filas.perdas);
       embaladoDia.push(...filas.embalado);
     }
 
@@ -145,6 +143,7 @@ export class FluxoFilasBuilder {
         embalado,
         FluxoFilaUltimoLotePicker.fromEventos(input.eventosEmb),
       ),
+      perdas: montarResumo(ordenarItems(perdas), null),
     };
   }
 
@@ -153,25 +152,28 @@ export class FluxoFilasBuilder {
     input: FluxoFilasBuilderInput,
     embUn: number,
     embLoteEm: string | null,
-  ): OpFilas {
+  ): FluxoOpFilasParciais {
     const fermUn = somaUn(input.eventosFerm, op.id);
     const fornoUn = somaUn(input.eventosForno, op.id);
-    return {
-      aProduzir: this.itemSemPrazo(op, Math.max(0, op.unidades - fermUn)),
-      fermentando: this.itensDeLotes(
-        op,
-        this.loteSaldo.restantes(lotesDaOp(input.eventosFerm, op.id), fornoUn),
-        input.camaraMin,
-        input.asOfMs,
-      ),
-      resfriando: this.itensDeLotes(
-        op,
-        this.loteSaldo.restantes(lotesDaOp(input.eventosForno, op.id), embUn),
-        input.resfrioMin,
-        input.asOfMs,
-      ),
-      embalado: this.embItems.doDia(op, embUn, embLoteEm),
-    };
+    return this.filasPerdas.aplicar(
+      {
+        aProduzir: this.itemSemPrazo(op, Math.max(0, op.unidades - fermUn)),
+        fermentando: this.itensDeLotes(
+          op,
+          this.loteSaldo.restantes(lotesDaOp(input.eventosFerm, op.id), fornoUn),
+          input.camaraMin,
+          input.asOfMs,
+        ),
+        resfriando: this.itensDeLotes(
+          op,
+          this.loteSaldo.restantes(lotesDaOp(input.eventosForno, op.id), embUn),
+          input.resfrioMin,
+          input.asOfMs,
+        ),
+        embalado: this.embItems.doDia(op, embUn, embLoteEm),
+      },
+      op,
+    );
   }
 
   private itemSemPrazo(op: FluxoFilasOpInput, volumeUn: number): FluxoFilaItem[] {

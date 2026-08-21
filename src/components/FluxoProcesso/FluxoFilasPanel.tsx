@@ -35,6 +35,7 @@ const TILES: FilaTileDef[] = [
   },
   { key: 'resfriando' as const, label: 'Resfriando', icon: 'ac_unit', showPrazo: true },
   { key: 'embalado' as const, label: 'Embalado', icon: 'inventory_2', showPrazo: false },
+  { key: 'perdas' as const, label: 'Perdas', icon: 'report', showPrazo: false },
 ];
 
 const TILE_ACCENT: Record<FluxoFilaKey, string> = {
@@ -42,6 +43,7 @@ const TILE_ACCENT: Record<FluxoFilaKey, string> = {
   fermentando: '#C6A848',
   resfriando: '#44403C',
   embalado: '#047857',
+  perdas: '#BE123C',
 };
 
 class FluxoFilasSubtitle {
@@ -76,7 +78,7 @@ function FluxoFilasTileGrid({
   onToggle: (key: FluxoFilaKey) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {TILES.map((tile) => {
         const resumo = filas[tile.key];
         return (

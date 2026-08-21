@@ -209,4 +209,61 @@ describe('FluxoFilasServiceAttach', () => {
     expect(fluxo.filas?.embalado.totalUn).toBe(50);
     expect(fluxo.filas?.embalado.anteriorUn).toBe(31);
   });
+
+  it('OP com embalagem fechada move resfriando para perdas', () => {
+    const fluxo = emptyFluxo();
+    new FluxoFilasServiceAttach().attach(fluxo, {
+      ops: [
+        {
+          id: 'op-1',
+          ordemPlanejamento: 1,
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          observacao: '',
+          unidades: 100,
+          latas: 0,
+          caixas: 0,
+          dataProducao: DATE,
+          embalagemFinalizada: true,
+        },
+      ],
+      fermentacao: [
+        {
+          ordemProducaoId: 'op-1',
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          unidades: 80,
+          produzidoEm: iso('06:00'),
+          dataOp: DATE,
+        },
+      ],
+      forno: [
+        {
+          ordemProducaoId: 'op-1',
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          unidades: 80,
+          produzidoEm: iso('10:00'),
+          dataOp: DATE,
+        },
+      ],
+      embalagem: [
+        {
+          ordemProducaoId: 'op-1',
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          unidades: 50,
+          produzidoEm: iso('11:00'),
+          dataOp: DATE,
+        },
+      ],
+      camaraMin: 180,
+      resfrioMin: 60,
+      asOfMs: Date.parse(iso('12:00')),
+    });
+    expect(fluxo.filas?.resfriando.totalUn).toBe(0);
+    expect(fluxo.filas?.embalado.totalUn).toBe(50);
+    expect(fluxo.filas?.perdas.totalUn).toBe(30);
+    expect(fluxo.filas?.perdas.items[0]?.perdaOrigem).toBe('embalagem');
+  });
 });

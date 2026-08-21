@@ -155,7 +155,7 @@ export type VpFluxoPayload = {
   ritmoPorEtapa: Record<FluxoEtapaKey, FluxoEtapaRitmo> | null;
   /** Preenchido pelo service após o builder (realizado-only). */
   controle: FluxoControleDia | null;
-  /** Filas WIP (a produzir / fermentando / resfriando); null se não há OPs do dia. */
+  /** Filas WIP (a produzir / fermentando / resfriando / embalado / perdas); null se não há OPs do dia. */
   filas: FluxoFilasDia | null;
 };
 

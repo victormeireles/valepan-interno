@@ -2,10 +2,14 @@
 
 import { Badge } from '@/components/ui/Badge';
 import { ListRow } from '@/components/ui/ListRow';
-import type { FluxoFilaItem, FluxoFilaKey } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
+import type {
+  FluxoFilaItem,
+  FluxoFilaKey,
+  FluxoFilaPerdaOrigem,
+} from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import { formatBrazilHourMinuteLabel } from '@/lib/utils/date-utils';
 import type { FluxoDisplayScale } from './fluxo-display-scale';
-import { FluxoFilaEmbaladoCopy, formatFilaQty, formatNaFilaBadge } from './fluxo-fila-format';
+import { FluxoFilaEmbaladoCopy, FluxoFilaPerdasCopy, formatFilaQty, formatNaFilaBadge } from './fluxo-fila-format';
 
 export type FluxoFilaZonaGrupo = {
   dataOp: string | null;
@@ -47,6 +51,28 @@ export class FluxoFilaEmbaladoZonas {
   }
 }
 
+const PERDA_ORDEM: FluxoFilaPerdaOrigem[] = ['fermentacao', 'forno', 'embalagem'];
+
+export type FluxoFilaPerdaZona = {
+  origem: FluxoFilaPerdaOrigem;
+  items: FluxoFilaItem[];
+};
+
+export class FluxoFilaPerdasZonas {
+  static particionar(items: FluxoFilaItem[]): FluxoFilaPerdaZona[] {
+    return PERDA_ORDEM.map((origem) => ({
+      origem,
+      items: items.filter((i) => i.perdaOrigem === origem),
+    })).filter((zona) => zona.items.length > 0);
+  }
+
+  static evenStart(zonas: FluxoFilaPerdaZona[], gi: number): number {
+    let n = 0;
+    for (let i = 0; i < gi; i++) n += zonas[i].items.length;
+    return n;
+  }
+}
+
 function loteSubtitle(item: FluxoFilaItem): string {
   const base = item.observacao.trim() || item.assadeiraNome;
   if (!item.ultimoLoteEm) return base;
@@ -55,6 +81,7 @@ function loteSubtitle(item: FluxoFilaItem): string {
 }
 
 function presoBadge(item: FluxoFilaItem, filaKey: FluxoFilaKey): string | null {
+  if (filaKey === 'perdas') return FluxoFilaPerdasCopy.badge(item.perdaOrigem);
   if (!item.preso || item.naFilaMin == null) return null;
   return formatNaFilaBadge(item.naFilaMin, filaKey);
 }
@@ -86,7 +113,9 @@ export function FluxoFilaDetalheRow({
       columns={[{ value: volume, width: '5.5rem', emphasize: !zonaAnterior }]}
       menu={
         badge ? (
-          <Badge tone={zonaAnterior ? 'neutral' : 'accent'}>{badge}</Badge>
+          <Badge tone={zonaAnterior ? 'neutral' : filaKey === 'perdas' ? 'danger' : 'accent'}>
+            {badge}
+          </Badge>
         ) : undefined
       }
     />

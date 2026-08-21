@@ -53,7 +53,9 @@ function tileClassName(active: boolean): string {
 
 class FluxoFilaAcaoCopy {
   static label(filaKey: FluxoFilaKey): string {
-    return filaKey === 'aProduzir' ? 'Ver OPs' : 'Ver lotes';
+    if (filaKey === 'aProduzir') return 'Ver OPs';
+    if (filaKey === 'perdas') return 'Ver perdas';
+    return 'Ver lotes';
   }
 }
 

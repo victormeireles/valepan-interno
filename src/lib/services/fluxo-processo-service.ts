@@ -310,6 +310,9 @@ function toFluxoFilasOpInput(
     latas: o.assadeiras,
     caixas: o.quantidade.caixas,
     dataProducao: o.dataProducao,
+    fermentacaoFinalizada: o.fermentacaoFinalizada,
+    fornoFinalizada: o.fornoFinalizada,
+    embalagemFinalizada: o.embalagemFinalizada,
   };
 }
 
