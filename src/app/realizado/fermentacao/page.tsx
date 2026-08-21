@@ -51,7 +51,6 @@ export default function ProducaoFermentacaoPage() {
     comparisonWeekDate,
     dateComparisonPrev,
     turnos,
-    turnoAtivo,
     refreshOrdensOnly,
   } = useEtapaPainelCarga({
     etapa: 'fermentacao',
@@ -64,7 +63,7 @@ export default function ProducaoFermentacaoPage() {
     useRealizadoTurnoUi({
       etapa: 'fermentacao',
       turnos,
-      turnoAtivo,
+      turnoAtivo: null,
       onError: (msg) => setMessage(msg),
     });
 

@@ -15,7 +15,7 @@ const findByIdsTipos = vi.fn();
 const findByIdsProdutos = vi.fn();
 const assadeirasIn = vi.fn();
 const countOpcoesByProdutoIds = vi.fn();
-const mockGetEstado = vi.fn();
+const mockGetConfig = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: {
@@ -78,9 +78,9 @@ vi.mock('@/lib/clients/supabase-client-factory', () => ({
   },
 }));
 
-vi.mock('@/lib/services/producao-turno-service', () => ({
-  producaoTurnoService: {
-    getEstado: (...args: unknown[]) => mockGetEstado(...args),
+vi.mock('@/lib/services/config-operacao-service', () => ({
+  configOperacaoService: {
+    getConfig: (...args: unknown[]) => mockGetConfig(...args),
   },
 }));
 
@@ -224,15 +224,12 @@ describe('PainelFornoService.getCargaCompleta', () => {
     getIdsVisiveisEmbalagem.mockResolvedValue(new Set(['cat-hamb']));
     findUltimaDataComPedidos.mockResolvedValue('2026-06-17');
     findDataAnteriorComPedidos.mockResolvedValue('2026-06-16');
-    mockGetEstado.mockResolvedValue({
-      ativo: null,
-      decision: {
-        kind: 'definir',
-        ativoValido: false,
-        numeroAtivo: null,
-        turnoVigente: null,
-      },
-      turnos: [{ numero: 1, inicio: '07:00', fim: '18:00' }],
+    mockGetConfig.mockResolvedValue({
+      turnos: [
+        { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '18:00' },
+        { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
+        { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+      ],
     });
   });
 
@@ -254,7 +251,7 @@ describe('PainelFornoService.getCargaCompleta', () => {
       { assadeiras: 3, pedidoAssadeiras: 0, produzidoEm: '2026-06-17T10:00:00Z' },
     ]);
     expect(result.turnos).toEqual([{ numero: 1, inicio: '07:00', fim: '18:00' }]);
-    expect(result.turnoAtivo).toBeNull();
-    expect(mockGetEstado).toHaveBeenCalledWith('forno', expect.any(Date));
+    expect(result).not.toHaveProperty('turnoAtivo');
+    expect(mockGetConfig).toHaveBeenCalled();
   });
 });

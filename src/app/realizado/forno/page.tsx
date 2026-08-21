@@ -51,7 +51,6 @@ export default function ProducaoFornoPage() {
     comparisonWeekDate,
     dateComparisonPrev,
     turnos,
-    turnoAtivo,
     refreshOrdensOnly,
   } = useEtapaPainelCarga({
     etapa: 'forno',
@@ -64,7 +63,7 @@ export default function ProducaoFornoPage() {
     useRealizadoTurnoUi({
       etapa: 'forno',
       turnos,
-      turnoAtivo,
+      turnoAtivo: null,
       onError: (msg) => setMessage(msg),
     });
 

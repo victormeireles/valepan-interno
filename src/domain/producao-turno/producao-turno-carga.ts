@@ -12,7 +12,6 @@ export type ProducaoTurnoCargaAtivo = {
 
 export type ProducaoTurnoCargaDto = {
   turnos: ProducaoTurnoCadastrado[];
-  turnoAtivo: ProducaoTurnoCargaAtivo | null;
 };
 
 export function turnoLabelFromNumero(
@@ -24,10 +23,8 @@ export function turnoLabelFromNumero(
 
 export function readTurnoCarga(payload: {
   turnos?: ProducaoTurnoCadastrado[];
-  turnoAtivo?: ProducaoTurnoCargaAtivo | null;
 }): ProducaoTurnoCargaDto {
   return {
     turnos: Array.isArray(payload.turnos) ? payload.turnos : [],
-    turnoAtivo: payload.turnoAtivo ?? null,
   };
 }

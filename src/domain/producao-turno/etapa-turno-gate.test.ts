@@ -144,19 +144,17 @@ describe('EtapaTurnoGate.ativoAposConfirmacao', () => {
 });
 
 describe('readTurnoCarga', () => {
-  it('lê turnos e turnoAtivo do payload da carga', () => {
-    const ativo = ativoHoje(1);
+  it('lê só turnos do payload da carga', () => {
     expect(
       readTurnoCarga({
         turnos,
-        turnoAtivo: ativo,
         ordens: [],
       }),
-    ).toEqual({ turnos, turnoAtivo: ativo });
+    ).toEqual({ turnos });
   });
 
-  it('ausentes → turnos vazios e ativo nulo', () => {
-    expect(readTurnoCarga({})).toEqual({ turnos: [], turnoAtivo: null });
+  it('ausentes → turnos vazios', () => {
+    expect(readTurnoCarga({})).toEqual({ turnos: [] });
   });
 });
 

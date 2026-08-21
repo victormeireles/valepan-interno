@@ -6,7 +6,6 @@ import {
 } from '@/domain/producao-etapa/painel-dashboard-adapter';
 import {
   readTurnoCarga,
-  type ProducaoTurnoCargaAtivo,
   type ProducaoTurnoCargaDto,
 } from '@/domain/producao-turno/producao-turno-carga';
 import type { ProducaoTurnoCadastrado } from '@/domain/producao-turno/producao-turno-types';
@@ -61,7 +60,6 @@ export function useEtapaPainelCarga({
     snapshotsToDashboardItems([]),
   );
   const [turnos, setTurnos] = useState<ProducaoTurnoCadastrado[]>([]);
-  const [turnoAtivo, setTurnoAtivo] = useState<ProducaoTurnoCargaAtivo | null>(null);
 
   const applyCargaResponse = useCallback(
     (data: EtapaPainelCargaResponse, currentDate: string) => {
@@ -79,7 +77,6 @@ export function useEtapaPainelCarga({
       setOrdens(data.ordens);
       const turnoCarga = readTurnoCarga(data);
       setTurnos(turnoCarga.turnos);
-      setTurnoAtivo(turnoCarga.turnoAtivo);
       setComparisonWeekDate(data.comparacaoSemana.date);
       setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
       setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
@@ -152,7 +149,6 @@ export function useEtapaPainelCarga({
     comparisonWeekDate,
     dateComparisonPrev,
     turnos,
-    turnoAtivo,
     refreshOrdensOnly,
   };
 }

@@ -52,7 +52,6 @@ export default function ProducaoEmbalagemPage() {
     comparisonWeekDate,
     dateComparisonPrev,
     turnos,
-    turnoAtivo,
     loadCargaEmbalagem,
     refreshPedidosOnly,
   } = useEmbalagemPainelCarga({
@@ -66,7 +65,7 @@ export default function ProducaoEmbalagemPage() {
     useRealizadoTurnoUi({
       etapa: 'embalagem',
       turnos,
-      turnoAtivo,
+      turnoAtivo: null,
       onError: (msg) => setMessage(msg),
     });
 

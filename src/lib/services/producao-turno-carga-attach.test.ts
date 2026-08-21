@@ -1,102 +1,57 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProducaoTurnoEstado } from './producao-turno-service';
+import {
+  configOperacaoMapper,
+  DEFAULT_CONFIG_OPERACAO,
+} from '@/domain/config-operacao/config-operacao-mapper';
+import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
 
-const mockGetEstado = vi.fn();
+const mockGetConfig = vi.fn();
 
-vi.mock('./producao-turno-service', () => ({
-  producaoTurnoService: {
-    getEstado: (...args: unknown[]) => mockGetEstado(...args),
+vi.mock('./config-operacao-service', () => ({
+  configOperacaoService: {
+    getConfig: (...args: unknown[]) => mockGetConfig(...args),
   },
 }));
 
 const { attachTurnoCarga } = await import('./producao-turno-carga-attach');
 
-const turnos = [{ numero: 1 as const, inicio: '07:00', fim: '18:00' }];
-
-function estado(overrides: Partial<ProducaoTurnoEstado> = {}): ProducaoTurnoEstado {
-  return {
-    ativo: null,
-    decision: {
-      kind: 'definir',
-      ativoValido: false,
-      numeroAtivo: null,
-      turnoVigente: 1,
-    },
-    turnos,
-    ...overrides,
-  };
-}
+const snapshotComDoisTurnos: ConfigOperacaoSnapshot = {
+  ...DEFAULT_CONFIG_OPERACAO,
+  turnos: [
+    { etapa: 'fermentacao', numero: 1, inicio: '06:00', fim: '14:00' },
+    { etapa: 'fermentacao', numero: 2, inicio: '14:00', fim: '22:00' },
+    { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
+    { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
+  ],
+};
 
 describe('attachTurnoCarga', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetConfig.mockResolvedValue(snapshotComDoisTurnos);
   });
 
-  it('anexa turnos cadastrados e turnoAtivo nulo quando não há linha', async () => {
-    mockGetEstado.mockResolvedValue(estado());
-
+  it('anexa só turnos da etapa e não inclui turnoAtivo', async () => {
     const result = await attachTurnoCarga('fermentacao', { date: '2026-08-18' });
 
-    expect(mockGetEstado).toHaveBeenCalledWith('fermentacao', expect.any(Date));
+    expect(mockGetConfig).toHaveBeenCalled();
     expect(result.date).toBe('2026-08-18');
-    expect(result.turnos).toEqual(turnos);
-    expect(result.turnoAtivo).toBeNull();
-  });
-
-  it('anexa turnoAtivo com valido true quando o ativo do dia é válido', async () => {
-    mockGetEstado.mockResolvedValue(
-      estado({
-        ativo: { numero: 1, confirmadoEm: '2026-08-18T11:00:00.000Z' },
-        decision: {
-          kind: 'nenhum',
-          ativoValido: true,
-          numeroAtivo: 1,
-          turnoVigente: 1,
-        },
-      }),
+    expect(result.turnos).toEqual(
+      configOperacaoMapper.turnosDaEtapa(snapshotComDoisTurnos, 'fermentacao'),
     );
-
-    const result = await attachTurnoCarga('forno', { date: '2026-08-18' });
-
-    expect(result.turnoAtivo).toEqual({
-      numero: 1,
-      confirmadoEm: '2026-08-18T11:00:00.000Z',
-      valido: true,
-    });
-  });
-
-  it('anexa turnoAtivo com valido false quando há linha mas o ativo é inválido', async () => {
-    mockGetEstado.mockResolvedValue(
-      estado({
-        ativo: { numero: 2, confirmadoEm: '2026-08-17T11:00:00.000Z' },
-        decision: {
-          kind: 'definir',
-          ativoValido: false,
-          numeroAtivo: null,
-          turnoVigente: 1,
-        },
-      }),
-    );
-
-    const result = await attachTurnoCarga('embalagem', { date: '2026-08-18' });
-
-    expect(result.turnoAtivo).toEqual({
-      numero: 2,
-      confirmadoEm: '2026-08-17T11:00:00.000Z',
-      valido: false,
-    });
+    expect(result).not.toHaveProperty('turnoAtivo');
   });
 
   it('preserva horarioInicioEmbalagem no payload original', async () => {
-    mockGetEstado.mockResolvedValue(estado());
-
     const result = await attachTurnoCarga('embalagem', {
       date: '2026-08-18',
       horarioInicioEmbalagem: '07:00',
     });
 
     expect(result.horarioInicioEmbalagem).toBe('07:00');
-    expect(result.turnos).toEqual(turnos);
-    expect(result.turnoAtivo).toBeNull();
+    expect(result.turnos).toEqual(
+      configOperacaoMapper.turnosDaEtapa(snapshotComDoisTurnos, 'embalagem'),
+    );
+    expect(result).not.toHaveProperty('turnoAtivo');
   });
 });

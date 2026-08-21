@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { snapshotsToDashboardItems } from '@/domain/embalagem/painel-dashboard-adapter';
 import {
   readTurnoCarga,
-  type ProducaoTurnoCargaAtivo,
   type ProducaoTurnoCargaDto,
 } from '@/domain/producao-turno/producao-turno-carga';
 import type { ProducaoTurnoCadastrado } from '@/domain/producao-turno/producao-turno-types';
@@ -62,7 +61,6 @@ export function useEmbalagemPainelCarga({
     snapshotsToDashboardItems([]),
   );
   const [turnos, setTurnos] = useState<ProducaoTurnoCadastrado[]>([]);
-  const [turnoAtivo, setTurnoAtivo] = useState<ProducaoTurnoCargaAtivo | null>(null);
 
   const applyCargaResponse = useCallback(
     (data: EmbalagemPainelCargaResponse, currentDate: string) => {
@@ -79,7 +77,6 @@ export function useEmbalagemPainelCarga({
       setPedidos(data.pedidos);
       const turnoCarga = readTurnoCarga(data);
       setTurnos(turnoCarga.turnos);
-      setTurnoAtivo(turnoCarga.turnoAtivo);
       setComparisonWeekDate(data.comparacaoSemana.date);
       setComparisonWeekItems(snapshotsToDashboardItems(data.comparacaoSemana.items));
       setComparisonPrevItems(snapshotsToDashboardItems(data.comparacaoAnterior.items));
@@ -149,7 +146,6 @@ export function useEmbalagemPainelCarga({
     comparisonWeekDate,
     dateComparisonPrev,
     turnos,
-    turnoAtivo,
     loadCargaEmbalagem,
     refreshPedidosOnly,
   };
