@@ -1,5 +1,9 @@
 import { configOperacaoMapper } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
+import {
+  TURNO_NAO_CADASTRADO_MESSAGE,
+  TurnoNaoCadastradoError,
+} from '@/domain/producao-turno/producao-turno-numero';
 import { ProducaoTurnoPrompt } from '@/domain/producao-turno/producao-turno-prompt';
 import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import type {
@@ -26,7 +30,7 @@ export type ProducaoTurnoConfigSource = {
   getConfig(): Promise<ConfigOperacaoSnapshot>;
 };
 
-export const TURNO_NAO_CADASTRADO = 'Turno não cadastrado para esta etapa.';
+export const TURNO_NAO_CADASTRADO = TURNO_NAO_CADASTRADO_MESSAGE;
 
 export class ProducaoTurnoService {
   constructor(
@@ -52,15 +56,22 @@ export class ProducaoTurnoService {
     numero: ProducaoTurnoNumero,
     now: Date = new Date(),
   ): Promise<void> {
-    const turnos = await this.turnosDaEtapa(etapa);
-    if (!turnos.some((turno) => turno.numero === numero)) {
-      throw new Error(TURNO_NAO_CADASTRADO);
-    }
+    await this.assertNumeroCadastrado(etapa, numero);
     await this.repo.upsert({
       etapa,
       numero,
       confirmadoEm: now.toISOString(),
     });
+  }
+
+  async assertNumeroCadastrado(
+    etapa: ProducaoTurnoEtapaId,
+    numero: ProducaoTurnoNumero,
+  ): Promise<void> {
+    const turnos = await this.turnosDaEtapa(etapa);
+    if (!turnos.some((turno) => turno.numero === numero)) {
+      throw new TurnoNaoCadastradoError();
+    }
   }
 
   async requireNumero(

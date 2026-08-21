@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
+import { TurnoNaoCadastradoError } from '@/domain/producao-turno/producao-turno-numero';
 import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import type {
   ProducaoTurnoAtivo,
@@ -114,6 +115,20 @@ describe('ProducaoTurnoService.requireNumero', () => {
     const numero = await service.requireNumero('fermentacao', at('19:00'));
 
     expect(numero).toBe(1);
+  });
+});
+
+describe('ProducaoTurnoService.assertNumeroCadastrado', () => {
+  it('assertNumeroCadastrado passa se o número está ligado', async () => {
+    const service = createService(new FakeTurnoAtivoRepository());
+    await expect(service.assertNumeroCadastrado('fermentacao', 1)).resolves.toBeUndefined();
+  });
+
+  it('assertNumeroCadastrado lança se o número não está ligado', async () => {
+    const service = createService(new FakeTurnoAtivoRepository());
+    await expect(service.assertNumeroCadastrado('fermentacao', 2)).rejects.toBeInstanceOf(
+      TurnoNaoCadastradoError,
+    );
   });
 });
 
