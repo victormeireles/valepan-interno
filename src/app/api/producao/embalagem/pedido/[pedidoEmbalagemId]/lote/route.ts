@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
-import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
+import {
+  parseProducaoTurnoNumero,
+  TURNO_INFORME_MESSAGE,
+  TurnoNaoCadastradoError,
+} from '@/domain/producao-turno/producao-turno-numero';
 import {
   embalagemLoteService,
   EstoqueResolverError,
@@ -18,6 +22,10 @@ export async function POST(
   try {
     const { pedidoEmbalagemId } = await context.params;
     const body = await request.json();
+    const turno = parseProducaoTurnoNumero(body.turno);
+    if (turno == null) {
+      return NextResponse.json({ error: TURNO_INFORME_MESSAGE }, { status: 400 });
+    }
     const {
       caixas,
       pacotes,
@@ -86,6 +94,7 @@ export async function POST(
           palletFotoUploadedAt: palletFotoUploadedAt || undefined,
         },
         continuaProduzindo: continuaProduzindo ?? true,
+        turno,
       });
       loteId = loteRecord.id;
 
@@ -136,11 +145,8 @@ export async function POST(
       throw dbError;
     }
   } catch (error) {
-    if (error instanceof TurnoRequeridoError) {
-      return NextResponse.json(
-        { code: error.code, error: error.message },
-        { status: 409 },
-      );
+    if (error instanceof TurnoNaoCadastradoError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

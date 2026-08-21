@@ -3,7 +3,11 @@ import { revalidatePath } from 'next/cache';
 
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
-import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
+import {
+  parseProducaoTurnoNumero,
+  TURNO_INFORME_MESSAGE,
+  TurnoNaoCadastradoError,
+} from '@/domain/producao-turno/producao-turno-numero';
 import { fermentacaoLoteService } from '@/lib/services/fermentacao-lote-service';
 import { notifyEtapaProductionAfterLoteSave } from '@/lib/services/etapa-production-notification';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
@@ -19,6 +23,10 @@ export async function POST(
     }
 
     const body = await request.json();
+    const turno = parseProducaoTurnoNumero(body.turno);
+    if (turno == null) {
+      return NextResponse.json({ error: TURNO_INFORME_MESSAGE }, { status: 400 });
+    }
     const { assadeiras, unidades, fotoUrl, fotoId, fotoUploadedAt, continuaProduzindo } = body;
 
     const loteAssadeiras = Number(assadeiras) || 0;
@@ -42,6 +50,7 @@ export async function POST(
         fotoUploadedAt: fotoUploadedAt || undefined,
       },
       continuaProduzindo: continuaProduzindo ?? true,
+      turno,
     });
 
     try {
@@ -68,11 +77,8 @@ export async function POST(
       insumoConsumo,
     });
   } catch (error) {
-    if (error instanceof TurnoRequeridoError) {
-      return NextResponse.json(
-        { code: error.code, error: error.message },
-        { status: 409 },
-      );
+    if (error instanceof TurnoNaoCadastradoError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
