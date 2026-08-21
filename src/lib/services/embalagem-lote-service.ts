@@ -11,6 +11,7 @@ import type {
 import type { InsumoConsumoResultado } from '@/domain/types/insumo-estoque';
 import type { Quantidade } from '@/domain/types/inventario';
 import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 import { EstoqueResolverError } from '@/lib/services/estoque-resolver-service';
 import { etapaFinalizacaoService } from '@/lib/services/etapa-finalizacao-service';
 import { estoqueService } from '@/lib/services/estoque-service';
@@ -29,6 +30,7 @@ export type CriarLotePorPedidoInput = {
   clienteNome: string;
   produtoNome: string;
   quantidade: Quantidade;
+  turno: ProducaoTurnoNumero;
   produzidoEm?: string;
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
@@ -89,7 +91,7 @@ export class EmbalagemLoteService {
   async criarLotePorPedidoEmbalagem(
     input: CriarLotePorPedidoInput,
   ): Promise<EmbalagemLoteComConsumo> {
-    const turno = await producaoTurnoService.requireNumero('embalagem', new Date());
+    await producaoTurnoService.assertNumeroCadastrado('embalagem', input.turno);
     const pedido = await pedidoEmbalagemRepository.findById(input.pedidoEmbalagemId);
     if (!pedido) {
       throw new Error('Pedido de embalagem não encontrado');
@@ -121,7 +123,7 @@ export class EmbalagemLoteService {
       produzidoEm,
       obsEmbalagem: input.obsEmbalagem ?? null,
       fotos: input.fotos,
-      turno,
+      turno: input.turno,
     });
 
     await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);

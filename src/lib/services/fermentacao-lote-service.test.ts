@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DEFAULT_ORDEM_ETAPA_STATUS } from '@/domain/producao-etapa/ordem-etapa-status-defaults';
-import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
+import { TurnoNaoCadastradoError } from '@/domain/producao-turno/producao-turno-numero';
 
 const mockFindById = vi.fn();
 const mockListByOrdem = vi.fn();
@@ -12,7 +12,7 @@ const mockAplicarAposSalvarLote = vi.fn();
 const mockSincronizar = vi.fn();
 const mockAjustar = vi.fn();
 const mockEstornar = vi.fn();
-const mockRequireNumero = vi.fn();
+const mockAssertNumeroCadastrado = vi.fn();
 
 vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
   ordemProducaoRepository: { findById: (...args: unknown[]) => mockFindById(...args) },
@@ -41,7 +41,7 @@ vi.mock('@/lib/services/etapa-finalizacao-service', () => ({
 }));
 vi.mock('@/lib/services/producao-turno-service', () => ({
   producaoTurnoService: {
-    requireNumero: (...args: unknown[]) => mockRequireNumero(...args),
+    assertNumeroCadastrado: (...args: unknown[]) => mockAssertNumeroCadastrado(...args),
   },
 }));
 
@@ -82,7 +82,7 @@ describe('FermentacaoLoteService', () => {
     mockSincronizar.mockResolvedValue({ aplicado: true, avisos: [] });
     mockAjustar.mockResolvedValue({ aplicado: true, avisos: [] });
     mockEstornar.mockResolvedValue({ aplicado: true, avisos: [] });
-    mockRequireNumero.mockResolvedValue(1);
+    mockAssertNumeroCadastrado.mockResolvedValue(undefined);
   });
 
   it('cria lote acima do saldo da ordem', async () => {
@@ -90,9 +90,11 @@ describe('FermentacaoLoteService', () => {
     const result = await fermentacaoLoteService.criarLotePorOrdem({
       ordemProducaoId: 'o1',
       quantidade: { assadeiras: 5, unidades: 0 },
+      turno: 1,
     });
 
     expect(result.lote.id).toBe('l-new');
+    expect(mockAssertNumeroCadastrado).toHaveBeenCalledWith('fermentacao', 1);
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
     expect(mockSincronizar).toHaveBeenCalled();
   });
@@ -102,21 +104,23 @@ describe('FermentacaoLoteService', () => {
     const result = await fermentacaoLoteService.criarLotePorOrdem({
       ordemProducaoId: 'o1',
       quantidade: { assadeiras: 2, unidades: 0 },
+      turno: 1,
     });
     expect(result.lote.id).toBe('l-new');
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
   });
 
-  it('não insere lote quando o turno do dia é inválido', async () => {
-    mockRequireNumero.mockRejectedValue(new TurnoRequeridoError());
+  it('não insere lote quando o turno não está cadastrado', async () => {
+    mockAssertNumeroCadastrado.mockRejectedValue(new TurnoNaoCadastradoError());
     const { fermentacaoLoteService } = await import('./fermentacao-lote-service');
 
     await expect(
       fermentacaoLoteService.criarLotePorOrdem({
         ordemProducaoId: 'o1',
         quantidade: { assadeiras: 5, unidades: 0 },
+        turno: 1,
       }),
-    ).rejects.toBeInstanceOf(TurnoRequeridoError);
+    ).rejects.toBeInstanceOf(TurnoNaoCadastradoError);
 
     expect(mockInsert).not.toHaveBeenCalled();
   });
@@ -128,6 +132,7 @@ describe('FermentacaoLoteService', () => {
       fermentacaoLoteService.criarLotePorOrdem({
         ordemProducaoId: 'o1',
         quantidade: { assadeiras: 0, unidades: 0 },
+        turno: 1,
       }),
     ).rejects.toThrow(/maior que zero/i);
   });
@@ -141,7 +146,7 @@ describe('FermentacaoLoteService', () => {
     expect(result.lote.id).toBe('l1');
     expect(mockUpdateById).toHaveBeenCalled();
     expect(mockUpdateById.mock.calls[0][1]).not.toHaveProperty('turno');
-    expect(mockRequireNumero).not.toHaveBeenCalled();
+    expect(mockAssertNumeroCadastrado).not.toHaveBeenCalled();
     expect(mockAjustar).toHaveBeenCalled();
   });
 });
