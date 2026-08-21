@@ -1,0 +1,155 @@
+# Turno no lançamento (overlap e hora extra)
+
+Data: 2026-08-21  
+Status: aprovada  
+Substitui o fluxo de **turno ativo da etapa** da spec `2026-08-18-rastreio-turnos-producao` (chip, sheet, `producao_turno_ativo` no POST). O carimbo `turno` no lote e a config de até 3 turnos por etapa permanecem.
+
+## Objetivo
+
+O operador escolhe o turno **dentro do modal de lote**, como primeiro campo do formulário. A fermentação pode ter turnos encavalados (T1 00:00–09:00 e T2 05:00–…). Relógio fora de qualquer janela é hora extra: o sistema não quebra.
+
+### Sucesso
+
+- `+` abre o modal na hora; turno é campo obrigatório no topo (segmento 1 · 2 · 3, só os ligados)
+- Novo lote grava o `turno` enviado no body
+- Configuração aceita janelas sobrepostas
+- Relógio em buraco / depois do último turno **não** recusa o save
+- Pré-seleção: último lançado neste tablet; senão janela única; senão hora extra do que acabou; senão vazio (overlap sem histórico)
+- Chip, sheet e 409 `turno_requerido` saem do lançamento
+
+## Contexto
+
+A spec de 18/08 carimba o lote com o **turno ativo da etapa** no servidor (uma linha em `producao_turno_ativo`). A config **proíbe** overlap. Na fermentação o 1º começa 00h e o 2º 05h: entre ~5h e ~9h as duas equipes produzem. Um ativo só no servidor faz um lançamento “roubar” o turno do outro. O sheet antes do modal também não serve: a escolha tem que ser do lote, no mesmo formulário.
+
+Hora extra (funcionário do turno que acabou ainda lançando) já era prevista como “continuar neste”; agora não pode virar erro de horário.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Onde escolhe | Primeiro campo do modal de lote (mesmo `+`), não sheet antes |
+| Controle | Segmento/chips Turno 1 · 2 · 3, não `<select>` |
+| Carimbo | Body do POST; servidor **não** lê `producao_turno_ativo` |
+| Relógio vs janela | Nunca recusa save. Só valida número ligado na etapa |
+| Overlap na config | Permitido nas três etapas |
+| Pré-seleção | Por tablet (`localStorage` por etapa), não pelo último lote do servidor |
+| Dois tablets | Cada um lembra o próprio último; não se pisam |
+| Edição de lote | Não altera `turno`; campo não é trocável |
+| Chip / sheet / PUT ativo | Fora do fluxo de lançamento |
+| Tabela `producao_turno_ativo` | Fica no banco; não entra no fluxo |
+| Ritmo / fluxo | Inalterados: janela única T1 início → fim do último ligado |
+| PIN / relatório / TV | Fora |
+
+## Abordagem
+
+**Turno é campo do lote** (aprovado).
+
+Descartado: manter turno ativo no servidor e só liberar overlap (briga no tablet). Descartado: chip + campo no modal (duas fontes de verdade). Descartado: inferir só pelo relógio (overlap e hora extra não têm um único turno).
+
+## Arquitetura
+
+```text
+config_operacao_turnos (overlap permitido)
+        │
+        ▼
+modal + lote  →  segmento turno (pré-seleção local)
+        │
+        ▼
+POST lote { …, turno: 1|2|3 }
+        │
+        ▼
+serviço valida numero ∈ turnos ligados da etapa
+        │
+        ▼
+insert lote.turno
+        │
+        ▼
+tablet grava último turno da etapa no localStorage
+```
+
+Relógio só entra na **pré-seleção** do cliente. O servidor não consulta janela, dia operacional nem `producao_turno_ativo` para criar lote.
+
+## Schema
+
+Sem tabela nova. Coluna `turno` nos lotes permanece (`smallint` 1\|2\|3, nullable por histórico).
+
+`config_operacao_turnos`: deixa de valer “sobreposição não”. Fronteira `fim(N) = início(N+1)` continua válida; overlap (`início(N+1) < fim(N)`) também. Overnight (`fim < início`) continua permitido. Início = fim continua inválido. T1 obrigatório; T3 só com T2.
+
+`producao_turno_ativo`: sem migração de drop nesta entrega.
+
+## Regras de negócio
+
+### Config
+
+`assertTurnosEtapaValidos` (ou sucessor) **não** retorna “Os turnos desta etapa se sobrepõem.” Nem o wrap que recusava T3 overnight atravessando o T1 do dia seguinte.
+
+Ainda recusa: sem T1; T3 sem T2; início = fim.
+
+### POST lote (fermentação, forno, embalagem)
+
+- `turno` obrigatório no body: `1`, `2` ou `3`.
+- Tem de existir linha ligada dessa etapa na config.
+- Ausente / inválido / desligado → 400 (não 409). Mensagem: “Informe o turno.” ou “Turno não cadastrado para esta etapa.”
+- Relógio fora de janela, em overlap ou em buraco → **não** é motivo de erro.
+- Edição (PATCH/PUT de quantidade/fotos) não manda e não altera `turno`.
+
+### Pré-seleção no `+` (cliente)
+
+Turnos = ligados da etapa. `ultimo` = número em `localStorage` desta etapa neste tablet (`valepan.producao.turno.ultimo.<etapa>`), se ainda estiver ligado.
+
+1. Se `ultimo` existe → pré-seleciona `ultimo` (vale em overlap e em hora extra).
+2. Senão, se o relógio cai em **exatamente uma** janela `[inicio, fim)` → esse número.
+3. Senão, se o relógio não cai em nenhuma janela → turno cujo `fim` é o mais recente (hora extra do que acabou). Distância = minutos de `fim` até agora no relógio de 24h (se `agora < fim`, soma 24h). Overnight de janela continua igual a `isClockInJanela`.
+4. Senão (overlap e sem `ultimo`) → nenhum selecionado; salvar bloqueado até tocar um chip.
+
+Depois de **criar** lote com sucesso, grava esse número no `localStorage` da etapa. Edição não grava.
+
+Janela: `[inicio, fim)` com overnight igual a `isClockInJanela`. Relógio `America/Sao_Paulo`.
+
+## Interface
+
+Telas: `/realizado/fermentacao`, `/realizado/forno`, `/realizado/embalagem`.
+
+- Toolbar **sem** chip de turno.
+- `+` abre o modal **sem** sheet.
+- Primeiro campo: segmento “Turno” com um chip por turno ligado (`Turno 1`, …). Alvo ≥44px; selecionado amber; pt-BR. Componente novo, pequeno — não inchar `ProducaoModal`. Não reutilizar o `TurnoRadio` antigo (só 1\|2, fora do design system).
+- Embalagem: o mesmo campo no modal de lote da etapa.
+- Sem turno selecionado: não salva; o campo indica obrigação (não toast de “horário inválido”).
+- Linha de lote: rótulo `T1` / `T2` / `T3` como hoje; `turno` null não mostra rótulo.
+- Edição: não mostra o segmento (turno já carimbado).
+
+## APIs e unidades
+
+| Unidade | Papel |
+|---------|--------|
+| Domínio pré-seleção | Função pura: `turnos` + `agoraMin` + `ultimo` → número ou `null` |
+| Validação de config | T1, T3-com-T2, início ≠ fim; **sem** check de overlap |
+| POST lote ferm/forno/emb | Lê `turno` do body; valida contra config; carimba |
+| Cliente lote | Segmento no modal; `localStorage` por etapa após insert ok |
+| GET realizado | Continua enviando `turnos` (chips). `turnoAtivo` sai do payload e do attach |
+
+Remover do lançamento: `ensureTurnoThen`, sheet, chip, `onTurnoRequerido`, 409 `turno_requerido`, `requireNumero` nos serviços de lote, PUT `/api/producao/*/turno-ativo` (rotas mortas podem ser apagadas).
+
+Falha de rede no POST: toast atual de erro ao salvar; não limpar o `localStorage`.
+
+## Testes
+
+Unitário:
+
+- Config: overlap T1 00:00–09:00 + T2 05:00–14:00 **válido**; T3 sem T2 inválido; início = fim inválido
+- Pré-seleção: `ultimo` ganha em overlap e fora de janela; janela única sem `ultimo`; hora extra escolhe o `fim` mais recente; overlap sem `ultimo` → `null`
+- Overnight na hora extra (T3 22–05, agora 06:00 → 3)
+- Serviço: insert com `turno` do input; recusa sem turno / número desligado; **não** recusa com relógio fora de janela
+- Linha de lote `turno` null não quebra
+
+UI: segmento no topo do modal de novo lote; edição sem segmento. Sem E2E de tablet.
+
+## Fora de escopo
+
+- Nome de operador, PIN, `criado_por_usuario_id`
+- Drop da tabela `producao_turno_ativo`
+- Ritmo, fluxo ou estimativa por turno
+- Filtro/relatório por turno, TV, WhatsApp
+- Resfriamento, saídas, estoque
+- Backfill de lotes antigos
+- Sincronizar o último turno entre tablets
