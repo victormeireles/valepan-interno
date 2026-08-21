@@ -121,7 +121,7 @@ describe('ConfigOperacaoMapper.validateSnapshot', () => {
     expect(mapper.validateSnapshot(DEFAULT_CONFIG_OPERACAO)).toBeNull();
   });
 
-  it('recusa T3 sem T2, sobreposição, T1 ausente e tempos ≤ 0', () => {
+  it('recusa T3 sem T2, T1 ausente e tempos ≤ 0; aceita sobreposição', () => {
     expect(
       mapper.validateSnapshot({
         ...DEFAULT_CONFIG_OPERACAO,
@@ -144,7 +144,7 @@ describe('ConfigOperacaoMapper.validateSnapshot', () => {
           t1('embalagem', '07:00', '21:50'),
         ],
       }),
-    ).toBe('Os turnos desta etapa se sobrepõem.');
+    ).toBeNull();
 
     expect(
       mapper.validateSnapshot({
