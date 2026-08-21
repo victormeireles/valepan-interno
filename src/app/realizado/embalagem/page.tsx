@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import ProducaoModal from '@/components/ProducaoModal';
 import RealizadoEtapa from '@/components/Realizado/RealizadoEtapa';
 import EtapaReabrirConfirmDialog from '@/components/Realizado/etapa/EtapaReabrirConfirmDialog';
-import { useRealizadoTurnoUi } from '@/components/Realizado/turno/useRealizadoTurnoUi';
+import { useEtapaTurnoLoteField } from '@/components/Realizado/turno/useEtapaTurnoLoteField';
 import { splitPedidosEmbalagemPorStatus } from '@/domain/embalagem/embalagem-painel-adapter';
 import {
   buildEmbalagemLoteLookup,
@@ -61,13 +61,11 @@ export default function ProducaoEmbalagemPage() {
     setMessage,
   });
 
-  const { turnoChip, turnoSheet, ensureTurnoThen, onTurnoRequerido } =
-    useRealizadoTurnoUi({
-      etapa: 'embalagem',
-      turnos,
-      turnoAtivo: null,
-      onError: (msg) => setMessage(msg),
-    });
+  const { loteTurno, setLoteTurno, persistUltimo } = useEtapaTurnoLoteField({
+    etapa: 'embalagem',
+    turnos,
+    isNewLoteOpen: producaoModalOpen && isNewLoteModal,
+  });
 
   const pedidoLookup = useMemo(() => buildEmbalagemPedidoLookup(pedidos), [pedidos]);
   const loteLookup = useMemo(() => buildEmbalagemLoteLookup(pedidos), [pedidos]);
@@ -151,34 +149,32 @@ export default function ProducaoEmbalagemPage() {
   );
 
   const handleNovoLote = useCallback((pedido: PainelPedidoEmbalagem) => {
-    ensureTurnoThen(() => {
-      setIsNewLoteModal(true);
-      setEditingItem({
-        pedidoEmbalagemId: pedido.pedidoEmbalagemId,
-        cliente: pedido.cliente,
-        produto: pedido.produto,
-        observacao: pedido.observacao,
-        congelado: pedido.congelado ?? 'Não',
-        unidade: pedido.unidade,
-        aProduzir: pedido.aProduzir,
-        produzido: 0,
-        dataFabricacao: pedido.dataFabricacao,
-        caixas: 0,
-        pacotes: 0,
-        unidades: 0,
-        kg: 0,
-        pedidoCaixas: pedido.pedido.caixas,
-        pedidoPacotes: pedido.pedido.pacotes,
-        pedidoUnidades: pedido.pedido.unidades,
-        pedidoKg: pedido.pedido.kg,
-        metaCaixas: pedido.pedido.caixas,
-        metaPacotes: pedido.pedido.pacotes,
-        metaUnidades: pedido.pedido.unidades,
-        metaKg: pedido.pedido.kg,
-      });
-      setProducaoModalOpen(true);
+    setIsNewLoteModal(true);
+    setEditingItem({
+      pedidoEmbalagemId: pedido.pedidoEmbalagemId,
+      cliente: pedido.cliente,
+      produto: pedido.produto,
+      observacao: pedido.observacao,
+      congelado: pedido.congelado ?? 'Não',
+      unidade: pedido.unidade,
+      aProduzir: pedido.aProduzir,
+      produzido: 0,
+      dataFabricacao: pedido.dataFabricacao,
+      caixas: 0,
+      pacotes: 0,
+      unidades: 0,
+      kg: 0,
+      pedidoCaixas: pedido.pedido.caixas,
+      pedidoPacotes: pedido.pedido.pacotes,
+      pedidoUnidades: pedido.pedido.unidades,
+      pedidoKg: pedido.pedido.kg,
+      metaCaixas: pedido.pedido.caixas,
+      metaPacotes: pedido.pedido.pacotes,
+      metaUnidades: pedido.pedido.unidades,
+      metaKg: pedido.pedido.kg,
     });
-  }, [ensureTurnoThen]);
+    setProducaoModalOpen(true);
+  }, []);
 
   const handleNovoLoteById = useCallback(
     (pedidoEmbalagemId: string) => {
@@ -339,7 +335,6 @@ export default function ProducaoEmbalagemPage() {
           onEditLote: handleEditLoteById,
           onDeleteLote: handleDeleteLoteById,
         }}
-        turnoChip={turnoChip}
       />
 
       {reabrirDialogProps ? (
@@ -357,7 +352,10 @@ export default function ProducaoEmbalagemPage() {
         onSave={handleSaveProducao}
         onInsumoConsumoAviso={handleInsumoConsumoAviso}
         onSaveSuccess={refreshPainelData}
-        onTurnoRequerido={onTurnoRequerido}
+        turnos={turnos}
+        loteTurno={loteTurno}
+        onLoteTurnoChange={setLoteTurno}
+        onLoteTurnoPersist={persistUltimo}
         initialData={
           editingItem
             ? {
@@ -410,8 +408,6 @@ export default function ProducaoEmbalagemPage() {
         loading={producaoLoading}
         mode="embalagem"
       />
-
-      {turnoSheet}
     </>
   );
 }

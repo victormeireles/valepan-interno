@@ -13,7 +13,12 @@ import {
 import { EmbalagemLoteModalShell } from './EmbalagemLoteModal';
 import EmbalagemDiscardSheet from './EmbalagemLoteModal/EmbalagemDiscardSheet';
 import { hasProducaoDraftChanged } from '@/domain/realizado/producao-draft-changes';
-import { isTurnoRequeridoHttp } from '@/domain/producao-turno/turno-requerido-http';
+import { TURNO_INFORME_MESSAGE } from '@/domain/producao-turno/producao-turno-numero';
+import type {
+  ProducaoTurnoCadastrado,
+  ProducaoTurnoNumero,
+} from '@/domain/producao-turno/producao-turno-types';
+import { TurnoSegmentField } from './Realizado/turno/TurnoSegmentField';
 import {
   aplicarAtalhoLotePadrao,
   aplicarAtalhoLoteValor,
@@ -35,7 +40,10 @@ interface ProducaoModalProps {
     options?: { continuaProduzindo?: boolean },
   ) => Promise<void>;
   onSaveSuccess?: () => Promise<void>;
-  onTurnoRequerido?: () => void;
+  turnos?: ProducaoTurnoCadastrado[];
+  loteTurno?: ProducaoTurnoNumero | null;
+  onLoteTurnoChange?: (numero: ProducaoTurnoNumero) => void;
+  onLoteTurnoPersist?: () => void;
   onInsumoConsumoAviso?: (avisos: string[]) => void;
   initialData?: ProducaoData;
   loading?: boolean;
@@ -75,7 +83,10 @@ export default function ProducaoModal({
   onClose,
   onSave,
   onSaveSuccess,
-  onTurnoRequerido,
+  turnos,
+  loteTurno,
+  onLoteTurnoChange,
+  onLoteTurnoPersist,
   onInsumoConsumoAviso,
   initialData,
   loading = false,
@@ -333,6 +344,11 @@ export default function ProducaoModal({
       return;
     }
 
+    if (loteTurno == null) {
+      setMessage({ type: 'error', text: TURNO_INFORME_MESSAGE });
+      return;
+    }
+
     const payload = sanitizeQuantidades(formData);
 
     try {
@@ -348,11 +364,13 @@ export default function ProducaoModal({
           ? {
               ...buildLotePayload(payload),
               continuaProduzindo,
+              turno: loteTurno,
             }
           : {
               assadeiras: payload.caixas,
               unidades: payload.unidades,
               continuaProduzindo,
+              turno: loteTurno,
             };
 
       const res = await fetch(endpoint, {
@@ -361,10 +379,6 @@ export default function ProducaoModal({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (isTurnoRequeridoHttp(res.status, data)) {
-        onTurnoRequerido?.();
-        return;
-      }
       if (!res.ok) throw new Error(data.error || 'Erro ao criar lote');
 
       const createdLoteId = data.loteId as string | undefined;
@@ -375,6 +389,7 @@ export default function ProducaoModal({
         await uploadPendingPhotos({ loteId: createdLoteId });
       }
 
+      onLoteTurnoPersist?.();
       if (onSaveSuccess) await onSaveSuccess();
       setFormData({ caixas: 0, pacotes: 0, unidades: 0, kg: 0, obsEmbalagem: '' });
       setPhotoFiles({ pacote: null, etiqueta: null, pallet: null });
@@ -394,10 +409,11 @@ export default function ProducaoModal({
     ordemProducaoId,
     mode,
     formData,
+    loteTurno,
     buildLotePayload,
     uploadPendingPhotos,
+    onLoteTurnoPersist,
     onSaveSuccess,
-    onTurnoRequerido,
     onInsumoConsumoAviso,
     onClose,
     totalQtyVisivel,
@@ -751,6 +767,15 @@ export default function ProducaoModal({
 
   const embalagemTitle = isNewLote ? 'Novo lote' : 'Editar lote';
   const modalTitle = isNewLote ? 'Novo lote' : 'Editar produção';
+  const turnoField =
+    isNewLote && turnos && turnos.length > 0 ? (
+      <TurnoSegmentField
+        turnos={turnos}
+        value={loteTurno ?? null}
+        onChange={(numero) => onLoteTurnoChange?.(numero)}
+        disabled={loading || isSubmitting}
+      />
+    ) : null;
 
   return (
     <div
@@ -812,6 +837,7 @@ export default function ProducaoModal({
           onSubmit={handleSubmit}
           onSalvar={() => void handleEtapaSalvar()}
           onSalvarEFinalizar={() => void handleEtapaSalvarEFinalizar()}
+          turnoField={turnoField}
         />
       ) : (
       <div
@@ -882,6 +908,7 @@ export default function ProducaoModal({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {turnoField}
             <div className="grid grid-cols-2 gap-6">
               {showAssadeirasField && (
                 <NumberInput

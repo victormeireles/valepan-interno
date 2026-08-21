@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { EtapaTurnoUltimoStore } from '@/domain/producao-turno/etapa-turno-ultimo-store';
 import { resolveTurnoPreselecao } from '@/domain/producao-turno/producao-turno-preselecao';
 import type {
@@ -26,9 +26,12 @@ export function useEtapaTurnoLoteField({
   isNewLoteOpen,
 }: UseEtapaTurnoLoteFieldInput) {
   const [loteTurno, setLoteTurno] = useState<ProducaoTurnoNumero | null>(null);
+  const wasNewLoteOpenRef = useRef(false);
 
   useEffect(() => {
-    if (!isNewLoteOpen) return;
+    const justOpened = isNewLoteOpen && !wasNewLoteOpenRef.current;
+    wasNewLoteOpenRef.current = isNewLoteOpen;
+    if (!justOpened) return;
     const store = createClientStore();
     const ultimo = store.read(etapa);
     const agoraMin = brazilClockMinutes(new Date());

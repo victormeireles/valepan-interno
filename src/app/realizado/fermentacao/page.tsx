@@ -16,7 +16,7 @@ import {
   type PainelLoteItemEtapa,
 } from '@/domain/realizado/etapa-painel-adapter';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
-import { useRealizadoTurnoUi } from '@/components/Realizado/turno/useRealizadoTurnoUi';
+import { useEtapaTurnoLoteField } from '@/components/Realizado/turno/useEtapaTurnoLoteField';
 import { useLatestDataDate } from '@/hooks/useLatestDataDate';
 import { useEtapaPainelCarga } from '@/hooks/useEtapaPainelCarga';
 import { useEtapaReabrirOp } from '@/hooks/useEtapaReabrirOp';
@@ -59,13 +59,11 @@ export default function ProducaoFermentacaoPage() {
     producaoModalOpen,
   });
 
-  const { turnoChip, turnoSheet, ensureTurnoThen, onTurnoRequerido } =
-    useRealizadoTurnoUi({
-      etapa: 'fermentacao',
-      turnos,
-      turnoAtivo: null,
-      onError: (msg) => setMessage(msg),
-    });
+  const { loteTurno, setLoteTurno, persistUltimo } = useEtapaTurnoLoteField({
+    etapa: 'fermentacao',
+    turnos,
+    isNewLoteOpen: producaoModalOpen && isNewLoteModal,
+  });
 
   useEffect(() => {
     setSelectedDate(latestDate);
@@ -116,15 +114,13 @@ export default function ProducaoFermentacaoPage() {
   );
 
   const handleNovoLote = useCallback((ordem: PainelOrdemEtapa) => {
-    ensureTurnoThen(() => {
-      setCreatingLoteOrdemId(ordem.ordemProducaoId);
-      setSelectedOrdem(ordem);
-      setEditingLote(null);
-      setIsNewLoteModal(true);
-      setProducaoModalOpen(true);
-      setCreatingLoteOrdemId(null);
-    });
-  }, [ensureTurnoThen]);
+    setCreatingLoteOrdemId(ordem.ordemProducaoId);
+    setSelectedOrdem(ordem);
+    setEditingLote(null);
+    setIsNewLoteModal(true);
+    setProducaoModalOpen(true);
+    setCreatingLoteOrdemId(null);
+  }, []);
 
   const handleDeleteLote = useCallback(
     async (lote: PainelLoteItemEtapa) => {
@@ -351,7 +347,6 @@ export default function ProducaoFermentacaoPage() {
           onEditLote: handleEditLoteById,
           onDeleteLote: handleDeleteLoteById,
         }}
-        turnoChip={turnoChip}
       />
 
       {reabrirDialogProps ? (
@@ -367,6 +362,10 @@ export default function ProducaoFermentacaoPage() {
         onSaveSuccess={async () => {
           await refreshOrdensOnly();
         }}
+        turnos={turnos}
+        loteTurno={loteTurno}
+        onLoteTurnoChange={setLoteTurno}
+        onLoteTurnoPersist={persistUltimo}
         initialData={selectedInitialData}
         produto={selectedOrdem?.produto || ''}
         cliente={selectedOrdem?.tipoEstoque || ''}
@@ -374,7 +373,6 @@ export default function ProducaoFermentacaoPage() {
         ordemProducaoId={selectedOrdem?.ordemProducaoId}
         pedidoQuantidades={selectedPedidoQuantidades}
         loading={producaoLoading}
-        onTurnoRequerido={onTurnoRequerido}
         mode="fermentacao"
         modoQuantidade={selectedOrdem?.modoQuantidade || 'assadeiras'}
         metaReferencia={selectedOrdem?.metaReferencia}
@@ -382,8 +380,6 @@ export default function ProducaoFermentacaoPage() {
         produzidoAtual={selectedOrdem?.produzido || 0}
         etapaUnidade={(selectedOrdem?.unidade || 'lt').toUpperCase()}
       />
-
-      {turnoSheet}
     </>
   );
 }

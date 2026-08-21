@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { CamposRealizadoEmbalagem } from '@/domain/embalagem/painel-quantidade';
 import type { ProducaoData } from '@/domain/types';
 import type { PhotoFiles } from '@/domain/validators/PhotoValidator';
@@ -55,6 +56,7 @@ export type EmbalagemLoteModalShellProps = {
   onSubmit: (e: React.FormEvent) => void;
   onSalvar: () => void;
   onSalvarEFinalizar: () => void;
+  turnoField?: ReactNode;
 };
 
 export default function EmbalagemLoteModalShell({
@@ -97,6 +99,7 @@ export default function EmbalagemLoteModalShell({
   onSubmit,
   onSalvar,
   onSalvarEFinalizar,
+  turnoField,
 }: EmbalagemLoteModalShellProps) {
   const closeDisabled = isSubmitting || photoLoading || loading;
 
@@ -130,6 +133,8 @@ export default function EmbalagemLoteModalShell({
               <div className="whitespace-pre-line">{message.text}</div>
             </div>
           )}
+
+          {turnoField}
 
           <EmbalagemQuantidadeSection
             camposVisiveis={camposVisiveis}
