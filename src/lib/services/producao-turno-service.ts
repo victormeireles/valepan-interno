@@ -1,11 +1,7 @@
 import { configOperacaoMapper } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
-import {
-  TURNO_NAO_CADASTRADO_MESSAGE,
-  TurnoNaoCadastradoError,
-} from '@/domain/producao-turno/producao-turno-numero';
+import { TurnoNaoCadastradoError } from '@/domain/producao-turno/producao-turno-numero';
 import { ProducaoTurnoPrompt } from '@/domain/producao-turno/producao-turno-prompt';
-import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import type {
   ProducaoTurnoAtivo,
   ProducaoTurnoCadastrado,
@@ -15,7 +11,7 @@ import type {
 } from '@/domain/producao-turno/producao-turno-types';
 import {
   producaoTurnoAtivoRepository,
-  type ProducaoTurnoAtivoRepository,
+  type ProducaoTurnoAtivoStore,
 } from '@/data/producao-turno/ProducaoTurnoAtivoRepository';
 import { configOperacaoService } from '@/lib/services/config-operacao-service';
 import { brazilClockMinutes } from '@/lib/utils/date-utils';
@@ -30,11 +26,9 @@ export type ProducaoTurnoConfigSource = {
   getConfig(): Promise<ConfigOperacaoSnapshot>;
 };
 
-export const TURNO_NAO_CADASTRADO = TURNO_NAO_CADASTRADO_MESSAGE;
-
 export class ProducaoTurnoService {
   constructor(
-    private readonly repo: ProducaoTurnoAtivoRepository = producaoTurnoAtivoRepository,
+    private readonly repo: ProducaoTurnoAtivoStore = producaoTurnoAtivoRepository,
     private readonly configSource: ProducaoTurnoConfigSource = configOperacaoService,
     private readonly prompt = new ProducaoTurnoPrompt(),
   ) {}
@@ -72,17 +66,6 @@ export class ProducaoTurnoService {
     if (!turnos.some((turno) => turno.numero === numero)) {
       throw new TurnoNaoCadastradoError();
     }
-  }
-
-  async requireNumero(
-    etapa: ProducaoTurnoEtapaId,
-    now: Date,
-  ): Promise<ProducaoTurnoNumero> {
-    const { decision } = await this.getEstado(etapa, now);
-    if (!decision.ativoValido || decision.numeroAtivo == null) {
-      throw new TurnoRequeridoError();
-    }
-    return decision.numeroAtivo;
   }
 
   private async turnosDaEtapa(

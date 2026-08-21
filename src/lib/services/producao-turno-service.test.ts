@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG_OPERACAO } from '@/domain/config-operacao/config-operacao-mapper';
 import type { ConfigOperacaoSnapshot } from '@/domain/config-operacao/config-operacao-types';
 import { TurnoNaoCadastradoError } from '@/domain/producao-turno/producao-turno-numero';
-import { TurnoRequeridoError } from '@/domain/producao-turno/turno-requerido-error';
 import type {
   ProducaoTurnoAtivo,
   ProducaoTurnoEtapaId,
@@ -63,60 +62,6 @@ const t1ConfirmadoHoje: ProducaoTurnoAtivo = {
   numero: 1,
   confirmadoEm: at('08:00').toISOString(),
 };
-
-describe('ProducaoTurnoService.requireNumero', () => {
-  it('com ativo T1 válido às 10:00 retorna 1', async () => {
-    const service = createService(
-      new FakeTurnoAtivoRepository({ fermentacao: t1ConfirmadoHoje }),
-    );
-
-    const numero = await service.requireNumero('fermentacao', at('10:00'));
-
-    expect(numero).toBe(1);
-  });
-
-  it('sem ativo lança TurnoRequeridoError', async () => {
-    const service = createService(new FakeTurnoAtivoRepository());
-
-    const thrown = service.requireNumero('fermentacao', at('10:00'));
-
-    await expect(thrown).rejects.toBeInstanceOf(TurnoRequeridoError);
-    await expect(thrown).rejects.toMatchObject({ code: 'turno_requerido' });
-  });
-
-  it('T1 confirmado hoje fora da janela (19:00) ainda retorna 1', async () => {
-    const snapshot = snapshotComTurnos([
-      { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '14:00' },
-      { etapa: 'fermentacao', numero: 2, inicio: '14:00', fim: '22:00' },
-      { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
-      { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
-    ]);
-    const service = createService(
-      new FakeTurnoAtivoRepository({ fermentacao: t1ConfirmadoHoje }),
-      snapshot,
-    );
-
-    const numero = await service.requireNumero('fermentacao', at('19:00'));
-
-    expect(numero).toBe(1);
-  });
-
-  it('T1 07–18 só, confirmado às 08:00, requireNumero às 19:00 retorna 1', async () => {
-    const snapshot = snapshotComTurnos([
-      { etapa: 'fermentacao', numero: 1, inicio: '07:00', fim: '18:00' },
-      { etapa: 'forno', numero: 1, inicio: '07:00', fim: '18:00' },
-      { etapa: 'embalagem', numero: 1, inicio: '07:00', fim: '21:50' },
-    ]);
-    const service = createService(
-      new FakeTurnoAtivoRepository({ fermentacao: t1ConfirmadoHoje }),
-      snapshot,
-    );
-
-    const numero = await service.requireNumero('fermentacao', at('19:00'));
-
-    expect(numero).toBe(1);
-  });
-});
 
 describe('ProducaoTurnoService.assertNumeroCadastrado', () => {
   it('assertNumeroCadastrado passa se o número está ligado', async () => {

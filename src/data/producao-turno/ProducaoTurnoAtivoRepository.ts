@@ -14,7 +14,12 @@ export type ProducaoTurnoAtivoUpsert = {
   confirmadoEm: string;
 };
 
-export class ProducaoTurnoAtivoRepository {
+export type ProducaoTurnoAtivoStore = {
+  findByEtapa(etapa: ProducaoTurnoEtapaId): Promise<ProducaoTurnoAtivo | null>;
+  upsert(input: ProducaoTurnoAtivoUpsert): Promise<void>;
+};
+
+export class ProducaoTurnoAtivoRepository implements ProducaoTurnoAtivoStore {
   private get supabase() {
     return supabaseClientFactory.createServiceRoleClient();
   }
