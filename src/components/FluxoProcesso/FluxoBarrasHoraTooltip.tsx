@@ -30,7 +30,7 @@ export default function FluxoBarrasHoraTooltip({
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute top-2 z-20 min-w-[160px] max-w-[220px] rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-lg"
+      className="pointer-events-none absolute top-2 z-20 min-w-[160px] max-w-[min(220px,calc(100%-8px))] rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-lg"
       style={{
         left: `calc(${(hora + 0.5) / 24} * 100%)`,
         transform: hora < 4 ? 'translateX(0)' : hora > 19 ? 'translateX(-100%)' : 'translateX(-50%)',

@@ -42,18 +42,18 @@ export default function FluxoPercursoSection({
   };
 
   return (
-    <Card padding="lg">
+    <Card padding="md" className="min-w-0">
       <div className="mb-2.5 flex flex-wrap items-baseline gap-2.5">
         <span className="text-base font-bold text-text-strong">Percurso da assadeira</span>
         <span className="text-xs text-text-muted">em que hora ela esteve em cada etapa</span>
       </div>
-      <div className="mb-3.5 flex flex-wrap gap-1.5">
+      <div className="mb-3.5 flex min-w-0 gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5">
         {fluxo.ordemAss.map((a) => (
           <button
             key={a}
             type="button"
             onClick={() => trocarAss(a)}
-            className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm"
+            className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm"
             style={{
               border: `1px solid ${ass === a ? fluxo.cores[a] : 'var(--border-default)'}`,
               background:

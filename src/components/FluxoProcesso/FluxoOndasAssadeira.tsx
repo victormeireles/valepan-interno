@@ -138,7 +138,7 @@ function OndasLista({
   const { scale } = useFluxoDisplay();
 
   return (
-    <div className="flex flex-wrap gap-1.5" role="listbox" aria-label="Ondas">
+    <div className="flex min-w-0 gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5" role="listbox" aria-label="Ondas">
       {ondas.map((onda, i) => {
         const active = onda.id === selectedId;
         const vol = fmtQty(
@@ -152,7 +152,7 @@ function OndasLista({
             role="option"
             aria-selected={active}
             onClick={() => onSelect(onda.id)}
-            className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] transition-colors duration-150"
+            className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] transition-colors duration-150"
             style={{
               border: `1px solid ${active ? 'var(--color-amber-600, #d97706)' : 'var(--border-default)'}`,
               background: active

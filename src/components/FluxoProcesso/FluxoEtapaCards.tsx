@@ -11,7 +11,7 @@ type FluxoEtapaCardsProps = {
 
 export default function FluxoEtapaCards({ fluxo, etapaAtiva, onSelect }: FluxoEtapaCardsProps) {
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
       {fluxo.etapas.map((e) => (
         <FluxoEtapaCard
           key={e.key}

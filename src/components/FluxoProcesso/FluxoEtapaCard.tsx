@@ -28,6 +28,7 @@ export default function FluxoEtapaCard({
   return (
     <Card
       padding="md"
+      className="min-w-0"
       style={
         ativa
           ? {
@@ -50,13 +51,13 @@ export default function FluxoEtapaCard({
           }
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
             style={{ background: cor }}
             aria-hidden
           />
-          <span className="text-[15px] font-bold tracking-tight text-text-strong">
+          <span className="min-w-0 text-[15px] font-bold tracking-tight text-text-strong">
             {e.nome}
           </span>
           <span className="ml-auto font-mono text-[11px] tabular-nums text-text-muted">

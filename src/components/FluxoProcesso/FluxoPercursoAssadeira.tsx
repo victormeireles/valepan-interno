@@ -4,8 +4,12 @@ import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/flux
 import type { FluxoPercursoCelulaFiltro } from '@/domain/fluxo-processo/fluxo-produtos-hora';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtCellShort, fmtQty } from './fluxo-display-scale';
+import FluxoOverflowX from './FluxoOverflowX';
+import { FluxoHoraTrack } from './fluxo-hora-track';
 import { diaAnteriorLabelFromDia } from './fluxo-processo-format';
 
+const LABEL_W = 108;
+const TOTAL_W = 84;
 const HORAS = Array.from({ length: 24 }, (_, i) => i);
 
 type FluxoPercursoAssadeiraProps = {
@@ -56,114 +60,125 @@ export default function FluxoPercursoAssadeira({
   };
 
   return (
-    <div>
-      <div className="flex pl-[108px]">
-        {HORAS.map((h) => (
-          <div
-            key={h}
-            className={[
-              'flex-1 pb-1 text-center font-mono text-[9px] tabular-nums',
-              filtro?.hora === h ? 'font-bold text-text-strong' : 'text-text-faint',
-            ].join(' ')}
-          >
-            {String(h).padStart(2, '0')}
-          </div>
-        ))}
-        <div className="w-[84px] shrink-0" />
-      </div>
-
-      {linhas.map((l) => {
-        const j = janela(l.v);
-        const tot = l.v.reduce((t, x) => t + x, 0);
-        const linhaAtiva = filtro?.etapa === l.k;
-        return (
-          <div key={l.k} className="mb-1 flex items-center">
-            <div className="w-[108px] shrink-0 pr-2.5 text-right">
+    <div className="min-w-0">
+      <FluxoOverflowX label="Percurso da assadeira por hora">
+        <div style={{ minWidth: FluxoHoraTrack.innerMinWidthPx(LABEL_W + TOTAL_W) }}>
+          <div className="flex">
+            <div
+              className="sticky left-0 z-10 shrink-0 bg-surface"
+              style={{ width: LABEL_W }}
+            />
+            {HORAS.map((h) => (
               <div
+                key={h}
                 className={[
-                  'text-sm font-semibold',
-                  linhaAtiva ? 'text-text-strong' : 'text-text-strong',
+                  'min-w-11 flex-1 pb-1 text-center font-mono text-[9px] tabular-nums',
+                  filtro?.hora === h ? 'font-bold text-text-strong' : 'text-text-faint',
                 ].join(' ')}
               >
-                {l.nome}
+                {String(h).padStart(2, '0')}
               </div>
-              <div className="font-mono text-[9.5px] tabular-nums text-text-faint">
-                {j
-                  ? `${String(j[0]).padStart(2, '0')}h → ${String(j[1]).padStart(2, '0')}h`
-                  : 'não passou'}
-              </div>
-            </div>
-            <div className="flex flex-1 gap-0.5">
-              {HORAS.map((h) => {
-                const v = l.v[h];
-                const intensity = Math.round(14 + Math.sqrt(v / max) * 86);
-                const selecionada = filtro?.etapa === l.k && filtro.hora === h;
-                const clicavel = v > 0;
+            ))}
+            <div className="shrink-0" style={{ width: TOTAL_W }} />
+          </div>
 
-                if (!clicavel) {
-                  return (
-                    <div
-                      key={h}
-                      className="grid h-10 flex-1 place-items-center rounded-md border border-border-default bg-surface-sunken"
-                      aria-hidden
-                    />
-                  );
-                }
-
-                return (
-                  <button
-                    key={h}
-                    type="button"
-                    aria-pressed={selecionada}
-                    aria-label={`${l.nome}, ${String(h).padStart(2, '0')}:00, ${fmtQty(v, scale.mode)} ${scale.unitLabel}. Clique para ver produtos`}
-                    title="Ver produtos desta hora"
-                    onClick={() => toggleCelula(l.k, h, v)}
+          {linhas.map((l) => {
+            const j = janela(l.v);
+            const tot = l.v.reduce((t, x) => t + x, 0);
+            const linhaAtiva = filtro?.etapa === l.k;
+            return (
+              <div key={l.k} className="mb-1 flex items-center">
+                <div
+                  className="sticky left-0 z-10 shrink-0 bg-surface pr-2.5 text-right"
+                  style={{ width: LABEL_W }}
+                >
+                  <div
                     className={[
-                      'grid h-10 flex-1 cursor-pointer place-items-center rounded-md border-none',
-                      'transition-[transform,box-shadow] duration-150 ease-out',
-                      'hover:-translate-y-px hover:shadow-sm',
-                      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-500',
-                      'active:translate-y-0',
-                      selecionada ? 'ring-2 ring-amber-500 ring-offset-1' : '',
+                      'truncate text-sm font-semibold text-text-strong',
+                      linhaAtiva ? 'font-bold' : '',
                     ].join(' ')}
-                    style={{
-                      background: `color-mix(in srgb, ${cor} ${intensity}%, white)`,
-                    }}
                   >
-                    <span
-                      className="font-mono text-[9px] font-bold tabular-nums"
-                      style={{
-                        color:
-                          Math.sqrt(v / max) > 0.62 ? '#fff' : 'var(--text-strong)',
-                      }}
-                    >
-                      {fmtCellShort(v, scale.mode)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="w-[84px] shrink-0 pl-2.5 text-right">
-              <div
-                className={[
-                  'font-mono text-sm font-bold tabular-nums',
-                  tot ? 'text-text-strong' : 'text-text-faint',
-                ].join(' ')}
-              >
-                {tot ? fmtQty(tot, scale.mode) : '—'}
-              </div>
-              <div className="text-[9.5px] text-text-faint">{scale.unitLabel} no dia</div>
-            </div>
-          </div>
-        );
-      })}
+                    {l.nome}
+                  </div>
+                  <div className="font-mono text-[9.5px] tabular-nums text-text-faint">
+                    {j
+                      ? `${String(j[0]).padStart(2, '0')}h → ${String(j[1]).padStart(2, '0')}h`
+                      : 'não passou'}
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-1 gap-0.5">
+                  {HORAS.map((h) => {
+                    const v = l.v[h];
+                    const intensity = Math.round(14 + Math.sqrt(v / max) * 86);
+                    const selecionada = filtro?.etapa === l.k && filtro.hora === h;
+                    const clicavel = v > 0;
 
-      <div className="mt-1.5 pl-[108px] text-[10.5px] text-text-faint">
-        Clique numa célula para ver os produtos daquela hora · clique de novo para limpar
+                    if (!clicavel) {
+                      return (
+                        <div
+                          key={h}
+                          className="grid h-11 min-w-11 flex-1 place-items-center rounded-md border border-border-default bg-surface-sunken"
+                          aria-hidden
+                        />
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        aria-pressed={selecionada}
+                        aria-label={`${l.nome}, ${String(h).padStart(2, '0')}:00, ${fmtQty(v, scale.mode)} ${scale.unitLabel}. Clique para ver produtos`}
+                        title="Ver produtos desta hora"
+                        onClick={() => toggleCelula(l.k, h, v)}
+                        className={[
+                          'grid h-11 min-w-11 flex-1 cursor-pointer place-items-center rounded-md border-none',
+                          'transition-[transform,box-shadow] duration-150 ease-out',
+                          'hover:-translate-y-px hover:shadow-sm',
+                          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-500',
+                          'active:translate-y-0',
+                          selecionada ? 'ring-2 ring-amber-500 ring-offset-1' : '',
+                        ].join(' ')}
+                        style={{
+                          background: `color-mix(in srgb, ${cor} ${intensity}%, white)`,
+                        }}
+                      >
+                        <span
+                          className="font-mono text-[9px] font-bold tabular-nums"
+                          style={{
+                            color:
+                              Math.sqrt(v / max) > 0.62 ? '#fff' : 'var(--text-strong)',
+                          }}
+                        >
+                          {fmtCellShort(v, scale.mode)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="shrink-0 pl-2.5 text-right" style={{ width: TOTAL_W }}>
+                  <div
+                    className={[
+                      'font-mono text-sm font-bold tabular-nums',
+                      tot ? 'text-text-strong' : 'text-text-faint',
+                    ].join(' ')}
+                  >
+                    {tot ? fmtQty(tot, scale.mode) : '—'}
+                  </div>
+                  <div className="text-[9.5px] text-text-faint">{scale.unitLabel} no dia</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </FluxoOverflowX>
+
+      <div className="mt-1.5 text-[10.5px] text-text-faint">
+        Toque numa célula para ver os produtos daquela hora
       </div>
 
       {a ? (
-        <div className="mt-2.5 flex flex-wrap gap-4 pl-[108px] text-[11.5px] text-text-muted">
+        <div className="mt-2.5 flex flex-wrap gap-4 text-[11.5px] text-text-muted">
           {fermTot - fornoTot > 0 ? (
             <span>
               <strong className="font-mono tabular-nums text-text-body">

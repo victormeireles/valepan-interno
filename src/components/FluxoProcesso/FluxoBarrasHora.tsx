@@ -7,6 +7,8 @@ import { fmtQtyK } from './fluxo-display-scale';
 import FluxoBarrasHoraColuna from './FluxoBarrasHoraColuna';
 import FluxoBarrasHoraTooltip from './FluxoBarrasHoraTooltip';
 import { FluxoHoraLegendaBuilder } from './FluxoHoraLegendaBuilder';
+import FluxoOverflowX from './FluxoOverflowX';
+import { FluxoHoraTrack } from './fluxo-hora-track';
 import {
   diaAnteriorLabelFromDia,
   FLUXO_UI_ETAPA_COR,
@@ -66,7 +68,7 @@ export default function FluxoBarrasHora({
         mostrarAgora={mostrarAgora}
       />
 
-      <div className="flex">
+      <div className="flex min-w-0">
         <div className="relative w-[46px] shrink-0" style={{ height: CHART_H }}>
           {[0, 0.5, 1].map((f) => (
             <span
@@ -79,83 +81,90 @@ export default function FluxoBarrasHora({
           ))}
         </div>
 
-        <div
-          className="relative flex-1 border-b border-border-default"
-          style={{ height: CHART_H }}
-          role="list"
-          aria-label="Produção por hora"
-          onMouseLeave={() => setHoraAtiva(null)}
-        >
-          {[0.25, 0.5, 0.75, 1].map((f) => (
+        <FluxoOverflowX label="Produção por hora" className="flex-1">
+          <div style={{ minWidth: FluxoHoraTrack.plotMinWidthPx() }}>
             <div
-              key={f}
-              className="absolute right-0 left-0 border-t border-stone-100"
-              style={{ bottom: f * plotH }}
-            />
-          ))}
-
-          {cap <= maxHora ? (
-            <div
-              className="absolute right-0 left-0"
-              style={{ bottom: (cap / maxHora) * plotH, borderTop: `1px dashed ${cor}` }}
+              className="relative border-b border-border-default"
+              style={{ height: CHART_H }}
+              role="list"
+              aria-label="Produção por hora"
+              onMouseLeave={() => setHoraAtiva(null)}
             >
-              <span
-                className="absolute top-[-13px] right-0.5 font-mono text-[9.5px] tabular-nums"
-                style={{ color: cor }}
-              >
-                capacidade informada {fmtQtyK(cap, scale.mode)}/h
-              </span>
+              {[0.25, 0.5, 0.75, 1].map((f) => (
+                <div
+                  key={f}
+                  className="absolute right-0 left-0 border-t border-stone-100"
+                  style={{ bottom: f * plotH }}
+                />
+              ))}
+
+              {cap <= maxHora ? (
+                <div
+                  className="absolute right-0 left-0"
+                  style={{ bottom: (cap / maxHora) * plotH, borderTop: `1px dashed ${cor}` }}
+                >
+                  <span
+                    className="absolute top-[-13px] right-0.5 max-w-[70%] truncate font-mono text-[9.5px] tabular-nums"
+                    style={{ color: cor }}
+                  >
+                    <span className="sm:hidden">cap. {fmtQtyK(cap, scale.mode)}/h</span>
+                    <span className="hidden sm:inline">
+                      capacidade informada {fmtQtyK(cap, scale.mode)}/h
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
+              {horaAtiva != null ? (
+                <FluxoBarrasHoraTooltip
+                  hora={horaAtiva}
+                  total={totais[horaAtiva]}
+                  previsto={previstos[horaAtiva]}
+                  unitLabel={scale.unitLabel}
+                  mode={scale.mode}
+                  itens={itensAtivos}
+                />
+              ) : null}
+
+              <div className="absolute inset-x-0 bottom-0 flex items-end" style={{ height: plotH }}>
+                {HORAS.map((h) => (
+                  <FluxoBarrasHoraColuna
+                    key={h}
+                    h={h}
+                    fluxo={fluxo}
+                    etapa={etapa}
+                    scale={scale}
+                    usadas={usadas}
+                    total={totais[h]}
+                    previsto={previstos[h]}
+                    maxHora={maxHora}
+                    plotH={plotH}
+                    ativa={horaAtiva === h}
+                    labelId={`${chartId}-hora-${h}`}
+                    mostrarAgora={mostrarAgora && h === horaAgora}
+                    onActivate={() => setHoraAtiva(h)}
+                    onDeactivate={() => setHoraAtiva((cur) => (cur === h ? null : cur))}
+                  />
+                ))}
+              </div>
             </div>
-          ) : null}
 
-          {horaAtiva != null ? (
-            <FluxoBarrasHoraTooltip
-              hora={horaAtiva}
-              total={totais[horaAtiva]}
-              previsto={previstos[horaAtiva]}
-              unitLabel={scale.unitLabel}
-              mode={scale.mode}
-              itens={itensAtivos}
-            />
-          ) : null}
-
-          <div className="absolute inset-x-0 bottom-0 flex items-end" style={{ height: plotH }}>
-            {HORAS.map((h) => (
-              <FluxoBarrasHoraColuna
-                key={h}
-                h={h}
-                fluxo={fluxo}
-                etapa={etapa}
-                scale={scale}
-                usadas={usadas}
-                total={totais[h]}
-                previsto={previstos[h]}
-                maxHora={maxHora}
-                plotH={plotH}
-                ativa={horaAtiva === h}
-                labelId={`${chartId}-hora-${h}`}
-                mostrarAgora={mostrarAgora && h === horaAgora}
-                onActivate={() => setHoraAtiva(h)}
-                onDeactivate={() => setHoraAtiva((cur) => (cur === h ? null : cur))}
-              />
-            ))}
+            <div className="flex">
+              {HORAS.map((h) => (
+                <div
+                  key={h}
+                  className={[
+                    'min-w-11 flex-1 pt-1.5 text-center font-mono text-[9px] tabular-nums',
+                    totais[h] || previstos[h] ? 'text-text-muted' : 'text-text-faint',
+                    horaAtiva === h ? 'font-bold text-text-strong' : '',
+                  ].join(' ')}
+                >
+                  {String(h).padStart(2, '0')}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div className="flex pl-[46px]">
-        {HORAS.map((h) => (
-          <div
-            key={h}
-            className={[
-              'flex-1 pt-1.5 text-center font-mono text-[9px] tabular-nums',
-              totais[h] || previstos[h] ? 'text-text-muted' : 'text-text-faint',
-              horaAtiva === h ? 'font-bold text-text-strong' : '',
-            ].join(' ')}
-          >
-            {String(h).padStart(2, '0')}
-          </div>
-        ))}
+        </FluxoOverflowX>
       </div>
     </div>
   );

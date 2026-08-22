@@ -569,7 +569,6 @@ export default function ProducaoModal({
     totalProjetado: totalProjetadoEtapa,
     metaReferencia: metaReferenciaEfetiva,
     unidade: etapaUnidadeNorm,
-    contexto: mode === 'embalagem' ? 'embalagem' : 'etapa',
     onSubmit: handleEtapaSubmitAction,
   });
 
@@ -1071,6 +1070,7 @@ export default function ProducaoModal({
           titulo={confirmDialog.titulo}
           mensagem={confirmDialog.mensagem}
           textoConfirmar={confirmDialog.textoConfirmar}
+          resumo={confirmDialog.resumo}
           onVoltar={handleEtapaConfirmBack}
           onConfirmar={() => void handleEtapaConfirmContinue()}
         />

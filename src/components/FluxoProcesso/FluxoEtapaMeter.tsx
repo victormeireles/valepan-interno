@@ -22,7 +22,7 @@ export default function FluxoEtapaMeter({
   if (fillPct == null) return null;
 
   return (
-    <div className="grid grid-cols-[2.75rem_2.35rem_1fr_auto] items-center gap-x-2">
+    <div className="grid min-w-0 grid-cols-[2.75rem_2.35rem_minmax(0,1fr)_auto] items-center gap-x-2">
       <span className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
         {label}
       </span>

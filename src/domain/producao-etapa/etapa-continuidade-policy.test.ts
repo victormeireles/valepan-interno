@@ -17,7 +17,13 @@ describe('resolveEtapaContinuidade', () => {
     expect(result.usualContinuaProduzindo).toBe(true);
     expect(result.requerConfirmacaoAoFinalizar).toBe(true);
     expect(result.requerConfirmacaoAoContinuar).toBe(false);
-    expect(result.textoConfirmacaoFinalizar).toContain('100');
+    expect(result.quantidadeNaoProduzida).toBe(100);
+    expect(result.textoConfirmacaoFinalizar).toBe(
+      'Sim, finalizar com 100 LT a menos',
+    );
+    expect(result.textoConfirmacaoFinalizar.toLowerCase()).not.toMatch(
+      /perda|perdido/,
+    );
     expect(requerConfirmacao(false, result)).toBe(true);
     expect(requerConfirmacao(true, result)).toBe(false);
   });
@@ -32,6 +38,7 @@ describe('resolveEtapaContinuidade', () => {
     expect(result.usualContinuaProduzindo).toBe(false);
     expect(result.requerConfirmacaoAoFinalizar).toBe(false);
     expect(result.requerConfirmacaoAoContinuar).toBe(true);
+    expect(result.quantidadeNaoProduzida).toBe(0);
     expect(result.textoConfirmacaoContinuar).toBe(
       'Sim, confirmo que ainda vou produzir mais',
     );
@@ -62,7 +69,10 @@ describe('resolveEtapaContinuidade', () => {
     expect(result.usualContinuaProduzindo).toBe(true);
     expect(result.requerConfirmacaoAoFinalizar).toBe(true);
     expect(result.requerConfirmacaoAoContinuar).toBe(false);
-    expect(result.textoConfirmacaoFinalizar).toContain('20');
+    expect(result.quantidadeNaoProduzida).toBe(20);
+    expect(result.textoConfirmacaoFinalizar).toBe(
+      'Sim, finalizar com 20 LT a menos',
+    );
     expect(requerConfirmacao(false, result)).toBe(true);
     expect(requerConfirmacao(true, result)).toBe(false);
   });

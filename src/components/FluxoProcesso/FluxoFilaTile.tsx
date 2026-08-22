@@ -43,7 +43,7 @@ function tileActiveStyle(active: boolean): CSSProperties | undefined {
 
 function tileClassName(active: boolean): string {
   return [
-    'flex min-h-11 w-full flex-col rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-left',
+    'flex min-h-11 min-w-0 w-full flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-left',
     'transition-[border-color,box-shadow,background] duration-150 ease-out',
     'motion-reduce:transition-none',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
@@ -97,7 +97,7 @@ function FluxoFilaTileAlertBadge({
       pill={false}
       numeric
       aria-hidden
-      className="shrink-0 px-1.5 py-0.5 text-[11px] leading-none"
+      className="max-w-[7.5rem] shrink truncate px-1.5 py-0.5 text-[11px] leading-none"
     >
       {label}
     </Badge>
@@ -179,14 +179,16 @@ export default function FluxoFilaTile({
       data-fila-key={filaKey}
       className={tileClassName(active)}
     >
-      <div className="flex items-center gap-2">
-        <span className="material-icons text-xl" style={{ color: accentColor }} aria-hidden>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="material-icons shrink-0 text-xl" style={{ color: accentColor }} aria-hidden>
           {icon}
         </span>
-        <span className="text-[15px] font-bold tracking-tight text-text-strong">{label}</span>
+        <span className="min-w-0 truncate text-[15px] font-bold tracking-tight text-text-strong">
+          {label}
+        </span>
       </div>
-      <div className="mt-2 flex items-start justify-between gap-2">
-        <p className="font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
+      <div className="mt-2 flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <p className="min-w-0 font-mono text-xl font-bold leading-none tabular-nums text-text-strong">
           {volume}
         </p>
         {alerta ? <FluxoFilaTileAlertBadge label={alerta} tone={alertaTone} /> : null}

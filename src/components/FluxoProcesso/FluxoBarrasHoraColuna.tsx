@@ -61,7 +61,7 @@ export default function FluxoBarrasHoraColuna({
       onFocus={onActivate}
       onBlur={onDeactivate}
       className={[
-        'relative flex h-full min-w-0 flex-1 cursor-pointer flex-col justify-end border-none bg-transparent px-0.5',
+        'relative flex h-full min-w-11 flex-1 cursor-pointer flex-col justify-end border-none bg-transparent px-0.5',
         'transition-colors duration-150 ease-out',
         ativa ? 'bg-amber-50/70' : 'hover:bg-stone-50',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500',

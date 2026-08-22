@@ -41,17 +41,23 @@ export default function FluxoProducaoPorHora({
   const horaAgora = getBrazilHourMinuteNow().hour;
 
   return (
-    <Card padding="lg">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+    <Card padding="md" className="min-w-0">
+      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
         <span className="text-base font-bold text-text-strong">Produção por hora</span>
-        <div className="flex gap-0.5 rounded-full bg-surface-sunken p-0.5">
+        <div
+          className="flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain rounded-full bg-surface-sunken p-0.5"
+          role="tablist"
+          aria-label="Etapa do gráfico"
+        >
           {fluxo.etapas.map((e) => (
             <button
               key={e.key}
               type="button"
+              role="tab"
+              aria-selected={etapa === e.key}
               onClick={() => onEtapaChange(e.key)}
               className={[
-                'cursor-pointer rounded-full border-none px-3.5 py-1.5 text-sm',
+                'min-h-11 shrink-0 cursor-pointer rounded-full border-none px-3.5 text-sm',
                 etapa === e.key
                   ? 'bg-surface font-semibold text-text-strong shadow-[0_1px_3px_rgba(63,3,19,0.12)]'
                   : 'bg-transparent font-normal text-text-muted',
@@ -61,7 +67,7 @@ export default function FluxoProducaoPorHora({
             </button>
           ))}
         </div>
-        <span className="ml-auto font-mono text-[11px] tabular-nums text-text-muted">
+        <span className="font-mono text-[11px] tabular-nums text-text-muted lg:ml-auto">
           {fmtQty(total, scale.mode)} {scale.unitLabel} no dia · empilhado por assadeira
           {etapa === 'emb' && scale.opAnteriorTotal() > 0
             ? ` · ${fmtQty(scale.opAnteriorTotal(), scale.mode)} de OP de ${antLabel}`

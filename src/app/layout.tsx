@@ -33,13 +33,13 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col bg-app antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen min-w-0 flex-col bg-app antialiased`}
       >
         <Suspense fallback={null}>
           <ConditionalNavigation />
         </Suspense>
-        <div className="flex w-full flex-1 flex-col px-4 pb-6 sm:px-6 lg:px-8">
-          <main className="w-full flex-1 py-6">{children}</main>
+        <div className="flex w-full min-w-0 flex-1 flex-col px-4 pb-6 sm:px-6 lg:px-8">
+          <main className="w-full min-w-0 flex-1 py-6">{children}</main>
         </div>
       </body>
     </html>

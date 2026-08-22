@@ -1,3 +1,5 @@
+import { EtapaContinuidadeCopy } from './etapa-continuidade-copy';
+
 export type EtapaContinuidadeInput = {
   totalProjetado: number;
   metaReferencia: number;
@@ -8,12 +10,10 @@ export type EtapaContinuidadeResult = {
   usualContinuaProduzindo: boolean;
   requerConfirmacaoAoContinuar: boolean;
   requerConfirmacaoAoFinalizar: boolean;
+  quantidadeNaoProduzida: number;
   textoConfirmacaoContinuar: string;
   textoConfirmacaoFinalizar: string;
 };
-
-const TEXTO_CONFIRMACAO_CONTINUAR =
-  'Sim, confirmo que ainda vou produzir mais';
 
 export function resolveEtapaContinuidade(
   input: EtapaContinuidadeInput,
@@ -22,13 +22,17 @@ export function resolveEtapaContinuidade(
   const abaixoDaMeta = totalProjetado < metaReferencia;
 
   if (abaixoDaMeta) {
-    const perda = metaReferencia - totalProjetado;
+    const quantidadeNaoProduzida = metaReferencia - totalProjetado;
     return {
       usualContinuaProduzindo: true,
       requerConfirmacaoAoContinuar: false,
       requerConfirmacaoAoFinalizar: true,
+      quantidadeNaoProduzida,
       textoConfirmacaoContinuar: '',
-      textoConfirmacaoFinalizar: `Sim, confirmo encerrar com perda de ${perda} ${unidade}`,
+      textoConfirmacaoFinalizar: EtapaContinuidadeCopy.confirmarFinalizarAbaixo(
+        quantidadeNaoProduzida,
+        unidade,
+      ),
     };
   }
 
@@ -36,7 +40,8 @@ export function resolveEtapaContinuidade(
     usualContinuaProduzindo: false,
     requerConfirmacaoAoContinuar: true,
     requerConfirmacaoAoFinalizar: false,
-    textoConfirmacaoContinuar: TEXTO_CONFIRMACAO_CONTINUAR,
+    quantidadeNaoProduzida: 0,
+    textoConfirmacaoContinuar: EtapaContinuidadeCopy.confirmarContinuar(),
     textoConfirmacaoFinalizar: '',
   };
 }

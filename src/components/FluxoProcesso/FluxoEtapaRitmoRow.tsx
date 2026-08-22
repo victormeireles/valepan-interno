@@ -40,7 +40,7 @@ export default function FluxoEtapaRitmoRow({
 
   return (
     <div
-      className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 border-t border-stone-100 pt-2.5"
+      className="mt-2.5 flex min-w-0 flex-wrap items-center justify-between gap-1.5 border-t border-stone-100 pt-2.5"
       aria-label={`${fmtQtyExact(view.atual)} ${view.rateLabel}, ontem ${view.deltaOntemPct}%, semana ${view.deltaSemanaPct}%`}
     >
       <span className="font-mono text-sm tabular-nums text-text-body">

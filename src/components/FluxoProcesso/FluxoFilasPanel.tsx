@@ -78,7 +78,7 @@ function FluxoFilasTileGrid({
   onToggle: (key: FluxoFilaKey) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
       {TILES.map((tile) => {
         const resumo = filas[tile.key];
         return (
@@ -114,7 +114,7 @@ export default function FluxoFilasPanel({ fluxo }: FluxoFilasPanelProps) {
   }
 
   return (
-    <Card padding="md">
+    <Card padding="md" className="min-w-0">
       <h2 className="text-base font-bold tracking-tight text-text-strong">Pães em trânsito</h2>
       <p className="mt-0.5 text-[13px] text-text-muted">{FluxoFilasSubtitle.forDia(fluxo.dia)}</p>
 

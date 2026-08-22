@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
+import { EtapaContinuidadeCopy } from '@/domain/producao-etapa/etapa-continuidade-copy';
 import {
   requerConfirmacao,
   resolveEtapaContinuidade,
   type EtapaContinuidadeResult,
 } from '@/domain/producao-etapa/etapa-continuidade-policy';
+import type { EtapaContinuidadeQuantidadeResumoProps } from './EtapaContinuidadeQuantidadeResumo';
 
 type EtapaSubmitIntent = 'salvar' | 'salvar-finalizar';
 
@@ -12,7 +14,6 @@ type UseEtapaLoteSubmitParams = {
   totalProjetado: number;
   metaReferencia: number;
   unidade: string;
-  contexto?: 'etapa' | 'embalagem';
   onSubmit: (continuaProduzindo: boolean) => Promise<void>;
 };
 
@@ -21,29 +22,45 @@ type ConfirmDialogState = {
   titulo: string;
   mensagem: string;
   textoConfirmar: string;
+  resumo: EtapaContinuidadeQuantidadeResumoProps | null;
 };
+
+function emptyDialog(): ConfirmDialogState {
+  return {
+    open: false,
+    titulo: '',
+    mensagem: '',
+    textoConfirmar: '',
+    resumo: null,
+  };
+}
 
 function resolveDialogContent(
   intent: EtapaSubmitIntent,
   unidade: string,
   continuidade: EtapaContinuidadeResult,
-  contexto: 'etapa' | 'embalagem',
+  totalProjetado: number,
+  metaReferencia: number,
 ): Omit<ConfirmDialogState, 'open'> {
-  const alvo = contexto === 'embalagem' ? 'produção' : 'etapa';
-
   if (intent === 'salvar-finalizar') {
     return {
-      titulo: `Finalizar ${alvo} com perda?`,
-      mensagem: `Ao finalizar abaixo da meta de referência, a ${alvo} será encerrada com perda registrada em ${unidade}.`,
+      titulo: EtapaContinuidadeCopy.tituloFinalizarAbaixo(),
+      mensagem: EtapaContinuidadeCopy.mensagemFinalizarAbaixo(),
       textoConfirmar: continuidade.textoConfirmacaoFinalizar,
+      resumo: {
+        lancado: totalProjetado,
+        ordem: metaReferencia,
+        naoProduzido: continuidade.quantidadeNaoProduzida,
+        unidade,
+      },
     };
   }
 
   return {
-    titulo: 'Continuar produzindo?',
-    mensagem:
-      'O total projetado já atingiu a referência. Confirme apenas se realmente houver mais produção para lançar.',
+    titulo: EtapaContinuidadeCopy.tituloContinuar(),
+    mensagem: EtapaContinuidadeCopy.mensagemContinuar(),
     textoConfirmar: continuidade.textoConfirmacaoContinuar,
+    resumo: null,
   };
 }
 
@@ -52,7 +69,6 @@ export function useEtapaLoteSubmit({
   totalProjetado,
   metaReferencia,
   unidade,
-  contexto = 'etapa',
   onSubmit,
 }: UseEtapaLoteSubmitParams) {
   const [pendingIntent, setPendingIntent] = useState<EtapaSubmitIntent | null>(null);
@@ -103,21 +119,19 @@ export function useEtapaLoteSubmit({
   }, []);
 
   const confirmDialog = useMemo<ConfirmDialogState>(() => {
-    if (!pendingIntent) {
-      return {
-        open: false,
-        titulo: '',
-        mensagem: '',
-        textoConfirmar: '',
-      };
-    }
+    if (!pendingIntent) return emptyDialog();
 
-    const content = resolveDialogContent(pendingIntent, unidade, continuidade, contexto);
     return {
       open: true,
-      ...content,
+      ...resolveDialogContent(
+        pendingIntent,
+        unidade,
+        continuidade,
+        totalProjetado,
+        metaReferencia,
+      ),
     };
-  }, [pendingIntent, unidade, continuidade, contexto]);
+  }, [pendingIntent, unidade, continuidade, totalProjetado, metaReferencia]);
 
   return {
     continuidade,

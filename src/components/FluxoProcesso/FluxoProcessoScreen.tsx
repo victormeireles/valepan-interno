@@ -47,7 +47,7 @@ function FluxoProcessoScreenBody({
   const activeAss = fluxo.ordemAss.includes(ass) ? ass : (fluxo.ordemAss[0] ?? 'N/A');
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       <FluxoProcessoHeader
         diaLabel={fluxo.diaLabel}
         selectedDate={selectedDate}
@@ -56,7 +56,7 @@ function FluxoProcessoScreenBody({
 
       <div
         className={[
-          'mx-auto grid w-full max-w-[1360px] gap-3.5 pt-4 pb-14',
+          'mx-auto grid w-full min-w-0 max-w-[1360px] gap-3.5 pt-4 pb-14',
           pageShellPaddingX,
         ].join(' ')}
       >

@@ -91,10 +91,12 @@ export default function FluxoOndasGrafico({
           onSelect={onSelect}
         />
       ))}
-      <div className="flex justify-between gap-0 pl-[40px] font-mono text-[8px] tabular-nums text-text-faint">
+      <div className="flex justify-between gap-0 pl-[40px] font-mono text-[8px] tabular-nums text-text-faint sm:text-[10px]">
         {Array.from({ length: 24 }, (_, h) => (
           <span key={h} className="min-w-0 flex-1 text-center">
-            {String(h).padStart(2, '0')}
+            <span className={h % 6 === 0 ? '' : 'hidden sm:inline'}>
+              {String(h).padStart(2, '0')}
+            </span>
           </span>
         ))}
       </div>
@@ -212,7 +214,7 @@ function TrilhoUnificado({
       <div className="w-[40px] shrink-0 text-right text-[10px] font-bold uppercase tracking-wide text-text-muted">
         {label}
       </div>
-      <div className="relative h-8 min-w-0 flex-1 rounded-lg bg-stone-100">
+      <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded-lg bg-stone-100">
         {ordered.length === 0 ? (
           <div className="absolute inset-0 flex items-center px-2 text-[10px] text-text-faint">
             —
@@ -281,42 +283,29 @@ function SegmentoLayer({
   const antSuffix = opAnterior ? ', OP anterior' : '';
 
   return (
-    <>
-      <button
-        type="button"
-        disabled={!clickable}
-        onClick={() => {
-          if (ondaId) onSelect(ondaId);
-        }}
-        aria-label={`${faixa}, ${volTxt}${antSuffix}`}
-        className="absolute top-0.5 bottom-0.5 flex items-center justify-center overflow-hidden rounded-md px-1 disabled:cursor-default"
-        style={{
-          left: `${leftPct}%`,
-          width: `${Math.max(widthPct, 2.2)}%`,
-          background: bg,
-          color: textColor,
-          zIndex: z,
-          cursor: clickable ? 'pointer' : 'default',
-        }}
-      >
-        {showLabel ? (
-          <span className="truncate font-mono text-[10px] font-bold tabular-nums leading-none">
-            {volTxt}
-          </span>
-        ) : null}
-      </button>
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={() => {
+        if (ondaId) onSelect(ondaId);
+      }}
+      aria-label={`${faixa}, ${volTxt}${antSuffix}`}
+      className="absolute top-0.5 bottom-0.5 flex items-center justify-center overflow-hidden rounded-md px-1 disabled:cursor-default"
+      style={{
+        left: `${leftPct}%`,
+        width: `${Math.max(widthPct, 2.2)}%`,
+        background: bg,
+        color: textColor,
+        zIndex: z,
+        cursor: clickable ? 'pointer' : 'default',
+      }}
+    >
       {showLabel ? (
-        <div
-          className="pointer-events-none absolute top-1/2 -translate-y-1/2 font-mono text-[10px] font-semibold tabular-nums text-text-strong"
-          style={{
-            left: `calc(${leftPct + widthPct}% + 4px)`,
-            zIndex: z + 1,
-          }}
-        >
-          {faixa}
-        </div>
+        <span className="truncate font-mono text-[10px] font-bold tabular-nums leading-none">
+          {volTxt}
+        </span>
       ) : null}
-    </>
+    </button>
   );
 }
 

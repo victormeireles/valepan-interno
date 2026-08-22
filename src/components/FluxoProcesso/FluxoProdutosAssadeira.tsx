@@ -31,7 +31,8 @@ export default function FluxoProdutosAssadeira({
   const colAtiva = filtro?.etapa ?? null;
 
   return (
-    <table className="mt-1 w-full border-collapse">
+    <div className="mt-1 min-w-0 overflow-x-auto overscroll-x-contain">
+      <table className="w-full min-w-[28rem] border-collapse">
       <thead>
         <tr>
           {(
@@ -96,6 +97,7 @@ export default function FluxoProdutosAssadeira({
           ))
         )}
       </tbody>
-    </table>
+      </table>
+    </div>
   );
 }
