@@ -1,0 +1,859 @@
+# Exceção de receita de caixa por tipo de estoque — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) ou superpowers:executing-plans para implementar tarefa a tarefa. Steps usam checkbox (`- [ ]`).
+
+**Goal:** Na embalagem, debitar a caixa do tipo de estoque (Damião/Milani) quando houver exceção cadastrada; Valepan e Top Alto continuam na receita de caixa do produto.
+
+**Architecture:** Coluna opcional `tipos_estoque.receita_caixa_id`. Função pura `aplicarExcecaoReceitaCaixa` troca só os ingredientes da receita de tipo `caixa`. `InsumoConsumoEmbalagemService` e o backfill aplicam isso com o `tipoEstoqueId` do lote. Cadastro no modal de tipos de estoque.
+
+**Tech Stack:** Next.js 15 App Router, Supabase Postgres, Zod, Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-08-24-caixa-por-tipo-estoque-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400. Funções < 40 linhas. Classes < 200.
+- Uma responsabilidade por arquivo/classe. Função pura de domínio sem I/O.
+- UI em pt-BR. Não redesenhar o modal de tipos de estoque — só o campo novo, no estilo atual.
+- Não alterar unique de `produto_receitas`, fermentação, forno, estoque de pão, simulador de custo, nem a UI do realizado.
+- Pães/caixa continuam em `produto_receitas.quantidade_por_produto`.
+- Working tree atual tem mudanças de `criado_por` não relacionadas. Implementar numa branch limpa a partir do commit da spec (`9780eee` ou main depois de `git stash`).
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260824180000_tipos_estoque_receita_caixa.sql` | Coluna `receita_caixa_id` + FK |
+| `src/types/database.ts` e `types/database.ts` | Tipos gerados / patch da coluna |
+| `src/domain/insumos/aplicar-excecao-receita-caixa.ts` | Troca ingredientes da caixa |
+| `src/domain/insumos/aplicar-excecao-receita-caixa.test.ts` | Testes da função pura |
+| `src/data/insumos/TipoEstoqueReceitaCaixaRepository.ts` | Lê ingredientes da exceção |
+| `src/lib/services/insumo-consumo-embalagem-service.ts` | Aplica exceção no débito ao vivo |
+| `src/lib/services/insumo-consumo-embalagem-service.test.ts` | Testes do serviço |
+| `src/lib/services/insumo-consumo-embalagem-backfill-batch-service.ts` | Mesma regra no backfill |
+| `src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts` | Dois lotes, duas caixas |
+| `src/domain/etiquetas/tipo-estoque-validation.ts` | `receita_caixa_id` no schema |
+| `src/domain/etiquetas/tipo-estoque-validation.test.ts` | Aceita null / uuid / string vazia |
+| `src/domain/etiquetas/tipo-estoque-receita-caixa.ts` | Valida tipo=caixa; rótulo da coluna |
+| `src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts` | Testes de validação e rótulo |
+| `src/lib/services/tipos-estoque-admin-service.ts` | Persiste e lista a exceção + nome |
+| `src/app/actions/tipos-estoque-actions.ts` | Actions + lista de receitas caixa |
+| `src/components/TiposEstoque/TipoEstoqueModal.tsx` | Select da exceção |
+| `src/components/TiposEstoque/TiposEstoqueTable.tsx` | Coluna Caixa |
+| `src/components/TiposEstoque/TiposEstoqueMobileList.tsx` | Nome da receita no mobile |
+| `src/app/config/tipos-estoque/page.tsx` | Carrega receitas caixa |
+| `src/app/config/tipos-estoque/TiposEstoqueClient.tsx` | Passa receitas ao modal |
+
+---
+
+### Task 1: Migration e tipos
+
+**Files:**
+- Create: `supabase/migrations/20260824180000_tipos_estoque_receita_caixa.sql`
+- Modify: `src/types/database.ts` (bloco `tipos_estoque`)
+- Modify: `types/database.ts` (mesmo bloco)
+
+**Interfaces:**
+- Produces: `tipos_estoque.receita_caixa_id: string | null` com FK `tipos_estoque_receita_caixa_id_fkey` → `receitas(id)` ON DELETE SET NULL
+
+- [ ] **Step 1: Criar a migration**
+
+```sql
+ALTER TABLE public.tipos_estoque
+  ADD COLUMN IF NOT EXISTS receita_caixa_id uuid;
+
+ALTER TABLE public.tipos_estoque
+  DROP CONSTRAINT IF EXISTS tipos_estoque_receita_caixa_id_fkey;
+
+ALTER TABLE public.tipos_estoque
+  ADD CONSTRAINT tipos_estoque_receita_caixa_id_fkey
+  FOREIGN KEY (receita_caixa_id)
+  REFERENCES public.receitas(id)
+  ON DELETE SET NULL;
+
+COMMENT ON COLUMN public.tipos_estoque.receita_caixa_id IS
+  'Receita de caixa que substitui a do produto no consumo de embalagem. NULL = receita do produto.';
+```
+
+Não criar tabela nova. Não mexer em RLS (tabela já existe).
+
+- [ ] **Step 2: Aplicar a migration no projeto Supabase**
+
+Pelo fluxo do time (MCP `apply_migration` ou `supabase db push`). Expected: coluna visível em `tipos_estoque`.
+
+- [ ] **Step 3: Regenerar tipos**
+
+```bash
+npm run gen:types
+```
+
+Expected: `receita_caixa_id` em Row/Insert/Update de `tipos_estoque`. Se o remoto ainda não tiver a coluna, patch manual nos dois arquivos:
+
+Em `tipos_estoque.Row` / `Insert` / `Update` adicionar `receita_caixa_id: string | null` (opcional em Insert/Update). Em `Relationships`:
+
+```ts
+{
+  foreignKeyName: "tipos_estoque_receita_caixa_id_fkey",
+  columns: ["receita_caixa_id"],
+  isOneToOne: false,
+  referencedRelation: "receitas",
+  referencedColumns: ["id"],
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260824180000_tipos_estoque_receita_caixa.sql src/types/database.ts types/database.ts
+git commit -m "feat: coluna receita_caixa_id em tipos de estoque"
+```
+
+---
+
+### Task 2: Função pura `aplicarExcecaoReceitaCaixa`
+
+**Files:**
+- Create: `src/domain/insumos/aplicar-excecao-receita-caixa.ts`
+- Test: `src/domain/insumos/aplicar-excecao-receita-caixa.test.ts`
+
+**Interfaces:**
+- Consumes: `InsumoReceitaTipoContexto`, `InsumoReceitaMassaIngrediente` de `src/domain/insumos/insumo-consumo-producao-types.ts`
+- Produces:
+
+```ts
+export const AVISO_EXCECAO_CAIXA_SEM_RECEITA_PRODUTO =
+  'Exceção de caixa do tipo de estoque ignorada: produto sem receita de caixa';
+
+export function aplicarExcecaoReceitaCaixa(
+  receitas: InsumoReceitaTipoContexto[],
+  ingredientesExcecao: InsumoReceitaMassaIngrediente[] | null,
+): { receitas: InsumoReceitaTipoContexto[]; avisos: string[] };
+```
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import {
+  AVISO_EXCECAO_CAIXA_SEM_RECEITA_PRODUTO,
+  aplicarExcecaoReceitaCaixa,
+} from './aplicar-excecao-receita-caixa';
+import type { InsumoReceitaTipoContexto } from '@/domain/insumos/insumo-consumo-producao-types';
+
+const base: InsumoReceitaTipoContexto[] = [
+  {
+    tipo: 'embalagem',
+    quantidadePorProduto: 4,
+    ingredientes: [{ insumoId: 'plastico', quantidadePadrao: 1 }],
+  },
+  {
+    tipo: 'caixa',
+    quantidadePorProduto: 48,
+    ingredientes: [{ insumoId: 'caixa-valepan', quantidadePadrao: 1 }],
+  },
+];
+
+const excecao = [{ insumoId: 'caixa-damiao', quantidadePadrao: 1 }];
+
+describe('aplicarExcecaoReceitaCaixa', () => {
+  it('sem exceção devolve a lista igual', () => {
+    const r = aplicarExcecaoReceitaCaixa(base, null);
+    expect(r.receitas).toEqual(base);
+    expect(r.avisos).toEqual([]);
+  });
+
+  it('com exceção troca só ingredientes da caixa e preserva qpp', () => {
+    const r = aplicarExcecaoReceitaCaixa(base, excecao);
+    const caixa = r.receitas.find((item) => item.tipo === 'caixa');
+    const embalagem = r.receitas.find((item) => item.tipo === 'embalagem');
+    expect(caixa?.ingredientes).toEqual(excecao);
+    expect(caixa?.quantidadePorProduto).toBe(48);
+    expect(embalagem).toEqual(base[0]);
+    expect(r.avisos).toEqual([]);
+  });
+
+  it('sem receita de caixa no produto ignora a exceção e avisa', () => {
+    const soEmbalagem = [base[0]];
+    const r = aplicarExcecaoReceitaCaixa(soEmbalagem, excecao);
+    expect(r.receitas).toEqual(soEmbalagem);
+    expect(r.avisos).toEqual([AVISO_EXCECAO_CAIXA_SEM_RECEITA_PRODUTO]);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar o teste e ver falhar**
+
+```bash
+npx vitest run src/domain/insumos/aplicar-excecao-receita-caixa.test.ts
+```
+
+Expected: FAIL (módulo inexistente).
+
+- [ ] **Step 3: Implementar o mínimo**
+
+```ts
+import type {
+  InsumoReceitaMassaIngrediente,
+  InsumoReceitaTipoContexto,
+} from '@/domain/insumos/insumo-consumo-producao-types';
+
+export const AVISO_EXCECAO_CAIXA_SEM_RECEITA_PRODUTO =
+  'Exceção de caixa do tipo de estoque ignorada: produto sem receita de caixa';
+
+export function aplicarExcecaoReceitaCaixa(
+  receitas: InsumoReceitaTipoContexto[],
+  ingredientesExcecao: InsumoReceitaMassaIngrediente[] | null,
+): { receitas: InsumoReceitaTipoContexto[]; avisos: string[] } {
+  if (ingredientesExcecao == null) {
+    return { receitas, avisos: [] };
+  }
+
+  const temCaixa = receitas.some((item) => item.tipo === 'caixa');
+  if (!temCaixa) {
+    return { receitas, avisos: [AVISO_EXCECAO_CAIXA_SEM_RECEITA_PRODUTO] };
+  }
+
+  return {
+    receitas: receitas.map((item) =>
+      item.tipo === 'caixa' ? { ...item, ingredientes: ingredientesExcecao } : item,
+    ),
+    avisos: [],
+  };
+}
+```
+
+Não mutar o array original além do map (novo array / novo objeto só na caixa).
+
+- [ ] **Step 4: Rodar o teste e ver passar**
+
+```bash
+npx vitest run src/domain/insumos/aplicar-excecao-receita-caixa.test.ts
+```
+
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/aplicar-excecao-receita-caixa.ts src/domain/insumos/aplicar-excecao-receita-caixa.test.ts
+git commit -m "feat: aplica exceção de receita de caixa sem mudar pães/caixa"
+```
+
+---
+
+### Task 3: Débito ao vivo na embalagem
+
+**Files:**
+- Create: `src/data/insumos/TipoEstoqueReceitaCaixaRepository.ts`
+- Create: `src/lib/services/insumo-consumo-embalagem-service.test.ts`
+- Modify: `src/lib/services/insumo-consumo-embalagem-service.ts`
+
+**Interfaces:**
+- Consumes: `aplicarExcecaoReceitaCaixa`; `EmbalagemLoteRecord.tipoEstoqueId`
+- Produces:
+
+```ts
+export class TipoEstoqueReceitaCaixaRepository {
+  async loadIngredientes(
+    tipoEstoqueId: string,
+  ): Promise<InsumoReceitaMassaIngrediente[] | null>;
+}
+```
+
+`null` = tipo sem `receita_caixa_id`. Array vazio = receita apontada sem ingredientes. **Não** filtrar `receitas.ativo` (receita desativada continua valendo se o FK existir).
+
+- [ ] **Step 1: Escrever o teste do serviço que falha**
+
+Espelhar `src/lib/services/insumo-consumo-producao-service.test.ts`. Injetar três deps no construtor.
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
+
+const mockReceitaRepo = { loadContextoProducaoPorProduto: vi.fn() };
+const mockAplicador = { reconciliar: vi.fn(), estornar: vi.fn() };
+const mockExcecaoRepo = { loadIngredientes: vi.fn() };
+
+const lote: EmbalagemLoteRecord = {
+  id: 'lote-1',
+  createdAt: '2026-08-24T10:00:00Z',
+  modo: 'parcial',
+  dataPedido: '2026-08-24',
+  dataFabricacao: '2026-08-24',
+  tipoEstoqueId: 'tipo-damiao',
+  produtoId: 'prod-1',
+  congelado: 'Não',
+  quantidade: { caixas: 1, pacotes: 0, unidades: 0, kg: 0 },
+  produzidoEm: '2026-08-24T10:00:00Z',
+};
+
+const contextoProduto = {
+  produtoNome: 'HB 65g',
+  unidadesPorAssadeira: null,
+  receitas: [
+    {
+      tipo: 'embalagem' as const,
+      quantidadePorProduto: 4,
+      ingredientes: [{ insumoId: 'plastico', quantidadePadrao: 1 }],
+    },
+    {
+      tipo: 'caixa' as const,
+      quantidadePorProduto: 48,
+      ingredientes: [{ insumoId: 'caixa-valepan', quantidadePadrao: 1 }],
+    },
+  ],
+};
+
+vi.mock('@/data/insumos/InsumoReceitaMassaRepository', () => ({
+  insumoReceitaMassaRepository: mockReceitaRepo,
+}));
+vi.mock('@/lib/services/insumo-consumo-aplicador', () => ({
+  insumoConsumoAplicador: mockAplicador,
+}));
+vi.mock('@/data/insumos/TipoEstoqueReceitaCaixaRepository', () => ({
+  tipoEstoqueReceitaCaixaRepository: mockExcecaoRepo,
+}));
+
+describe('InsumoConsumoEmbalagemService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAplicador.reconciliar.mockResolvedValue(undefined);
+    mockReceitaRepo.loadContextoProducaoPorProduto.mockResolvedValue(contextoProduto);
+  });
+
+  it('lote Damião com exceção debita caixa Damião e mantém plástico', async () => {
+    mockExcecaoRepo.loadIngredientes.mockResolvedValue([
+      { insumoId: 'caixa-damiao', quantidadePadrao: 1 },
+    ]);
+    const { InsumoConsumoEmbalagemService } = await import(
+      './insumo-consumo-embalagem-service'
+    );
+    const service = new InsumoConsumoEmbalagemService(
+      mockReceitaRepo as never,
+      mockAplicador as never,
+      mockExcecaoRepo as never,
+    );
+    const result = await service.sincronizar(lote);
+    expect(result.aplicado).toBe(true);
+    expect(mockAplicador.reconciliar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        consumosAlvo: expect.arrayContaining([
+          { insumoId: 'plastico', quantidade: 12 },
+          { insumoId: 'caixa-damiao', quantidade: 1 },
+        ]),
+      }),
+    );
+    const alvo = mockAplicador.reconciliar.mock.calls[0][0].consumosAlvo;
+    expect(alvo.find((c: { insumoId: string }) => c.insumoId === 'caixa-valepan')).toBeUndefined();
+  });
+
+  it('lote sem exceção debita caixa do produto', async () => {
+    mockExcecaoRepo.loadIngredientes.mockResolvedValue(null);
+    const { InsumoConsumoEmbalagemService } = await import(
+      './insumo-consumo-embalagem-service'
+    );
+    const service = new InsumoConsumoEmbalagemService(
+      mockReceitaRepo as never,
+      mockAplicador as never,
+      mockExcecaoRepo as never,
+    );
+    await service.sincronizar({ ...lote, tipoEstoqueId: 'tipo-valepan' });
+    const alvo = mockAplicador.reconciliar.mock.calls[0][0].consumosAlvo;
+    expect(alvo).toEqual(
+      expect.arrayContaining([
+        { insumoId: 'plastico', quantidade: 12 },
+        { insumoId: 'caixa-valepan', quantidade: 1 },
+      ]),
+    );
+  });
+});
+```
+
+1 CX × 48 pães/caixa = 48 un; 48 / 4 pães/pacote = 12 plástico; 48 / 48 = 1 caixa.
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+```bash
+npx vitest run src/lib/services/insumo-consumo-embalagem-service.test.ts
+```
+
+Expected: FAIL (repo/serviço ainda não usam exceção).
+
+- [ ] **Step 3: Repository**
+
+```ts
+import type { InsumoReceitaMassaIngrediente } from '@/domain/insumos/insumo-consumo-producao-types';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+
+export class TipoEstoqueReceitaCaixaRepository {
+  private get supabase() {
+    return supabaseClientFactory.createServiceRoleClient();
+  }
+
+  async loadIngredientes(
+    tipoEstoqueId: string,
+  ): Promise<InsumoReceitaMassaIngrediente[] | null> {
+    const { data: tipo, error: tipoError } = await this.supabase
+      .from('tipos_estoque')
+      .select('receita_caixa_id')
+      .eq('id', tipoEstoqueId)
+      .maybeSingle();
+    if (tipoError) throw new Error(`Erro ao ler exceção de caixa: ${tipoError.message}`);
+    if (!tipo?.receita_caixa_id) return null;
+
+    const { data: itens, error } = await this.supabase
+      .from('receita_ingredientes')
+      .select('insumo_id, quantidade_padrao')
+      .eq('receita_id', tipo.receita_caixa_id);
+    if (error) throw new Error(`Erro ao ler ingredientes da caixa: ${error.message}`);
+
+    return (itens ?? [])
+      .filter((item) => item.insumo_id)
+      .map((item) => ({
+        insumoId: item.insumo_id as string,
+        quantidadePadrao: Number(item.quantidade_padrao),
+      }));
+  }
+}
+
+export const tipoEstoqueReceitaCaixaRepository = new TipoEstoqueReceitaCaixaRepository();
+```
+
+- [ ] **Step 4: Ligar no serviço**
+
+Injetar o repo. Depois de `loadContextoProducaoPorProduto`, chamar `loadIngredientes(lote.tipoEstoqueId)` e `aplicarExcecaoReceitaCaixa`. Usar `receitas` e `avisos` retornados em `derivarDimensoesEmbalagem` e `calcularConsumoMultiReceitas`. Concatenar avisos da exceção aos demais.
+
+Manter `sincronizar` ≤ 40 linhas: extrair método privado `resolverReceitas(lote)` que devolve `{ produtoNome, receitas, avisos } | null`.
+
+Construtor:
+
+```ts
+constructor(
+  private readonly receitaRepository: InsumoReceitaMassaRepository = insumoReceitaMassaRepository,
+  private readonly aplicador: InsumoConsumoAplicador = insumoConsumoAplicador,
+  private readonly excecaoRepository: TipoEstoqueReceitaCaixaRepository = tipoEstoqueReceitaCaixaRepository,
+) {}
+```
+
+- [ ] **Step 5: Rodar e ver passar**
+
+```bash
+npx vitest run src/lib/services/insumo-consumo-embalagem-service.test.ts src/domain/insumos/aplicar-excecao-receita-caixa.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/data/insumos/TipoEstoqueReceitaCaixaRepository.ts src/lib/services/insumo-consumo-embalagem-service.ts src/lib/services/insumo-consumo-embalagem-service.test.ts
+git commit -m "feat: débito de embalagem usa exceção de caixa do tipo de estoque"
+```
+
+---
+
+### Task 4: Backfill com a mesma regra
+
+**Files:**
+- Modify: `src/lib/services/insumo-consumo-embalagem-backfill-batch-service.ts`
+- Create: `src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts`
+
+**Interfaces:**
+- Consumes: `aplicarExcecaoReceitaCaixa`; `TipoEstoqueReceitaCaixaRepository.loadIngredientes`; `EmbalagemLoteRecord.tipoEstoqueId` (já vem de `embalagemLoteRepository.findByIds`)
+- Produces: backfill agrupa contexto por produto, mas aplica exceção **por lote**, com cache `Map<tipoEstoqueId, ingredientes | null>`
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+Dois lotes do mesmo produto: Valepan (sem exceção) e Damião (com exceção). `sumDeltasGroupedByLoteInsumo` devolve Map vazio. `aplicarDeltasEmLote` deve receber um delta de `caixa-valepan` no lote A e `caixa-damiao` no lote B.
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockLoteRepo = {
+  listLoteIdsByProduto: vi.fn(),
+  loadEmbalagemLotes: vi.fn(),
+};
+const mockReceitaRepo = { loadContextoProducaoPorProduto: vi.fn() };
+const mockEstoqueRepo = { sumDeltasGroupedByLoteInsumo: vi.fn() };
+const mockEstoqueService = { aplicarDeltasEmLote: vi.fn() };
+const mockExcecaoRepo = { loadIngredientes: vi.fn() };
+
+const contexto = {
+  produtoNome: 'HB 65g',
+  unidadesPorAssadeira: null,
+  receitas: [
+    {
+      tipo: 'caixa' as const,
+      quantidadePorProduto: 48,
+      ingredientes: [{ insumoId: 'caixa-valepan', quantidadePadrao: 1 }],
+    },
+  ],
+};
+
+function lote(id: string, tipoEstoqueId: string) {
+  return {
+    id,
+    createdAt: '2026-08-24T10:00:00Z',
+    modo: 'parcial' as const,
+    dataPedido: '2026-08-24',
+    dataFabricacao: '2026-08-24',
+    tipoEstoqueId,
+    produtoId: 'prod-1',
+    congelado: 'Não' as const,
+    quantidade: { caixas: 1, pacotes: 0, unidades: 0, kg: 0 },
+    produzidoEm: '2026-08-24T10:00:00Z',
+  };
+}
+
+describe('InsumoConsumoEmbalagemBackfillBatchService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReceitaRepo.loadContextoProducaoPorProduto.mockResolvedValue(contexto);
+    mockLoteRepo.listLoteIdsByProduto.mockResolvedValue([
+      { id: 'lote-v', produzidoEm: '2026-08-24T10:00:00Z' },
+      { id: 'lote-d', produzidoEm: '2026-08-24T11:00:00Z' },
+    ]);
+    mockLoteRepo.loadEmbalagemLotes.mockResolvedValue([
+      lote('lote-v', 'tipo-valepan'),
+      lote('lote-d', 'tipo-damiao'),
+    ]);
+    mockEstoqueRepo.sumDeltasGroupedByLoteInsumo.mockResolvedValue(new Map());
+    mockEstoqueService.aplicarDeltasEmLote.mockResolvedValue(2);
+    mockExcecaoRepo.loadIngredientes.mockImplementation(async (tipoId: string) => {
+      if (tipoId === 'tipo-damiao') {
+        return [{ insumoId: 'caixa-damiao', quantidadePadrao: 1 }];
+      }
+      return null;
+    });
+  });
+
+  it('mesmo produto: Valepan e Damião geram insumos de caixa diferentes', async () => {
+    const { InsumoConsumoEmbalagemBackfillBatchService } = await import(
+      './insumo-consumo-embalagem-backfill-batch-service'
+    );
+    const service = new InsumoConsumoEmbalagemBackfillBatchService(
+      mockLoteRepo as never,
+      mockReceitaRepo as never,
+      mockEstoqueRepo as never,
+      mockEstoqueService as never,
+      mockExcecaoRepo as never,
+    );
+    await service.applyPorProdutos([{ produtoId: 'prod-1', produtoNome: 'HB 65g' }]);
+    const pendentes = mockEstoqueService.aplicarDeltasEmLote.mock.calls[0][0] as Array<{
+      insumoId: string;
+      embalagemLoteId: string;
+    }>;
+    expect(pendentes.find((p) => p.embalagemLoteId === 'lote-v')?.insumoId).toBe(
+      'caixa-valepan',
+    );
+    expect(pendentes.find((p) => p.embalagemLoteId === 'lote-d')?.insumoId).toBe(
+      'caixa-damiao',
+    );
+  });
+});
+```
+
+O construtor hoje tem 4 deps. Este teste exige a 5ª (`excecaoRepository`) **antes** do último param opcional — incluir no construtor na implementação.
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+```bash
+npx vitest run src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts
+```
+
+Expected: FAIL (ainda usa um contexto só por produto).
+
+- [ ] **Step 3: Implementar**
+
+Adicionar `excecaoRepository` no construtor (default `tipoEstoqueReceitaCaixaRepository`).
+
+Em `applyProduto`, criar `const cache = new Map<string, InsumoReceitaMassaIngrediente[] | null>()`.
+
+Em `buildDeltasParaLotes`, para **cada lote**:
+
+1. Se `cache` não tem `lote.tipoEstoqueId`, `cache.set(..., await this.excecaoRepository.loadIngredientes(lote.tipoEstoqueId))`.
+2. `const aplicado = aplicarExcecaoReceitaCaixa(contextoReceitas, cache.get(lote.tipoEstoqueId) ?? null)`.
+3. Usar `aplicado.receitas` em `derivarDimensoesEmbalagem` e `calcularConsumoMultiReceitas`.
+4. Push `aplicado.avisos` nos avisos.
+
+`buildDeltasParaLotes` hoje é síncrono. Passar a ser `async` **ou** pré-carregar o cache em `applyProduto` antes do loop de chunks (melhor: no início de cada chunk, unique `tipoEstoqueId` dos lotes e `await` em paralelo). Prefira pré-carga no chunk para não tornar `buildDeltasParaLotes` async-aninhado demais:
+
+```ts
+for (const tipoId of new Set(lotes.map((l) => l.tipoEstoqueId))) {
+  if (!cache.has(tipoId)) {
+    cache.set(tipoId, await this.excecaoRepository.loadIngredientes(tipoId));
+  }
+}
+```
+
+Passar `cache` para `buildDeltasParaLotes`. Lá, síncrono: `aplicarExcecaoReceitaCaixa(base, cache.get(lote.tipoEstoqueId) ?? null)`.
+
+Atualizar o comentário da classe: não é mais “1 contexto por produto” sem nuance — contexto de produto + exceção por tipo.
+
+- [ ] **Step 4: Rodar e ver passar**
+
+```bash
+npx vitest run src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts src/lib/services/insumo-consumo-embalagem-service.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/insumo-consumo-embalagem-backfill-batch-service.ts src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts
+git commit -m "feat: backfill de embalagem aplica exceção de caixa por tipo de estoque"
+```
+
+---
+
+### Task 5: Validação e persistência do cadastro
+
+**Files:**
+- Modify: `src/domain/etiquetas/tipo-estoque-validation.ts`
+- Modify: `src/domain/etiquetas/tipo-estoque-validation.test.ts`
+- Create: `src/domain/etiquetas/tipo-estoque-receita-caixa.ts`
+- Create: `src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts`
+- Modify: `src/lib/services/tipos-estoque-admin-service.ts`
+- Modify: `src/app/actions/tipos-estoque-actions.ts`
+
+**Interfaces:**
+- Consumes: `receita_caixa_id` da Task 1
+- Produces:
+
+```ts
+// TipoEstoqueFormData
+receita_caixa_id: string | null;
+
+export function mensagemExcecaoReceitaCaixaInvalida(
+  receita: { tipo: string } | null,
+): string | null;
+
+export function rotuloExcecaoCaixa(nomeReceita: string | null | undefined): string;
+// '' / null / undefined → 'Produto'; senão o nome trimado
+
+export type TipoEstoqueAdmin = {
+  // campos atuais +
+  receita_caixa_id: string | null;
+  receita_caixa_nome: string | null;
+};
+
+export async function listReceitasCaixaAtivas(): Promise<Array<{ id: string; nome: string }>>;
+```
+
+- [ ] **Step 1: Testes que falham**
+
+Em `tipo-estoque-validation.test.ts` adicionar:
+
+```ts
+it('normaliza receita_caixa_id vazio para null', () => {
+  const result = parseTipoEstoqueForm({ ...valid, receita_caixa_id: '' });
+  expect(result.success).toBe(true);
+  if (result.success) expect(result.data.receita_caixa_id).toBeNull();
+});
+
+it('aceita receita_caixa_id uuid', () => {
+  const id = '11111111-1111-1111-1111-111111111111';
+  const result = parseTipoEstoqueForm({ ...valid, receita_caixa_id: id });
+  expect(result.success).toBe(true);
+  if (result.success) expect(result.data.receita_caixa_id).toBe(id);
+});
+
+it('default de receita_caixa_id é null', () => {
+  const result = parseTipoEstoqueForm({ nome: 'Valepan' });
+  expect(result.success).toBe(true);
+  if (result.success) expect(result.data.receita_caixa_id).toBeNull();
+});
+```
+
+`tipo-estoque-receita-caixa.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import {
+  mensagemExcecaoReceitaCaixaInvalida,
+  rotuloExcecaoCaixa,
+} from './tipo-estoque-receita-caixa';
+
+describe('mensagemExcecaoReceitaCaixaInvalida', () => {
+  it('recusa receita que não é caixa', () => {
+    expect(mensagemExcecaoReceitaCaixaInvalida({ tipo: 'massa' })).toBe(
+      'A exceção deve ser uma receita do tipo caixa',
+    );
+  });
+  it('recusa receita ausente', () => {
+    expect(mensagemExcecaoReceitaCaixaInvalida(null)).toBe(
+      'Receita de caixa não encontrada',
+    );
+  });
+  it('aceita tipo caixa', () => {
+    expect(mensagemExcecaoReceitaCaixaInvalida({ tipo: 'caixa' })).toBeNull();
+  });
+});
+
+describe('rotuloExcecaoCaixa', () => {
+  it('mostra Produto quando vazio', () => {
+    expect(rotuloExcecaoCaixa(null)).toBe('Produto');
+    expect(rotuloExcecaoCaixa('')).toBe('Produto');
+  });
+  it('mostra o nome da receita', () => {
+    expect(rotuloExcecaoCaixa('Caixa Damião')).toBe('Caixa Damião');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+```bash
+npx vitest run src/domain/etiquetas/tipo-estoque-validation.test.ts src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts
+```
+
+Expected: FAIL.
+
+- [ ] **Step 3: Implementar schema e helpers**
+
+Em `tipo-estoque-validation.ts`:
+
+```ts
+receita_caixa_id: z
+  .union([z.string().uuid(), z.literal(''), z.null()])
+  .optional()
+  .transform((value) => (value ? value : null)),
+```
+
+`tipo-estoque-receita-caixa.ts` com as duas funções e as strings exatas dos testes.
+
+- [ ] **Step 4: Admin service + actions**
+
+`SELECT_COLUMNS` passa a incluir `receita_caixa_id`. `list()` faz join:
+
+```ts
+.select(`${SELECT_COLUMNS}, receitas!tipos_estoque_receita_caixa_id_fkey ( nome )`)
+```
+
+Estender `TipoEstoqueAdminRecord` / `mapRecord` com `receita_caixa_id` e `receita_caixa_nome` (do join; `null` se vazio). `toPayload` grava `receita_caixa_id: input.receita_caixa_id`.
+
+`mapRecord` das actions copia os dois campos.
+
+Importar `supabaseClientFactory` e `mensagemExcecaoReceitaCaixaInvalida` em `tipos-estoque-actions.ts`.
+
+Em `persistTipoEstoque`, se `parsed.receita_caixa_id` não for null, validar **antes** do insert/update:
+
+```ts
+const supabase = supabaseClientFactory.createServiceRoleClient();
+const { data: receita } = await supabase
+  .from('receitas')
+  .select('tipo')
+  .eq('id', parsed.receita_caixa_id)
+  .maybeSingle();
+const erroTipo = mensagemExcecaoReceitaCaixaInvalida(receita);
+if (erroTipo) return { success: false, error: erroTipo };
+```
+
+`listReceitasCaixaAtivas`:
+
+```ts
+export async function listReceitasCaixaAtivas(): Promise<Array<{ id: string; nome: string }>> {
+  await requireInternoModulo('interno_config', 'ler');
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('receitas')
+    .select('id, nome')
+    .eq('tipo', 'caixa')
+    .eq('ativo', true)
+    .order('nome', { ascending: true });
+  if (error) {
+    console.error('Erro ao listar receitas de caixa:', error);
+    return [];
+  }
+  return (data ?? []).map((row) => ({ id: row.id, nome: row.nome }));
+}
+```
+
+- [ ] **Step 5: Rodar testes de domínio**
+
+```bash
+npx vitest run src/domain/etiquetas/tipo-estoque-validation.test.ts src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/domain/etiquetas/tipo-estoque-validation.ts src/domain/etiquetas/tipo-estoque-validation.test.ts src/domain/etiquetas/tipo-estoque-receita-caixa.ts src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts src/lib/services/tipos-estoque-admin-service.ts src/app/actions/tipos-estoque-actions.ts
+git commit -m "feat: cadastro de exceção de caixa no tipo de estoque"
+```
+
+---
+
+### Task 6: UI de tipos de estoque
+
+**Files:**
+- Modify: `src/components/TiposEstoque/TipoEstoqueModal.tsx`
+- Modify: `src/components/TiposEstoque/TiposEstoqueTable.tsx`
+- Modify: `src/components/TiposEstoque/TiposEstoqueMobileList.tsx`
+- Modify: `src/app/config/tipos-estoque/page.tsx`
+- Modify: `src/app/config/tipos-estoque/TiposEstoqueClient.tsx`
+
+**Interfaces:**
+- Consumes: `TipoEstoqueAdmin.receita_caixa_id` / `receita_caixa_nome`; `listReceitasCaixaAtivas`; `rotuloExcecaoCaixa`
+- Produces: select no modal; coluna **Caixa** na tabela; nome da receita no mobile só se houver exceção
+
+- [ ] **Step 1: Page + client**
+
+`page.tsx` carrega em paralelo `listTiposEstoqueAdmin(true)` e `listReceitasCaixaAtivas()`. Passa `caixaReceitas` ao client.
+
+Client prop nova: `caixaReceitas: Array<{ id: string; nome: string }>`. Encaminhar ao modal.
+
+- [ ] **Step 2: Modal**
+
+Não reestilizar. Props: `caixaReceitas`. Estado `receitaCaixaId: string` (`''` = padrão). Incluir no snapshot de dirty e em `buildPayload` como `receita_caixa_id: receitaCaixaId`.
+
+Select nativo com o mesmo `inputClassName` do modal:
+
+- label: `Receita de caixa (exceção)`
+- ajuda: `Se vazia, usa a receita de caixa do produto.`
+- primeira option: `value=""` texto `Padrão do produto`
+- demais: `caixaReceitas`
+
+Se o modal passar de ~400 linhas, extrair o form para `TipoEstoqueFormFields.tsx` no mesmo folder.
+
+- [ ] **Step 3: Tabela e mobile**
+
+Sort key nova `'receita_caixa_nome'`. Header **Caixa**. Célula: `rotuloExcecaoCaixa(item.receita_caixa_nome)`.
+
+Mobile: se `receita_caixa_nome` trimado, uma linha `text-xs text-stone-500` com o nome; se vazio, não mostra nada.
+
+- [ ] **Step 4: Verificar tipos e testes**
+
+```bash
+npx tsc --noEmit
+npx vitest run src/domain/insumos/aplicar-excecao-receita-caixa.test.ts src/lib/services/insumo-consumo-embalagem-service.test.ts src/lib/services/insumo-consumo-embalagem-backfill-batch-service.test.ts src/domain/etiquetas/tipo-estoque-validation.test.ts src/domain/etiquetas/tipo-estoque-receita-caixa.test.ts
+```
+
+Expected: `tsc` limpo; todos PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/components/TiposEstoque/TipoEstoqueModal.tsx src/components/TiposEstoque/TiposEstoqueTable.tsx src/components/TiposEstoque/TiposEstoqueMobileList.tsx src/app/config/tipos-estoque/page.tsx src/app/config/tipos-estoque/TiposEstoqueClient.tsx
+git commit -m "feat: select de receita de caixa no tipo de estoque"
+```
+
+---
+
+## Depois do deploy (não é código)
+
+1. Em `/config/tipos-estoque`, Damião → receita Caixa Damião; Milani → receita Caixa Milani. Valepan e Top Alto vazios.
+2. Lote novo de Damião deve baixar Caixa Damião.
+3. Rodar o backfill de consumo de embalagem já existente para acertar lotes antigos.
+
+## Fora deste plano
+
+- Exceção por produto
+- Pães/caixa diferentes por tipo de estoque
+- Simulador de custo
+- Operador escolher caixa no lançamento
