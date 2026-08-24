@@ -4585,6 +4585,7 @@ export type Database = {
           mostrar_texto_congelado: boolean
           nome: string
           possui_etiqueta: boolean
+          receita_caixa_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -4595,6 +4596,7 @@ export type Database = {
           mostrar_texto_congelado?: boolean
           nome: string
           possui_etiqueta?: boolean
+          receita_caixa_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -4605,9 +4607,18 @@ export type Database = {
           mostrar_texto_congelado?: boolean
           nome?: string
           possui_etiqueta?: boolean
+          receita_caixa_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tipos_estoque_receita_caixa_id_fkey"
+            columns: ["receita_caixa_id"]
+            isOneToOne: false
+            referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transportadoras_logistica: {
         Row: {
