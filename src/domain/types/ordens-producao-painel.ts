@@ -25,6 +25,7 @@ export type OrdemProducaoPainelItem = {
   unidades: number;
   caixas: number;
   quantidadeLabel: string;
+  criadoPorNome?: string | null;
   estimativa: OrdemProducaoEstimativaView | null;
 };
 

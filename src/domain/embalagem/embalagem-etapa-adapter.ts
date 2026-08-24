@@ -146,6 +146,7 @@ function mapPedidoToProduct(
       isLast: loteIndex === pedido.lotes.length - 1,
       editLabel: `Editar lote ${loteIndex + 1} de ${embalagemItem.produto}`,
       turnoLabel: turnoLabelFromNumero(lote.turno),
+      registradoPor: lote.criadoPorNome ?? undefined,
     };
   });
 

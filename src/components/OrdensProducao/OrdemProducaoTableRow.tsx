@@ -116,6 +116,14 @@ export default function OrdemProducaoTableRow({
           >
             {ordem.produto}
           </span>
+          {ordem.criadoPorNome ? (
+            <span
+              className="mt-0.5 block truncate text-[11px] text-stone-400"
+              title={`Criada por ${ordem.criadoPorNome}`}
+            >
+              por {ordem.criadoPorNome}
+            </span>
+          ) : null}
           <OrdemProducaoEstimativaLine estimativa={ordem.estimativa} />
         </button>
       </td>

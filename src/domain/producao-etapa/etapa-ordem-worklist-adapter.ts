@@ -84,6 +84,7 @@ function mapOrdemToProduct(
       isLast: loteIndex === ordem.lotes.length - 1,
       editLabel: `Editar lote ${loteIndex + 1} de ${ordem.produto}`,
       turnoLabel: turnoLabelFromNumero(lote.turno),
+      registradoPor: lote.criadoPorNome ?? undefined,
     };
   });
 

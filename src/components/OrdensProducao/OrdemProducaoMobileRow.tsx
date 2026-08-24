@@ -97,6 +97,7 @@ export default function OrdemProducaoMobileRow({
         </span>
         <span className="mt-0.5 block truncate text-xs text-text-muted">
           {buildOrdemMobileDetails(ordem)}
+          {ordem.criadoPorNome ? ` • ${ordem.criadoPorNome}` : ''}
           {etiquetaDiffers ? (
             <>
               {' '}

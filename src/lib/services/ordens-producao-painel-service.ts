@@ -166,6 +166,7 @@ export class OrdensProducaoPainelService {
         unidades,
         caixas,
       }),
+      criadoPorNome: ordem.criadoPorNome ?? null,
       estimativa,
     };
   }

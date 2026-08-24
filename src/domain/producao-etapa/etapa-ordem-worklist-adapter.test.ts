@@ -127,5 +127,26 @@ describe('buildEtapaOrdemWorklistData', () => {
 
     expect(worklist.gruposAtivos[0]?.products[0]?.lotes[0]?.turnoLabel).toBeUndefined();
   });
+
+  it('propaga quem registrou o lote', () => {
+    const worklist = buildWorklist([
+      ordemBase({
+        lotes: [
+          {
+            loteId: 'l1',
+            modo: 'parcial',
+            assadeiras: 3,
+            unidades: 0,
+            produzidoEm: '2026-06-18T10:00:00Z',
+            criadoPorNome: 'Maria Silva',
+          },
+        ],
+      }),
+    ]);
+
+    expect(worklist.gruposAtivos[0]?.products[0]?.lotes[0]?.registradoPor).toBe(
+      'Maria Silva',
+    );
+  });
 });
 

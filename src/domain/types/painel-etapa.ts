@@ -50,6 +50,7 @@ export type PainelLoteEtapa = {
   fotoId?: string;
   fotoUploadedAt?: string;
   turno?: ProducaoTurnoNumero | null;
+  criadoPorNome?: string | null;
 };
 
 export type EtapaDashboardSnapshot = {

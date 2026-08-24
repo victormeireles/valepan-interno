@@ -8,6 +8,7 @@ export type ManualAdjustmentDisplay = {
   tipoEstoqueId: string;
   tipoEstoqueNome: string;
   produtoNome: string;
+  criadoPorNome?: string | null;
   antes: Quantidade;
   depois: Quantidade;
   delta: Quantidade;
@@ -62,6 +63,7 @@ export function buildManualAdjustmentDisplay(
     tipoEstoqueId: mov.tipoEstoqueId,
     tipoEstoqueNome: mov.tipoEstoqueNome,
     produtoNome: mov.produtoNome,
+    criadoPorNome: mov.criadoPorNome ?? null,
     antes: calcularSaldoAntes(mov.saldo, mov.delta),
     depois: mov.saldo,
     delta: mov.delta,

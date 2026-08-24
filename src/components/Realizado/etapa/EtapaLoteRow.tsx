@@ -17,6 +17,7 @@ type EtapaLoteRowProps = {
   trailingSlot?: ReactNode;
   isLast?: boolean;
   turnoLabel?: string;
+  registradoPor?: string;
 };
 
 export default function EtapaLoteRow({
@@ -32,6 +33,7 @@ export default function EtapaLoteRow({
   trailingSlot,
   isLast = false,
   turnoLabel,
+  registradoPor,
 }: EtapaLoteRowProps) {
   const photoClass =
     photoColor === 'yellow'
@@ -55,6 +57,14 @@ export default function EtapaLoteRow({
         <span>Lote {index}</span>
         {turnoLabel ? (
           <span className="font-mono text-xs text-text-muted">{turnoLabel}</span>
+        ) : null}
+        {registradoPor ? (
+          <span
+            className="max-w-[6.5rem] truncate text-xs text-text-muted"
+            title={`Registrado por ${registradoPor}`}
+          >
+            {registradoPor}
+          </span>
         ) : null}
       </span>
       {hasPhoto ? (

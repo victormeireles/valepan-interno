@@ -22,6 +22,7 @@ export type PainelLoteEmbalagem = {
   palletFotoId?: string;
   palletFotoUploadedAt?: string;
   turno?: ProducaoTurnoNumero | null;
+  criadoPorNome?: string | null;
 };
 
 export type PainelPedidoEmbalagem = {

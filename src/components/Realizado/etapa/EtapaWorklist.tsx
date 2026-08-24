@@ -147,6 +147,7 @@ export default function EtapaWorklist({
                     isLoading={lote.isLoading || lote.isDeleting}
                     trailingSlot={deleteButton}
                     isLast={lote.isLast}
+                    registradoPor={lote.registradoPor}
                   />
 
                   {openPhotoLoteId === lote.id && lote.photoLinks && lote.photoLinks.length > 0 ? (

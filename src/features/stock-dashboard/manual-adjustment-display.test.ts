@@ -28,6 +28,14 @@ describe('buildManualAdjustmentDisplay', () => {
     expect(row.depois).toEqual(mov.saldo);
     expect(row.delta).toEqual(mov.delta);
   });
+
+  it('preserva o nome de quem fez o ajuste', () => {
+    const row = buildManualAdjustmentDisplay({
+      ...mov,
+      criadoPorNome: 'João Costa',
+    });
+    expect(row.criadoPorNome).toBe('João Costa');
+  });
 });
 
 describe('buildCxPctDeltaChips', () => {

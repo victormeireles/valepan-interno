@@ -60,6 +60,9 @@ export function StockManualAdjustmentList({
             <p className="mt-1 text-sm font-semibold text-stone-900">
               {row.produtoNome}
             </p>
+            {row.criadoPorNome ? (
+              <p className="mt-0.5 text-xs text-stone-500">por {row.criadoPorNome}</p>
+            ) : null}
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-stone-600">
