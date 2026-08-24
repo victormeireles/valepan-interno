@@ -42,4 +42,23 @@ describe('tipoEstoqueFormSchema', () => {
       expect(result.data.mostrar_texto_congelado).toBe(true);
     }
   });
+
+  it('normaliza receita_caixa_id vazio para null', () => {
+    const result = parseTipoEstoqueForm({ ...valid, receita_caixa_id: '' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.receita_caixa_id).toBeNull();
+  });
+
+  it('aceita receita_caixa_id uuid', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const result = parseTipoEstoqueForm({ ...valid, receita_caixa_id: id });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.receita_caixa_id).toBe(id);
+  });
+
+  it('default de receita_caixa_id é null', () => {
+    const result = parseTipoEstoqueForm({ nome: 'Valepan' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.receita_caixa_id).toBeNull();
+  });
 });

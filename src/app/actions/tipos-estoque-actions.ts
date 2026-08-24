@@ -1,6 +1,8 @@
 'use server';
 
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
+import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { mensagemExcecaoReceitaCaixaInvalida } from '@/domain/etiquetas/tipo-estoque-receita-caixa';
 
 import { revalidatePath } from 'next/cache';
 import {
@@ -19,6 +21,8 @@ export type TipoEstoqueAdmin = {
   possui_etiqueta: boolean;
   congelado: boolean;
   mostrar_texto_congelado: boolean;
+  receita_caixa_id: string | null;
+  receita_caixa_nome: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -35,6 +39,8 @@ function mapRecord(record: TipoEstoqueAdminRecord): TipoEstoqueAdmin {
     possui_etiqueta: record.possui_etiqueta,
     congelado: record.congelado,
     mostrar_texto_congelado: record.mostrar_texto_congelado,
+    receita_caixa_id: record.receita_caixa_id,
+    receita_caixa_nome: record.receita_caixa_nome,
     created_at: record.created_at,
     updated_at: record.updated_at,
   };
@@ -60,6 +66,17 @@ async function persistTipoEstoque(
   const isDuplicate = await tiposEstoqueAdminService.findDuplicateNome(parsed.nome, id);
   if (isDuplicate) {
     return { success: false, error: 'Já existe um tipo de estoque com este nome' };
+  }
+
+  if (parsed.receita_caixa_id) {
+    const supabase = supabaseClientFactory.createServiceRoleClient();
+    const { data: receita } = await supabase
+      .from('receitas')
+      .select('tipo')
+      .eq('id', parsed.receita_caixa_id)
+      .maybeSingle();
+    const erroTipo = mensagemExcecaoReceitaCaixaInvalida(receita);
+    if (erroTipo) return { success: false, error: erroTipo };
   }
 
   try {
@@ -105,6 +122,22 @@ export async function updateTipoEstoque(
   }
 
   return persistTipoEstoque(parsed.data, id);
+}
+
+export async function listReceitasCaixaAtivas(): Promise<Array<{ id: string; nome: string }>> {
+  await requireInternoModulo('interno_config', 'ler');
+  const supabase = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await supabase
+    .from('receitas')
+    .select('id, nome')
+    .eq('tipo', 'caixa')
+    .eq('ativo', true)
+    .order('nome', { ascending: true });
+  if (error) {
+    console.error('Erro ao listar receitas de caixa:', error);
+    return [];
+  }
+  return (data ?? []).map((row) => ({ id: row.id, nome: row.nome }));
 }
 
 export async function deactivateTipoEstoque(id: string): Promise<ActionResult> {

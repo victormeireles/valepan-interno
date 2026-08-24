@@ -6,6 +6,10 @@ export const tipoEstoqueFormSchema = z.object({
   possui_etiqueta: z.boolean().default(false),
   congelado: z.boolean().default(false),
   mostrar_texto_congelado: z.boolean().default(false),
+  receita_caixa_id: z
+    .union([z.string().uuid(), z.literal(''), z.null()])
+    .optional()
+    .transform((value) => (value ? value : null)),
 });
 
 export type TipoEstoqueFormInput = z.input<typeof tipoEstoqueFormSchema>;
