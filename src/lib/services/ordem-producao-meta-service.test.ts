@@ -27,6 +27,7 @@ vi.mock('@/data/producao/OrdemProducaoRepository', () => ({
     upsertMany: (...args: unknown[]) => upsertMany(...args),
     nextOrdemPlanejamento: (...args: unknown[]) => nextOrdemPlanejamento(...args),
     findById: (...args: unknown[]) => findById(...args),
+    stampCriadoPorIfNull: vi.fn().mockResolvedValue(undefined),
     updateQuantidades: vi.fn(),
     updatePedidoFields: (...args: unknown[]) => updatePedidoFields(...args),
     deleteById: vi.fn(),
@@ -104,6 +105,25 @@ describe('OrdemProducaoMetaService.createFromLatas', () => {
     ]);
     expect(result.id).toBe('op-1');
     expect(validatePayloadItems).toHaveBeenCalledWith('Valepan', ['HB Brioche 65g']);
+  });
+
+  it('grava o autor só se a ordem ainda não tiver', async () => {
+    const { ordemProducaoRepository } = await import(
+      '@/data/producao/OrdemProducaoRepository'
+    );
+    await service.createFromLatas({
+      dataProducao: '2026-06-09',
+      dataEtiqueta: '2026-06-09',
+      tipoEstoque: 'Valepan',
+      produto: 'HB Brioche 65g',
+      latas: 430,
+      observacao: '',
+      criadoPor: 'usuario-1',
+    });
+    expect(ordemProducaoRepository.stampCriadoPorIfNull).toHaveBeenCalledWith(
+      'op-1',
+      'usuario-1',
+    );
   });
 });
 

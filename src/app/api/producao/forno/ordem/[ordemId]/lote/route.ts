@@ -9,6 +9,7 @@ import {
   TurnoNaoCadastradoError,
 } from '@/domain/producao-turno/producao-turno-numero';
 import { fornoLoteService } from '@/lib/services/forno-lote-service';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 import { notifyEtapaProductionAfterLoteSave } from '@/lib/services/etapa-production-notification';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
@@ -51,6 +52,7 @@ export async function POST(
       },
       continuaProduzindo: continuaProduzindo ?? true,
       turno,
+      criadoPor: await sessionUsuarioIdResolver.resolve(),
     });
 
     try {

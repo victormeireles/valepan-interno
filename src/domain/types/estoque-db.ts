@@ -31,6 +31,8 @@ export interface EstoqueMovimentoRecord {
   saldo: Quantidade;
   origem: EstoqueMovimentoOrigem;
   clienteDestino?: string | null;
+  criadoPor?: string | null;
+  criadoPorNome?: string | null;
 }
 
 export interface RegistrarMovimentoInput {
@@ -41,6 +43,7 @@ export interface RegistrarMovimentoInput {
   origem: EstoqueMovimentoOrigem;
   embalagemLoteId?: string | null;
   clienteDestino?: string | null;
+  criadoPor?: string | null;
 }
 
 export interface ListMovimentosFilters {

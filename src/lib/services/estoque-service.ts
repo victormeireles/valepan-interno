@@ -28,6 +28,7 @@ type AtualizarQuantidadeInput = {
   cliente: string;
   produto: string;
   quantidade: Quantidade;
+  criadoPor?: string | null;
 };
 
 type RegistrarMovimentoByNomesInput = AjusteQuantidadeInput & {
@@ -35,6 +36,7 @@ type RegistrarMovimentoByNomesInput = AjusteQuantidadeInput & {
   origem?: EstoqueMovimentoOrigem;
   embalagemLoteId?: string;
   clienteDestino?: string;
+  criadoPor?: string | null;
 };
 
 export class EstoqueService {
@@ -120,9 +122,10 @@ export class EstoqueService {
     delta,
     allowNegative = false,
     origem = 'ajuste_manual',
-    embalagemLoteId,
-    clienteDestino,
-  }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord & { movimentoId: string }> {
+      embalagemLoteId,
+      clienteDestino,
+      criadoPor,
+    }: RegistrarMovimentoByNomesInput): Promise<EstoqueRecord & { movimentoId: string }> {
     const tipoEstoqueId = await estoqueResolverService.resolveTipoEstoqueId(cliente);
     const produtoId = await estoqueResolverService.resolveProdutoId(produto);
 
@@ -136,6 +139,7 @@ export class EstoqueService {
       origem,
       embalagemLoteId,
       clienteDestino,
+      criadoPor,
     });
 
     return { ...record, movimentoId };
@@ -145,6 +149,7 @@ export class EstoqueService {
     cliente,
     produto,
     quantidade,
+    criadoPor,
   }: AtualizarQuantidadeInput): Promise<EstoqueRecord> {
     const estoqueAtual = await this.obterEstoqueCliente(cliente);
     const existente = estoqueAtual.find((record) => record.produto === produto);
@@ -157,6 +162,7 @@ export class EstoqueService {
       produto,
       delta,
       origem: 'ajuste_manual',
+      criadoPor,
     });
   }
 
@@ -170,6 +176,7 @@ export class EstoqueService {
     origem: EstoqueMovimentoOrigem;
     embalagemLoteId?: string;
     clienteDestino?: string;
+    criadoPor?: string | null;
   }): Promise<{ record: EstoqueRecord; movimentoId: string }> {
     const saldoAtualRow = await estoqueRepository.findSaldo(
       input.tipoEstoqueId,
@@ -199,6 +206,7 @@ export class EstoqueService {
       origem: input.origem,
       embalagemLoteId: input.embalagemLoteId ?? null,
       clienteDestino: input.clienteDestino ?? null,
+      criadoPor: input.criadoPor ?? null,
     });
 
     await estoqueRepository.upsertSaldo(

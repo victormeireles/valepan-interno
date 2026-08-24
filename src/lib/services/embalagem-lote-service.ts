@@ -35,6 +35,7 @@ export type CriarLotePorPedidoInput = {
   obsEmbalagem?: string;
   fotos?: EmbalagemLoteFotos;
   continuaProduzindo?: boolean;
+  criadoPor?: string | null;
 };
 
 export type EmbalagemLoteComConsumo = EmbalagemLoteRecord & {
@@ -124,6 +125,7 @@ export class EmbalagemLoteService {
       obsEmbalagem: input.obsEmbalagem ?? null,
       fotos: input.fotos,
       turno: input.turno,
+      criadoPor: input.criadoPor,
     });
 
     await aplicarFinalizacaoEmbalagemAposSalvar(pedido.id, input.continuaProduzindo);

@@ -5,12 +5,18 @@ import type {
   EmbalagemLoteRecord,
 } from '@/domain/types/embalagem-lote';
 import type { Database, Json } from '@/types/database';
+import {
+  mapOperacaoAutor,
+  SELECT_COM_AUTOR,
+  type AutorJoin,
+} from '@/domain/auditoria/operacao-autor';
 
 type LoteRow = Database['public']['Tables']['embalagem_lotes']['Row'];
 type LoteInsertRow = Database['public']['Tables']['embalagem_lotes']['Insert'];
 type LoteRowCompat = LoteRow & {
   ordem_producao_id?: string | null;
   pedido_embalagem_id?: string | null;
+  autor?: AutorJoin;
 };
 type LoteInsertCompat = LoteInsertRow & {
   ordem_producao_id?: string | null;
@@ -55,11 +61,17 @@ function toDbInsert(input: EmbalagemLoteInsert): LoteInsertRow {
     pallet_foto_uploaded_at: fotos?.palletFotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
     turno: input.turno,
+    criado_por: input.criadoPor ?? null,
   } as LoteInsertCompat;
 }
 
-function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
+function fromDbRow(row: unknown): EmbalagemLoteRecord {
+  return mapFromDbRow(row as LoteRow);
+}
+
+function mapFromDbRow(row: LoteRow): EmbalagemLoteRecord {
   const compatRow = row as LoteRowCompat;
+  const autor = mapOperacaoAutor(row.criado_por, compatRow.autor);
   return {
     id: row.id,
     createdAt: row.created_at,
@@ -93,6 +105,8 @@ function fromDbRow(row: LoteRow): EmbalagemLoteRecord {
     },
     producaoAnterior: row.producao_anterior as EmbalagemLoteInsert['producaoAnterior'],
     turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null,
+    criadoPor: autor.criadoPor,
+    criadoPorNome: autor.criadoPorNome,
   };
 }
 
@@ -105,7 +119,7 @@ export class EmbalagemLoteRepository {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
       .insert(toDbInsert(input))
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -118,7 +132,7 @@ export class EmbalagemLoteRepository {
   async findById(id: string): Promise<EmbalagemLoteRecord | null> {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('id', id)
       .maybeSingle();
 
@@ -133,7 +147,7 @@ export class EmbalagemLoteRepository {
     if (ids.length === 0) return [];
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in('id', ids);
 
     if (error) {
@@ -159,7 +173,7 @@ export class EmbalagemLoteRepository {
 
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, pedidoIds)
       .order('produzido_em', { ascending: true });
 
@@ -296,7 +310,7 @@ export class EmbalagemLoteRepository {
           : {}),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -333,7 +347,7 @@ export class EmbalagemLoteRepository {
   ): Promise<EmbalagemLoteRecord[]> {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .is(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, null)
       .gte('data_pedido', from)
       .lte('data_pedido', to);
@@ -390,7 +404,7 @@ export class EmbalagemLoteRepository {
   ): Promise<EmbalagemLoteRecord[]> {
     const { data, error } = await this.supabase
       .from('embalagem_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .gte('produzido_em', startIso)
       .lt('produzido_em', endIsoExclusive)
       .order('produzido_em', { ascending: true });

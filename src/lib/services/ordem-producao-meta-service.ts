@@ -25,6 +25,7 @@ export type CreateFromLatasInput = {
   latas: number;
   observacao: string;
   assadeiraNome?: string;
+  criadoPor?: string | null;
 };
 
 export type UpdateFieldsInput = {
@@ -44,6 +45,7 @@ export type CreateFromQuantidadeInput = {
   produto: string;
   observacao: string;
   quantidade: DerivedQuantidades;
+  criadoPor?: string | null;
 };
 
 export type CreateFromUnidadesInput = {
@@ -53,6 +55,7 @@ export type CreateFromUnidadesInput = {
   produto: string;
   observacao: string;
   unidades: number;
+  criadoPor?: string | null;
 };
 
 export type UpdateFromFormInput = {
@@ -118,7 +121,7 @@ export class OrdemProducaoMetaService {
     const upsert = await this.buildUpsertFromLatas(input);
     const [record] = await ordemProducaoRepository.upsertMany([upsert]);
     await enqueueEstimativaRecalc(record.dataProducao);
-    return record;
+    return this.atribuirAutorSeNovo(record, input.criadoPor);
   }
 
   async createSemAssadeira(input: CreateFromUnidadesInput): Promise<OrdemProducaoRecord> {
@@ -162,7 +165,7 @@ export class OrdemProducaoMetaService {
       },
     ]);
     await enqueueEstimativaRecalc(record.dataProducao);
-    return record;
+    return this.atribuirAutorSeNovo(record, input.criadoPor);
   }
 
   async createFromQuantidade(input: CreateFromQuantidadeInput): Promise<OrdemProducaoRecord> {
@@ -191,7 +194,16 @@ export class OrdemProducaoMetaService {
       },
     ]);
     await enqueueEstimativaRecalc(record.dataProducao);
-    return record;
+    return this.atribuirAutorSeNovo(record, input.criadoPor);
+  }
+
+  private async atribuirAutorSeNovo(
+    record: OrdemProducaoRecord,
+    criadoPor?: string | null,
+  ): Promise<OrdemProducaoRecord> {
+    if (!criadoPor) return record;
+    await ordemProducaoRepository.stampCriadoPorIfNull(record.id, criadoPor);
+    return { ...record, criadoPor: record.criadoPor ?? criadoPor };
   }
 
   private async assertMetaNotBelowProduzido(

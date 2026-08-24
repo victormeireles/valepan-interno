@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { estoqueService } from '@/lib/services/estoque-service';
 import { Quantidade } from '@/domain/types/inventario';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 type UpdateEstoqueRequest = {
   cliente?: string;
@@ -26,6 +27,7 @@ export async function PATCH(request: Request) {
       cliente: body.cliente!,
       produto: body.produto!,
       quantidade: body.quantidade!,
+      criadoPor: await sessionUsuarioIdResolver.resolve(),
     });
 
     return NextResponse.json({ data: record });

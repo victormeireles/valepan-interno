@@ -11,6 +11,11 @@ import type {
 } from '@/domain/types/ordem-producao';
 import type { EtapaProducaoSlug } from '@/domain/types/ordem-producao-etapa';
 import { keysEqual } from '@/domain/embalagem/pedido-key';
+import {
+  mapOperacaoAutor,
+  SELECT_COM_AUTOR,
+  type AutorJoin,
+} from '@/domain/auditoria/operacao-autor';
 
 type OrdemProducaoEtapaRowFields = {
   fermentacao_finalizada?: boolean | null;
@@ -40,6 +45,8 @@ type OrdemProducaoRow = {
   pacotes: number;
   unidades: number;
   kg: number;
+  criado_por?: string | null;
+  autor?: AutorJoin;
 } & OrdemProducaoEtapaRowFields;
 
 type OrdemProducaoInsertRow = Omit<OrdemProducaoRow, 'id' | 'created_at'> & {
@@ -105,6 +112,8 @@ function fromDbRow(row: OrdemProducaoRow): OrdemProducaoRecord {
     embalagemFinalizada: row.embalagem_finalizada ?? false,
     embalagemMetaConfirmada: row.embalagem_meta_confirmada ?? null,
     embalagemFinalizadaEm: row.embalagem_finalizada_em ?? null,
+    criadoPor: mapOperacaoAutor(row.criado_por, row.autor).criadoPor,
+    criadoPorNome: mapOperacaoAutor(row.criado_por, row.autor).criadoPorNome,
   };
 }
 
@@ -171,7 +180,7 @@ export class OrdemProducaoRepository {
   async findById(id: string): Promise<OrdemProducaoRecord | null> {
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('id', id)
       .maybeSingle();
 
@@ -188,7 +197,7 @@ export class OrdemProducaoRepository {
 
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in('id', unique);
 
     if (error) {
@@ -218,7 +227,7 @@ export class OrdemProducaoRepository {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -260,7 +269,7 @@ export class OrdemProducaoRepository {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -282,7 +291,7 @@ export class OrdemProducaoRepository {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -303,7 +312,7 @@ export class OrdemProducaoRepository {
   async findByKey(key: OrdemProducaoKey): Promise<OrdemProducaoRecord | null> {
     let query = this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('data_producao', key.dataProducao)
       .eq('data_fabricacao_etiqueta', key.dataFabricacaoEtiqueta)
       .eq('tipo_estoque_id', key.tipoEstoqueId)
@@ -329,7 +338,7 @@ export class OrdemProducaoRepository {
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
       .upsert(inputs.map(toDbInsert), { onConflict: CONFLICT_COLUMNS })
-      .select();
+      .select(SELECT_COM_AUTOR);
 
     if (error) {
       throw new Error(`Erro ao upsert ordens produção: ${error.message}`);
@@ -338,10 +347,22 @@ export class OrdemProducaoRepository {
     return (data ?? []).map((row) => fromDbRow(row as unknown as OrdemProducaoRow));
   }
 
+  async stampCriadoPorIfNull(id: string, usuarioId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from(ORDENS_PRODUCAO_TABLE)
+      .update({ criado_por: usuarioId })
+      .eq('id', id)
+      .is('criado_por', null);
+
+    if (error) {
+      throw new Error(`Erro ao gravar autor da ordem: ${error.message}`);
+    }
+  }
+
   async listByDataProducao(dataProducao: string): Promise<OrdemProducaoRecord[]> {
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('data_producao', dataProducao)
       .order('ordem_planejamento', { ascending: true });
 
@@ -458,7 +479,7 @@ export class OrdemProducaoRepository {
 
     const { data, error } = await this.supabase
       .from(ORDENS_PRODUCAO_TABLE)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in('data_producao', unique)
       .order('ordem_planejamento', { ascending: true });
 

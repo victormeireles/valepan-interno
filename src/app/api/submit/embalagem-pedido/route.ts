@@ -6,6 +6,7 @@ import {
   ordemProducaoMetaService,
   EstoqueResolverError,
 } from '@/lib/services/ordem-producao-meta-service';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 function isValidDateISO(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     }
 
     try {
+      const criadoPor = await sessionUsuarioIdResolver.resolve();
       for (const item of payload.itens) {
         const observacao = item.observacao?.trim() || payload.observacao?.trim() || '';
 
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
             produto: item.produto,
             latas: item.assadeiras,
             observacao,
+            criadoPor,
           });
           continue;
         }
@@ -49,6 +52,7 @@ export async function POST(request: Request) {
             produto: item.produto,
             observacao,
             unidades: item.unidades,
+            criadoPor,
           });
           continue;
         }
@@ -65,6 +69,7 @@ export async function POST(request: Request) {
             unidades: item.unidades || 0,
             kg: item.kg || 0,
           },
+          criadoPor,
         });
       }
     } catch (e) {

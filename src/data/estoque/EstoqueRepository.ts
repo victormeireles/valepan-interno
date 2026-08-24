@@ -10,6 +10,7 @@ import type {
 } from '@/domain/types/estoque-db';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
+import { mapOperacaoAutor, type AutorJoin } from '@/domain/auditoria/operacao-autor';
 
 type SaldoRow = Database['public']['Tables']['estoque_saldos']['Row'];
 type MovimentoRow = Database['public']['Tables']['estoque_movimentos']['Row'];
@@ -36,6 +37,7 @@ const SALDO_SELECT_APENAS_ATIVOS =
 type MovimentoWithRelations = MovimentoRow & {
   tipos_estoque: { nome: string } | null;
   produtos: { nome: string } | null;
+  autor?: AutorJoin;
 };
 
 function mapQuantidade(row: {
@@ -145,6 +147,7 @@ export class EstoqueRepository {
         origem: input.origem,
         embalagem_lote_id: input.embalagemLoteId ?? null,
         cliente: input.clienteDestino ?? null,
+        criado_por: input.criadoPor ?? null,
       })
       .select()
       .single();
@@ -193,7 +196,9 @@ export class EstoqueRepository {
   async findMovimentoById(id: string): Promise<EstoqueMovimentoRecord | null> {
     const { data, error } = await this.supabase
       .from('estoque_movimentos')
-      .select('*, tipos_estoque(nome), produtos(nome)')
+      .select(
+        '*, tipos_estoque(nome), produtos(nome), autor:usuarios!criado_por(nome)',
+      )
       .eq('id', id)
       .maybeSingle();
 
@@ -210,7 +215,9 @@ export class EstoqueRepository {
 
     const { data, error } = await this.supabase
       .from('estoque_movimentos')
-      .select('*, tipos_estoque(nome), produtos(nome)')
+      .select(
+        '*, tipos_estoque(nome), produtos(nome), autor:usuarios!criado_por(nome)',
+      )
       .eq('origem', 'saida')
       .gte('created_at', inicio)
       .lte('created_at', fim)
@@ -307,7 +314,9 @@ export class EstoqueRepository {
   async listMovimentos(filters: ListMovimentosFilters): Promise<EstoqueMovimentoRecord[]> {
     let query = this.supabase
       .from('estoque_movimentos')
-      .select('*, tipos_estoque(nome), produtos(nome)')
+      .select(
+        '*, tipos_estoque(nome), produtos(nome), autor:usuarios!criado_por(nome)',
+      )
       .order('created_at', { ascending: false })
       .limit(filters.limit ?? 100);
 
@@ -378,6 +387,8 @@ export class EstoqueRepository {
       },
       origem: row.origem as EstoqueMovimentoOrigem,
       clienteDestino: row.cliente ?? null,
+      criadoPor: mapOperacaoAutor(row.criado_por, row.autor).criadoPor,
+      criadoPorNome: mapOperacaoAutor(row.criado_por, row.autor).criadoPorNome,
     };
   }
 }

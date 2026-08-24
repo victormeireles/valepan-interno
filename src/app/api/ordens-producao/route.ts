@@ -5,6 +5,7 @@ import {
 } from '@/lib/services/ordem-producao-meta-service';
 import { ordensProducaoPainelService } from '@/lib/services/ordens-producao-painel-service';
 import { extractCalendarDate } from '@/lib/utils/date-utils';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 type OrdemProducaoCreateBody = {
   dataProducao: string;
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
 
     const body = normalizeCalendarDates(rawBody)!;
     const observacao = body.observacao?.trim() ?? '';
+    const criadoPor = await sessionUsuarioIdResolver.resolve();
 
     try {
       if (body.modoQuantidade === 'unidades') {
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
           produto: body.produto,
           observacao,
           unidades: body.unidades ?? 0,
+          criadoPor,
         });
         return NextResponse.json({ id: record.id }, { status: 201 });
       }
@@ -90,6 +93,7 @@ export async function POST(request: Request) {
         observacao,
         latas: body.latas ?? 0,
         assadeiraNome: body.assadeiraNome,
+        criadoPor,
       });
       return NextResponse.json({ id: record.id }, { status: 201 });
     } catch (e) {

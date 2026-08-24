@@ -110,6 +110,19 @@ describe('FermentacaoLoteService', () => {
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
   });
 
+  it('grava o usuário que registrou o lote', async () => {
+    const { fermentacaoLoteService } = await import('./fermentacao-lote-service');
+    await fermentacaoLoteService.criarLotePorOrdem({
+      ordemProducaoId: 'o1',
+      quantidade: { assadeiras: 2, unidades: 0 },
+      turno: 1,
+      criadoPor: 'usuario-1',
+    });
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ criadoPor: 'usuario-1' }),
+    );
+  });
+
   it('não insere lote quando o turno não está cadastrado', async () => {
     mockAssertNumeroCadastrado.mockRejectedValue(new TurnoNaoCadastradoError());
     const { fermentacaoLoteService } = await import('./fermentacao-lote-service');

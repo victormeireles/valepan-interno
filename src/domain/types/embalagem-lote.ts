@@ -30,10 +30,12 @@ export interface EmbalagemLoteInsert {
   fotos?: EmbalagemLoteFotos;
   producaoAnterior?: Quantidade | null;
   turno: ProducaoTurnoNumero;
+  criadoPor?: string | null;
 }
 
 export interface EmbalagemLoteRecord extends Omit<EmbalagemLoteInsert, 'turno'> {
   id: string;
   createdAt: string;
   turno?: ProducaoTurnoNumero | null;
+  criadoPorNome?: string | null;
 }

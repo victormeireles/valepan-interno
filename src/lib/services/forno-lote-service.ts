@@ -22,6 +22,7 @@ export type CriarLotePorOrdemInput = {
   turno: ProducaoTurnoNumero;
   fotos?: EtapaLoteFotos;
   continuaProduzindo?: boolean;
+  criadoPor?: string | null;
 };
 
 export type AtualizarLoteInput = {
@@ -122,6 +123,7 @@ export class FornoLoteService {
       produzidoEm: new Date().toISOString(),
       fotos: input.fotos,
       turno: input.turno,
+      criadoPor: input.criadoPor,
     });
 
     await aplicarFinalizacaoAposSalvar(ordem, input.continuaProduzindo);

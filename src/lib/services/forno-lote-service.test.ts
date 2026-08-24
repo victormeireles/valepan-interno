@@ -78,6 +78,19 @@ describe('FornoLoteService', () => {
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
   });
 
+  it('grava o usuário que registrou o lote', async () => {
+    const { fornoLoteService } = await import('./forno-lote-service');
+    await fornoLoteService.criarLotePorOrdem({
+      ordemProducaoId: 'o1',
+      quantidade: { assadeiras: 5, unidades: 0 },
+      turno: 1,
+      criadoPor: 'usuario-1',
+    });
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ criadoPor: 'usuario-1' }),
+    );
+  });
+
   it('cria lote dentro do saldo', async () => {
     const { fornoLoteService } = await import('./forno-lote-service');
     const result = await fornoLoteService.criarLotePorOrdem({

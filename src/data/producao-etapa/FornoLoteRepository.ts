@@ -2,9 +2,15 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { EtapaQuantidade } from '@/domain/producao-etapa/etapa-quantidade';
 import type { FornoLoteInsert, FornoLoteRecord } from '@/domain/types/forno-lote';
 import type { Database, Json } from '@/types/database';
+import {
+  mapOperacaoAutor,
+  SELECT_COM_AUTOR,
+  type AutorJoin,
+} from '@/domain/auditoria/operacao-autor';
 
 type LoteRow = Database['public']['Tables']['forno_lotes']['Row'];
 type LoteInsertRow = Database['public']['Tables']['forno_lotes']['Insert'];
+type LoteRowComAutor = LoteRow & { autor?: AutorJoin };
 const ORDEM_PRODUCAO_COLUMN = 'ordem_producao_id';
 
 export type FornoLoteUpdate = {
@@ -37,10 +43,16 @@ function toDbInsert(input: FornoLoteInsert): LoteInsertRow {
     foto_uploaded_at: fotos?.fotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
     turno: input.turno,
+    criado_por: input.criadoPor ?? null,
   };
 }
 
-function fromDbRow(row: LoteRow): FornoLoteRecord {
+function fromDbRow(row: unknown): FornoLoteRecord {
+  return mapFromDbRow(row as LoteRowComAutor);
+}
+
+function mapFromDbRow(row: LoteRowComAutor): FornoLoteRecord {
+  const autor = mapOperacaoAutor(row.criado_por, row.autor);
   return {
     id: row.id,
     createdAt: row.created_at,
@@ -56,6 +68,8 @@ function fromDbRow(row: LoteRow): FornoLoteRecord {
     },
     producaoAnterior: row.producao_anterior as FornoLoteInsert['producaoAnterior'],
     turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null,
+    criadoPor: autor.criadoPor,
+    criadoPorNome: autor.criadoPorNome,
   };
 }
 
@@ -68,7 +82,7 @@ export class FornoLoteRepository {
     const { data, error } = await this.supabase
       .from('forno_lotes')
       .insert(toDbInsert(input))
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -81,7 +95,7 @@ export class FornoLoteRepository {
   async findById(id: string): Promise<FornoLoteRecord | null> {
     const { data, error } = await this.supabase
       .from('forno_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('id', id)
       .maybeSingle();
 
@@ -96,7 +110,7 @@ export class FornoLoteRepository {
     if (ids.length === 0) return [];
     const { data, error } = await this.supabase
       .from('forno_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in('id', ids);
 
     if (error) {
@@ -127,7 +141,7 @@ export class FornoLoteRepository {
           : {}),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -153,7 +167,7 @@ export class FornoLoteRepository {
 
     const { data, error } = await this.supabase
       .from('forno_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, ordemProducaoIds)
       .order('produzido_em', { ascending: true });
 
@@ -178,7 +192,7 @@ export class FornoLoteRepository {
   ): Promise<FornoLoteRecord[]> {
     const { data, error } = await this.supabase
       .from('forno_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .gte('produzido_em', startIso)
       .lt('produzido_em', endIsoExclusive)
       .order('produzido_em', { ascending: true });

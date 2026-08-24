@@ -301,11 +301,14 @@ export class MetaEmbalagemBatchService {
     };
   }
 
-  async apply(text: string): Promise<MetaEmbalagemBatchApplyResult> {
-    return withCoalescedEstimativaRecalc(() => this.applyBatch(text));
+  async apply(text: string, criadoPor?: string | null): Promise<MetaEmbalagemBatchApplyResult> {
+    return withCoalescedEstimativaRecalc(() => this.applyBatch(text, criadoPor));
   }
 
-  private async applyBatch(text: string): Promise<MetaEmbalagemBatchApplyResult> {
+  private async applyBatch(
+    text: string,
+    criadoPor?: string | null,
+  ): Promise<MetaEmbalagemBatchApplyResult> {
     const preview = await this.preview(text);
     if (!preview.canApply) {
       throw new Error('Corrija os erros antes de aplicar o lote');
@@ -336,6 +339,7 @@ export class MetaEmbalagemBatchService {
               produto: row.produto,
               observacao: row.observacao,
               unidades: row.latas,
+              criadoPor,
             });
           } else {
             await ordemProducaoMetaService.createFromLatas({
@@ -346,6 +350,7 @@ export class MetaEmbalagemBatchService {
               latas: row.latas,
               observacao: row.observacao,
               assadeiraNome: row.assadeira || undefined,
+              criadoPor,
             });
           }
         } catch (e) {

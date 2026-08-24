@@ -18,10 +18,12 @@ export interface FornoLoteInsert {
   fotos?: EtapaLoteFotos;
   producaoAnterior?: EtapaQuantidade | null;
   turno: ProducaoTurnoNumero;
+  criadoPor?: string | null;
 }
 
 export interface FornoLoteRecord extends Omit<FornoLoteInsert, 'turno'> {
   id: string;
   createdAt: string;
   turno?: ProducaoTurnoNumero | null;
+  criadoPorNome?: string | null;
 }

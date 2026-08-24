@@ -148,6 +148,23 @@ describe('EmbalagemLoteService', () => {
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ turno: 1 }));
   });
 
+  it('grava o usuário que registrou o lote', async () => {
+    const { embalagemLoteService } = await import('./embalagem-lote-service');
+
+    await embalagemLoteService.criarLotePorPedidoEmbalagem({
+      pedidoEmbalagemId: 'pedido-1',
+      clienteNome: 'Cliente',
+      produtoNome: 'Produto',
+      quantidade: { caixas: 1, pacotes: 0, unidades: 0, kg: 0 },
+      turno: 1,
+      criadoPor: 'usuario-1',
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ criadoPor: 'usuario-1' }),
+    );
+  });
+
   it('não insere lote quando o turno não está cadastrado', async () => {
     mockAssertNumeroCadastrado.mockRejectedValue(new TurnoNaoCadastradoError());
     const { embalagemLoteService } = await import('./embalagem-lote-service');

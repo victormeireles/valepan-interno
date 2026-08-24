@@ -14,6 +14,7 @@ import { estoqueService } from '@/lib/services/estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 export async function POST(
   request: Request,
@@ -95,6 +96,7 @@ export async function POST(
         },
         continuaProduzindo: continuaProduzindo ?? true,
         turno,
+        criadoPor: await sessionUsuarioIdResolver.resolve(),
       });
       loteId = loteRecord.id;
 

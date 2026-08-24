@@ -3,6 +3,7 @@ import {
   metaEmbalagemBatchService,
   EstoqueResolverError,
 } from '@/lib/services/meta-embalagem-batch-service';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Texto vazio' }, { status: 400 });
     }
 
-    const result = await metaEmbalagemBatchService.apply(text);
+    const result = await metaEmbalagemBatchService.apply(
+      text,
+      await sessionUsuarioIdResolver.resolve(),
+    );
     return NextResponse.json({
       message: 'Metas importadas com sucesso',
       ...result,

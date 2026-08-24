@@ -21,4 +21,6 @@ export type OrdemProducaoRecord = OrdemProducaoUpsert &
     id: string;
     createdAt: string;
     updatedAt: string;
+    criadoPor?: string | null;
+    criadoPorNome?: string | null;
   };

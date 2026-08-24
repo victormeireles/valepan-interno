@@ -11,6 +11,7 @@ import { whatsAppNotificationService } from '@/lib/services/whatsapp-notificatio
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { Quantidade } from '@/domain/types/inventario';
+import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 const quantidadeSchema = z.object({
   caixas: z.coerce.number().min(0),
@@ -70,10 +71,12 @@ export async function adjustStockAction(input: AdjustStockInput) {
   const quantidadeAtual = registroAtual?.quantidade ?? criarQuantidadeZerada();
 
   const delta = calcularDelta(quantidadeAtual, payload.quantidade);
+  const criadoPor = await sessionUsuarioIdResolver.resolve();
   const atualizado = await estoqueService.aplicarDelta({
     cliente: payload.estoqueNome,
     produto: produtoNormalizado,
     delta,
+    criadoPor,
   });
 
   revalidatePath('/api/painel/estoque');
@@ -166,18 +169,21 @@ export async function createStockAction(input: CreateStockInput) {
   await requireInternoModulo('interno_estoque', 'editar');
   const payload = createStockSchema.parse(input);
   const produtoNormalizado = payload.produto.trim();
+  const criadoPor = await sessionUsuarioIdResolver.resolve();
 
   if (payload.action === 'replace') {
     await estoqueService.definirQuantidadeAbsoluta({
       cliente: payload.estoqueNome,
       produto: produtoNormalizado,
       quantidade: payload.quantidade,
+      criadoPor,
     });
   } else {
     await estoqueService.aplicarDelta({
       cliente: payload.estoqueNome,
       produto: produtoNormalizado,
       delta: payload.quantidade,
+      criadoPor,
     });
   }
 

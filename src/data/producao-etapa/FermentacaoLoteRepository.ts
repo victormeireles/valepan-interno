@@ -5,9 +5,15 @@ import type {
   FermentacaoLoteRecord,
 } from '@/domain/types/fermentacao-lote';
 import type { Database, Json } from '@/types/database';
+import {
+  mapOperacaoAutor,
+  SELECT_COM_AUTOR,
+  type AutorJoin,
+} from '@/domain/auditoria/operacao-autor';
 
 type LoteRow = Database['public']['Tables']['fermentacao_lotes']['Row'];
 type LoteInsertRow = Database['public']['Tables']['fermentacao_lotes']['Insert'];
+type LoteRowComAutor = LoteRow & { autor?: AutorJoin };
 const ORDEM_PRODUCAO_COLUMN = 'ordem_producao_id';
 
 export type FermentacaoLoteUpdate = {
@@ -40,25 +46,30 @@ function toDbInsert(input: FermentacaoLoteInsert): LoteInsertRow {
     foto_uploaded_at: fotos?.fotoUploadedAt ?? null,
     producao_anterior: quantidadeToJson(input.producaoAnterior),
     turno: input.turno,
+    criado_por: input.criadoPor ?? null,
   };
 }
 
-function fromDbRow(row: LoteRow): FermentacaoLoteRecord {
+function fromDbRow(row: unknown): FermentacaoLoteRecord {
+  const typed = row as LoteRowComAutor;
+  const autor = mapOperacaoAutor(typed.criado_por, typed.autor);
   return {
-    id: row.id,
-    createdAt: row.created_at,
-    modo: row.modo,
-    ordemProducaoId: row.ordem_producao_id,
-    assadeiras: row.assadeiras,
-    unidades: row.unidades,
-    produzidoEm: row.produzido_em,
+    id: typed.id,
+    createdAt: typed.created_at,
+    modo: typed.modo,
+    ordemProducaoId: typed.ordem_producao_id,
+    assadeiras: typed.assadeiras,
+    unidades: typed.unidades,
+    produzidoEm: typed.produzido_em,
     fotos: {
-      fotoUrl: row.foto_url ?? undefined,
-      fotoId: row.foto_id ?? undefined,
-      fotoUploadedAt: row.foto_uploaded_at ?? undefined,
+      fotoUrl: typed.foto_url ?? undefined,
+      fotoId: typed.foto_id ?? undefined,
+      fotoUploadedAt: typed.foto_uploaded_at ?? undefined,
     },
-    producaoAnterior: row.producao_anterior as FermentacaoLoteInsert['producaoAnterior'],
-    turno: row.turno === 1 || row.turno === 2 || row.turno === 3 ? row.turno : null,
+    producaoAnterior: typed.producao_anterior as FermentacaoLoteInsert['producaoAnterior'],
+    turno: typed.turno === 1 || typed.turno === 2 || typed.turno === 3 ? typed.turno : null,
+    criadoPor: autor.criadoPor,
+    criadoPorNome: autor.criadoPorNome,
   };
 }
 
@@ -71,7 +82,7 @@ export class FermentacaoLoteRepository {
     const { data, error } = await this.supabase
       .from('fermentacao_lotes')
       .insert(toDbInsert(input))
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -84,7 +95,7 @@ export class FermentacaoLoteRepository {
   async findById(id: string): Promise<FermentacaoLoteRecord | null> {
     const { data, error } = await this.supabase
       .from('fermentacao_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .eq('id', id)
       .maybeSingle();
 
@@ -116,7 +127,7 @@ export class FermentacaoLoteRepository {
           : {}),
       })
       .eq('id', id)
-      .select()
+      .select(SELECT_COM_AUTOR)
       .single();
 
     if (error) {
@@ -142,7 +153,7 @@ export class FermentacaoLoteRepository {
 
     const { data, error } = await this.supabase
       .from('fermentacao_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .in(ORDEM_PRODUCAO_COLUMN as keyof LoteRow, ordemProducaoIds)
       .order('produzido_em', { ascending: true });
 
@@ -167,7 +178,7 @@ export class FermentacaoLoteRepository {
   ): Promise<FermentacaoLoteRecord[]> {
     const { data, error } = await this.supabase
       .from('fermentacao_lotes')
-      .select()
+      .select(SELECT_COM_AUTOR)
       .gte('produzido_em', startIso)
       .lt('produzido_em', endIsoExclusive)
       .order('produzido_em', { ascending: true });
