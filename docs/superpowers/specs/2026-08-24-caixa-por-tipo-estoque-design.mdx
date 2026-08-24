@@ -1,0 +1,172 @@
+# Exceção de receita de caixa por tipo de estoque
+
+Data: 2026-08-24  
+Status: aprovada pelo stakeholder
+
+## Objetivo
+
+O débito de caixa na embalagem segue o tipo de estoque da OP, não só a receita de caixa do produto. Damião e Milani baixam a caixa certa; Valepan e Top Alto continuam na Caixa Valepan.
+
+### Sucesso
+
+- OP Damião: 1 CX de pão baixa 1 Caixa Damião
+- OP Milani: baixa Caixa Milani
+- OP Valepan ou Top Alto: baixa Caixa Valepan (igual hoje)
+- Plástico e antimofo não mudam
+- Pães/caixa continuam os da receita do produto
+- Chão de fábrica não escolhe caixa
+
+## Contexto
+
+Cada produto tem uma receita de caixa (`produto_receitas`, unique por produto + tipo). Essa receita define o insumo (hoje Caixa Valepan) e a quantidade de pães por caixa.
+
+O lote de embalagem já tem `tipoEstoqueId`. O consumo ignora isso e sempre usa a receita do produto. Resultado: Caixa Valepan sai demais; Caixa Damião e Caixa Milani não saem.
+
+Mapeamento real:
+
+| Tipo de estoque | Caixa |
+|-----------------|-------|
+| Valepan | Valepan (padrão do produto) |
+| Top Alto | Valepan (padrão do produto) |
+| Damião | Damião (exceção) |
+| Milani | Milani (exceção) |
+
+A caixa segue o **tipo de estoque**, não o produto e não o cliente de entrega.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Onde cadastra | Exceção opcional no tipo de estoque, não no produto |
+| Campo | `tipos_estoque.receita_caixa_id` nullable |
+| Sem exceção | Receita de caixa do produto (comportamento atual) |
+| Com exceção | Troca só os **ingredientes** da receita de caixa |
+| Pães/caixa | Continuam em `produto_receitas.quantidade_por_produto` |
+| Produto sem receita de caixa | Exceção ignorada; mesmo aviso de hoje |
+| Quem escolhe no chão | Ninguém. A OP já traz o tipo de estoque |
+| Mapeamento por nome | Não. Cadastro manual depois do deploy |
+| Estoque do pão | Inalterado |
+| Fermentação / forno | Inalterados |
+| Simulador de custo | Continua na caixa padrão do produto |
+| Histórico | Sem tela nova. O backfill de consumo de embalagem usa a mesma regra |
+
+## Abordagem
+
+**Exceção opcional no tipo de estoque** (aprovado).
+
+Descartado: receita de caixa por produto + tipo de estoque (quebra o unique de `produto_receitas` e o modal de receitas; a regra não é por SKU).
+
+Descartado: trocar o insumo depois do cálculo (precisa adivinhar qual ingrediente é a caixa).
+
+## Schema
+
+Sem tabela nova. Coluna em `tipos_estoque`:
+
+- `receita_caixa_id uuid NULL REFERENCES receitas(id) ON DELETE SET NULL`
+- Comentário: receita de caixa que substitui a do produto no consumo de embalagem
+
+RLS da tabela permanece. Sem policy nova.
+
+Tipo da receita não dá para checar com `CHECK` em outra tabela. A action de tipo de estoque só aceita receita ativa com `tipo = 'caixa'`, ou `null`.
+
+## Cadastro
+
+Tela: `/config/tipos-estoque`, modal existente.
+
+- Select **Receita de caixa (exceção)**
+- Opções: receitas ativas do tipo caixa + vazio
+- Ajuda: *Se vazia, usa a receita de caixa do produto.*
+- Lista desktop: coluna **Caixa** — nome da receita ou `Produto`
+- Lista mobile: o nome da receita (ou nada, se for padrão do produto)
+
+Depois do deploy, preencher Damião e Milani no modal. Valepan e Top Alto ficam vazios.
+
+## Regra de débito
+
+Gatilho: criar, editar ou excluir lote de embalagem (fluxo atual de `InsumoConsumoEmbalagemService`).
+
+```text
+lote.produtoId + lote.tipoEstoqueId
+        │
+        ▼
+receitas do produto (antimofo, embalagem, caixa)
+        │
+        ▼
+se tipo tem receita_caixa_id
+  → aplicarExcecaoReceitaCaixa (só ingredientes da caixa)
+senão
+  → receitas intactas
+        │
+        ▼
+derivar dimensões (pães/caixa do produto)
+        │
+        ▼
+calcular consumo e reconciliar movimentos
+```
+
+Detalhes:
+
+1. Exceção presente e produto com receita de caixa → ingredientes da caixa vêm da receita do tipo de estoque. `quantidadePorProduto` da caixa não muda.
+2. Exceção ausente ou `null` → caminho atual.
+3. Produto sem receita de caixa → não inventa caixa; aviso atual; se houver exceção cadastrada, aviso extra: exceção ignorada porque o produto não tem receita de caixa.
+4. Receita de exceção sem ingredientes válidos → receita de caixa ignorada no cálculo, com aviso (igual receita de produto vazia).
+5. Receita apontada foi desativada, mas o FK continua → usa mesmo assim (não volta calado para Valepan).
+6. Receita apontada foi apagada → `ON DELETE SET NULL` → volta ao padrão do produto.
+7. Falha no consumo **não** impede salvar o lote; aviso não bloqueante, como hoje.
+
+Editar/excluir lote reconcilia de novo com a regra atual (caixa certa, não a de quando o lote nasceu).
+
+## Arquitetura
+
+Três unidades:
+
+1. **Migração** — coluna `receita_caixa_id` em `tipos_estoque`.
+2. **`aplicarExcecaoReceitaCaixa`** — função pura em `src/domain/insumos/aplicar-excecao-receita-caixa.ts`. Entrada: receitas do produto + ingredientes da exceção ou `null`. Saída: lista com caixa trocada ou a lista original. Sem I/O.
+3. **Consumo de embalagem** — `InsumoConsumoEmbalagemService` lê `receita_caixa_id` do tipo de estoque, carrega os ingredientes dessa receita e aplica a função antes de calcular. O backfill faz o mesmo por lote, com cache por tipo de estoque.
+
+Config: validation, admin service, actions, modal, tabela e lista mobile passam a carregar/gravar o campo. Select só lista receitas `tipo = 'caixa'` ativas.
+
+O que não mexe: unique de `produto_receitas`, fermentação, forno, estoque de pão acabado, UI do realizado.
+
+## Backfill
+
+O backfill de consumo de embalagem (botão já existente) deixa de usar um único contexto por produto.
+
+- Carrega receitas do produto uma vez
+- Para cada lote, aplica a exceção do `tipoEstoqueId` (cache por tipo)
+- Reconcilia o delta como hoje
+
+Sem isso, um backfill depois do deploy regravaria Damião como Caixa Valepan.
+
+Não há tela nova de “corrigir histórico”. Depois de cadastrar Damião e Milani, rodar esse backfill acerta lotes antigos.
+
+## Testes
+
+Domínio (`aplicarExcecaoReceitaCaixa`):
+
+- Sem exceção → lista igual
+- Com exceção → só ingredientes de `caixa` mudam; antimofo e embalagem iguais; `quantidadePorProduto` da caixa igual
+- Sem receita de caixa no produto → lista igual (exceção não cria caixa)
+
+Consumo ao vivo:
+
+- Lote Valepan (sem exceção) → insumo da receita do produto
+- Lote Damião (com exceção) → insumo da receita Damião; plástico inalterado
+
+Cadastro:
+
+- Recusa receita que não é tipo caixa
+- Aceita `null`
+- Lista mostra `Produto` quando vazio
+
+Backfill: dois lotes do mesmo produto (Valepan e Damião) geram insumos de caixa diferentes.
+
+## Fora de escopo
+
+- Exceção por produto (SKU Damião diferente de outro pão Damião)
+- Pães/caixa diferentes por tipo de estoque no mesmo produto
+- Operador escolher caixa no lançamento
+- Simulador de custo usando a caixa do tipo de estoque
+- Mapeamento automático Valepan/Damião/Milani por nome
+- Tela dedicada de correção histórica (o backfill existente cobre)
+- Alterar estoque de produto acabado
