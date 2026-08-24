@@ -11,11 +11,19 @@ import {
   insumoReceitaMassaRepository,
   InsumoReceitaMassaRepository,
 } from '@/data/insumos/InsumoReceitaMassaRepository';
+import {
+  tipoEstoqueReceitaCaixaRepository,
+  TipoEstoqueReceitaCaixaRepository,
+} from '@/data/insumos/TipoEstoqueReceitaCaixaRepository';
+import { aplicarExcecaoReceitaCaixa } from '@/domain/insumos/aplicar-excecao-receita-caixa';
 import { derivarDimensoesEmbalagem } from '@/domain/insumos/insumo-consumo-embalagem-dimensoes';
 import { formatarObservacaoConsumoEmbalagem } from '@/domain/insumos/insumo-consumo-observacao';
 import { calcularConsumoMultiReceitas } from '@/domain/insumos/insumo-consumo-producao-multi-calculator';
 import { InsumoConsumoReconcileDeltaCalculator } from '@/domain/insumos/insumo-consumo-reconcile-delta-calculator';
-import type { InsumoReceitaTipoContexto } from '@/domain/insumos/insumo-consumo-producao-types';
+import type {
+  InsumoReceitaMassaIngrediente,
+  InsumoReceitaTipoContexto,
+} from '@/domain/insumos/insumo-consumo-producao-types';
 import type { TipoReceita } from '@/domain/receitas/receita-gramatura-resolver';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import {
@@ -28,14 +36,16 @@ const TIPOS_EMBALAGEM: TipoReceita[] = ['antimofo', 'embalagem', 'caixa'];
 const ORIGEM = 'producao_embalagem' as const;
 const COLUNA = 'embalagem_lote_id' as const;
 
+type ExcecaoCaixaCache = Map<string, InsumoReceitaMassaIngrediente[] | null>;
+
 export type EmbalagemBackfillProdutoAlvo = {
   produtoId: string;
   produtoNome: string;
 };
 
 /**
- * Reconcilia consumo de embalagem em batch: 1 contexto por produto,
- * agregação de deltas por chunk, inserts/saldos em lote.
+ * Reconcilia consumo de embalagem em batch: contexto por produto,
+ * exceção de caixa por tipo de estoque, inserts/saldos em lote.
  * Movimentos usam `produzido_em` do lote (grade diária correta).
  */
 export class InsumoConsumoEmbalagemBackfillBatchService {
@@ -46,6 +56,8 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
       insumoReceitaMassaRepository,
     private readonly estoqueRepository: InsumoEstoqueRepository = insumoEstoqueRepository,
     private readonly estoqueService: InsumoEstoqueService = insumoEstoqueService,
+    private readonly excecaoRepository: TipoEstoqueReceitaCaixaRepository =
+      tipoEstoqueReceitaCaixaRepository,
   ) {}
 
   async applyPorProdutos(
@@ -111,12 +123,14 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
     let lotesProcessados = 0;
     let movimentosInseridos = 0;
     const avisos: string[] = [];
+    const excecoes: ExcecaoCaixaCache = new Map();
 
     for (const chunk of idListChunker.chunk(loteIds)) {
       const [lotes, deltasPorLote] = await Promise.all([
         this.loteRepository.loadEmbalagemLotes(chunk),
         this.estoqueRepository.sumDeltasGroupedByLoteInsumo(COLUNA, chunk),
       ]);
+      await this.preloadExcecoes(lotes, excecoes);
 
       const pendentes = this.buildDeltasParaLotes({
         lotes,
@@ -124,6 +138,7 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
         contextoReceitas: contexto.receitas,
         produtoNome: contexto.produtoNome,
         avisos,
+        excecoes,
       });
 
       lotesProcessados += lotes.length;
@@ -135,12 +150,24 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
     return { lotesProcessados, movimentosInseridos, avisos };
   }
 
+  private async preloadExcecoes(
+    lotes: EmbalagemLoteRecord[],
+    cache: ExcecaoCaixaCache,
+  ): Promise<void> {
+    for (const tipoId of new Set(lotes.map((lote) => lote.tipoEstoqueId))) {
+      if (!cache.has(tipoId)) {
+        cache.set(tipoId, await this.excecaoRepository.loadIngredientes(tipoId));
+      }
+    }
+  }
+
   private buildDeltasParaLotes(input: {
     lotes: EmbalagemLoteRecord[];
     deltasPorLote: Map<string, Map<string, number>>;
     contextoReceitas: InsumoReceitaTipoContexto[];
     produtoNome: string;
     avisos: string[];
+    excecoes: ExcecaoCaixaCache;
   }) {
     const pendentes: Array<{
       insumoId: string;
@@ -152,10 +179,16 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
     }> = [];
 
     for (const lote of input.lotes) {
-      const dimensoes = derivarDimensoesEmbalagem(lote.quantidade, input.contextoReceitas);
+      const aplicado = aplicarExcecaoReceitaCaixa(
+        input.contextoReceitas,
+        input.excecoes.get(lote.tipoEstoqueId) ?? null,
+      );
+      input.avisos.push(...aplicado.avisos);
+
+      const dimensoes = derivarDimensoesEmbalagem(lote.quantidade, aplicado.receitas);
       const calculo = calcularConsumoMultiReceitas({
         unidadesProduzidas: dimensoes.unidades ?? 0,
-        receitas: input.contextoReceitas,
+        receitas: aplicado.receitas,
       });
       input.avisos.push(...dimensoes.avisos, ...calculo.avisos);
 
