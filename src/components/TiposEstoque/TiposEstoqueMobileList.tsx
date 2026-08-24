@@ -28,6 +28,9 @@ export default function TiposEstoqueMobileList({ items, onRowClick }: Props) {
         >
           <div className="min-w-0">
             <p className="truncate font-semibold text-stone-900">{item.nome}</p>
+            {item.receita_caixa_nome?.trim() ? (
+              <p className="mt-0.5 truncate text-xs text-stone-500">{item.receita_caixa_nome}</p>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {item.possui_etiqueta && <Flag label="Etiqueta" />}
               {item.congelado && <Flag label="Congelado" />}

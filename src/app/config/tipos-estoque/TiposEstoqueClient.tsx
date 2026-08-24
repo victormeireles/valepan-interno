@@ -20,6 +20,7 @@ type StatusFilter = 'todas' | 'ativas' | 'inativas';
 
 type Props = {
   initialTipos: TipoEstoqueAdmin[];
+  caixaReceitas: Array<{ id: string; nome: string }>;
 };
 
 function compareValues(a: unknown, b: unknown): number {
@@ -33,7 +34,7 @@ function compareValues(a: unknown, b: unknown): number {
   return String(a).localeCompare(String(b), 'pt-BR');
 }
 
-export default function TiposEstoqueClient({ initialTipos }: Props) {
+export default function TiposEstoqueClient({ initialTipos, caixaReceitas }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -217,6 +218,7 @@ export default function TiposEstoqueClient({ initialTipos }: Props) {
           setEditing(undefined);
         }}
         tipo={editing}
+        caixaReceitas={caixaReceitas}
         onSaved={handleSaved}
       />
     </div>

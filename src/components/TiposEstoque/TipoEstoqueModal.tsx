@@ -12,19 +12,27 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   tipo?: TipoEstoqueAdmin;
+  caixaReceitas: Array<{ id: string; nome: string }>;
   onSaved?: () => void;
 };
 
 const inputClassName =
   'w-full min-h-11 px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-gray-900 font-medium focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all';
 
-export default function TipoEstoqueModal({ isOpen, onClose, tipo, onSaved }: Props) {
+export default function TipoEstoqueModal({
+  isOpen,
+  onClose,
+  tipo,
+  caixaReceitas,
+  onSaved,
+}: Props) {
   const titleId = useId();
   const [nome, setNome] = useState('');
   const [ativo, setAtivo] = useState(true);
   const [possuiEtiqueta, setPossuiEtiqueta] = useState(false);
   const [congelado, setCongelado] = useState(false);
   const [mostrarTextoCongelado, setMostrarTextoCongelado] = useState(false);
+  const [receitaCaixaId, setReceitaCaixaId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -41,12 +49,14 @@ export default function TipoEstoqueModal({ isOpen, onClose, tipo, onSaved }: Pro
         possuiEtiqueta: tipo?.possui_etiqueta ?? false,
         congelado: tipo?.congelado ?? false,
         mostrarTextoCongelado: tipo?.mostrar_texto_congelado ?? false,
+        receitaCaixaId: tipo?.receita_caixa_id ?? '',
       };
       setNome(next.nome);
       setAtivo(next.ativo);
       setPossuiEtiqueta(next.possuiEtiqueta);
       setCongelado(next.congelado);
       setMostrarTextoCongelado(next.mostrarTextoCongelado);
+      setReceitaCaixaId(next.receitaCaixaId);
       setError('');
       setFieldErrors({});
       setDirty(false);
@@ -65,9 +75,10 @@ export default function TipoEstoqueModal({ isOpen, onClose, tipo, onSaved }: Pro
       possuiEtiqueta,
       congelado,
       mostrarTextoCongelado,
+      receitaCaixaId,
     });
     setDirty(current !== initialSnapshot.current);
-  }, [isOpen, nome, ativo, possuiEtiqueta, congelado, mostrarTextoCongelado]);
+  }, [isOpen, nome, ativo, possuiEtiqueta, congelado, mostrarTextoCongelado, receitaCaixaId]);
 
   if (!isOpen && !animating) return null;
 
@@ -88,6 +99,7 @@ export default function TipoEstoqueModal({ isOpen, onClose, tipo, onSaved }: Pro
     possui_etiqueta: possuiEtiqueta,
     congelado,
     mostrar_texto_congelado: mostrarTextoCongelado,
+    receita_caixa_id: receitaCaixaId,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -201,6 +213,28 @@ export default function TipoEstoqueModal({ isOpen, onClose, tipo, onSaved }: Pro
                   {fieldErrors.nome}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="tipo-receita-caixa" className="text-sm font-semibold text-gray-700 ml-1">
+                Receita de caixa (exceção)
+              </label>
+              <select
+                id="tipo-receita-caixa"
+                value={receitaCaixaId}
+                onChange={(e) => setReceitaCaixaId(e.target.value)}
+                className={inputClassName}
+              >
+                <option value="">Padrão do produto</option>
+                {caixaReceitas.map((receita) => (
+                  <option key={receita.id} value={receita.id}>
+                    {receita.nome}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 ml-1">
+                Se vazia, usa a receita de caixa do produto.
+              </p>
             </div>
 
             <fieldset className="space-y-3">

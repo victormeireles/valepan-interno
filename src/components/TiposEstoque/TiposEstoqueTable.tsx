@@ -9,6 +9,7 @@ import {
   configTableHeadCellClass,
   configTableRowClass,
 } from '@/components/Config/config-table-styles';
+import { rotuloExcecaoCaixa } from '@/domain/etiquetas/tipo-estoque-receita-caixa';
 import { Badge } from '@/components/ui/Badge';
 
 export type TipoEstoqueSortKey =
@@ -16,6 +17,7 @@ export type TipoEstoqueSortKey =
   | 'possui_etiqueta'
   | 'congelado'
   | 'mostrar_texto_congelado'
+  | 'receita_caixa_nome'
   | 'ativo';
 
 type Props = {
@@ -63,6 +65,7 @@ export default function TiposEstoqueTable({
     label: string;
   }[] = [
     { key: 'nome', label: 'Nome' },
+    { key: 'receita_caixa_nome', label: 'Caixa' },
     { key: 'possui_etiqueta', label: 'Etiqueta' },
     { key: 'congelado', label: 'Congelado' },
     { key: 'mostrar_texto_congelado', label: 'Texto congelado' },
@@ -108,6 +111,9 @@ export default function TiposEstoqueTable({
             >
               <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
                 {item.nome}
+              </td>
+              <td className={configTableBodyCellClass}>
+                {rotuloExcecaoCaixa(item.receita_caixa_nome)}
               </td>
               <td className={configTableBodyCellClass}>
                 <BooleanBadge value={item.possui_etiqueta} trueLabel="Sim" falseLabel="Não" />
