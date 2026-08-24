@@ -63,13 +63,14 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
   async applyPorProdutos(
     produtos: EmbalagemBackfillProdutoAlvo[],
     desdeIso?: string | null,
+    tipoEstoqueId?: string | null,
   ): Promise<ConsumoProdutividadeBackfillResult> {
     let lotesProcessados = 0;
     let movimentosInseridos = 0;
     const avisos: string[] = [];
 
     for (const produto of produtos) {
-      const result = await this.applyProduto(produto, desdeIso);
+      const result = await this.applyProduto(produto, desdeIso, tipoEstoqueId);
       lotesProcessados += result.lotesProcessados;
       movimentosInseridos += result.movimentosInseridos;
       avisos.push(...result.avisos);
@@ -97,6 +98,7 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
   private async applyProduto(
     produto: EmbalagemBackfillProdutoAlvo,
     desdeIso?: string | null,
+    tipoEstoqueId?: string | null,
   ): Promise<ConsumoProdutividadeBackfillResult> {
     const contexto = await this.receitaRepository.loadContextoProducaoPorProduto(
       produto.produtoId,
@@ -114,6 +116,7 @@ export class InsumoConsumoEmbalagemBackfillBatchService {
       produtoId: produto.produtoId,
       coluna: COLUNA,
       desdeIso,
+      tipoEstoqueId,
     });
     if (loteRefs.length === 0) {
       return { lotesProcessados: 0, movimentosInseridos: 0, avisos: [] };

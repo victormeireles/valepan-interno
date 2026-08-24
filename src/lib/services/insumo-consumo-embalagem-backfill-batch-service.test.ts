@@ -97,4 +97,35 @@ describe('InsumoConsumoEmbalagemBackfillBatchService', () => {
       'caixa-damiao',
     );
   });
+
+  it('restringe lotes quando tipoEstoqueId é informado', async () => {
+    const { InsumoConsumoEmbalagemBackfillBatchService } = await import(
+      './insumo-consumo-embalagem-backfill-batch-service'
+    );
+    const service = new InsumoConsumoEmbalagemBackfillBatchService(
+      mockLoteRepo as never,
+      mockReceitaRepo as never,
+      mockEstoqueRepo as never,
+      mockEstoqueService as never,
+      mockExcecaoRepo as never,
+    );
+    mockLoteRepo.listLoteIdsByProduto.mockResolvedValue([
+      { id: 'lote-d', produzidoEm: '2026-08-24T11:00:00Z' },
+    ]);
+    mockLoteRepo.loadEmbalagemLotes.mockResolvedValue([lote('lote-d', 'tipo-damiao')]);
+    mockEstoqueService.aplicarDeltasEmLote.mockResolvedValue(1);
+
+    await service.applyPorProdutos(
+      [{ produtoId: 'prod-1', produtoNome: 'HB 65g' }],
+      null,
+      'tipo-damiao',
+    );
+
+    expect(mockLoteRepo.listLoteIdsByProduto).toHaveBeenCalledWith({
+      produtoId: 'prod-1',
+      coluna: 'embalagem_lote_id',
+      desdeIso: null,
+      tipoEstoqueId: 'tipo-damiao',
+    });
+  });
 });

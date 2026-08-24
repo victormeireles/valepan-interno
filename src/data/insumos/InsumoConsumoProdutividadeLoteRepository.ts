@@ -27,9 +27,14 @@ export class InsumoConsumoProdutividadeLoteRepository {
     produtoId: string;
     coluna: InsumoMovimentoLoteColuna;
     desdeIso?: string | null;
+    tipoEstoqueId?: string | null;
   }): Promise<LoteIdComData[]> {
     if (input.coluna === 'embalagem_lote_id') {
-      return this.listEmbalagemLoteIds(input.produtoId, input.desdeIso);
+      return this.listEmbalagemLoteIds(
+        input.produtoId,
+        input.desdeIso,
+        input.tipoEstoqueId,
+      );
     }
     return this.listEtapaLoteIdsViaOrdem(input.produtoId, input.coluna, input.desdeIso);
   }
@@ -153,12 +158,17 @@ export class InsumoConsumoProdutividadeLoteRepository {
   private async listEmbalagemLoteIds(
     produtoId: string,
     desdeIso?: string | null,
+    tipoEstoqueId?: string | null,
   ): Promise<LoteIdComData[]> {
     let query = this.db
       .from('embalagem_lotes')
       .select('id, produzido_em')
       .eq('produto_id', produtoId)
       .order('produzido_em', { ascending: true });
+
+    if (tipoEstoqueId) {
+      query = query.eq('tipo_estoque_id', tipoEstoqueId);
+    }
 
     if (desdeIso) {
       query = query.gte('produzido_em', `${desdeIso}T00:00:00.000Z`);
