@@ -1365,6 +1365,7 @@ export type Database = {
           caixas: number
           congelado: string
           created_at: string
+          criado_por: string | null
           data_fabricacao: string
           data_pedido: string
           etiqueta_foto_id: string | null
@@ -1394,6 +1395,7 @@ export type Database = {
           caixas?: number
           congelado?: string
           created_at?: string
+          criado_por?: string | null
           data_fabricacao: string
           data_pedido: string
           etiqueta_foto_id?: string | null
@@ -1423,6 +1425,7 @@ export type Database = {
           caixas?: number
           congelado?: string
           created_at?: string
+          criado_por?: string | null
           data_fabricacao?: string
           data_pedido?: string
           etiqueta_foto_id?: string | null
@@ -1449,6 +1452,13 @@ export type Database = {
           unidades?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "embalagem_lotes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "embalagem_lotes_ordem_producao_id_fkey"
             columns: ["ordem_producao_id"]
@@ -1712,6 +1722,7 @@ export type Database = {
         Row: {
           cliente: string | null
           created_at: string
+          criado_por: string | null
           delta_caixas: number
           delta_kg: number
           delta_pacotes: number
@@ -1729,6 +1740,7 @@ export type Database = {
         Insert: {
           cliente?: string | null
           created_at?: string
+          criado_por?: string | null
           delta_caixas?: number
           delta_kg?: number
           delta_pacotes?: number
@@ -1746,6 +1758,7 @@ export type Database = {
         Update: {
           cliente?: string | null
           created_at?: string
+          criado_por?: string | null
           delta_caixas?: number
           delta_kg?: number
           delta_pacotes?: number
@@ -1761,6 +1774,13 @@ export type Database = {
           tipo_estoque_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "estoque_movimentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estoque_movimentos_embalagem_lote_id_fkey"
             columns: ["embalagem_lote_id"]
@@ -1983,6 +2003,7 @@ export type Database = {
         Row: {
           assadeiras: number
           created_at: string
+          criado_por: string | null
           foto_id: string | null
           foto_uploaded_at: string | null
           foto_url: string | null
@@ -1997,6 +2018,7 @@ export type Database = {
         Insert: {
           assadeiras?: number
           created_at?: string
+          criado_por?: string | null
           foto_id?: string | null
           foto_uploaded_at?: string | null
           foto_url?: string | null
@@ -2011,6 +2033,7 @@ export type Database = {
         Update: {
           assadeiras?: number
           created_at?: string
+          criado_por?: string | null
           foto_id?: string | null
           foto_uploaded_at?: string | null
           foto_url?: string | null
@@ -2024,6 +2047,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fermentacao_lotes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "fermentacao_lotes_ordem_producao_id_fkey"
             columns: ["ordem_producao_id"]
             isOneToOne: false
@@ -2036,6 +2066,7 @@ export type Database = {
         Row: {
           assadeiras: number
           created_at: string
+          criado_por: string | null
           foto_id: string | null
           foto_uploaded_at: string | null
           foto_url: string | null
@@ -2050,6 +2081,7 @@ export type Database = {
         Insert: {
           assadeiras?: number
           created_at?: string
+          criado_por?: string | null
           foto_id?: string | null
           foto_uploaded_at?: string | null
           foto_url?: string | null
@@ -2064,6 +2096,7 @@ export type Database = {
         Update: {
           assadeiras?: number
           created_at?: string
+          criado_por?: string | null
           foto_id?: string | null
           foto_uploaded_at?: string | null
           foto_url?: string | null
@@ -2076,6 +2109,13 @@ export type Database = {
           unidades?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "forno_lotes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "forno_lotes_ordem_producao_id_fkey"
             columns: ["ordem_producao_id"]
@@ -3108,6 +3148,7 @@ export type Database = {
           assadeiras: number
           caixas: number
           created_at: string
+          criado_por: string | null
           data_fabricacao_etiqueta: string
           data_producao: string
           embalagem_finalizada: boolean
@@ -3134,6 +3175,7 @@ export type Database = {
           assadeiras?: number
           caixas?: number
           created_at?: string
+          criado_por?: string | null
           data_fabricacao_etiqueta: string
           data_producao: string
           embalagem_finalizada?: boolean
@@ -3160,6 +3202,7 @@ export type Database = {
           assadeiras?: number
           caixas?: number
           created_at?: string
+          criado_por?: string | null
           data_fabricacao_etiqueta?: string
           data_producao?: string
           embalagem_finalizada?: boolean
@@ -3182,6 +3225,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ordens_producao_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ordens_producao_assadeira_id_fkey1"
             columns: ["assadeira_id"]
