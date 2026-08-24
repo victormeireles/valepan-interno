@@ -2,6 +2,11 @@ import {
   insumoReceitaMassaRepository,
   InsumoReceitaMassaRepository,
 } from '@/data/insumos/InsumoReceitaMassaRepository';
+import {
+  tipoEstoqueReceitaCaixaRepository,
+  TipoEstoqueReceitaCaixaRepository,
+} from '@/data/insumos/TipoEstoqueReceitaCaixaRepository';
+import { aplicarExcecaoReceitaCaixa } from '@/domain/insumos/aplicar-excecao-receita-caixa';
 import { derivarDimensoesEmbalagem } from '@/domain/insumos/insumo-consumo-embalagem-dimensoes';
 import { calcularConsumoMultiReceitas } from '@/domain/insumos/insumo-consumo-producao-multi-calculator';
 import { formatarObservacaoConsumoEmbalagem } from '@/domain/insumos/insumo-consumo-observacao';
@@ -21,14 +26,12 @@ export class InsumoConsumoEmbalagemService {
   constructor(
     private readonly receitaRepository: InsumoReceitaMassaRepository = insumoReceitaMassaRepository,
     private readonly aplicador: InsumoConsumoAplicador = insumoConsumoAplicador,
+    private readonly excecaoRepository: TipoEstoqueReceitaCaixaRepository = tipoEstoqueReceitaCaixaRepository,
   ) {}
 
   async sincronizar(lote: EmbalagemLoteRecord): Promise<InsumoConsumoResultado> {
     try {
-      const contexto = await this.receitaRepository.loadContextoProducaoPorProduto(
-        lote.produtoId,
-        TIPOS_EMBALAGEM,
-      );
+      const contexto = await this.resolverReceitas(lote);
       if (!contexto) {
         return {
           aplicado: false,
@@ -41,8 +44,7 @@ export class InsumoConsumoEmbalagemService {
         unidadesProduzidas: dimensoes.unidades ?? 0,
         receitas: contexto.receitas,
       });
-
-      const avisos = [...dimensoes.avisos, ...calculo.avisos];
+      const avisos = [...contexto.avisos, ...dimensoes.avisos, ...calculo.avisos];
 
       if (calculo.consumos.length === 0) {
         return {
@@ -53,18 +55,16 @@ export class InsumoConsumoEmbalagemService {
         };
       }
 
-      const observacao = formatarObservacaoConsumoEmbalagem({
-        produtoNome: contexto.produtoNome,
-        unidades: dimensoes.unidades,
-        pacotes: dimensoes.pacotes,
-        loteId: lote.id,
-      });
-
       await this.aplicador.reconciliar({
         vinculo: { coluna: COLUNA, loteId: lote.id },
         origem: ORIGEM,
         consumosAlvo: calculo.consumos,
-        observacao,
+        observacao: formatarObservacaoConsumoEmbalagem({
+          produtoNome: contexto.produtoNome,
+          unidades: dimensoes.unidades,
+          pacotes: dimensoes.pacotes,
+          loteId: lote.id,
+        }),
         createdAt: lote.produzidoEm,
       });
 
@@ -93,6 +93,24 @@ export class InsumoConsumoEmbalagemService {
         avisos: [`Estorno de insumos não concluído: ${message}`],
       };
     }
+  }
+
+  private async resolverReceitas(lote: EmbalagemLoteRecord) {
+    const contexto = await this.receitaRepository.loadContextoProducaoPorProduto(
+      lote.produtoId,
+      TIPOS_EMBALAGEM,
+    );
+    if (!contexto) return null;
+
+    const ingredientesExcecao = await this.excecaoRepository.loadIngredientes(
+      lote.tipoEstoqueId,
+    );
+    const aplicado = aplicarExcecaoReceitaCaixa(contexto.receitas, ingredientesExcecao);
+    return {
+      produtoNome: contexto.produtoNome,
+      receitas: aplicado.receitas,
+      avisos: aplicado.avisos,
+    };
   }
 }
 
