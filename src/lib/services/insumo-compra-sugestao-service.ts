@@ -35,11 +35,13 @@ import {
   type InsumoControleEstoqueFilter,
 } from '@/domain/insumos/insumo-controle-estoque-filter';
 import type { InsumoDistribuidorRow } from '@/domain/types/insumo-compra-db';
+import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
 
 export type InsumoCompraSugestaoLinha = {
   insumoId: string;
   nome: string;
   unidade: string;
+  conversao: InsumoConversaoVisual | null;
   estoque: number;
   consumoDiario: number;
   coberturaAtualDias: number | null;
@@ -81,6 +83,7 @@ type InsumoFonte = {
   insumoId: string;
   nome: string;
   unidade: string;
+  conversao: InsumoConversaoVisual | null;
   consumo: InsumoConsumoSemanalItem | null;
   regra: InsumoRegraCompraComInsumo | null;
 };
@@ -193,6 +196,7 @@ export class InsumoCompraSugestaoService {
         insumoId: consumo.insumoId,
         nome: consumo.nome,
         unidade: consumo.unidadeResumida,
+        conversao: consumo.conversao,
         consumo,
         regra: null,
       });
@@ -203,6 +207,7 @@ export class InsumoCompraSugestaoService {
         insumoId: regra.insumo_id,
         nome: fonte?.nome || regra.nome,
         unidade: fonte?.unidade || regra.unidade,
+        conversao: fonte?.conversao ?? regra.conversao,
         consumo: fonte?.consumo ?? null,
         regra,
       });
@@ -245,6 +250,7 @@ export class InsumoCompraSugestaoService {
       insumoId: fonte.insumoId,
       nome: fonte.nome,
       unidade: fonte.unidade,
+      conversao: fonte.conversao,
       estoque,
       consumoDiario,
       coberturaAtualDias: sugestao.coberturaAtualDias,

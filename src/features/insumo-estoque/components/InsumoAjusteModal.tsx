@@ -5,18 +5,21 @@ import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import { ajustarInsumoSaldo } from '@/app/actions/insumo-estoque-actions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { formatInsumoQuantidade } from '@/features/insumo-estoque/utils/formatters';
+import InsumoConversaoQuantidadeField, {
+  InsumoConversaoQuantidadeFieldParser,
+} from '@/features/insumo-estoque/components/InsumoConversaoQuantidadeField';
+import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
 
 type Props = {
   isOpen: boolean;
   item: InsumoSaldoComDetalhes | null;
   onClose: () => void;
-  onSaved: (novoSaldo: number) => void;
+  onSaved: (novoSaldoEstoque: number) => void;
 };
 
 export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Props) {
   const titleId = useId();
-  const [novoSaldo, setNovoSaldo] = useState('');
+  const [novoSaldoExibicao, setNovoSaldoExibicao] = useState('');
   const [observacao, setObservacao] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +28,12 @@ export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Pr
   useEffect(() => {
     if (isOpen && item) {
       setAnimating(true);
-      setNovoSaldo(String(item.quantidade));
+      setNovoSaldoExibicao(
+        InsumoConversaoQuantidadeFieldParser.estoqueToExibicaoString(
+          item.quantidade,
+          item.conversao,
+        ),
+      );
       setObservacao('');
       setError('');
     } else if (!isOpen) {
@@ -41,21 +49,24 @@ export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Pr
     setLoading(true);
     setError('');
 
-    const parsed = Number(novoSaldo.replace(',', '.'));
-    if (Number.isNaN(parsed)) {
+    const parsedEstoque = InsumoConversaoQuantidadeFieldParser.parseExibicaoToEstoque(
+      novoSaldoExibicao,
+      item.conversao,
+    );
+    if (parsedEstoque == null) {
       setError('Informe um saldo válido');
       setLoading(false);
       return;
     }
 
-    const result = await ajustarInsumoSaldo(item.insumoId, parsed, observacao);
+    const result = await ajustarInsumoSaldo(item.insumoId, parsedEstoque, observacao);
     if (!result.success) {
       setError(result.error);
       setLoading(false);
       return;
     }
 
-    onSaved(parsed);
+    onSaved(parsedEstoque);
     onClose();
     setLoading(false);
   };
@@ -111,21 +122,23 @@ export default function InsumoAjusteModal({ isOpen, item, onClose, onSaved }: Pr
             <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
               Saldo atual
             </p>
-            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-stone-900">
-              {formatInsumoQuantidade(item.quantidade, item.unidadeResumida)}
-            </p>
+            <div className="mt-1 text-lg font-semibold text-stone-900">
+              <InsumoQuantidadeConvertida
+                quantidadeEstoque={item.quantidade}
+                unidadeEstoque={item.unidadeResumida}
+                conversao={item.conversao}
+              />
+            </div>
           </div>
 
-          <Input
+          <InsumoConversaoQuantidadeField
             id="novo-saldo"
             label="Novo saldo"
-            type="number"
-            step="0.001"
-            min="0"
-            numeric
+            valueExibicao={novoSaldoExibicao}
+            onChangeExibicao={setNovoSaldoExibicao}
+            unidadeEstoque={item.unidadeResumida}
+            conversao={item.conversao}
             required
-            value={novoSaldo}
-            onChange={(event) => setNovoSaldo(event.target.value)}
           />
 
           <Input

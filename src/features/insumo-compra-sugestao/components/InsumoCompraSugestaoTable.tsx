@@ -6,8 +6,8 @@ import {
 import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
 import {
   formatCoberturaDias,
-  formatInsumoQuantidadeArredondada,
 } from '@/features/insumo-estoque/utils/formatters';
+import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/utils/format-insumo-quantidade-operacional';
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
 import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
@@ -82,7 +82,12 @@ export default function InsumoCompraSugestaoTable({
                   />
                 </CelulaNumerica>
                 <CelulaNumerica>
-                  {formatInsumoQuantidadeArredondada(item.consumoDiario, item.unidade)}
+                  {formatInsumoQuantidadeOperacional(
+                    item.consumoDiario,
+                    item.unidade,
+                    item.conversao,
+                    { arredondado: true },
+                  )}
                 </CelulaNumerica>
                 <CelulaNumerica>{formatCoberturaDias(item.coberturaAtualDias)}</CelulaNumerica>
                 <CelulaNumerica>{item.leadTimeDias} d</CelulaNumerica>
@@ -170,5 +175,10 @@ function CelulaNumerica({
 
 function formatQuantidadeSugerida(item: InsumoCompraSugestaoLinha): string {
   if (item.quantidadeSugerida == null) return '—';
-  return formatInsumoQuantidadeArredondada(item.quantidadeSugerida, item.unidade);
+  return formatInsumoQuantidadeOperacional(
+    item.quantidadeSugerida,
+    item.unidade,
+    item.conversao,
+    { arredondado: true },
+  );
 }

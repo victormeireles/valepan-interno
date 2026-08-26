@@ -15,7 +15,10 @@ import {
   configTableHeadCellClass,
 } from '@/components/Config/config-table-styles';
 import InsumoCoberturaBadge from '@/features/insumo-estoque/components/InsumoCoberturaBadge';
+import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
 import { insumoCoberturaVisualTone } from '@/features/insumo-estoque/insumo-cobertura-visual-tone';
+import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/utils/format-insumo-quantidade-operacional';
+import { InsumoUnidadeConversao } from '@/domain/insumos/insumo-unidade-conversao';
 import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
@@ -137,18 +140,25 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
                     </button>
                   </td>
                   <td
-                    className={`${configTableBodyCellClass} ${DECISION_CELL} text-right font-mono tabular-nums ${
+                    className={`${configTableBodyCellClass} ${DECISION_CELL} text-right ${
                       item.estoqueAtual < 0 ? 'font-semibold text-rose-700' : 'text-stone-800'
                     }`}
                   >
-                    {formatInsumoQuantidadeArredondada(
-                      item.estoqueAtual,
-                      item.unidadeResumida,
-                    )}
+                    <InsumoQuantidadeConvertida
+                      quantidadeEstoque={item.estoqueAtual}
+                      unidadeEstoque={item.unidadeResumida}
+                      conversao={item.conversao}
+                      arredondado
+                      className="inline-block text-right"
+                      secundariaClassName="mt-0.5 font-mono text-[11px] tabular-nums text-stone-500"
+                    />
                   </td>
                   {colunas.map((coluna) => {
                     const valor = item.consumoPorSemana[coluna.inicio] ?? 0;
                     const isPico = picoKeys.has(coluna.inicio);
+                    const valorExibicao = InsumoUnidadeConversao.fromConfig(
+                      item.conversao,
+                    ).toExibicao(valor);
                     return (
                       <td
                         key={`${item.insumoId}-${coluna.inicio}`}
@@ -160,18 +170,28 @@ export default function InsumoConsumoSemanalTable({ items, periodo, colunas }: P
                               : 'text-stone-300'
                         }`}
                       >
-                        {formatInsumoQuantidadeArredondada(valor)}
+                        {formatInsumoQuantidadeArredondada(valorExibicao)}
                       </td>
                     );
                   })}
                   <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-500`}>
-                    {formatInsumoQuantidadeArredondada(item.media)}
+                    {formatInsumoQuantidadeOperacional(
+                      item.media,
+                      '',
+                      item.conversao,
+                      { arredondado: true },
+                    )}
                   </td>
                   <td className={`${configTableBodyCellClass} ${DECISION_CELL} text-right`}>
                     <InsumoCoberturaBadge dias={item.coberturaDias} />
                   </td>
                   <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-500`}>
-                    {formatInsumoQuantidadeArredondada(item.pico)}
+                    {formatInsumoQuantidadeOperacional(
+                      item.pico,
+                      '',
+                      item.conversao,
+                      { arredondado: true },
+                    )}
                   </td>
                   <td className={`${configTableBodyCellClass} ${DECISION_CELL} text-right`}>
                     <InsumoCoberturaBadge dias={item.coberturaPicoDias} />
@@ -240,7 +260,8 @@ function ReceitasDetalhe({
     <div className="rounded-xl border border-amber-100 bg-white shadow-xs">
       <div className="border-b border-stone-100 px-3 py-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Consumo por produto produzido ({item.unidadeResumida})
+          Consumo por produto produzido (
+          {item.conversao?.unidadeExibicao || item.unidadeResumida})
         </p>
       </div>
       <table className="w-full border-collapse text-sm">
@@ -254,7 +275,9 @@ function ReceitasDetalhe({
                   className="px-3 py-2 text-right font-mono tabular-nums text-stone-700"
                 >
                   {formatInsumoQuantidadeArredondada(
-                    receita.consumoPorSemana[coluna.inicio] ?? 0,
+                    InsumoUnidadeConversao.fromConfig(item.conversao).toExibicao(
+                      receita.consumoPorSemana[coluna.inicio] ?? 0,
+                    ),
                   )}
                 </td>
               ))}

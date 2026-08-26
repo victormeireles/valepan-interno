@@ -55,7 +55,7 @@ function buildSelectQuery(
   ).join(', ');
 
   if (table === 'insumos') {
-    return `${baseFields}, unidades (nome_resumido, codigo)`;
+    return `${baseFields}, unidades!insumos_unidade_id_fkey (nome_resumido, codigo)`;
   }
 
   if (table === 'produtos' && extraFields.includes('unidade_padrao_id')) {

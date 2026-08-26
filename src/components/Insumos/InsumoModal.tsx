@@ -19,6 +19,7 @@ import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-a
 import SelectRemoteAutocomplete from '@/components/FormControls/SelectRemoteAutocomplete';
 import Accordion from '@/components/Accordion';
 import InsumoCustoSegmentControl from '@/components/Insumos/InsumoCustoSegmentControl';
+import InsumoConversaoCadastroFields from '@/components/Insumos/InsumoConversaoCadastroFields';
 import InsumoReceitasLista from '@/components/Insumos/InsumoReceitasLista';
 import InsumoVinculosOmieLista from '@/components/Insumos/InsumoVinculosOmieLista';
 import {
@@ -46,6 +47,9 @@ export default function InsumoModal({
   const [custoEstado, setCustoEstado] = useState<InsumoCustoEstado>('pendente');
   const [valorComCusto, setValorComCusto] = useState(0);
   const [unidadeId, setUnidadeId] = useState('');
+  const [unidadeResumida, setUnidadeResumida] = useState('');
+  const [conversaoUnidadeId, setConversaoUnidadeId] = useState('');
+  const [conversaoFator, setConversaoFator] = useState('');
   const [ativo, setAtivo] = useState(true);
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -65,12 +69,20 @@ export default function InsumoModal({
         setCustoEstado(estado);
         setValorComCusto(estado === 'com_custo' ? (insumo.custo_unitario ?? 0) : 0);
         setUnidadeId(insumo.unidade_id);
+        setUnidadeResumida(insumo.unidades?.nome_resumido || insumo.unidades?.codigo || '');
+        setConversaoUnidadeId(insumo.conversao_unidade_id ?? '');
+        setConversaoFator(
+          insumo.conversao_fator != null ? String(insumo.conversao_fator) : '',
+        );
         setAtivo(insumo.ativo);
       } else {
         setNome('');
         setCustoEstado('pendente');
         setValorComCusto(0);
         setUnidadeId('');
+        setUnidadeResumida('');
+        setConversaoUnidadeId('');
+        setConversaoFator('');
         setAtivo(true);
         setIntegracoes([]);
         setReceitas([]);
@@ -138,10 +150,20 @@ export default function InsumoModal({
         throw new Error('Informe um valor maior que zero para custo com compra');
       }
 
+      const fatorParsed =
+        conversaoFator.trim() === ''
+          ? null
+          : Number(conversaoFator.replace(',', '.'));
+      if (conversaoFator.trim() !== '' && (fatorParsed == null || Number.isNaN(fatorParsed))) {
+        throw new Error('Fator de conversão inválido');
+      }
+
       const payload = {
         nome: nome.trim(),
         custo_unitario: custoResolvido,
         unidade_id: unidadeId,
+        conversao_unidade_id: conversaoUnidadeId || null,
+        conversao_fator: fatorParsed,
         ativo,
       };
 
@@ -171,6 +193,9 @@ export default function InsumoModal({
         setCustoEstado('pendente');
         setValorComCusto(0);
         setUnidadeId('');
+        setUnidadeResumida('');
+        setConversaoUnidadeId('');
+        setConversaoFator('');
         setAtivo(true);
       }
       setError('');
@@ -293,12 +318,31 @@ export default function InsumoModal({
               <SelectRemoteAutocomplete
                 value={unidadeId}
                 onChange={setUnidadeId}
+                onOptionSelected={(option) => {
+                  const meta = option?.meta as
+                    | { unidadeNomeResumido?: string; codigo?: string }
+                    | undefined;
+                  setUnidadeResumida(
+                    meta?.unidadeNomeResumido ||
+                      meta?.codigo ||
+                      option?.label ||
+                      '',
+                  );
+                }}
                 stage="unidades"
                 label=""
                 placeholder="Selecione a unidade..."
                 required
               />
             </div>
+
+            <InsumoConversaoCadastroFields
+              conversaoUnidadeId={conversaoUnidadeId}
+              conversaoFator={conversaoFator}
+              unidadeResumida={unidadeResumida}
+              onConversaoUnidadeIdChange={setConversaoUnidadeId}
+              onConversaoFatorChange={setConversaoFator}
+            />
 
             {insumo ? (
               <>

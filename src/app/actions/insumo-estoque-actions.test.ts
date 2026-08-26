@@ -66,6 +66,7 @@ function buildSaldo(nome: string): InsumoSaldoComDetalhes {
     quantidade: 10,
     custoUnitario: 1,
     ultimaEntradaEm: null,
+    conversao: null,
   };
 }
 
@@ -95,6 +96,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
         insumoId: 'farinha',
         nome: 'Farinha',
         unidadeResumida: 'KG',
+        conversao: null,
         consumoPorSemana: {
           '2026-06-28': 14,
           '2026-07-05': 28,
@@ -134,6 +136,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
         insumoId: 'farinha',
         nome: 'Farinha',
         unidadeResumida: 'KG',
+        conversao: null,
         consumoPorSemana: { '2026-06-28': 10 },
         total: 10,
         receitas: [],
@@ -147,6 +150,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
         insumoId: 'agua',
         nome: 'Água',
         unidadeResumida: 'L',
+        conversao: null,
         consumoPorSemana: { '2026-06-28': 100 },
         total: 100,
         receitas: [],
@@ -160,6 +164,7 @@ describe('getInsumoConsumoSemanalPageData', () => {
         insumoId: 'gelo',
         nome: 'Gelo',
         unidadeResumida: 'KG',
+        conversao: null,
         consumoPorSemana: { '2026-06-28': 20 },
         total: 20,
         receitas: [],

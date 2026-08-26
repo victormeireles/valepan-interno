@@ -5,31 +5,39 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import type { IntegracaoInsumoComEmpresa } from '@/domain/types/insumo-estoque-db';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { receitaIngredienteRepository } from '@/data/receitas/ReceitaIngredienteRepository';
+import { validateInsumoConversaoParams } from '@/domain/insumos/insumo-conversao-params';
 import { insumoDeleteManager } from '@/domain/insumos/insumo-delete-manager';
 import type { InsumoReceitaAssociacao } from '@/domain/receitas/insumo-receita-associacao';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { revalidatePath } from 'next/cache';
+
+type UnidadeResumo = {
+  id: string;
+  nome: string;
+  nome_resumido: string;
+  codigo: string;
+};
 
 export interface Insumo {
   id: string;
   nome: string;
   custo_unitario: number | null;
   unidade_id: string;
+  conversao_unidade_id?: string | null;
+  conversao_fator?: number | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
-  unidades?: {
-    id: string;
-    nome: string;
-    nome_resumido: string;
-    codigo: string;
-  };
+  unidades?: UnidadeResumo;
+  conversao_unidades?: UnidadeResumo | null;
 }
 
 interface CreateInsumoParams {
   nome: string;
   custo_unitario: number | null;
   unidade_id: string;
+  conversao_unidade_id?: string | null;
+  conversao_fator?: number | null;
   ativo?: boolean;
 }
 
@@ -38,8 +46,26 @@ interface UpdateInsumoParams {
   nome?: string;
   custo_unitario?: number | null;
   unidade_id?: string;
+  conversao_unidade_id?: string | null;
+  conversao_fator?: number | null;
   ativo?: boolean;
 }
+
+const INSUMO_SELECT = `
+  *,
+  unidades!insumos_unidade_id_fkey (
+    id,
+    nome,
+    nome_resumido,
+    codigo
+  ),
+  conversao_unidades:unidades!insumos_conversao_unidade_id_fkey (
+    id,
+    nome,
+    nome_resumido,
+    codigo
+  )
+`;
 
 export async function getInsumos(includeInactive = false) {
   await requireInternoModulo('interno_config', 'ler');
@@ -47,15 +73,7 @@ export async function getInsumos(includeInactive = false) {
 
   let query = supabase
     .from('insumos')
-    .select(`
-      *,
-      unidades (
-        id,
-        nome,
-        nome_resumido,
-        codigo
-      )
-    `)
+    .select(INSUMO_SELECT)
     .order('nome', { ascending: true });
 
   if (!includeInactive) {
@@ -122,15 +140,7 @@ export async function getInsumoById(id: string) {
 
   const { data, error } = await supabase
     .from('insumos')
-    .select(`
-      *,
-      unidades (
-        id,
-        nome,
-        nome_resumido,
-        codigo
-      )
-    `)
+    .select(INSUMO_SELECT)
     .eq('id', id)
     .single();
 
@@ -160,12 +170,23 @@ export async function createInsumo(params: CreateInsumoParams) {
       return { success: false, error: 'Unidade é obrigatória' };
     }
 
+    const conversao = validateInsumoConversaoParams({
+      unidadeId: params.unidade_id,
+      conversaoUnidadeId: params.conversao_unidade_id,
+      conversaoFator: params.conversao_fator,
+    });
+    if (!conversao.ok) {
+      return { success: false, error: conversao.error };
+    }
+
     const { data, error } = await supabase
       .from('insumos')
       .insert({
         nome: params.nome.trim(),
         custo_unitario: params.custo_unitario,
         unidade_id: params.unidade_id,
+        conversao_unidade_id: conversao.conversaoUnidadeId,
+        conversao_fator: conversao.conversaoFator,
         ativo: params.ativo ?? true,
       })
       .select()
@@ -214,6 +235,44 @@ export async function updateInsumo(params: UpdateInsumoParams) {
 
     if (params.ativo !== undefined) {
       updateData.ativo = params.ativo;
+    }
+
+    const touchesConversao =
+      params.conversao_unidade_id !== undefined ||
+      params.conversao_fator !== undefined ||
+      params.unidade_id !== undefined;
+
+    if (touchesConversao) {
+      const { data: atual, error: atualError } = await supabase
+        .from('insumos')
+        .select('unidade_id, conversao_unidade_id, conversao_fator')
+        .eq('id', params.id)
+        .single();
+
+      if (atualError || !atual) {
+        return { success: false, error: 'Insumo não encontrado' };
+      }
+
+      const unidadeId = params.unidade_id ?? atual.unidade_id;
+      const conversao = validateInsumoConversaoParams({
+        unidadeId,
+        conversaoUnidadeId:
+          params.conversao_unidade_id !== undefined
+            ? params.conversao_unidade_id
+            : atual.conversao_unidade_id,
+        conversaoFator:
+          params.conversao_fator !== undefined
+            ? params.conversao_fator
+            : atual.conversao_fator != null
+              ? Number(atual.conversao_fator)
+              : null,
+      });
+      if (!conversao.ok) {
+        return { success: false, error: conversao.error };
+      }
+
+      updateData.conversao_unidade_id = conversao.conversaoUnidadeId;
+      updateData.conversao_fator = conversao.conversaoFator;
     }
 
     const { data, error } = await supabase

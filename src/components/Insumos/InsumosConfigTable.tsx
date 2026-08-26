@@ -8,6 +8,7 @@ import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
 import InsumoRegraCompraButton from '@/components/Insumos/InsumoRegraCompraButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
+import { formatInsumoUnidadeConfigLabel } from '@/components/Insumos/insumo-unidade-config-label';
 import ConfigSortIcon from '@/components/Config/ConfigSortIcon';
 import {
   configSortButtonClass,
@@ -37,19 +38,24 @@ function sortAriaValue(key: InsumoSortKey, activeKey: InsumoSortKey, dir: 'asc' 
   return dir === 'asc' ? ('ascending' as const) : ('descending' as const);
 }
 
-function unidadeLabel(insumo: Insumo) {
-  return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '—';
-}
-
 function regraConfigFor(
   item: Insumo,
   regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>,
 ): InsumoCompraRegraConfig {
+  const conversaoUnidade =
+    item.conversao_unidades?.nome_resumido || item.conversao_unidades?.nome || null;
+  const fator = item.conversao_fator != null ? Number(item.conversao_fator) : null;
+  const conversao =
+    conversaoUnidade && fator != null && fator > 0
+      ? { unidadeExibicao: conversaoUnidade, fator }
+      : null;
+
   return (
     regrasCompraPorInsumo[item.id] ?? {
       insumoId: item.id,
       nome: item.nome,
-      unidade: unidadeLabel(item),
+      unidade: formatInsumoUnidadeConfigLabel(item),
+      conversao,
       regra: null,
       distribuidores: [],
     }
@@ -130,7 +136,7 @@ export default function InsumosConfigTable({
                 {item.nome}
               </td>
               <td className={`${configTableBodyCellClass} text-stone-600`}>
-                {unidadeLabel(item)}
+                {formatInsumoUnidadeConfigLabel(item)}
               </td>
               <td className={`${configTableBodyCellClass} text-right`}>
                 <InsumoCustoBadge custoUnitario={item.custo_unitario} className="justify-end" />

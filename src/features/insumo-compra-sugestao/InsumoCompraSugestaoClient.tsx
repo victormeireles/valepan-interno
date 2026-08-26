@@ -303,6 +303,7 @@ function toRegraConfig(item: InsumoCompraSugestaoLinha): InsumoCompraRegraConfig
     insumoId: item.insumoId,
     nome: item.nome,
     unidade: item.unidade,
+    conversao: item.conversao,
     regra: null,
     distribuidores: [],
   };
@@ -316,5 +317,6 @@ function toSaldoDetalhes(item: InsumoCompraSugestaoLinha): InsumoSaldoComDetalhe
     quantidade: item.estoque,
     custoUnitario: 0,
     ultimaEntradaEm: null,
+    conversao: item.conversao,
   };
 }

@@ -1,17 +1,25 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { InsumoRegraCompraRow } from '@/domain/types/insumo-compra-db';
+import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
+import {
+  resolveInsumoConversaoVisual,
+  resolveUnidadeResumida,
+} from '@/domain/insumos/insumo-conversao-params';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
 
 export type InsumoRegraCompraComInsumo = InsumoRegraCompraRow & {
   nome: string;
   unidade: string;
+  conversao: InsumoConversaoVisual | null;
 };
 
 type RegraWithInsumoJoin = InsumoRegraCompraRow & {
   insumos: {
     nome: string;
+    conversao_fator: number | null;
     unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
+    conversao_unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
   } | null;
 };
 
@@ -54,7 +62,14 @@ export class InsumoRegraCompraRepository {
   async listAllWithInsumo(): Promise<InsumoRegraCompraComInsumo[]> {
     const { data, error } = await this.db
       .from('insumo_regra_compra')
-      .select('*, insumos(nome, unidades(nome_resumido))')
+      .select(
+        `*, insumos(
+          nome,
+          conversao_fator,
+          unidades!insumos_unidade_id_fkey(nome_resumido),
+          conversao_unidades:unidades!insumos_conversao_unidade_id_fkey(nome_resumido)
+        )`,
+      )
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -108,10 +123,11 @@ export class InsumoRegraCompraRepository {
   }
 
   private toRegraComInsumo(row: RegraWithInsumoJoin): InsumoRegraCompraComInsumo {
-    const unidades = row.insumos?.unidades;
-    const unidade = Array.isArray(unidades)
-      ? unidades[0]?.nome_resumido ?? ''
-      : unidades?.nome_resumido ?? '';
+    const unidade = resolveUnidadeResumida(row.insumos?.unidades);
+    const conversao = resolveInsumoConversaoVisual({
+      conversaoFator: row.insumos?.conversao_fator,
+      conversaoUnidade: row.insumos?.conversao_unidades,
+    });
 
     return {
       insumo_id: row.insumo_id,
@@ -125,6 +141,7 @@ export class InsumoRegraCompraRepository {
       updated_at: row.updated_at,
       nome: row.insumos?.nome ?? '',
       unidade,
+      conversao,
     };
   }
 }

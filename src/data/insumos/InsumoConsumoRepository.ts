@@ -34,6 +34,8 @@ type ConsumoAgregadoRpcRow = {
   insumo_id: string;
   nome: string;
   unidade_resumida: string;
+  conversao_fator: number | null;
+  conversao_unidade_resumida: string | null;
   coluna_inicio: string;
   consumo: number | string;
 };
@@ -73,6 +75,8 @@ export class InsumoConsumoRepository {
         insumoId: row.insumo_id,
         nome: row.nome ?? '',
         unidadeResumida: row.unidade_resumida ?? '',
+        conversaoFator: row.conversao_fator != null ? Number(row.conversao_fator) : null,
+        conversaoUnidadeResumida: row.conversao_unidade_resumida ?? null,
         colunaInicio: String(row.coluna_inicio).slice(0, 10),
         consumo: Number(row.consumo),
       })),
@@ -136,7 +140,7 @@ export class InsumoConsumoRepository {
       let query = this.db
         .from('insumo_movimentos')
         .select(
-          'insumo_id, created_at, delta_quantidade, origem, fermentacao_lote_id, forno_lote_id, embalagem_lote_id, insumos(nome, unidades(nome_resumido))',
+          'insumo_id, created_at, delta_quantidade, origem, fermentacao_lote_id, forno_lote_id, embalagem_lote_id, insumos(nome, unidades!insumos_unidade_id_fkey(nome_resumido))',
         )
         .in('origem', ['producao_fermentacao', 'producao_forno', 'producao_embalagem'])
         .or(

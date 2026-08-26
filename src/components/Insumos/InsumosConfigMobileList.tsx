@@ -8,6 +8,7 @@ import InsumoCustoBadge from '@/components/Insumos/InsumoCustoBadge';
 import InsumoReceitasButton from '@/components/Insumos/InsumoReceitasButton';
 import InsumoRegraCompraButton from '@/components/Insumos/InsumoRegraCompraButton';
 import InsumoVinculosOmieButton from '@/components/Insumos/InsumoVinculosOmieButton';
+import { formatInsumoUnidadeConfigLabel } from '@/components/Insumos/insumo-unidade-config-label';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
 import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
 
@@ -20,19 +21,24 @@ type Props = {
   onRegraCompraSaved: () => void;
 };
 
-function unidadeLabel(insumo: Insumo) {
-  return insumo.unidades?.nome_resumido || insumo.unidades?.nome || '—';
-}
-
 function regraConfigFor(
   item: Insumo,
   regrasCompraPorInsumo: Record<string, InsumoCompraRegraConfig>,
 ): InsumoCompraRegraConfig {
+  const conversaoUnidade =
+    item.conversao_unidades?.nome_resumido || item.conversao_unidades?.nome || null;
+  const fator = item.conversao_fator != null ? Number(item.conversao_fator) : null;
+  const conversao =
+    conversaoUnidade && fator != null && fator > 0
+      ? { unidadeExibicao: conversaoUnidade, fator }
+      : null;
+
   return (
     regrasCompraPorInsumo[item.id] ?? {
       insumoId: item.id,
       nome: item.nome,
-      unidade: unidadeLabel(item),
+      unidade: formatInsumoUnidadeConfigLabel(item),
+      conversao,
       regra: null,
       distribuidores: [],
     }
@@ -63,7 +69,7 @@ export default function InsumosConfigMobileList({
           >
             <div className="min-w-0">
               <p className="truncate font-semibold text-stone-900">{item.nome}</p>
-              <p className="mt-1 text-sm text-stone-600">{unidadeLabel(item)}</p>
+              <p className="mt-1 text-sm text-stone-600">{formatInsumoUnidadeConfigLabel(item)}</p>
               <div className="mt-1">
                 <InsumoCustoBadge custoUnitario={item.custo_unitario} />
               </div>

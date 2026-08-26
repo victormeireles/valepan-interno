@@ -84,7 +84,7 @@ export async function getProdutoCustoSimulacao(produtoId: string): Promise<Actio
               id,
               nome,
               custo_unitario,
-              unidades (
+              unidades!insumos_unidade_id_fkey (
                 nome,
                 nome_resumido
               )

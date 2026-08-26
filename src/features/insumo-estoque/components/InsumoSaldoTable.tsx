@@ -9,8 +9,8 @@ import {
 import {
   formatCurrency,
   formatDateTime,
-  formatInsumoQuantidade,
 } from '@/features/insumo-estoque/utils/formatters';
+import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
 
 type Props = {
   items: InsumoSaldoComDetalhes[];
@@ -71,12 +71,22 @@ export default function InsumoSaldoTable({
               <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
                 {item.nome}
               </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums ${
-                item.quantidade < 0 ? 'text-rose-700' : 'text-stone-800'
-              }`}>
-                {formatInsumoQuantidade(item.quantidade, item.unidadeResumida)}
+              <td
+                className={`${configTableBodyCellClass} text-right ${
+                  item.quantidade < 0 ? 'text-rose-700' : 'text-stone-800'
+                }`}
+              >
+                <InsumoQuantidadeConvertida
+                  quantidadeEstoque={item.quantidade}
+                  unidadeEstoque={item.unidadeResumida}
+                  conversao={item.conversao}
+                  className="inline-block text-right"
+                  secundariaClassName="mt-0.5 font-mono text-xs tabular-nums text-stone-500"
+                />
               </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+              <td
+                className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}
+              >
                 {formatCurrency(item.custoUnitario)}
               </td>
               <td className={`${configTableBodyCellClass} text-stone-600`}>

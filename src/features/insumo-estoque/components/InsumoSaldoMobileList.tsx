@@ -6,8 +6,8 @@ import { configMobileRowClass } from '@/components/Config/config-table-styles';
 import {
   formatCurrency,
   formatDateTime,
-  formatInsumoQuantidade,
 } from '@/features/insumo-estoque/utils/formatters';
+import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
 
 type Props = {
   items: InsumoSaldoComDetalhes[];
@@ -31,11 +31,15 @@ export default function InsumoSaldoMobileList({
         >
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-stone-900">{item.nome}</p>
-            <p className={`mt-1 font-mono text-sm font-medium tabular-nums ${
+            <div className={`mt-1 text-sm font-medium ${
               item.quantidade < 0 ? 'text-rose-700' : 'text-stone-800'
             }`}>
-              {formatInsumoQuantidade(item.quantidade, item.unidadeResumida)}
-            </p>
+              <InsumoQuantidadeConvertida
+                quantidadeEstoque={item.quantidade}
+                unidadeEstoque={item.unidadeResumida}
+                conversao={item.conversao}
+              />
+            </div>
             <p className="mt-0.5 font-mono text-xs tabular-nums text-stone-600">
               {formatCurrency(item.custoUnitario)}
             </p>

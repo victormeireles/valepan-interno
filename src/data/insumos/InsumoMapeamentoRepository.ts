@@ -211,7 +211,7 @@ export class InsumoMapeamentoRepository {
   async listAtivosComDetalhes(): Promise<IntegracaoInsumoListItemBase[]> {
     const { data, error } = await this.db
       .from('integracao_insumos')
-      .select('*, empresas(nome), insumos(nome, unidades(codigo, nome_resumido))')
+      .select('*, empresas(nome), insumos(nome, unidades!insumos_unidade_id_fkey(codigo, nome_resumido))')
       .eq('ativo', true)
       .order('descricao_omie', { ascending: true });
 

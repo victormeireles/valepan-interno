@@ -28,6 +28,11 @@ export type OmieRecebimentoItem = {
   categoriaItem: string | null;
 };
 
+export type InsumoConversaoVisual = {
+  unidadeExibicao: string;
+  fator: number;
+};
+
 export type InsumoSaldoComDetalhes = {
   insumoId: string;
   nome: string;
@@ -35,6 +40,7 @@ export type InsumoSaldoComDetalhes = {
   quantidade: number;
   custoUnitario: number;
   ultimaEntradaEm: string | null;
+  conversao: InsumoConversaoVisual | null;
 };
 
 export type InsumoMovimentoRecord = {

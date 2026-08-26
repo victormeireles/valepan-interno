@@ -21,6 +21,11 @@ import type {
   InsumoDistribuidorRow,
   InsumoRegraCompraRow,
 } from '@/domain/types/insumo-compra-db';
+import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
+import {
+  resolveInsumoConversaoVisual,
+  resolveUnidadeResumida,
+} from '@/domain/insumos/insumo-conversao-params';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 export type SalvarInsumoCompraRegraInput = {
@@ -38,16 +43,24 @@ export type InsumoCompraRegraConfig = {
   insumoId: string;
   nome: string;
   unidade: string;
+  conversao: InsumoConversaoVisual | null;
   regra: InsumoRegraCompraRow | null;
   distribuidores: InsumoDistribuidorRow[];
 };
 
-type InsumoAtivo = { id: string; nome: string; unidade: string };
+type InsumoAtivo = {
+  id: string;
+  nome: string;
+  unidade: string;
+  conversao: InsumoConversaoVisual | null;
+};
 
 type InsumoAtivoRow = {
   id: string;
   nome: string;
+  conversao_fator: number | null;
   unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
+  conversao_unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
 };
 
 type RegraRepository = Pick<
@@ -71,7 +84,11 @@ class InsumoCompraInsumoAtivoLoader {
     let query = supabaseClientFactory
       .createServiceRoleClient()
       .from('insumos')
-      .select('id, nome, unidades(nome_resumido)')
+      .select(
+        `id, nome, conversao_fator,
+         unidades!insumos_unidade_id_fkey(nome_resumido),
+         conversao_unidades:unidades!insumos_conversao_unidade_id_fkey(nome_resumido)`,
+      )
       .order('nome');
 
     if (apenasAtivos) {
@@ -86,10 +103,11 @@ class InsumoCompraInsumoAtivoLoader {
     return ((data as InsumoAtivoRow[]) ?? []).map((row) => ({
       id: row.id,
       nome: row.nome,
-      unidade:
-        (Array.isArray(row.unidades)
-          ? row.unidades[0]?.nome_resumido
-          : row.unidades?.nome_resumido) ?? '',
+      unidade: resolveUnidadeResumida(row.unidades),
+      conversao: resolveInsumoConversaoVisual({
+        conversaoFator: row.conversao_fator,
+        conversaoUnidade: row.conversao_unidades,
+      }),
     }));
   }
 }
@@ -135,6 +153,7 @@ export class InsumoCompraRegraManager {
       insumoId: insumo.id,
       nome: insumo.nome,
       unidade: insumo.unidade,
+      conversao: insumo.conversao,
       regra: regrasPorInsumo.get(insumo.id) ?? null,
       distribuidores: distribuidoresPorInsumo.get(insumo.id) ?? [],
     }));

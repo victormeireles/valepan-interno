@@ -114,7 +114,7 @@ async function loadCatalogo(): Promise<InsumoCatalogoItem[]> {
       id,
       nome,
       custo_unitario,
-      unidades (
+      unidades!insumos_unidade_id_fkey (
         nome,
         nome_resumido,
         codigo

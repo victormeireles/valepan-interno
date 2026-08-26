@@ -40,8 +40,8 @@ describe('InsumoCompraRegraManager', () => {
 
   it('lista todos os insumos ativos com regra opcional e distribuidores', async () => {
     listarInsumosAtivos.mockResolvedValue([
-      { id: 'insumo-1', nome: 'Farinha', unidade: 'kg' },
-      { id: 'insumo-2', nome: 'Fermento', unidade: 'kg' },
+      { id: 'insumo-1', nome: 'Farinha', unidade: 'kg', conversao: null },
+      { id: 'insumo-2', nome: 'Fermento', unidade: 'kg', conversao: null },
     ]);
     listAllWithInsumo.mockResolvedValue([
       {
@@ -56,6 +56,7 @@ describe('InsumoCompraRegraManager', () => {
         updated_at: '2026-08-12T12:00:00.000Z',
         nome: 'Farinha',
         unidade: 'kg',
+        conversao: null,
       },
     ]);
     listByInsumoIds.mockResolvedValue([
@@ -74,6 +75,7 @@ describe('InsumoCompraRegraManager', () => {
         insumoId: 'insumo-1',
         nome: 'Farinha',
         unidade: 'kg',
+        conversao: null,
         regra: expect.objectContaining({
           insumo_id: 'insumo-1',
           lead_time_dias: 3,
@@ -84,6 +86,7 @@ describe('InsumoCompraRegraManager', () => {
         insumoId: 'insumo-2',
         nome: 'Fermento',
         unidade: 'kg',
+        conversao: null,
         regra: null,
         distribuidores: [],
       },

@@ -145,6 +145,7 @@ export default function InsumoHistoricoModal({ isOpen, item, onClose }: Props) {
             <InsumoHistoricoLista
               itens={itens}
               unidadeResumida={item.unidadeResumida}
+              conversao={item.conversao}
               mostrarCabecalhoDia={de !== ate}
             />
           )}

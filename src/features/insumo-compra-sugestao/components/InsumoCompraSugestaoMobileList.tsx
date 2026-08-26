@@ -2,8 +2,8 @@ import { Badge } from '@/components/ui/Badge';
 import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
 import {
   formatCoberturaDias,
-  formatInsumoQuantidadeArredondada,
 } from '@/features/insumo-estoque/utils/formatters';
+import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/utils/format-insumo-quantidade-operacional';
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
 import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
@@ -62,7 +62,12 @@ export default function InsumoCompraSugestaoMobileList({
                 value={
                   item.quantidadeSugerida == null
                     ? '—'
-                    : formatInsumoQuantidadeArredondada(item.quantidadeSugerida, item.unidade)
+                    : formatInsumoQuantidadeOperacional(
+                        item.quantidadeSugerida,
+                        item.unidade,
+                        item.conversao,
+                        { arredondado: true },
+                      )
                 }
                 strong
               />
@@ -83,7 +88,12 @@ export default function InsumoCompraSugestaoMobileList({
                   <InsumoCompraConsumoDiaHint />
                 </dt>
                 <dd className="mt-0.5 font-mono text-sm tabular-nums text-stone-700">
-                  {formatInsumoQuantidadeArredondada(item.consumoDiario, item.unidade)}
+                  {formatInsumoQuantidadeOperacional(
+                    item.consumoDiario,
+                    item.unidade,
+                    item.conversao,
+                    { arredondado: true },
+                  )}
                 </dd>
               </div>
               <Metrica label="Cobertura" value={formatCoberturaDias(item.coberturaAtualDias)} />

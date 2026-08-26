@@ -39,6 +39,7 @@ function createConsumo(
     insumoId,
     nome,
     unidadeResumida: 'kg',
+    conversao: null,
     consumoPorSemana: Object.fromEntries(
       periodo.colunas.map((coluna, index) => [coluna.inicio, consumos[index] ?? 0]),
     ),
@@ -69,6 +70,7 @@ function createRegra(
     updated_at: '2026-01-01T00:00:00Z',
     nome,
     unidade: 'kg',
+    conversao: null,
     ...overrides,
   };
 }

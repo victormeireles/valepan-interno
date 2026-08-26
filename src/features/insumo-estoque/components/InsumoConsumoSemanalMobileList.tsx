@@ -12,7 +12,10 @@ import type {
 } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
 import InsumoCoberturaBadge from '@/features/insumo-estoque/components/InsumoCoberturaBadge';
+import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
 import { insumoCoberturaVisualTone } from '@/features/insumo-estoque/insumo-cobertura-visual-tone';
+import { InsumoUnidadeConversao } from '@/domain/insumos/insumo-unidade-conversao';
+import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/utils/format-insumo-quantidade-operacional';
 import { formatInsumoQuantidadeArredondada } from '@/features/insumo-estoque/utils/formatters';
 
 type Props = {
@@ -81,16 +84,18 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="truncate font-semibold text-stone-900">{item.nome}</h2>
-                  <p
-                    className={`mt-0.5 font-mono text-sm tabular-nums ${
+                  <div
+                    className={`mt-0.5 text-sm ${
                       item.estoqueAtual < 0 ? 'font-semibold text-rose-700' : 'text-stone-600'
                     }`}
                   >
-                    {formatInsumoQuantidadeArredondada(
-                      item.estoqueAtual,
-                      item.unidadeResumida,
-                    )}
-                  </p>
+                    <InsumoQuantidadeConvertida
+                      quantidadeEstoque={item.estoqueAtual}
+                      unidadeEstoque={item.unidadeResumida}
+                      conversao={item.conversao}
+                      arredondado
+                    />
+                  </div>
                 </div>
                 <InsumoCoberturaBadge dias={item.coberturaDias} />
               </div>
@@ -99,6 +104,9 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
                 {colunas.map((coluna) => {
                   const valor = item.consumoPorSemana[coluna.inicio] ?? 0;
                   const isPico = picoKeys.has(coluna.inicio);
+                  const valorExibicao = InsumoUnidadeConversao.fromConfig(
+                    item.conversao,
+                  ).toExibicao(valor);
                   return (
                     <div
                       key={`${item.insumoId}-${coluna.inicio}`}
@@ -121,7 +129,7 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
                           isPico ? 'font-medium text-amber-900' : 'text-stone-800'
                         }`}
                       >
-                        {formatInsumoQuantidadeArredondada(valor)}
+                        {formatInsumoQuantidadeArredondada(valorExibicao)}
                       </dd>
                     </div>
                   );
@@ -132,7 +140,12 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
                 <dl className="grid grid-cols-2 gap-2">
                   <Metric
                     label="Média"
-                    value={formatInsumoQuantidadeArredondada(item.media)}
+                    value={formatInsumoQuantidadeOperacional(
+                      item.media,
+                      '',
+                      item.conversao,
+                      { arredondado: true },
+                    )}
                     muted
                   />
                   <div className="rounded-lg border border-stone-100 bg-white px-2.5 py-2">
@@ -145,7 +158,12 @@ export default function InsumoConsumoSemanalMobileList({ items, periodo, colunas
                   </div>
                   <Metric
                     label="Pico"
-                    value={formatInsumoQuantidadeArredondada(item.pico)}
+                    value={formatInsumoQuantidadeOperacional(
+                      item.pico,
+                      '',
+                      item.conversao,
+                      { arredondado: true },
+                    )}
                     muted
                   />
                   <div className="rounded-lg border border-stone-100 bg-white px-2.5 py-2">
@@ -250,7 +268,7 @@ function ReceitasMobileDetalhe({
   return (
     <div className="mt-2 space-y-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-        Por produto ({item.unidadeResumida})
+        Por produto ({item.conversao?.unidadeExibicao || item.unidadeResumida})
       </p>
       {detalhes.map((receita) => (
         <div key={receita.receitaId} className="rounded-xl border border-amber-100 bg-white p-3">
@@ -261,7 +279,9 @@ function ReceitasMobileDetalhe({
                 <dt className="text-xs text-stone-500">{coluna.label}</dt>
                 <dd className="font-mono text-xs tabular-nums text-stone-700">
                   {formatInsumoQuantidadeArredondada(
-                    receita.consumoPorSemana[coluna.inicio] ?? 0,
+                    InsumoUnidadeConversao.fromConfig(item.conversao).toExibicao(
+                      receita.consumoPorSemana[coluna.inicio] ?? 0,
+                    ),
                   )}
                 </dd>
               </div>

@@ -1,11 +1,13 @@
 import type { InsumoConsumoPeriodo } from './insumo-consumo-semanal-periodo';
 import { insumoConsumoSemanalPeriodoBuilder } from './insumo-consumo-semanal-periodo';
+import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
 import type { InsumoMovimentoOrigem } from '@/domain/types/insumo-estoque';
 
 export type InsumoConsumoMovimentoFonte = {
   insumoId: string;
   nome: string;
   unidadeResumida: string;
+  conversao?: InsumoConversaoVisual | null;
   dataMovimento: string;
   deltaQuantidade: number;
   origem: InsumoMovimentoOrigem;
@@ -27,6 +29,7 @@ export type InsumoConsumoSemanalItem = {
   insumoId: string;
   nome: string;
   unidadeResumida: string;
+  conversao: InsumoConversaoVisual | null;
   consumoPorSemana: Record<string, number>;
   total: number;
   receitas: InsumoConsumoReceitaDetalhe[];
@@ -112,6 +115,7 @@ export class InsumoConsumoSemanalAggregator {
       insumoId: movimento.insumoId,
       nome: movimento.nome,
       unidadeResumida: movimento.unidadeResumida,
+      conversao: movimento.conversao ?? null,
       total: 0,
       consumoPorSemana: Object.fromEntries(
         periodo.colunas.map((coluna) => [coluna.inicio, 0]),

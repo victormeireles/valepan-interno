@@ -10,6 +10,10 @@ import type {
   RegistrarInsumoMovimentoInput,
 } from '@/domain/types/insumo-estoque-db';
 import { idListChunker } from '@/data/insumos/IdListChunker';
+import {
+  resolveInsumoConversaoVisual,
+  resolveUnidadeResumida,
+} from '@/domain/insumos/insumo-conversao-params';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database } from '@/types/database';
 
@@ -17,7 +21,9 @@ type SaldoWithInsumo = InsumoSaldoRow & {
   insumos: {
     nome: string;
     custo_unitario: number;
+    conversao_fator: number | null;
     unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
+    conversao_unidades: { nome_resumido: string } | { nome_resumido: string }[] | null;
   } | null;
 };
 
@@ -185,7 +191,14 @@ export class InsumoEstoqueRepository {
     const { data, error } = await this.db
       .from('insumo_saldos')
       .select(
-        'insumo_id, quantidade, updated_at, insumos(nome, custo_unitario, unidades(nome_resumido))',
+        `insumo_id, quantidade, updated_at,
+         insumos(
+           nome,
+           custo_unitario,
+           conversao_fator,
+           unidades!insumos_unidade_id_fkey(nome_resumido),
+           conversao_unidades:unidades!insumos_conversao_unidade_id_fkey(nome_resumido)
+         )`,
       );
 
     if (error) {
@@ -199,10 +212,11 @@ export class InsumoEstoqueRepository {
 
     return saldos
       .map((row) => {
-        const unidades = row.insumos?.unidades;
-        const unidadeResumida = Array.isArray(unidades)
-          ? unidades[0]?.nome_resumido ?? ''
-          : unidades?.nome_resumido ?? '';
+        const unidadeResumida = resolveUnidadeResumida(row.insumos?.unidades);
+        const conversao = resolveInsumoConversaoVisual({
+          conversaoFator: row.insumos?.conversao_fator,
+          conversaoUnidade: row.insumos?.conversao_unidades,
+        });
 
         return {
           insumoId: row.insumo_id,
@@ -211,6 +225,7 @@ export class InsumoEstoqueRepository {
           quantidade: Number(row.quantidade),
           custoUnitario: Number(row.insumos?.custo_unitario ?? 0),
           ultimaEntradaEm: ultimasEntradas.get(row.insumo_id) ?? null,
+          conversao,
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));

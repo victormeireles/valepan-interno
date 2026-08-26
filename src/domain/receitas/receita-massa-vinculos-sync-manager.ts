@@ -162,7 +162,7 @@ export class ReceitaMassaVinculosSyncManager {
         .select(`
             quantidade_padrao,
             insumos (
-              unidades (
+              unidades!insumos_unidade_id_fkey (
                 nome_resumido,
                 nome
               )

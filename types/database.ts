@@ -2493,6 +2493,8 @@ export type Database = {
       insumos: {
         Row: {
           ativo: boolean | null
+          conversao_fator: number | null
+          conversao_unidade_id: string | null
           created_at: string | null
           custo_unitario: number | null
           id: string
@@ -2502,6 +2504,8 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          conversao_fator?: number | null
+          conversao_unidade_id?: string | null
           created_at?: string | null
           custo_unitario?: number | null
           id?: string
@@ -2511,6 +2515,8 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          conversao_fator?: number | null
+          conversao_unidade_id?: string | null
           created_at?: string | null
           custo_unitario?: number | null
           id?: string
@@ -2519,6 +2525,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "insumos_conversao_unidade_id_fkey"
+            columns: ["conversao_unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "insumos_unidade_id_fkey"
             columns: ["unidade_id"]
@@ -5403,6 +5416,8 @@ export type Database = {
         Returns: {
           coluna_inicio: string
           consumo: number
+          conversao_fator: number
+          conversao_unidade_resumida: string
           insumo_id: string
           nome: string
           unidade_resumida: string

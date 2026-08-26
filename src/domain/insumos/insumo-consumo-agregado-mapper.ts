@@ -1,10 +1,14 @@
 import type { InsumoConsumoPeriodo } from './insumo-consumo-semanal-periodo';
 import type { InsumoConsumoSemanalItem } from './insumo-consumo-semanal-aggregator';
+import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
+import { InsumoUnidadeConversao } from '@/domain/insumos/insumo-unidade-conversao';
 
 export type InsumoConsumoAgregadoFonte = {
   insumoId: string;
   nome: string;
   unidadeResumida: string;
+  conversaoFator?: number | null;
+  conversaoUnidadeResumida?: string | null;
   colunaInicio: string;
   consumo: number;
 };
@@ -30,6 +34,13 @@ export class InsumoConsumoAgregadoMapper {
     );
   }
 
+  private resolveConversao(row: InsumoConsumoAgregadoFonte): InsumoConversaoVisual | null {
+    return InsumoUnidadeConversao.fromFonte({
+      conversaoFator: row.conversaoFator,
+      conversaoUnidadeResumida: row.conversaoUnidadeResumida,
+    }).configValue;
+  }
+
   private getOrCreateItem(
     itemsByInsumo: Map<string, InsumoConsumoSemanalItem>,
     periodo: InsumoConsumoPeriodo,
@@ -42,6 +53,7 @@ export class InsumoConsumoAgregadoMapper {
       insumoId: row.insumoId,
       nome: row.nome,
       unidadeResumida: row.unidadeResumida,
+      conversao: this.resolveConversao(row),
       total: 0,
       consumoPorSemana: Object.fromEntries(
         periodo.colunas.map((coluna) => [coluna.inicio, 0]),

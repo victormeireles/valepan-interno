@@ -110,7 +110,7 @@ export async function getReceitas(includeInactive = false) {
           nome,
           custo_unitario,
           unidade_id,
-          unidades (
+          unidades!insumos_unidade_id_fkey (
             id,
             nome,
             nome_resumido,
@@ -169,7 +169,7 @@ export async function getReceitaDetalhes(id: string) {
           nome,
           custo_unitario,
           unidade_id,
-          unidades (
+          unidades!insumos_unidade_id_fkey (
             id,
             nome,
             nome_resumido,

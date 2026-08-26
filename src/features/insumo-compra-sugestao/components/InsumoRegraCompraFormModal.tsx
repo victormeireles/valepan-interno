@@ -10,6 +10,10 @@ import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import type { InsumoCompraJanelaTipo } from '@/domain/insumos/insumo-compra-janela';
 import type { InsumoCompraRegraConfig } from '@/lib/services/insumo-compra-regra-manager';
+import InsumoConversaoQuantidadeField, {
+  InsumoConversaoQuantidadeFieldParser,
+} from '@/features/insumo-estoque/components/InsumoConversaoQuantidadeField';
+import { InsumoUnidadeConversaoFormatter } from '@/domain/insumos/insumo-unidade-conversao-formatter';
 
 type DistribuidorForm = {
   nome: string;
@@ -33,8 +37,20 @@ const DIAS_SEMANA = [
   { value: 0, label: 'Dom' },
 ] as const;
 
-function numeroOpcional(value: string): number | null {
-  return value.trim() === '' ? null : Number(value);
+function numeroOpcionalExibicao(
+  value: string,
+  conversao: InsumoCompraRegraConfig['conversao'],
+): number | null {
+  if (value.trim() === '') return null;
+  return InsumoConversaoQuantidadeFieldParser.parseExibicaoToEstoque(value, conversao);
+}
+
+function estoqueToCampo(
+  value: number | null | undefined,
+  conversao: InsumoCompraRegraConfig['conversao'],
+): string {
+  if (value == null) return '';
+  return InsumoConversaoQuantidadeFieldParser.estoqueToExibicaoString(value, conversao);
 }
 
 export default function InsumoRegraCompraFormModal({
@@ -58,8 +74,8 @@ export default function InsumoRegraCompraFormModal({
     setLeadTimeDias(String(regra.regra?.lead_time_dias ?? 7));
     setJanelaTipo(regra.regra?.janela_tipo ?? 'qualquer');
     setDiasSemana(regra.regra?.dias_semana ?? []);
-    setQuantidadeMinima(regra.regra?.quantidade_minima?.toString() ?? '');
-    setQuantidadeMaxima(regra.regra?.quantidade_maxima?.toString() ?? '');
+    setQuantidadeMinima(estoqueToCampo(regra.regra?.quantidade_minima, regra.conversao));
+    setQuantidadeMaxima(estoqueToCampo(regra.regra?.quantidade_maxima, regra.conversao));
     setAtivo(regra.regra?.ativo ?? true);
     setDistribuidores(
       [...regra.distribuidores]
@@ -107,13 +123,28 @@ export default function InsumoRegraCompraFormModal({
     setError('');
 
     try {
+      const quantidadeMinimaEstoque = numeroOpcionalExibicao(
+        quantidadeMinima,
+        regra.conversao,
+      );
+      const quantidadeMaximaEstoque = numeroOpcionalExibicao(
+        quantidadeMaxima,
+        regra.conversao,
+      );
+      if (
+        (quantidadeMinima.trim() !== '' && quantidadeMinimaEstoque == null) ||
+        (quantidadeMaxima.trim() !== '' && quantidadeMaximaEstoque == null)
+      ) {
+        throw new Error('Informe quantidades mín/máx válidas');
+      }
+
       await salvarRegra({
         insumoId: regra.insumoId,
         leadTimeDias: Number(leadTimeDias),
         janelaTipo,
         diasSemana: janelaTipo === 'dias_semana' ? diasSemana : null,
-        quantidadeMinima: numeroOpcional(quantidadeMinima),
-        quantidadeMaxima: numeroOpcional(quantidadeMaxima),
+        quantidadeMinima: quantidadeMinimaEstoque,
+        quantidadeMaxima: quantidadeMaximaEstoque,
         ativo,
         distribuidores,
       });
@@ -231,25 +262,35 @@ export default function InsumoRegraCompraFormModal({
             ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input
+              <InsumoConversaoQuantidadeField
+                id="quantidade-minima"
                 label="Quantidade mínima"
-                hint={`Opcional, em ${regra.unidade || 'unidade do insumo'}.`}
-                type="number"
-                min="0"
+                hint={`Opcional. ${
+                  InsumoUnidadeConversaoFormatter.create(
+                    regra.unidade || 'unidade do insumo',
+                    regra.conversao,
+                  ).formatFatorLabel() ?? `Em ${regra.unidade || 'unidade do insumo'}`
+                }.`}
+                valueExibicao={quantidadeMinima}
+                onChangeExibicao={setQuantidadeMinima}
+                unidadeEstoque={regra.unidade || 'un'}
+                conversao={regra.conversao}
                 step="any"
-                numeric
-                value={quantidadeMinima}
-                onChange={(event) => setQuantidadeMinima(event.target.value)}
               />
-              <Input
+              <InsumoConversaoQuantidadeField
+                id="quantidade-maxima"
                 label="Quantidade máxima"
-                hint={`Opcional, em ${regra.unidade || 'unidade do insumo'}.`}
-                type="number"
-                min="0"
+                hint={`Opcional. ${
+                  InsumoUnidadeConversaoFormatter.create(
+                    regra.unidade || 'unidade do insumo',
+                    regra.conversao,
+                  ).formatFatorLabel() ?? `Em ${regra.unidade || 'unidade do insumo'}`
+                }.`}
+                valueExibicao={quantidadeMaxima}
+                onChangeExibicao={setQuantidadeMaxima}
+                unidadeEstoque={regra.unidade || 'un'}
+                conversao={regra.conversao}
                 step="any"
-                numeric
-                value={quantidadeMaxima}
-                onChange={(event) => setQuantidadeMaxima(event.target.value)}
               />
             </div>
 
