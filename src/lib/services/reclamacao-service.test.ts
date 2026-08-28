@@ -75,6 +75,31 @@ describe('ReclamacaoService', () => {
     expect(storage.remove).toHaveBeenCalledWith([storagePath]);
   });
 
+  it('anexarFoto não remove do bucket se signedUrls falhar após insertMany', async () => {
+    const storagePath = 'r1/abc.jpg';
+    const signedUrlError = new Error('signedUrls falhou');
+    const foto = {
+      id: 'f1',
+      reclamacaoId: 'r1',
+      storagePath,
+      ordem: 0,
+    };
+    const fotos = {
+      listByReclamacaoId: vi.fn().mockResolvedValue([]),
+      insertMany: vi.fn().mockResolvedValue([foto]),
+    };
+    const storage = {
+      upload: vi.fn().mockResolvedValue(storagePath),
+      remove: vi.fn(),
+      signedUrls: vi.fn().mockRejectedValue(signedUrlError),
+    };
+    const service = makeService({ fotos, storage });
+    await expect(service.anexarFoto('r1', new Uint8Array([1]))).rejects.toThrow(
+      'signedUrls falhou',
+    );
+    expect(storage.remove).not.toHaveBeenCalled();
+  });
+
   it('anexarFoto recusa a 11ª', async () => {
     const fotos = {
       listByReclamacaoId: vi.fn().mockResolvedValue(

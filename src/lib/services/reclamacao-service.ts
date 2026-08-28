@@ -94,17 +94,22 @@ export class ReclamacaoService {
       storagePath,
       ordem: atuais.length,
     };
+    let foto: Awaited<ReturnType<ReclamacaoFotoRepository['insertMany']>>[number];
     try {
-      const [foto] = await this.fotos.insertMany([insert]);
-      const urls = await this.storage.signedUrls([storagePath]);
-      return {
-        ...foto,
-        signedUrl: urls.get(storagePath) ?? null,
-      };
+      [foto] = await this.fotos.insertMany([insert]);
     } catch (error) {
-      await this.storage.remove([storagePath]);
+      try {
+        await this.storage.remove([storagePath]);
+      } catch {
+        // best-effort cleanup
+      }
       throw error;
     }
+    const urls = await this.storage.signedUrls([storagePath]);
+    return {
+      ...foto,
+      signedUrl: urls.get(storagePath) ?? null,
+    };
   }
 
   async removerFotos(reclamacaoId: string, fotoIds: string[]): Promise<void> {
