@@ -94,12 +94,17 @@ export class ReclamacaoService {
       storagePath,
       ordem: atuais.length,
     };
-    const [foto] = await this.fotos.insertMany([insert]);
-    const urls = await this.storage.signedUrls([storagePath]);
-    return {
-      ...foto,
-      signedUrl: urls.get(storagePath) ?? null,
-    };
+    try {
+      const [foto] = await this.fotos.insertMany([insert]);
+      const urls = await this.storage.signedUrls([storagePath]);
+      return {
+        ...foto,
+        signedUrl: urls.get(storagePath) ?? null,
+      };
+    } catch (error) {
+      await this.storage.remove([storagePath]);
+      throw error;
+    }
   }
 
   async removerFotos(reclamacaoId: string, fotoIds: string[]): Promise<void> {

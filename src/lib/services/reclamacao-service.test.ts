@@ -55,6 +55,26 @@ describe('ReclamacaoService', () => {
     expect(reclamacoes.deleteById).toHaveBeenCalledWith('r1');
   });
 
+  it('anexarFoto remove do bucket se insertMany falhar', async () => {
+    const storagePath = 'r1/abc.jpg';
+    const dbError = new Error('insert falhou');
+    const fotos = {
+      listByReclamacaoId: vi.fn().mockResolvedValue([]),
+      insertMany: vi.fn().mockRejectedValue(dbError),
+    };
+    const storage = {
+      upload: vi.fn().mockResolvedValue(storagePath),
+      remove: vi.fn().mockResolvedValue(undefined),
+      signedUrls: vi.fn(),
+    };
+    const service = makeService({ fotos, storage });
+    await expect(service.anexarFoto('r1', new Uint8Array([1]))).rejects.toThrow(
+      'insert falhou',
+    );
+    expect(storage.upload).toHaveBeenCalledWith('r1', new Uint8Array([1]));
+    expect(storage.remove).toHaveBeenCalledWith([storagePath]);
+  });
+
   it('anexarFoto recusa a 11ª', async () => {
     const fotos = {
       listByReclamacaoId: vi.fn().mockResolvedValue(
