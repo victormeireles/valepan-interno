@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   createReclamacao,
   deleteReclamacao,
@@ -89,6 +90,7 @@ export default function ReclamacaoModal({
   onSaveError,
 }: Props) {
   const titleId = useId();
+  const router = useRouter();
   const [form, setForm] = useState(EMPTY_FORM);
   const [novos, setNovos] = useState<File[]>([]);
   const [fotoIdsRemovidos, setFotoIdsRemovidos] = useState<string[]>([]);
@@ -158,36 +160,44 @@ export default function ReclamacaoModal({
     setError('');
     setFieldErrors({});
     const mode = reclamacao ? 'update' : 'create';
-    const result = await salvarReclamacaoComFotos(
-      {
-        create: createReclamacao,
-        update: updateReclamacao,
-        remove: deleteReclamacao,
-        postFoto: postReclamacaoFoto,
-        compress: (file) => compressImage(file, 4),
-      },
-      {
-        mode,
-        id: reclamacao?.id,
-        payload: built,
-        fotoIdsRemovidos,
-        arquivosNovos: novos,
-      },
-    );
-    setLoading(false);
+    try {
+      const result = await salvarReclamacaoComFotos(
+        {
+          create: createReclamacao,
+          update: updateReclamacao,
+          remove: deleteReclamacao,
+          postFoto: postReclamacaoFoto,
+          compress: (file) => compressImage(file, 4),
+        },
+        {
+          mode,
+          id: reclamacao?.id,
+          payload: built,
+          fotoIdsRemovidos,
+          arquivosNovos: novos,
+        },
+      );
 
-    if (!result.ok) {
-      if (result.error === ERRO_SALVAR_RECLAMACAO) {
-        onSaveError(result.error);
-        if (mode === 'create') onClose();
+      if (!result.ok) {
+        if (result.error === ERRO_SALVAR_RECLAMACAO) {
+          onSaveError(result.error);
+          if (mode === 'create') {
+            onClose();
+          } else {
+            setNovos([]);
+            router.refresh();
+          }
+          return;
+        }
+        setError(result.error);
         return;
       }
-      setError(result.error);
-      return;
-    }
 
-    onSaved(mode);
-    onClose();
+      onSaved(mode);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

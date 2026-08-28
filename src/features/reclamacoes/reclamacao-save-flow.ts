@@ -33,12 +33,16 @@ async function anexarArquivos(
   reclamacaoId: string,
   arquivos: File[],
 ): Promise<boolean> {
-  for (const arquivo of arquivos) {
-    const compressed = await deps.compress(arquivo);
-    const ok = await deps.postFoto(reclamacaoId, compressed);
-    if (!ok) return false;
+  try {
+    for (const arquivo of arquivos) {
+      const compressed = await deps.compress(arquivo);
+      const ok = await deps.postFoto(reclamacaoId, compressed);
+      if (!ok) return false;
+    }
+    return true;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 export async function salvarReclamacaoComFotos(

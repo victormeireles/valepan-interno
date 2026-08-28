@@ -8,6 +8,13 @@ export async function postReclamacaoFoto(
   const response = await fetch('/api/reclamacoes/foto', {
     method: 'POST',
     body: form,
+    redirect: 'manual',
   });
-  return response.ok;
+  return isReclamacaoFotoResponseOk(response);
+}
+
+function isReclamacaoFotoResponseOk(response: Response): boolean {
+  if (response.type === 'opaqueredirect') return false;
+  const contentType = response.headers.get('content-type') ?? '';
+  return response.ok && contentType.includes('application/json');
 }

@@ -45,6 +45,34 @@ describe('salvarReclamacaoComFotos', () => {
     expect(result).toEqual({ ok: false, error: ERRO_SALVAR_RECLAMACAO });
   });
 
+  it('no create, se compress lançar, exclui a reclamação', async () => {
+    const d = deps({
+      compress: vi.fn().mockRejectedValue(new Error('compress fail')),
+    });
+    const result = await salvarReclamacaoComFotos(d, {
+      mode: 'create',
+      payload,
+      fotoIdsRemovidos: [],
+      arquivosNovos: [file],
+    });
+    expect(d.remove).toHaveBeenCalledWith('r1');
+    expect(result).toEqual({ ok: false, error: ERRO_SALVAR_RECLAMACAO });
+  });
+
+  it('no create, se postFoto lançar, exclui a reclamação', async () => {
+    const d = deps({
+      postFoto: vi.fn().mockRejectedValue(new Error('network')),
+    });
+    const result = await salvarReclamacaoComFotos(d, {
+      mode: 'create',
+      payload,
+      fotoIdsRemovidos: [],
+      arquivosNovos: [file],
+    });
+    expect(d.remove).toHaveBeenCalledWith('r1');
+    expect(result).toEqual({ ok: false, error: ERRO_SALVAR_RECLAMACAO });
+  });
+
   it('no update, envia ids removidos e depois as fotos novas', async () => {
     const d = deps();
     const result = await salvarReclamacaoComFotos(d, {
