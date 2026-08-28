@@ -259,4 +259,22 @@ describe('InternoMiddlewareGuard', () => {
       }),
     ).toEqual({ redirect: '/?erro=sem-permissao' });
   });
+
+  it('interno_reclamacoes:ler acessa a lista e não o POST de foto', () => {
+    const qualidade = {
+      sub: 'user-qualidade',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_reclamacoes: 'ler' as const },
+    };
+    expect(guard.decide({ pathname: '/reclamacoes', token: qualidade })).toBe(
+      'allow',
+    );
+    expect(
+      guard.decide({
+        pathname: '/api/reclamacoes/foto',
+        token: qualidade,
+        method: 'POST',
+      }),
+    ).toEqual({ redirect: '/?erro=sem-permissao' });
+  });
 });

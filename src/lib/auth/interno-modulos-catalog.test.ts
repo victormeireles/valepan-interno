@@ -6,8 +6,9 @@ import {
 } from './interno-modulos-catalog';
 
 describe('interno-modulos-catalog', () => {
-  it('lista exatamente os 10 módulos interno_*', () => {
-    expect(MODULOS_INTERNO).toHaveLength(10);
+  it('lista exatamente os 11 módulos interno_*', () => {
+    expect(MODULOS_INTERNO).toHaveLength(11);
+    expect(MODULOS_INTERNO).toContain('interno_reclamacoes');
     expect(MODULOS_INTERNO.every((m) => m.startsWith('interno_'))).toBe(true);
   });
 

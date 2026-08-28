@@ -186,6 +186,11 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/api/reclamacoes',
+    requirement: modulo('interno_reclamacoes', 'editar'),
+  },
+  {
+    match: 'prefix',
     prefix: '/api/config',
     requirement: modulo('interno_config', 'administrar'),
   },
@@ -293,6 +298,11 @@ const ROUTE_RULES: RouteRule[] = [
     match: 'prefix',
     prefix: '/estoque/auditoria',
     requirement: modulo('interno_estoque', 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/reclamacoes',
+    requirement: modulo('interno_reclamacoes', 'ler'),
   },
   {
     match: 'prefix',

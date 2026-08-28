@@ -8,6 +8,7 @@ export const MODULOS_INTERNO = [
   'interno_etiquetas',
   'interno_insumos',
   'interno_estoque',
+  'interno_reclamacoes',
   'interno_config',
 ] as const;
 
