@@ -4,6 +4,7 @@ import {
   categoriasDoFiltro,
   categoriasDoSelect,
   idPorNome,
+  opcoesDoSelect,
 } from './reclamacao-form-options';
 
 const mofado: ReclamacaoCategoriaRecord = {
@@ -46,5 +47,13 @@ describe('reclamacao-form-options', () => {
   it('resolve id pelo nome exato', () => {
     expect(idPorNome([{ id: 'c1', nome: 'Chef+' }], 'Chef+')).toBe('c1');
     expect(idPorNome([{ id: 'c1', nome: 'Chef+' }], 'outro')).toBe('');
+  });
+
+  it('no edit inclui cliente ou produto atual se estiver inativo', () => {
+    const ativos = [{ id: 'c1', nome: 'Chef+' }];
+    const inativo = { id: 'c2', nome: 'Padaria velha' };
+    expect(opcoesDoSelect(ativos, inativo)).toEqual([...ativos, inativo]);
+    expect(opcoesDoSelect(ativos, { id: 'c1', nome: 'Chef+' })).toEqual(ativos);
+    expect(opcoesDoSelect(ativos, null)).toEqual(ativos);
   });
 });

@@ -1,3 +1,4 @@
+import { ReclamacaoCategoriaRepository } from '@/data/reclamacoes/ReclamacaoCategoriaRepository';
 import {
   ReclamacaoFotoRepository,
   type ReclamacaoFotoInsertInput,
@@ -33,6 +34,7 @@ export class ReclamacaoService {
     private readonly reclamacoes: ReclamacaoRepository,
     private readonly fotos: ReclamacaoFotoRepository,
     private readonly storage: ReclamacaoFotoStorage,
+    private readonly categorias: ReclamacaoCategoriaRepository,
   ) {}
 
   async list(filtro: ReclamacaoListFiltro): Promise<ReclamacaoListItem[]> {
@@ -43,7 +45,15 @@ export class ReclamacaoService {
   }
 
   async create(input: ReclamacaoCreateInput): Promise<ReclamacaoListItem> {
-    const erro = validarReclamacaoSave({ ...input, fotosCount: 0 });
+    const exigeObservacao = await this.exigeObservacaoDaCategoria(
+      input.categoriaId,
+      { exigirAtiva: true },
+    );
+    const erro = validarReclamacaoSave({
+      ...input,
+      exigeObservacao,
+      fotosCount: 0,
+    });
     if (erro) throw new Error(erro);
 
     const created = await this.reclamacoes.insert(
@@ -59,8 +69,12 @@ export class ReclamacaoService {
     const atuais = await this.fotos.listByReclamacaoId(id);
     const removidos = new Set(input.fotoIdsRemovidos ?? []);
     const fotosCount = atuais.filter((f) => !removidos.has(f.id)).length;
+    const exigeObservacao = await this.exigeObservacaoDaCategoria(
+      input.categoriaId,
+      { exigirAtiva: false },
+    );
 
-    const erro = validarReclamacaoSave({ ...input, fotosCount });
+    const erro = validarReclamacaoSave({ ...input, exigeObservacao, fotosCount });
     if (erro) throw new Error(erro);
 
     await this.reclamacoes.update(id, this.toWriteInput(input));
@@ -124,6 +138,19 @@ export class ReclamacaoService {
     await this.fotos.deleteByIds(alvo.map((f) => f.id));
   }
 
+  private async exigeObservacaoDaCategoria(
+    categoriaId: string,
+    opts: { exigirAtiva: boolean },
+  ): Promise<boolean> {
+    if (!categoriaId.trim()) throw new Error('Informe a categoria.');
+    const categoria = await this.categorias.findById(categoriaId);
+    if (!categoria) throw new Error('Informe a categoria.');
+    if (opts.exigirAtiva && !categoria.ativa) {
+      throw new Error('Categoria inativa.');
+    }
+    return categoria.exigeObservacao;
+  }
+
   private toWriteInput(
     input: ReclamacaoWritePayload,
     criadoPor?: string | null,
@@ -167,4 +194,5 @@ export const reclamacaoService = new ReclamacaoService(
   new ReclamacaoRepository(),
   new ReclamacaoFotoRepository(),
   new ReclamacaoFotoStorage(),
+  new ReclamacaoCategoriaRepository(),
 );

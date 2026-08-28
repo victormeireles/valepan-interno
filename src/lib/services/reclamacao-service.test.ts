@@ -15,10 +15,19 @@ const validInput = {
   criadoPor: 'u1',
 };
 
+const categoriaAtiva = {
+  id: 'k1',
+  nome: 'Mofado',
+  ordem: 1,
+  ativa: true,
+  exigeObservacao: false,
+};
+
 function makeService(overrides: {
   reclamacoes?: object;
   fotos?: object;
   storage?: object;
+  categorias?: object;
 }) {
   return new ReclamacaoService(
     (overrides.reclamacoes ?? {}) as never,
@@ -27,6 +36,9 @@ function makeService(overrides: {
       upload: vi.fn(),
       remove: vi.fn(),
       signedUrls: vi.fn().mockResolvedValue(new Map()),
+    }) as never,
+    (overrides.categorias ?? {
+      findById: vi.fn().mockResolvedValue(categoriaAtiva),
     }) as never,
   );
 }
@@ -98,6 +110,34 @@ describe('ReclamacaoService', () => {
       'signedUrls falhou',
     );
     expect(storage.remove).not.toHaveBeenCalled();
+  });
+
+  it('create usa exigeObservacao da categoria no banco, não do payload', async () => {
+    const insert = vi.fn();
+    const categorias = {
+      findById: vi.fn().mockResolvedValue({
+        ...categoriaAtiva,
+        exigeObservacao: true,
+      }),
+    };
+    const service = makeService({ reclamacoes: { insert }, categorias });
+    await expect(
+      service.create({ ...validInput, exigeObservacao: false, observacao: null }),
+    ).rejects.toThrow('Descreva o problema.');
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('create recusa categoria inativa', async () => {
+    const insert = vi.fn();
+    const categorias = {
+      findById: vi.fn().mockResolvedValue({
+        ...categoriaAtiva,
+        ativa: false,
+      }),
+    };
+    const service = makeService({ reclamacoes: { insert }, categorias });
+    await expect(service.create(validInput)).rejects.toThrow('Categoria inativa.');
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it('anexarFoto recusa a 11ª', async () => {

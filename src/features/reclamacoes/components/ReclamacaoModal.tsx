@@ -20,6 +20,7 @@ import { postReclamacaoFoto } from '@/features/reclamacoes/reclamacao-foto-clien
 import {
   categoriasDoSelect,
   idPorNome,
+  opcoesDoSelect,
 } from '@/features/reclamacoes/reclamacao-form-options';
 import {
   salvarReclamacaoComFotos,
@@ -117,6 +118,26 @@ export default function ReclamacaoModal({
     () => categoriasDoSelect({ ativas: categoriasAtivas, atual: categoriaAtual(reclamacao) }),
     [categoriasAtivas, reclamacao],
   );
+  const clientesOpcoes = useMemo(
+    () =>
+      opcoesDoSelect(
+        clientes,
+        reclamacao
+          ? { id: reclamacao.clienteId, nome: reclamacao.clienteNome }
+          : null,
+      ),
+    [clientes, reclamacao],
+  );
+  const produtosOpcoes = useMemo(
+    () =>
+      opcoesDoSelect(
+        produtos,
+        reclamacao
+          ? { id: reclamacao.produtoId, nome: reclamacao.produtoNome }
+          : null,
+      ),
+    [produtos, reclamacao],
+  );
   const selecionada = categorias.find((c) => c.id === form.categoriaId);
   const exigeObservacao = selecionada?.exigeObservacao ?? false;
   const fotosVisiveis = (reclamacao?.fotos ?? []).filter(
@@ -126,8 +147,8 @@ export default function ReclamacaoModal({
   if (!isOpen && !animating) return null;
 
   const buildPayload = (): ReclamacaoSavePayload | { error: string } => {
-    const clienteId = idPorNome(clientes, form.clienteNome) || reclamacao?.clienteId || '';
-    const produtoId = idPorNome(produtos, form.produtoNome) || reclamacao?.produtoId || '';
+    const clienteId = idPorNome(clientesOpcoes, form.clienteNome);
+    const produtoId = idPorNome(produtosOpcoes, form.produtoNome);
     const payload: ReclamacaoSavePayload = {
       clienteId,
       produtoId,
@@ -248,8 +269,8 @@ export default function ReclamacaoModal({
             ) : null}
             <ReclamacaoModalFields
               value={form}
-              clientes={clientes}
-              produtos={produtos}
+              clientes={clientesOpcoes}
+              produtos={produtosOpcoes}
               categorias={categorias}
               exigeObservacao={exigeObservacao}
               fieldErrors={fieldErrors}

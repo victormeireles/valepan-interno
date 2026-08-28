@@ -32,6 +32,15 @@ export function categoriasDoFiltro(
   return [...byId.values()];
 }
 
+export function opcoesDoSelect(
+  ativas: ReclamacaoOpcao[],
+  atual?: ReclamacaoOpcao | null,
+): ReclamacaoOpcao[] {
+  if (!atual?.id) return ativas;
+  if (ativas.some((o) => o.id === atual.id)) return ativas;
+  return [...ativas, atual];
+}
+
 export function idPorNome(opcoes: ReclamacaoOpcao[], nome: string): string {
   return opcoes.find((o) => o.nome === nome)?.id ?? '';
 }
