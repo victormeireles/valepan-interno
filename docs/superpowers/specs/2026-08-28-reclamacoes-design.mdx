@@ -1,0 +1,222 @@
+# Caderno de reclamações de cliente
+
+Data: 2026-08-28  
+Status: aguardando revisão do stakeholder
+
+## Objetivo
+
+Qualidade e comercial registram o que o cliente reportou (pão, defeito, datas, quantidade, fotos) num caderno estruturado. Sem fluxo de caso. Os campos já servem para, depois, ver recorrência (mesmo cliente, mesmo pão, mesma categoria).
+
+### Sucesso
+
+- Uma tela `/reclamacoes`: listar, criar, editar, excluir
+- Cliente e produto vêm dos cadastros existentes; categoria vem de config
+- Quantidade sempre com número e unidade (pacotes ou caixas)
+- Fotos opcionais, várias, com compressão
+- Categorias gerenciáveis em `/config/categorias-reclamacao`, já semeadas
+- Nada disso mexe em lote, OP, estoque ou Omie
+
+## Contexto
+
+Hoje as reclamações ficam em texto solto (cliente / pão / fabricação / problema / quantidade). O Interno não tem módulo de qualidade. Cliente é a linha de `clientes` (quem pediu, ex.: Chef+ Tiradentes), não o tipo de estoque. Produto é o SKU de `produtos`.
+
+v1 é caderno. Painel de recorrência, vínculo com lote/OP e status (aberto/resolvido) ficam de fora de propósito.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Forma | Lista operacional + formulário em modal |
+| Um registro | Um pão + um problema. Sem “caso” com várias linhas |
+| Lançamento em lote | Não. Um formulário por reclamação, do zero |
+| Cliente | FK `clientes.id` (nome fantasia no UI) |
+| Produto | FK `produtos.id`, sempre obrigatório |
+| Categoria | Cadastro em config, obrigatória no formulário |
+| Observação | Texto livre opcional; obrigatória se a categoria tiver `exige_observacao` |
+| Datas | Fabricação e data do problema, ambas obrigatórias, só calendário (sem hora) |
+| Ordem das datas | Sem regra “problema ≥ fabricação”. O cliente manda datas bagunçadas |
+| Quantidade | Inteiro ≥ 1 + unidade `pacotes` ou `caixas` |
+| Fotos | Opcionais, até 10 por registro |
+| Status de caso | Não existe no v1 |
+| Lote / OP | Sem vínculo |
+| Exclusão | Definitiva, com confirmação; apaga fotos |
+| Quem usa | Gestão/qualidade e comercial (`interno_reclamacoes` em editar) |
+| Categorias | Tela em Configurações; quem tem `interno_config` |
+| Módulo no hub | Operação, card **Reclamações**, ícone `report_problem` |
+
+## Abordagem
+
+**Caderno: lista + modal** (aprovado).
+
+Descartado: página de detalhe separada (mais clique, pior para o dia a dia). Descartado: cadastro estilo config (lento para comercial). Descartado: lembrar o último cliente para lançar vários seguidos (não é o fluxo real).
+
+## Schema
+
+Três tabelas novas. RLS ligado em todas. O app continua gravando com **service role** depois do gate de módulo (padrão do Interno); RLS é defesa se o client autenticado bater no PostgREST.
+
+### `reclamacao_categorias`
+
+- `id uuid PK`
+- `nome text NOT NULL` (trim; índice único parcial entre linhas `ativa = true`)
+- `ordem int NOT NULL`
+- `ativa boolean NOT NULL DEFAULT true`
+- `exige_observacao boolean NOT NULL DEFAULT false`
+- `created_at`, `updated_at`
+
+Seed (nessa ordem): Mofado; Amassado; Cru ou branco; Queimado; Tamanho; Coloração; Base fina (corte); Brilho; Confeito; Corte irregular; Sujeira; Outros (`exige_observacao = true`).
+
+### `reclamacoes`
+
+- `id uuid PK`
+- `cliente_id uuid NOT NULL REFERENCES clientes(id)`
+- `produto_id uuid NOT NULL REFERENCES produtos(id)`
+- `categoria_id uuid NOT NULL REFERENCES reclamacao_categorias(id)`
+- `observacao text NULL`
+- `data_fabricacao date NOT NULL`
+- `data_problema date NOT NULL`
+- `quantidade int NOT NULL CHECK (quantidade >= 1)`
+- `unidade text NOT NULL CHECK (unidade IN ('pacotes', 'caixas'))`
+- `criado_por uuid NULL REFERENCES usuarios(id) ON DELETE SET NULL`
+- `created_at`, `updated_at`
+
+Índices: `data_problema DESC`, `cliente_id`, `produto_id`, `categoria_id`.
+
+### `reclamacao_fotos`
+
+- `id uuid PK`
+- `reclamacao_id uuid NOT NULL REFERENCES reclamacoes(id) ON DELETE CASCADE`
+- `storage_path text NOT NULL`
+- `ordem int NOT NULL`
+- `created_at`
+
+Máximo 10 fotos: CHECK ou validação no service (service vale; o banco não precisa de trigger).
+
+### RLS (padrão do repo)
+
+| Tabela | SELECT | INSERT / UPDATE | DELETE |
+|--------|--------|-----------------|--------|
+| `reclamacao_categorias` | autenticado | `(SELECT is_admin())` | `(SELECT is_admin())` |
+| `reclamacoes` | autenticado | autenticado | `(SELECT is_admin())` |
+| `reclamacao_fotos` | autenticado | autenticado | `(SELECT is_admin())` |
+
+Excluir reclamação no app passa pelo service role + `interno_reclamacoes:editar`, como lotes. O DELETE restrito no RLS não impede isso.
+
+### Storage
+
+Bucket privado `reclamacoes`. Path `{reclamacao_id}/{uuid}.jpg`. Não usar o upload de produção (Google Drive exige etapa + OP). Compressão no cliente com `compressImage` (máx. 4MB, lado maior 1920px). API de upload autenticada, módulo `interno_reclamacoes` em **editar**. A lista/modal recebem **URL assinada** de curta duração para exibir miniatura e ampliação — o client não lê o bucket direto.
+
+Ao excluir a reclamação: apaga linhas (cascade) **e** os objetos no bucket.
+
+## Regras de negócio
+
+### Reclamação
+
+- Cliente, produto, categoria, as duas datas, quantidade e unidade obrigatórios.
+- Autocomplete de cliente e produto: só **ativos**. Registro antigo continua válido se o cliente/produto for inativado depois (mostra o nome mesmo inativo).
+- Categoria no select: só **ativas**. Registro antigo mostra o nome da categoria mesmo inativa.
+- Observação: trim; vazio vira `null`. Se a categoria tem `exige_observacao`, recusa save sem texto.
+- Não baixa estoque, não gera crédito, não fala com Omie.
+
+### Categoria (config)
+
+- Criar / editar nome, ordem, ativa, exige observação.
+- Inativar some do select de nova reclamação; histórico intacto.
+- Excluir só se **nenhuma** reclamação aponta para ela. Se houver uso → erro: “Categoria em uso. Inative em vez de excluir.”
+- Sem tela no v1 para “proteger” a linha Outros: o flag `exige_observacao` sobrevive a rename.
+
+### Lista
+
+Filtros: cliente, produto, categoria (todas, inclusive inativas que já foram usadas), período pela **data do problema** (início e fim inclusivos). Sem filtro de período: todos, mais recentes primeiro (`data_problema`, depois `created_at`).
+
+Colunas: data do problema, cliente (nome fantasia), produto, categoria, quantidade em Geist Mono (`25 pacotes` ou `10 CX`), data de fabricação, ícone se tiver foto.
+
+Vazio: “Nenhuma reclamação registrada.”
+
+Toasts: “Reclamação registrada.” / “Reclamação atualizada.” / “Reclamação excluída.” / “Erro ao salvar reclamação.”
+
+## Telas
+
+### `/reclamacoes`
+
+Hub Operação + nav principal (grupo operação). Toolbar com “Nova reclamação”. Linha abre o modal de edição. Menu da linha: editar, excluir (confirma “Excluir esta reclamação?”).
+
+Modal único criar/editar: cliente, produto, categoria, observação, data fabricação, data do problema, quantidade + segmento pacotes | caixas, fotos (anexar, miniatura, remover uma, ampliar). Na edição, rodapé só de leitura: “Registrado por {nome} em {data}.” Touch ≥ 44px. Copy pt-BR operacional.
+
+### `/config/categorias-reclamacao`
+
+Card no hub de Configurações, separado de **Categorias** (produto/embalagem). Label: **Categorias de reclamação**. Lista nome, ordem, ativas, se exige observação. Novo / editar em modal. Gate: `interno_config` administrar.
+
+## Permissão
+
+Novo id no catálogo do Interno **e** no Pedidos (mesmo contrato `interno_*`):
+
+| id | Rotas | Nível mín. página | Mutação |
+|----|-------|-------------------|---------|
+| `interno_reclamacoes` | `/reclamacoes`, upload de foto | `ler` | criar/editar/excluir/foto exigem `editar` |
+| `interno_config` | `/config/categorias-reclamacao` | `administrar` (já vale para `/config`) | CRUD de categoria |
+
+`administrar` em reclamações não abre tela extra no v1 (equivale a editar). Owner continua com bypass. Quem não tem o módulo não vê o card.
+
+Depois do deploy: no Pedidos, colocar `interno_reclamacoes` (editar) nos perfis de qualidade e comercial.
+
+## Arquitetura
+
+```text
+config: reclamacao_categorias
+        │
+        ▼
+modal reclamação → cliente + produto + categoria + datas + qtd + fotos
+        │
+        ▼
+ReclamacaoValidator (qtd, obs se exige, máx. 10 fotos)
+        │
+        ▼
+ReclamacaoService → insert/update reclamacoes
+                 → upload Storage + reclamacao_fotos
+                 → delete (DB cascade + objetos)
+```
+
+Unidades (SRP, pastas pequenas, sem arquivo > 400 linhas):
+
+1. **Domínio** — quantidade (valor + unidade), regra de observação, “categoria em uso”. Puro, testável.
+2. **`ReclamacaoCategoriaService`** — CRUD do catálogo; recusa delete com uso.
+3. **`ReclamacaoService`** — CRUD da reclamação; orquestra fotos.
+4. **`ReclamacaoFotoStorage`** — upload/delete no bucket. Sem regra de negócio.
+5. **Repositories** — `reclamacoes`, `reclamacao_categorias`, `reclamacao_fotos`.
+6. **UI** — `features/reclamacoes` (lista, modal, filtros); config em `app/config/categorias-reclamacao`.
+
+Actions/API passam por `requireInternoModulo`. Autocomplete reusa cadastros de cliente e produto; não inventa texto livre.
+
+## Testes
+
+Domínio:
+
+- Quantidade 0 ou negativa → inválida; 1 + `caixas` → válida
+- Categoria com `exige_observacao` e obs vazia → inválida; com texto → válida
+- Categoria sem flag e obs vazia → válida
+- Mais de 10 fotos → inválido
+
+Categoria:
+
+- Delete sem reclamações → ok
+- Delete com reclamação apontando → recusa
+- Inativar some do select de ativas
+
+Reclamação:
+
+- Save sem cliente/produto/categoria/data/quantidade → recusa
+- Excluir remove paths no storage (mock)
+
+Auth: `/reclamacoes` sem módulo → bloqueado; com `ler` vê lista e não salva; `editar` salva.
+
+## Fora de escopo
+
+- Status (aberto / em análise / resolvido) e acompanhamento de crédito/troca
+- Vínculo com lote, OP, data de fabricação no realizado
+- Painel de recorrência (filtros da lista já permitem olhar padrão)
+- Agrupar várias reclamações num relato
+- Cliente ou portal registrando sozinho
+- Lembrar último cliente / lançar vários de uma vez
+- Tela no Interno para conceder o módulo (isso é Pedidos)
+- Google Drive para essas fotos
+- Mexer em estoque, Omie, produção ou etiquetas
