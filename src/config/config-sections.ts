@@ -37,6 +37,12 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     description: 'Visibilidade de categorias no painel de embalagem',
   },
   {
+    href: '/config/categorias-reclamacao',
+    label: 'Categorias de reclamação',
+    icon: 'report_problem',
+    description: 'Tipos de problema reportados pelo cliente',
+  },
+  {
     href: '/config/insumos',
     label: 'Insumos',
     icon: 'inventory',

@@ -98,7 +98,11 @@ export class ReclamacaoCategoriaRepository {
       .single();
 
     if (error) {
-      throw new Error(`Erro ao criar categoria de reclamação: ${error.message}`);
+      const err = new Error(
+        `Erro ao criar categoria de reclamação: ${error.message}`,
+      ) as Error & { code?: string };
+      err.code = error.code;
+      throw err;
     }
 
     return mapCategoria(data as CategoriaRow);
@@ -122,7 +126,11 @@ export class ReclamacaoCategoriaRepository {
       .single();
 
     if (error) {
-      throw new Error(`Erro ao atualizar categoria de reclamação: ${error.message}`);
+      const err = new Error(
+        `Erro ao atualizar categoria de reclamação: ${error.message}`,
+      ) as Error & { code?: string };
+      err.code = error.code;
+      throw err;
     }
 
     return mapCategoria(data as CategoriaRow);
