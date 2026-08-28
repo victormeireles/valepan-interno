@@ -122,4 +122,69 @@ describe('FluxoControleServiceAttach', () => {
     expect(fluxo.controle!.etapas.ferm.objetivoUn).toBe(100);
     expect(fluxo.controle!.relogio.ferm[0]?.ordemProducaoId).toBe('op-1');
   });
+
+  it('está de embalagem é o volume da OP do dia, mesmo com OP anterior maior', () => {
+    const embalagem: FluxoApontamentoEvento[] = [
+      {
+        produzidoEm: iso('08:00'),
+        produtoNome: 'Bun',
+        assadeiraNome: 'Bun',
+        unidades: 12048,
+        caixas: 251,
+        dataOp: '2026-08-11',
+        ordemProducaoId: 'op-ontem',
+      },
+      {
+        produzidoEm: iso('08:40'),
+        produtoNome: 'Bun',
+        assadeiraNome: 'Bun',
+        unidades: 8640,
+        caixas: 180,
+        dataOp: DATE,
+        ordemProducaoId: 'op-1',
+      },
+    ];
+    const fluxo = new FluxoProcessoBuilder().build({
+      dateISO: DATE,
+      planoUn: 8640,
+      ordensDia: [
+        {
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          unidades: 8640,
+          latas: 0,
+          caixas: 180,
+        },
+      ],
+      fermentacao: [],
+      forno: [],
+      embalagem,
+    });
+
+    expect(fluxo.etapas.find((e) => e.key === 'emb')?.volOperacional).toBe(180);
+    expect(fluxo.opAnterior.volOperacional).toBe(251);
+
+    new FluxoControleServiceAttach().attach(fluxo, {
+      dateISO: DATE,
+      todayISO: TODAY,
+      asOfMs: Date.parse(iso('09:11')),
+      ordens: [
+        {
+          id: 'op-1',
+          ordemPlanejamento: 1,
+          produtoNome: 'Bun',
+          assadeiraNome: 'Bun',
+          unidades: 8640,
+          assadeiras: 0,
+          caixas: 1766,
+        },
+      ],
+      estimativas: [baseEst('op-1')],
+      fermentacao: [],
+      forno: [],
+      embalagem,
+    });
+
+    expect(fluxo.controle!.etapas.emb.estaUn).toBe(180);
+  });
 });

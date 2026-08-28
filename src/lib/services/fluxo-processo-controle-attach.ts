@@ -49,7 +49,7 @@ export class FluxoControleServiceAttach {
       todayISO: input.todayISO,
       asOfMs: input.asOfMs,
       ops,
-      etapasVol: this.etapasField(fluxo, 'volOperacional'),
+      etapasVol: this.etapasVolRealizadoNoDia(fluxo),
       opAnteriorVol: fluxo.opAnterior.volOperacional,
       ordemAss: fluxo.ordemAss,
       eventos: {
@@ -85,6 +85,20 @@ export class FluxoControleServiceAttach {
         },
       ];
     });
+  }
+
+  /**
+   * `etapas.emb.volOperacional` já exclui OP anterior. O builder desconta
+   * `opAnteriorVol` de `etapasVol.emb`, então aqui entra o total do dia.
+   */
+  private etapasVolRealizadoNoDia(
+    fluxo: VpFluxoPayload,
+  ): Record<FluxoEtapaKey, number> {
+    const vols = this.etapasField(fluxo, 'volOperacional');
+    return {
+      ...vols,
+      emb: vols.emb + fluxo.opAnterior.volOperacional,
+    };
   }
 
   private etapasField(
