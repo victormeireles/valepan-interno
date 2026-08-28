@@ -69,6 +69,13 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_etiquetas',
   },
   {
+    href: '/reclamacoes',
+    title: 'Reclamações',
+    description: 'Problemas reportados pelos clientes',
+    icon: 'report_problem',
+    moduloId: 'interno_reclamacoes',
+  },
+  {
     href: '/estoque-insumos',
     title: 'Estoque de insumos',
     description: 'Saldos, histórico e ajustes manuais',

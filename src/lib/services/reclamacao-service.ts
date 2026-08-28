@@ -9,7 +9,7 @@ import {
 import { assertLimiteFotos } from '@/domain/reclamacoes/reclamacao-fotos-limite';
 import {
   validarReclamacaoSave,
-  type ReclamacaoSaveInput,
+  type ReclamacaoWritePayload,
 } from '@/domain/reclamacoes/reclamacao-input';
 import { normalizarObservacao } from '@/domain/reclamacoes/reclamacao-observacao';
 import type {
@@ -20,11 +20,11 @@ import type {
 import type { ReclamacaoUnidade } from '@/domain/reclamacoes/reclamacao-unidade';
 import { ReclamacaoFotoStorage } from '@/lib/services/reclamacao-foto-storage';
 
-export type ReclamacaoCreateInput = ReclamacaoSaveInput & {
+export type ReclamacaoCreateInput = ReclamacaoWritePayload & {
   criadoPor: string | null;
 };
 
-export type ReclamacaoUpdateInput = ReclamacaoSaveInput & {
+export type ReclamacaoUpdateInput = ReclamacaoWritePayload & {
   fotoIdsRemovidos?: string[];
 };
 
@@ -125,7 +125,7 @@ export class ReclamacaoService {
   }
 
   private toWriteInput(
-    input: ReclamacaoSaveInput,
+    input: ReclamacaoWritePayload,
     criadoPor?: string | null,
   ): ReclamacaoWriteInput {
     return {

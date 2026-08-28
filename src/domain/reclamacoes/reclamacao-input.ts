@@ -20,6 +20,8 @@ export type ReclamacaoSaveInput = {
   fotosCount: number;
 };
 
+export type ReclamacaoWritePayload = Omit<ReclamacaoSaveInput, 'fotosCount'>;
+
 function idOk(value: string): boolean {
   return value.trim().length > 0;
 }

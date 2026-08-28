@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ReclamacaoOpcao } from '@/domain/reclamacoes/reclamacao-types';
 import { SupabaseClientFactory, supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import type { Database, Tables } from '@/types/database';
 
@@ -61,10 +62,15 @@ export class ClientesService {
   }
 
   public async listActiveDisplayNames(): Promise<string[]> {
+    const options = await this.listActiveOptions();
+    return options.map((option) => option.nome);
+  }
+
+  public async listActiveOptions(): Promise<ReclamacaoOpcao[]> {
     const client = this.resolveClient();
     const { data, error } = await client
       .from('clientes')
-      .select('nome_fantasia')
+      .select('id, nome_fantasia')
       .eq('ativo', true)
       .order('nome_fantasia', { ascending: true });
 
@@ -72,7 +78,10 @@ export class ClientesService {
       throw new Error(`Erro ao listar clientes: ${error.message}`);
     }
 
-    return (data ?? []).map((record) => record.nome_fantasia);
+    return (data ?? []).map((record) => ({
+      id: record.id,
+      nome: record.nome_fantasia,
+    }));
   }
 
   public async findByStockTypeName(

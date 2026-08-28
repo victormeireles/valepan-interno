@@ -37,7 +37,8 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     match: (pathname) =>
       pathname.startsWith('/ordens-producao') ||
       pathname.startsWith('/realizado') ||
-      pathname.startsWith('/etiquetas'),
+      pathname.startsWith('/etiquetas') ||
+      pathname.startsWith('/reclamacoes'),
     children: [
       {
         type: 'link',
@@ -86,6 +87,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'label',
         moduloId: 'interno_etiquetas',
         match: (pathname) => pathname.startsWith('/etiquetas'),
+      },
+      {
+        type: 'link',
+        href: '/reclamacoes',
+        label: 'Reclamações',
+        icon: 'report_problem',
+        moduloId: 'interno_reclamacoes',
+        match: (pathname) => pathname.startsWith('/reclamacoes'),
       },
       {
         type: 'link',

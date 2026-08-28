@@ -29,6 +29,14 @@ export type ReclamacaoListFiltro = {
   dataProblemaAte: string | null;
 };
 
+export const RECLAMACAO_FILTRO_VAZIO: ReclamacaoListFiltro = {
+  clienteId: null,
+  produtoId: null,
+  categoriaId: null,
+  dataProblemaDe: null,
+  dataProblemaAte: null,
+};
+
 export type ReclamacaoListItem = {
   id: string;
   clienteId: string;
