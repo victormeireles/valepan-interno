@@ -140,6 +140,14 @@ function mapReclamacao(row: ReclamacaoListRow): ReclamacaoListItem {
   };
 }
 
+function asListRows(data: unknown): ReclamacaoListRow[] {
+  return (data as ReclamacaoListRow[] | null) ?? [];
+}
+
+function asListRow(data: unknown): ReclamacaoListRow {
+  return data as ReclamacaoListRow;
+}
+
 function toDbWrite(input: ReclamacaoWriteInput) {
   return {
     cliente_id: input.clienteId,
@@ -184,7 +192,7 @@ export class ReclamacaoRepository {
       throw new Error(`Erro ao listar reclamações: ${error.message}`);
     }
 
-    return ((data as ReclamacaoListRow[]) ?? []).map(mapReclamacao);
+    return asListRows(data).map(mapReclamacao);
   }
 
   async findById(id: string): Promise<ReclamacaoListItem | null> {
@@ -198,7 +206,7 @@ export class ReclamacaoRepository {
       throw new Error(`Erro ao buscar reclamação: ${error.message}`);
     }
 
-    return data ? mapReclamacao(data as ReclamacaoListRow) : null;
+    return data ? mapReclamacao(asListRow(data)) : null;
   }
 
   async insert(input: ReclamacaoWriteInput): Promise<ReclamacaoListItem> {
@@ -215,7 +223,7 @@ export class ReclamacaoRepository {
       throw new Error(`Erro ao criar reclamação: ${error.message}`);
     }
 
-    return mapReclamacao(data as ReclamacaoListRow);
+    return mapReclamacao(asListRow(data));
   }
 
   async update(id: string, input: ReclamacaoWriteInput): Promise<ReclamacaoListItem> {
@@ -233,7 +241,7 @@ export class ReclamacaoRepository {
       throw new Error(`Erro ao atualizar reclamação: ${error.message}`);
     }
 
-    return mapReclamacao(data as ReclamacaoListRow);
+    return mapReclamacao(asListRow(data));
   }
 
   async deleteById(id: string): Promise<void> {
