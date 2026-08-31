@@ -2485,6 +2485,86 @@ export type Database = {
           },
         ]
       }
+      insumo_pedido_compra: {
+        Row: {
+          created_at: string
+          criado_por: string | null
+          data_chegada_prevista: string
+          fornecedor_nome: string
+          id: string
+          numero: number
+          observacao: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por?: string | null
+          data_chegada_prevista: string
+          fornecedor_nome: string
+          id?: string
+          numero?: number
+          observacao?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string | null
+          data_chegada_prevista?: string
+          fornecedor_nome?: string
+          id?: string
+          numero?: number
+          observacao?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_pedido_compra_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insumo_pedido_compra_item: {
+        Row: {
+          id: string
+          insumo_id: string
+          pedido_id: string
+          quantidade: number
+        }
+        Insert: {
+          id?: string
+          insumo_id: string
+          pedido_id: string
+          quantidade: number
+        }
+        Update: {
+          id?: string
+          insumo_id?: string
+          pedido_id?: string
+          quantidade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insumo_pedido_compra_item_insumo_id_fkey"
+            columns: ["insumo_id"]
+            isOneToOne: false
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insumo_pedido_compra_item_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "insumo_pedido_compra"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insumo_regra_compra: {
         Row: {
           ativo: boolean
