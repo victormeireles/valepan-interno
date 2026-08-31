@@ -10,10 +10,19 @@ function formatNumero(value: number, maxFractionDigits = 6): string {
   });
 }
 
+export function arredondarNumeroOperacional(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0;
+  if (Math.abs(value) < 5) {
+    return Math.round(value * 10) / 10;
+  }
+  return Math.round(value);
+}
+
 function formatNumeroArredondado(value: number): string {
   if (value === 0) return '-';
+  const arredondado = arredondarNumeroOperacional(value);
   const shouldUseDecimal = Math.abs(value) < 5;
-  return value.toLocaleString('pt-BR', {
+  return arredondado.toLocaleString('pt-BR', {
     minimumFractionDigits: shouldUseDecimal ? 1 : 0,
     maximumFractionDigits: shouldUseDecimal ? 1 : 0,
   });

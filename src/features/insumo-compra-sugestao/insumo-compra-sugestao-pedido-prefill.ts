@@ -1,4 +1,5 @@
 import { addDaysIso } from '@/domain/insumos/insumo-compra-data-offset';
+import { arredondarNumeroOperacional } from '@/domain/insumos/insumo-unidade-conversao-formatter';
 import type { InsumoPedidoCompraFormPrefill } from '@/features/insumo-pedido-compra/components/InsumoPedidoCompraFormModal';
 import type { InsumoCompraSugestaoLinha } from '@/lib/services/insumo-compra-sugestao-service';
 
@@ -14,7 +15,10 @@ export function buildSugestaoPedidoPrefill(
     itens: [
       {
         insumoId: item.insumoId,
-        quantidade: quantidade != null && quantidade > 0 ? quantidade : 0,
+        quantidade:
+          quantidade != null && quantidade > 0
+            ? arredondarNumeroOperacional(quantidade)
+            : 0,
       },
     ],
   };
