@@ -1,0 +1,877 @@
+# Pedidos de compra de insumos — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Registrar pedidos de compra multi-item com data de chegada, projetar “a chegar” na sugestão (sem misturar no saldo físico) e mostrar selos A chegar/Atrasado na sugestão, no estoque e na lista de pedidos.
+
+**Architecture:** Tabelas `insumo_pedido_compra` + itens. Status persistido `aberto|encerrado|cancelado`; atraso é derivado. `InsumoCompraProjecaoCalculator` simula saldo até H; o motor de sugestão passa a usar `qtd_bruta = meta − projetado_em_H`. Encerrar/cancelar não gera movimento em `insumo_saldos`. Badge puro + UI compartilhada nas três telas.
+
+**Tech Stack:** Next.js 15 App Router, Supabase (migration + RLS), Vitest, Tailwind v4, Material Icons, design system Valepan.
+
+**Spec:** `docs/superpowers/specs/2026-08-31-pedidos-compra-insumos-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400; classes SRP; funções < 40 linhas.
+- RLS em toda tabela nova; DELETE físico só `(SELECT is_admin())`; SELECT/INSERT/UPDATE autenticados `USING (true)`.
+- UI pt-BR, Material Icons (sem emoji estrutural), amber/stone, alvos ≥44px, Geist Mono/`tabular-nums` em quantidades.
+- Pedido **não** escreve em `insumo_saldos` nem em `insumo_movimentos`.
+- `qtd_bruta = max(0, meta − (saldo − demanda(H) + recebimentos_ate_H))` com `meta = demandaLead × 1,5`. Isto **substitui** `meta − estoque` da spec/plano de 12/08.
+- H = `diasAteJanela + lead_time_dias`. Timezone `America/Sao_Paulo`.
+- Demanda via `insumoCompraDiaOperacional` (pesos de dia útil), não `consumo × H` cego.
+- Pedido atrasado: `aberto` e `data_chegada_prevista < hoje`; no motor `data_efetiva = max(prevista, data_referencia)`.
+- Módulo auth: páginas GET `requireInternoModulo('interno_insumos', 'ler')`. Actions de salvar/encerrar/cancelar: `requireInternoModulo('interno_insumos', 'editar')` (igual a `ajustarInsumoSaldo`).
+- Fora de escopo: NF×pedido, recebimento parcial, data por item, Omie pedido, WhatsApp.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `supabase/migrations/20260831120000_insumo_pedido_compra.sql` | Tabelas, índices, RLS |
+| `src/domain/types/insumo-pedido-compra-db.ts` | Rows DB |
+| `src/domain/insumos/insumo-pedido-compra-types.ts` | Status, DTOs de domínio, pipeline resumo |
+| `src/domain/insumos/insumo-compra-data-offset.ts` | Offset de datas ISO (São Paulo) |
+| `src/domain/insumos/insumo-compra-projecao-calculator.ts` | Projetado em H + ruptura |
+| `src/domain/insumos/insumo-compra-projecao-calculator.test.ts` | Testes da projeção |
+| `src/domain/insumos/insumo-pedido-pipeline.ts` | Agrupa abertos por insumo; prioridade atrasado |
+| `src/domain/insumos/insumo-pedido-pipeline.test.ts` | Testes do agrupamento |
+| `src/domain/insumos/insumo-pedido-compra-validator.ts` | Validação de save |
+| `src/domain/insumos/insumo-pedido-compra-validator.test.ts` | Testes do validator |
+| `src/domain/insumos/insumo-compra-sugestao-calculator.ts` | Usa projeção (modify) |
+| `src/domain/insumos/insumo-compra-sugestao-calculator.test.ts` | Ajustar expectativas de qtd/status |
+| `src/domain/insumos/insumo-delete-eligibility.ts` | Bloqueio `pedidos` |
+| `src/data/insumos/InsumoPedidoCompraRepository.ts` | CRUD + pipeline abertos |
+| `src/lib/services/insumo-pedido-compra-manager.ts` | Criar/editar/encerrar/cancelar |
+| `src/lib/services/insumo-compra-sugestao-service.ts` | Injeta pipeline no cálculo e no DTO |
+| `src/app/actions/insumo-pedido-compra-actions.ts` | Server actions |
+| `src/app/compras-insumos/page.tsx` | Server page |
+| `src/features/insumo-pedido-compra/InsumoPedidoCompraClient.tsx` | Lista + filtros + modal |
+| `src/features/insumo-pedido-compra/components/*` | Tabela, mobile, form, badge |
+| `src/features/insumo-compra-sugestao/*` | Botão registrar + selo |
+| `src/features/insumo-estoque/*` | Selo no saldo |
+| `src/config/main-nav-config.ts` | Link Pedidos de compra |
+| `src/components/Hub/hub-nav-config.ts` | Card no hub |
+| `src/lib/auth/interno-route-access-map.ts` | Prefix `/compras-insumos` |
+| `src/types/database.ts` e `types/database.ts` | Tabelas novas |
+
+---
+
+### Task 1: Migration + tipos DB
+
+**Files:**
+- Create: `supabase/migrations/20260831120000_insumo_pedido_compra.sql`
+- Create: `src/domain/types/insumo-pedido-compra-db.ts`
+- Modify: `src/types/database.ts` e `types/database.ts` (inserir as duas tabelas no `public.Tables`, ao lado de `insumo_regra_compra`)
+
+**Interfaces:**
+- Produces: `public.insumo_pedido_compra`, `public.insumo_pedido_compra_item`, tipos `InsumoPedidoCompraRow`, `InsumoPedidoCompraItemRow`
+
+- [ ] **Step 1: Criar a migration**
+
+```sql
+CREATE TABLE IF NOT EXISTS public.insumo_pedido_compra (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  numero integer GENERATED ALWAYS AS IDENTITY UNIQUE,
+  fornecedor_nome text NOT NULL CHECK (length(trim(fornecedor_nome)) > 0),
+  data_chegada_prevista date NOT NULL,
+  status text NOT NULL DEFAULT 'aberto'
+    CHECK (status IN ('aberto', 'encerrado', 'cancelado')),
+  observacao text NULL,
+  criado_por uuid NULL REFERENCES public.usuarios(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.insumo_pedido_compra_item (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  pedido_id uuid NOT NULL REFERENCES public.insumo_pedido_compra(id) ON DELETE CASCADE,
+  insumo_id uuid NOT NULL REFERENCES public.insumos(id) ON DELETE RESTRICT,
+  quantidade numeric NOT NULL CHECK (quantidade > 0),
+  UNIQUE (pedido_id, insumo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_insumo_pedido_compra_status_data
+  ON public.insumo_pedido_compra (status, data_chegada_prevista);
+
+CREATE INDEX IF NOT EXISTS idx_insumo_pedido_compra_item_insumo
+  ON public.insumo_pedido_compra_item (insumo_id);
+
+ALTER TABLE public.insumo_pedido_compra ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.insumo_pedido_compra_item ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY insumo_pedido_compra_select ON public.insumo_pedido_compra
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_pedido_compra_insert ON public.insumo_pedido_compra
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_pedido_compra_update ON public.insumo_pedido_compra
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_pedido_compra_delete ON public.insumo_pedido_compra
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+CREATE POLICY insumo_pedido_compra_item_select ON public.insumo_pedido_compra_item
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY insumo_pedido_compra_item_insert ON public.insumo_pedido_compra_item
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY insumo_pedido_compra_item_update ON public.insumo_pedido_compra_item
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY insumo_pedido_compra_item_delete ON public.insumo_pedido_compra_item
+  FOR DELETE TO authenticated USING ((SELECT is_admin()));
+
+COMMENT ON TABLE public.insumo_pedido_compra IS
+  'Pedido de compra de insumos (compromisso a chegar; não altera insumo_saldos)';
+```
+
+- [ ] **Step 2: Tipos de domínio DB**
+
+```ts
+export type InsumoPedidoCompraStatus = 'aberto' | 'encerrado' | 'cancelado';
+
+export type InsumoPedidoCompraRow = {
+  id: string;
+  numero: number;
+  fornecedor_nome: string;
+  data_chegada_prevista: string;
+  status: InsumoPedidoCompraStatus;
+  observacao: string | null;
+  criado_por: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InsumoPedidoCompraItemRow = {
+  id: string;
+  pedido_id: string;
+  insumo_id: string;
+  quantidade: number;
+};
+```
+
+- [ ] **Step 3: Espelhar Row/Insert/Update/Relationships em `src/types/database.ts` e `types/database.ts`** (mesmo formato de `insumo_regra_compra`). `numero` no Insert é opcional (identity).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add supabase/migrations/20260831120000_insumo_pedido_compra.sql src/domain/types/insumo-pedido-compra-db.ts src/types/database.ts types/database.ts
+git commit -m "feat(insumos): tabelas de pedido de compra com RLS"
+```
+
+---
+
+### Task 2: Offset de datas + calculadora de projeção
+
+**Files:**
+- Create: `src/domain/insumos/insumo-compra-data-offset.ts`
+- Create: `src/domain/insumos/insumo-compra-data-offset.test.ts`
+- Create: `src/domain/insumos/insumo-compra-projecao-calculator.ts`
+- Test: `src/domain/insumos/insumo-compra-projecao-calculator.test.ts`
+
+**Interfaces:**
+- Consumes: `insumoCompraDiaOperacional.demandaHorizonte` / `pesoDia`
+- Produces:
+
+```ts
+export function offsetDiasIso(dataReferencia: string, dataAlvo: string): number;
+
+export type InsumoCompraRecebimentoInput = {
+  quantidade: number;
+  dataEfetiva: string; // YYYY-MM-DD já com max(prevista, ref)
+};
+
+export type InsumoCompraProjecaoInput = {
+  estoque: number;
+  consumoDiario: number;
+  dayOfWeek: number;
+  leadTimeDias: number;
+  horizonteDias: number;
+  dataReferencia: string;
+  recebimentos: InsumoCompraRecebimentoInput[];
+};
+
+export type InsumoCompraProjecaoResult = {
+  demandaH: number;
+  recebimentosAteH: number;
+  projetadoEmH: number;
+  rupturaAntesLeadTime: boolean;
+  rupturaAntesHorizonte: boolean;
+};
+
+class InsumoCompraProjecaoCalculator {
+  calculate(input: InsumoCompraProjecaoInput): InsumoCompraProjecaoResult;
+}
+```
+
+- [ ] **Step 1: Testes de offset**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { offsetDiasIso } from './insumo-compra-data-offset';
+
+describe('offsetDiasIso', () => {
+  it('mesmo dia = 0', () => {
+    expect(offsetDiasIso('2026-08-31', '2026-08-31')).toBe(0);
+  });
+  it('amanhã = 1', () => {
+    expect(offsetDiasIso('2026-08-31', '2026-09-01')).toBe(1);
+  });
+  it('passado é negativo', () => {
+    expect(offsetDiasIso('2026-08-31', '2026-08-30')).toBe(-1);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `npx vitest run src/domain/insumos/insumo-compra-data-offset.test.ts`
+Expected: FAIL (módulo não existe)
+
+- [ ] **Step 3: Implementar offset**
+
+```ts
+const MEIO_DIA_SP = 'T12:00:00-03:00';
+
+export function offsetDiasIso(dataReferencia: string, dataAlvo: string): number {
+  const inicio = Date.parse(`${dataReferencia}${MEIO_DIA_SP}`);
+  const alvo = Date.parse(`${dataAlvo}${MEIO_DIA_SP}`);
+  return Math.round((alvo - inicio) / 86_400_000);
+}
+
+export function dataEfetivaIso(dataPrevista: string, dataReferencia: string): string {
+  return dataPrevista < dataReferencia ? dataReferencia : dataPrevista;
+}
+```
+
+- [ ] **Step 4: Testes da projeção (segunda-feira, r=100, L=7, H=7)**
+
+`demandaHorizonte(100, 1, 7) = 550`. Incluir estes casos:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { insumoCompraDiaOperacional } from './insumo-compra-dia-operacional';
+import { InsumoCompraProjecaoCalculator } from './insumo-compra-projecao-calculator';
+
+const calc = new InsumoCompraProjecaoCalculator();
+const r = 100;
+const H = 7;
+const demanda = insumoCompraDiaOperacional.demandaHorizonte(r, 1, H); // 550
+
+function base(
+  overrides: Partial<Parameters<InsumoCompraProjecaoCalculator['calculate']>[0]> = {},
+) {
+  return {
+    estoque: 20,
+    consumoDiario: r,
+    dayOfWeek: 1,
+    leadTimeDias: 7,
+    horizonteDias: H,
+    dataReferencia: '2026-08-31',
+    recebimentos: [] as { quantidade: number; dataEfetiva: string }[],
+    ...overrides,
+  };
+}
+
+describe('InsumoCompraProjecaoCalculator', () => {
+  it('sem recebimento: projetado = saldo − demanda(H)', () => {
+    const result = calc.calculate(base({ estoque: 20 }));
+    expect(result.demandaH).toBeCloseTo(demanda, 5);
+    expect(result.projetadoEmH).toBeCloseTo(20 - demanda, 5);
+    expect(result.recebimentosAteH).toBe(0);
+  });
+
+  it('recebimento amanhã entra no projetado (spec: 20 − 70 + 100, com pesos reais)', () => {
+    const result = calc.calculate(
+      base({
+        estoque: 20,
+        recebimentos: [{ quantidade: 100, dataEfetiva: '2026-09-01' }],
+      }),
+    );
+    expect(result.recebimentosAteH).toBe(100);
+    expect(result.projetadoEmH).toBeCloseTo(20 - demanda + 100, 5);
+  });
+
+  it('recebimento depois de H não conta', () => {
+    const result = calc.calculate(
+      base({
+        recebimentos: [{ quantidade: 999, dataEfetiva: '2026-09-08' }], // offset 8 > 7
+      }),
+    );
+    expect(result.recebimentosAteH).toBe(0);
+  });
+
+  it('atrasado (efetiva = hoje) conta no dia 0', () => {
+    const result = calc.calculate(
+      base({
+        estoque: 20,
+        recebimentos: [{ quantidade: 50, dataEfetiva: '2026-08-31' }],
+      }),
+    );
+    expect(result.recebimentosAteH).toBe(50);
+    expect(result.projetadoEmH).toBeCloseTo(20 - demanda + 50, 5);
+  });
+
+  it('dois recebimentos somam nos offsets ≤ H', () => {
+    const result = calc.calculate(
+      base({
+        recebimentos: [
+          { quantidade: 40, dataEfetiva: '2026-09-01' },
+          { quantidade: 60, dataEfetiva: '2026-09-03' },
+        ],
+      }),
+    );
+    expect(result.recebimentosAteH).toBe(100);
+  });
+
+  it('ruptura no caminho mesmo se lumped em H for positivo', () => {
+    const result = calc.calculate(
+      base({
+        estoque: 50,
+        consumoDiario: 100,
+        recebimentos: [{ quantidade: 1000, dataEfetiva: '2026-09-06' }],
+      }),
+    );
+    expect(result.projetadoEmH).toBeGreaterThan(0);
+    expect(result.rupturaAntesLeadTime).toBe(true);
+  });
+
+  it('chegada amanhã evita ruptura no dia 0', () => {
+    const result = calc.calculate(
+      base({
+        estoque: 50,
+        consumoDiario: 100,
+        recebimentos: [{ quantidade: 1000, dataEfetiva: '2026-09-01' }],
+      }),
+    );
+    expect(result.rupturaAntesLeadTime).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 5: Rodar e ver falhar**
+
+Run: `npx vitest run src/domain/insumos/insumo-compra-projecao-calculator.test.ts`
+Expected: FAIL
+
+- [ ] **Step 6: Implementar `InsumoCompraProjecaoCalculator`**
+
+Regras:
+- `demandaH = demandaHorizonte(consumoDiario, dayOfWeek, horizonteDias)`
+- `recebimentosAteH` = soma onde `0 <= offset <= horizonteDias`
+- `projetadoEmH = estoque − demandaH + recebimentosAteH`
+- Simulação offsets `0 … horizonteDias-1`: no início do dia soma recebimentos daquele offset; depois desconta `consumoDiario * pesoDia`; se saldo `<= 0` → ruptura. `rupturaAntesLeadTime` se o dia da ruptura tem offset `< leadTimeDias`. `rupturaAntesHorizonte` se houve ruptura na simulação.
+- Funções privadas < 40 linhas. Exportar `insumoCompraProjecaoCalculator`.
+
+- [ ] **Step 7: Testes passarem + commit**
+
+Run: `npx vitest run src/domain/insumos/insumo-compra-data-offset.test.ts src/domain/insumos/insumo-compra-projecao-calculator.test.ts`
+
+```bash
+git add src/domain/insumos/insumo-compra-data-offset.ts src/domain/insumos/insumo-compra-data-offset.test.ts src/domain/insumos/insumo-compra-projecao-calculator.ts src/domain/insumos/insumo-compra-projecao-calculator.test.ts
+git commit -m "feat(insumos): projeta saldo com recebimentos no horizonte de compra"
+```
+
+---
+
+### Task 3: Ligar projeção no motor de sugestão
+
+**Files:**
+- Modify: `src/domain/insumos/insumo-compra-sugestao-types.ts`
+- Modify: `src/domain/insumos/insumo-compra-sugestao-calculator.ts`
+- Modify: `src/domain/insumos/insumo-compra-sugestao-calculator.test.ts`
+
+**Interfaces:**
+- Consumes: `InsumoCompraProjecaoCalculator.calculate`
+- Produces: `InsumoCompraSugestaoInput` ganha `dataReferencia: string` e `recebimentos: InsumoCompraRecebimentoInput[]` (default `[]` no helper de teste)
+
+Mudanças de regra (spec):
+- Continuar calculando `cobertura` e `metaEstoque` como hoje (cobertura = saldo **físico**).
+- `H = diasAteJanela + leadTimeDias`
+- `quantidadeBruta = max(0, meta − projetadoEmH)`
+- `urgente` se `rupturaAntesLeadTime`
+- `pedir_fora_janela` se fora da janela, não urgente, e `rupturaAntesHorizonte`
+- Demais status iguais (ok / pedir_hoje / adiar), usando a nova `quantidadeBruta`
+
+Atualizar testes existentes (segunda, r=100, L=7, `demandaH=550`, `meta=825`):
+
+| Caso antigo | Expectativa nova |
+|-------------|------------------|
+| estoque 0 → qtd 825 | qtd `825 − (0 − 550) = 1375`; segue `urgente` |
+| estoque na meta 825 → ok | **não** ok: projetado `825−550=275`; qtd `550`; `pedir_hoje` se cobertura ≥ L. Para `ok`, estoque ≥ `825+550=1375` |
+| estoque 700 pedir_hoje qtd 125 | qtd `825 − (700−550) = 675`; status `pedir_hoje` se cobertura ≥ 7 e sem ruptura |
+
+Passar `dataReferencia: '2026-08-31'` e `recebimentos: []` no `base()` dos testes.
+
+Novo teste: recebimento amanhã 1000 com estoque 20 tira urgente se a simulação não zera, e reduz a qtd vs sem recebimento.
+
+- [ ] **Step 1: Escrever/ajustar testes (red)**
+- [ ] **Step 2: `npx vitest run src/domain/insumos/insumo-compra-sugestao-calculator.test.ts` — FAIL**
+- [ ] **Step 3: Implementar no calculator** (chamar `insumoCompraProjecaoCalculator` em `createContext`; não inflar `coberturaAtualDias` com recebimento)
+- [ ] **Step 4: Testes PASS + `insumo-compra-sugestao-service.test.ts` se quebrar por qtd**
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-compra-sugestao-types.ts src/domain/insumos/insumo-compra-sugestao-calculator.ts src/domain/insumos/insumo-compra-sugestao-calculator.test.ts src/lib/services/insumo-compra-sugestao-service.test.ts
+git commit -m "feat(compras): sugestão usa estoque projetado na chegada"
+```
+
+---
+
+### Task 4: Pipeline por insumo + validator
+
+**Files:**
+- Create: `src/domain/insumos/insumo-pedido-compra-types.ts`
+- Create: `src/domain/insumos/insumo-pedido-pipeline.ts`
+- Create: `src/domain/insumos/insumo-pedido-pipeline.test.ts`
+- Create: `src/domain/insumos/insumo-pedido-compra-validator.ts`
+- Create: `src/domain/insumos/insumo-pedido-compra-validator.test.ts`
+
+**Interfaces:**
+
+```ts
+export type InsumoPedidoPipelineItem = {
+  insumoId: string;
+  pedidoId: string;
+  numero: number;
+  quantidade: number;
+  dataPrevista: string;
+  dataEfetiva: string;
+  atrasado: boolean;
+};
+
+export type InsumoPedidoPipelineResumo = {
+  quantidade: number;
+  atrasado: boolean;
+  proximaData: string | null; // menor dataPrevista dos abertos
+  pedidoIds: string[];
+};
+
+class InsumoPedidoPipelineAgrupador {
+  agrupar(
+    itens: InsumoPedidoPipelineItem[],
+  ): Map<string, InsumoPedidoPipelineResumo>;
+}
+
+export type InsumoPedidoCompraItemInput = {
+  insumoId: string;
+  quantidade: number;
+};
+
+export type ValidarPedidoCompraInput = {
+  fornecedorNome: string;
+  dataChegadaPrevista: string;
+  itens: InsumoPedidoCompraItemInput[];
+};
+
+class InsumoPedidoCompraValidator {
+  validar(input: ValidarPedidoCompraInput): string | null; // mensagem pt-BR ou null
+}
+```
+
+Testes pipeline:
+- sem itens → map vazio
+- um aberto futuro → `atrasado: false`, `proximaData` = prevista, qtd somada
+- um atrasado + um futuro no mesmo insumo → `atrasado: true`, qtd soma os dois, `pedidoIds` com os dois
+- insumos diferentes → chaves separadas
+
+Testes validator:
+- fornecedor em branco → `'Informe o fornecedor.'`
+- data vazia → `'Informe a data de chegada.'`
+- zero linhas → `'Inclua pelo menos um insumo.'`
+- qtd ≤ 0 → `'Quantidade deve ser maior que zero.'`
+- insumo repetido → `'O mesmo insumo não pode aparecer duas vezes.'`
+- válido → `null`
+
+- [ ] **Step 1: Testes red**
+- [ ] **Step 2: Implementar agrupador + validator** (`atrasado` já vem no item; não recalcular data aqui)
+- [ ] **Step 3: `npx vitest run src/domain/insumos/insumo-pedido-pipeline.test.ts src/domain/insumos/insumo-pedido-compra-validator.test.ts` PASS**
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/domain/insumos/insumo-pedido-compra-types.ts src/domain/insumos/insumo-pedido-pipeline.ts src/domain/insumos/insumo-pedido-pipeline.test.ts src/domain/insumos/insumo-pedido-compra-validator.ts src/domain/insumos/insumo-pedido-compra-validator.test.ts
+git commit -m "feat(insumos): agrupa pipeline a chegar e valida pedido"
+```
+
+---
+
+### Task 5: Repository
+
+**Files:**
+- Create: `src/data/insumos/InsumoPedidoCompraRepository.ts`
+
+**Interfaces:**
+- Consumes: tipos DB da Task 1; `dataEfetivaIso` da Task 2
+- Produces:
+
+```ts
+export type InsumoPedidoCompraFiltro = 'abertos' | 'atrasados' | 'encerrados' | 'cancelados' | 'todos';
+
+export type InsumoPedidoCompraListItem = InsumoPedidoCompraRow & {
+  itens: Array<InsumoPedidoCompraItemRow & { insumoNome: string; unidade: string }>;
+};
+
+class InsumoPedidoCompraRepository {
+  list(filtro: InsumoPedidoCompraFiltro, insumoId?: string): Promise<InsumoPedidoCompraListItem[]>;
+  getById(id: string): Promise<InsumoPedidoCompraListItem | null>;
+  listPipelineAberto(dataReferencia: string): Promise<InsumoPedidoPipelineItem[]>;
+  insert(input: {
+    fornecedorNome: string;
+    dataChegadaPrevista: string;
+    observacao: string | null;
+    criadoPor: string | null;
+    itens: InsumoPedidoCompraItemInput[];
+  }): Promise<InsumoPedidoCompraListItem>;
+  replaceAberto(id: string, input: {
+    fornecedorNome: string;
+    dataChegadaPrevista: string;
+    observacao: string | null;
+    itens: InsumoPedidoCompraItemInput[];
+  }): Promise<InsumoPedidoCompraListItem>;
+  updateStatus(id: string, status: 'encerrado' | 'cancelado'): Promise<void>;
+  countItensByInsumoId(insumoId: string): Promise<number>;
+  listInsumoOpcoes(): Promise<Array<{ id: string; nome: string; unidade: string }>>;
+}
+```
+
+Regras:
+- `list`: atrasados primeiro (`status=aberto` e `data_chegada_prevista < hoje SP`), depois `data_chegada_prevista` asc. Join itens + `insumos(nome)` + unidade resumida (mesmo padrão de `InsumoRegraCompraRepository`).
+- Filtro `abertos` = status aberto (inclui atrasados). `atrasados` = aberto e data < hoje.
+- `listPipelineAberto`: só `status=aberto`; montar `dataEfetiva` e `atrasado` no map.
+- `replaceAberto`: update cabeçalho; delete itens do pedido; insert novos (transação via dois round-trips aceitável; se o projeto tiver rpc, não criar só para isso).
+- `listInsumoOpcoes`: `insumos` ativos se existir `ativo`; senão todos, `order nome`. Unidade via join `unidades`.
+- Client: `supabaseClientFactory.createServiceRoleClient()` como os outros repos de insumos.
+- Exportar `insumoPedidoCompraRepository`.
+
+- [ ] **Step 1: Implementar repository** (sem teste de integração DB nesta v1)
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/data/insumos/InsumoPedidoCompraRepository.ts
+git commit -m "feat(insumos): repositório de pedidos de compra"
+```
+
+---
+
+### Task 6: Manager + exclusão de insumo
+
+**Files:**
+- Create: `src/lib/services/insumo-pedido-compra-manager.ts`
+- Create: `src/lib/services/insumo-pedido-compra-manager.test.ts`
+- Modify: `src/domain/insumos/insumo-delete-eligibility.ts`
+- Modify: `src/domain/insumos/insumo-delete-eligibility.test.ts`
+- Modify: `src/domain/insumos/insumo-delete-manager.ts`
+
+**Interfaces:**
+
+```ts
+export type SalvarInsumoPedidoCompraInput = {
+  id?: string;
+  fornecedorNome: string;
+  dataChegadaPrevista: string;
+  observacao?: string | null;
+  criadoPor?: string | null;
+  itens: InsumoPedidoCompraItemInput[];
+};
+
+class InsumoPedidoCompraManager {
+  listar(filtro: InsumoPedidoCompraFiltro, insumoId?: string): Promise<{
+    pedidos: InsumoPedidoCompraListItem[];
+    atrasados: number;
+    abertos: number;
+  }>;
+  obter(id: string): Promise<InsumoPedidoCompraListItem | null>;
+  salvar(input: SalvarInsumoPedidoCompraInput): Promise<InsumoPedidoCompraListItem>;
+  encerrar(id: string): Promise<void>;
+  cancelar(id: string): Promise<void>;
+  listarOpcoesInsumo(): Promise<Array<{ id: string; nome: string; unidade: string }>>;
+  listarPipelineAberto(dataReferencia: string): Promise<InsumoPedidoPipelineItem[]>;
+}
+```
+
+`salvar`: `validator.validar`; se `id`, `getById` e recusar se status ≠ `aberto` com `'Pedido encerrado ou cancelado não pode ser editado.'`; senão `insert` / `replaceAberto`.
+
+`encerrar` / `cancelar`: recusar se não estiver `aberto`.
+
+Testes do manager com repository fake (vi.fn):
+- save inválido não chama insert
+- save sem id chama insert
+- save de encerrado lança/retorna erro
+- encerrar em aberto chama `updateStatus(..., 'encerrado')`
+
+Delete eligibility:
+- `InsumoDeleteBlocker` inclui `'pedidos'`
+- `resolverBloqueiosExclusaoInsumo` ganha `pedidosCount`
+- mensagem: `'Insumo vinculado a pedidos de compra e não pode ser excluído.'`
+- `InsumoDeleteManager.delete` conta `insumo_pedido_compra_item`
+
+- [ ] **Step 1: Testes red do validator-through-manager e eligibility**
+- [ ] **Step 2: Implementar**
+- [ ] **Step 3: `npx vitest run src/lib/services/insumo-pedido-compra-manager.test.ts src/domain/insumos/insumo-delete-eligibility.test.ts` PASS**
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/services/insumo-pedido-compra-manager.ts src/lib/services/insumo-pedido-compra-manager.test.ts src/domain/insumos/insumo-delete-eligibility.ts src/domain/insumos/insumo-delete-eligibility.test.ts src/domain/insumos/insumo-delete-manager.ts
+git commit -m "feat(insumos): manager de pedido de compra e bloqueio na exclusão"
+```
+
+---
+
+### Task 7: Actions + injetar pipeline na sugestão e no estoque
+
+**Files:**
+- Create: `src/app/actions/insumo-pedido-compra-actions.ts`
+- Modify: `src/lib/services/insumo-compra-sugestao-service.ts`
+- Modify: `src/lib/services/insumo-compra-sugestao-service.test.ts`
+- Modify: `src/app/actions/insumo-estoque-actions.ts` (`InsumoSaldosPageData` + `getInsumoSaldosPageData`)
+- Modify: `src/domain/insumos/insumo-compra-sugestao-types.ts` já tem recebimentos; DTO da linha:
+
+```ts
+// em InsumoCompraSugestaoLinha
+pipeline: InsumoPedidoPipelineResumo | null;
+```
+
+**Actions** (`requireInternoModulo` igual a `ajustarInsumoSaldo` para mutating; `ler` para GET):
+
+```ts
+listarPedidosCompra(filtro, insumoId?)
+obterPedidoCompra(id)
+salvarPedidoCompra(input) // resolve criadoPor via sessionUsuarioIdResolver no create
+encerrarPedidoCompra(id)
+cancelarPedidoCompra(id)
+listarInsumosParaPedido()
+```
+
+`revalidatePath` de `/compras-insumos`, `/sugestao-compras`, `/estoque-insumos` em todo mutate.
+
+**Service de sugestão:**
+- Nova dep `listPipelineAberto(dataReferencia)` (default `insumoPedidoCompraManager`).
+- `dataReferencia` já resolvida pelo `InsumoCompraDataReferenciaResolver`.
+- Agrupar com `InsumoPedidoPipelineAgrupador`.
+- Passar `recebimentos` do insumo (mapear `dataEfetiva` + `quantidade`) e `dataReferencia` para o calculator.
+- Preencher `pipeline` na linha.
+
+Teste do service: mock pipeline com 100 amanhã no insumo X; `quantidadeSugerida` menor que sem pipeline (mesmo estoque/consumo). Incluir o mock no `createService` existente.
+
+**Estoque:** `pipelinePorInsumo: Record<string, InsumoPedidoPipelineResumo>` em `InsumoSaldosPageData`; carregar `listarPipelineAberto(hoje SP)` (reusar o resolver de data da sugestão ou `toSaoPauloIsoDate`).
+
+- [ ] **Step 1: Ajustar teste do service (red) + implementar wiring**
+- [ ] **Step 2: `npx vitest run src/lib/services/insumo-compra-sugestao-service.test.ts` PASS**
+- [ ] **Step 3: Actions**
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/app/actions/insumo-pedido-compra-actions.ts src/lib/services/insumo-compra-sugestao-service.ts src/lib/services/insumo-compra-sugestao-service.test.ts src/app/actions/insumo-estoque-actions.ts
+git commit -m "feat(insumos): actions de pedido e pipeline na sugestão/estoque"
+```
+
+---
+
+### Task 8: Badge compartilhado
+
+**Files:**
+- Create: `src/features/insumo-pedido-compra/insumo-pedido-pipeline-badge-label.ts`
+- Create: `src/features/insumo-pedido-compra/insumo-pedido-pipeline-badge-label.test.ts`
+- Create: `src/features/insumo-pedido-compra/components/InsumoPedidoPipelineBadge.tsx`
+
+**Interfaces:**
+
+```ts
+export function formatPipelineBadge(resumo: InsumoPedidoPipelineResumo): {
+  tone: 'danger' | 'accent';
+  texto: string; // "Atrasado" | "A chegar"
+  detalhe: string; // "12 kg" ou "12 kg · 01/09"
+  ariaLabel: (nome: string) => string;
+};
+```
+
+- Atrasado → tone `danger`, texto `Atrasado`, detalhe só quantidade (sem data).
+- Senão → `accent`, `A chegar`, quantidade + `proximaData` em `dd/MM`.
+- `ariaLabel`: `"{nome}: {qtd} atrasados"` / `"{nome}: {qtd} a chegar em {data}"`.
+
+Badge: `button` type=button, min 44px, `Badge` interno com `icon` `schedule` (atrasado) / `local_shipping` (a chegar), `numeric` no detalhe. Props: `nome`, `quantidadeLabel` (já formatada pelo pai com `formatInsumoQuantidadeOperacional`), `resumo`, `onClick`.
+
+Não renderizar se o pai não passar resumo.
+
+- [ ] **Step 1: Testes do label red/green**
+- [ ] **Step 2: Componente**
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/features/insumo-pedido-compra/insumo-pedido-pipeline-badge-label.ts src/features/insumo-pedido-compra/insumo-pedido-pipeline-badge-label.test.ts src/features/insumo-pedido-compra/components/InsumoPedidoPipelineBadge.tsx
+git commit -m "feat(insumos): selo a chegar/atrasado reutilizável"
+```
+
+Quantidade no label: testes usam string já formatada (`"100 kg"`) no componente; o helper de texto do selo recebe `quantidadeLabel` + `proximaData`. Ajustar a assinatura se ficar mais simples:
+
+```ts
+formatPipelineBadge({
+  atrasado: boolean;
+  quantidadeLabel: string;
+  proximaData: string | null;
+}): { tone, texto, detalhe, ariaSuffix }
+```
+
+`detalhe` = `quantidadeLabel` se atrasado; senão `quantidadeLabel + ' · ' + dd/MM`.
+
+---
+
+### Task 9: Tela `/compras-insumos`
+
+**Files:**
+- Create: `src/app/compras-insumos/page.tsx`
+- Create: `src/features/insumo-pedido-compra/InsumoPedidoCompraClient.tsx`
+- Create: `src/features/insumo-pedido-compra/components/InsumoPedidoCompraTable.tsx`
+- Create: `src/features/insumo-pedido-compra/components/InsumoPedidoCompraMobileList.tsx`
+- Create: `src/features/insumo-pedido-compra/components/InsumoPedidoCompraFormModal.tsx`
+- Create: `src/features/insumo-pedido-compra/components/InsumoPedidoCompraFormLinhas.tsx`
+- Modify: `src/config/main-nav-config.ts` (filho do grupo Insumos, depois de Sugestão de compra)
+- Modify: `src/components/Hub/hub-nav-config.ts`
+- Modify: `src/lib/auth/interno-route-access-map.ts`
+- Modify: `src/lib/auth/interno-route-access-map.test.ts`
+
+**Page:**
+
+```tsx
+export const dynamic = 'force-dynamic';
+
+export default async function ComprasInsumosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filtro?: string; insumo?: string }>;
+}) {
+  const { filtro, insumo } = await searchParams;
+  const parsed = parseFiltro(filtro); // default 'abertos'
+  const data = await listarPedidosCompra(parsed, insumo);
+  const opcoes = await listarInsumosParaPedido();
+  return (
+    <InsumoPedidoCompraClient
+      initialPedidos={data.pedidos}
+      atrasados={data.atrasados}
+      abertos={data.abertos}
+      filtro={parsed}
+      insumoId={insumo ?? null}
+      insumoOpcoes={opcoes}
+    />
+  );
+}
+```
+
+UI:
+- `ConfigPageHeader` título **Pedidos de compra**, ícone `receipt_long`.
+- Resumo `N atrasados • M abertos` (`font-mono tabular-nums`).
+- Chips filtro: Abertos | Atrasados | Encerrados | Cancelados | Todos (`router.replace` query).
+- CTA **Novo pedido** (≥44px, ícone `add`).
+- Tabela desktop / lista mobile: número, fornecedor, data (`dd/MM/yyyy`), status (Badge; se aberto e data < hoje, Badge danger **Atrasado**), qtd itens. Linha atrasada `bg-rose-50/60`. Clique abre modal.
+- EmptyState: “Nenhum pedido neste filtro.”
+- Modal: `Input` fornecedor, `DateField` chegada, observação, linhas via `InsumoPedidoCompraFormLinhas` (`Select` insumo + quantidade + remover; botão **Adicionar insumo**). Salvar chama `salvarPedidoCompra`. Se `status==='aberto'`, botões **Encerrar** e **Cancelar pedido**. Encerrar: `window.confirm('O saldo físico só aumenta quando a NF do Omie entrar. Encerrar o pedido?')`. Cancelar: confirm com `Pedido {numero} · {fornecedor}`. Encerrado/cancelado: campos `disabled`.
+- Toasts: “Pedido 47 criado.” / “Pedido salvo.” / “Pedido encerrado.” / “Pedido cancelado.” / erro da action.
+
+Auth teste:
+
+```ts
+it('protege pedidos de compra de insumos', () => {
+  expect(map.resolve('/compras-insumos')).toEqual({
+    kind: 'modulo',
+    modulo: 'interno_insumos',
+    minimo: 'ler',
+  });
+});
+```
+
+Nav child:
+
+```ts
+{
+  type: 'link',
+  href: '/compras-insumos',
+  label: 'Pedidos de compra',
+  icon: 'receipt_long',
+  moduloId: 'interno_insumos',
+  match: (pathname) => pathname.startsWith('/compras-insumos'),
+}
+```
+
+Incluir `pathname.startsWith('/compras-insumos')` no `match` do grupo Insumos.
+
+Hub: card após consumo, mesmo `moduloId`.
+
+- [ ] **Step 1: Teste de rota red/green**
+- [ ] **Step 2: Page + client + form (dividir se algum arquivo > 350 linhas)**
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/app/compras-insumos src/features/insumo-pedido-compra src/config/main-nav-config.ts src/components/Hub/hub-nav-config.ts src/lib/auth/interno-route-access-map.ts src/lib/auth/interno-route-access-map.test.ts
+git commit -m "feat(insumos): tela de pedidos de compra"
+```
+
+---
+
+### Task 10: Sugestão — registrar pedido + selo
+
+**Files:**
+- Modify: `src/features/insumo-compra-sugestao/InsumoCompraSugestaoClient.tsx`
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoTable.tsx`
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoMobileList.tsx`
+- Modify: `src/features/insumo-compra-sugestao/components/InsumoCompraSugestaoFornecedorGroups.tsx` (se a linha passar props; senão só table/mobile)
+- Reuse: `InsumoPedidoCompraFormModal`
+
+Fluxo:
+- Estado `pedidoTarget: { mode: 'create'; prefill: SalvarInsumoPedidoCompraInput } | { mode: 'edit'; id: string } | null`
+- Botão **Registrar pedido** em cada linha (`Button` ghost ou `IconButton` `add_shopping_cart`, `aria-label={`Registrar pedido de ${item.nome}`}`, ≥44px). Sempre create.
+- Prefill: `itens: [{ insumoId, quantidade: item.quantidadeSugerida ?? 0 }] ` — se qtd 0, deixar quantidade vazia no form (não salvar 0). `fornecedorNome: item.distribuidorPreferencial ?? ''`. `dataChegadaPrevista: addDaysIso(dataReferencia, item.leadTimeDias)` se `leadTimeDias > 0`, senão `''`.
+- Selo ao lado do nome se `item.pipeline`: `onClick` → se `pedidoIds.length === 1` abrir edit (`obterPedidoCompra`); senão `router.push(/compras-insumos?insumo=${id}&filtro=abertos)`.
+- Após save: toast + `router.refresh()`.
+- Incluir `insumoOpcoes` em `InsumoCompraSugestaoPageData` (carregado no server) para o modal abrir preenchido.
+
+Passar `onRegistrarPedido` e render do badge para table e mobile (e grupos, que já reusam esses).
+
+- [ ] **Step 1: Estender DTO se necessário + UI**
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/features/insumo-compra-sugestao src/lib/services/insumo-compra-sugestao-service.ts src/app/sugestao-compras
+git commit -m "feat(compras): registrar pedido pré-preenchido na sugestão"
+```
+
+---
+
+### Task 11: Selo no estoque de insumos
+
+**Files:**
+- Modify: `src/features/insumo-estoque/InsumoSaldosClient.tsx`
+- Modify: `src/features/insumo-estoque/components/InsumoSaldoTable.tsx`
+- Modify: `src/features/insumo-estoque/components/InsumoSaldoMobileList.tsx`
+
+- `pipelinePorInsumo` do page data. Buscar `insumoOpcoes` ao abrir o modal (`listarInsumosParaPedido`), para não inflar `getInsumoSaldosPageData`.
+- Junto do nome: badge se houver resumo. Clique: `pedidoIds.length === 1` → `obterPedidoCompra` + `InsumoPedidoCompraFormModal`; vários → `router.push(/compras-insumos?insumo=${id}&filtro=abertos)`.
+- Formatar qtd do selo com `formatInsumoQuantidadeOperacional` usando unidade/conversão do saldo.
+
+- [ ] **Step 1: UI**
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/features/insumo-estoque src/app/actions/insumo-estoque-actions.ts
+git commit -m "feat(insumos): selo a chegar/atrasado no estoque"
+```
+
+---
+
+### Task 12: Verificação final
+
+- [ ] **Step 1: `npx vitest run`** — PASS em tudo
+- [ ] **Step 2: `npx tsc --noEmit`** se o projeto usar isso no CI; corrigir tipos das tabelas novas
+- [ ] **Step 3: Conferir spec vs código**
+  - Pedido não toca `insumo_saldos`
+  - Atraso não some sozinho
+  - Encerrar copy da NF
+  - Três telas com selo
+  - qtd = meta − projetado
+- [ ] **Step 4: Commit vazio não; só se houver leftovers**
+
+---
+
+## Notas para o implementador
+
+- Aplicar a migration no projeto Supabase (MCP `apply_migration` ou `supabase db push`) **antes** de testar a UI contra o banco. Os testes Vitest desta v1 não sobem Postgres.
+- `numero` identity: o insert omite a coluna; o select devolve o número para o toast.
+- Não copiar `qtd_bruta = meta − estoque` de comentários antigos em `insumo-compra-sugestao-calculator.ts`.
+- Arquivos de UI: se `InsumoPedidoCompraFormModal` + client passarem de 350 linhas, extrair filtros/resumo imediatamente.
