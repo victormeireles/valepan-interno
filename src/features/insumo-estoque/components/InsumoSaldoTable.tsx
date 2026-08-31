@@ -1,5 +1,6 @@
 'use client';
 
+import type { InsumoPedidoPipelineResumo } from '@/domain/insumos/insumo-pedido-compra-types';
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import { IconButton } from '@/components/ui/IconButton';
 import {
@@ -11,9 +12,12 @@ import {
   formatDateTime,
 } from '@/features/insumo-estoque/utils/formatters';
 import InsumoQuantidadeConvertida from '@/features/insumo-estoque/components/InsumoQuantidadeConvertida';
+import InsumoSaldoPipelineSelo from '@/features/insumo-estoque/components/InsumoSaldoPipelineSelo';
 
 type Props = {
   items: InsumoSaldoComDetalhes[];
+  pipelinePorInsumo: Record<string, InsumoPedidoPipelineResumo>;
+  onAbrirPipeline: (insumoId: string) => void;
   onAjustar: (item: InsumoSaldoComDetalhes) => void;
   onHistorico: (item: InsumoSaldoComDetalhes) => void;
   embedded?: boolean;
@@ -21,6 +25,8 @@ type Props = {
 
 export default function InsumoSaldoTable({
   items,
+  pipelinePorInsumo,
+  onAbrirPipeline,
   onAjustar,
   onHistorico,
   embedded = false,
@@ -69,7 +75,14 @@ export default function InsumoSaldoTable({
               ].join(' ')}
             >
               <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
-                {item.nome}
+                <div className="flex items-start gap-2">
+                  <span className="min-w-0 flex-1">{item.nome}</span>
+                  <InsumoSaldoPipelineSelo
+                    item={item}
+                    resumo={pipelinePorInsumo[item.insumoId]}
+                    onClick={onAbrirPipeline}
+                  />
+                </div>
               </td>
               <td
                 className={`${configTableBodyCellClass} text-right ${

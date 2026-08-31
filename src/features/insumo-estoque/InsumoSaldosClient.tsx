@@ -15,19 +15,27 @@ import InsumoAjusteModal from '@/features/insumo-estoque/components/InsumoAjuste
 import InsumoHistoricoModal from '@/features/insumo-estoque/components/InsumoHistoricoModal';
 import InsumoSaldoMobileList from '@/features/insumo-estoque/components/InsumoSaldoMobileList';
 import InsumoSaldoTable from '@/features/insumo-estoque/components/InsumoSaldoTable';
+import { useInsumoSaldoPedidoModal } from '@/features/insumo-estoque/useInsumoSaldoPedidoModal';
+import InsumoPedidoCompraFormModal from '@/features/insumo-pedido-compra/components/InsumoPedidoCompraFormModal';
 
 type Props = {
   initialData: InsumoSaldosPageData;
 };
+
+type ToastState = { message: string; tone: 'success' | 'error' } | null;
 
 export default function InsumoSaldosClient({ initialData }: Props) {
   const router = useRouter();
   const [saldos, setSaldos] = useState(initialData.saldos);
   const [pendenciasCount, setPendenciasCount] = useState(initialData.pendenciasCount);
   const [searchTerm, setSearchTerm] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [ajusteItem, setAjusteItem] = useState<InsumoSaldoComDetalhes | null>(null);
   const [historicoItem, setHistoricoItem] = useState<InsumoSaldoComDetalhes | null>(null);
+  const pedidoModal = useInsumoSaldoPedidoModal({
+    pipelinePorInsumo: initialData.pipelinePorInsumo,
+    onToast: (message, tone) => showToast(setToast, message, tone),
+  });
 
   useEffect(() => {
     setSaldos(initialData.saldos);
@@ -40,14 +48,9 @@ export default function InsumoSaldosClient({ initialData }: Props) {
     return saldos.filter((item) => item.nome.toLowerCase().includes(term));
   }, [saldos, searchTerm]);
 
-  const handleRefresh = () => {
-    router.refresh();
-    setTimeout(() => setToast(null), 4000);
-  };
-
   const handleSaved = (message: string) => {
-    setToast(message);
-    handleRefresh();
+    showToast(setToast, message, 'success');
+    router.refresh();
   };
 
   const saldosLabel =
@@ -62,8 +65,8 @@ export default function InsumoSaldosClient({ initialData }: Props) {
       />
 
       {toast ? (
-        <Toast tone="success" onClose={() => setToast(null)}>
-          {toast}
+        <Toast tone={toast.tone} onClose={() => setToast(null)}>
+          {toast.message}
         </Toast>
       ) : null}
 
@@ -119,12 +122,16 @@ export default function InsumoSaldosClient({ initialData }: Props) {
           <>
             <InsumoSaldoTable
               items={filteredSaldos}
+              pipelinePorInsumo={initialData.pipelinePorInsumo}
+              onAbrirPipeline={pedidoModal.abrirPipeline}
               onAjustar={setAjusteItem}
               onHistorico={setHistoricoItem}
               embedded
             />
             <InsumoSaldoMobileList
               items={filteredSaldos}
+              pipelinePorInsumo={initialData.pipelinePorInsumo}
+              onAbrirPipeline={pedidoModal.abrirPipeline}
               onAjustar={setAjusteItem}
               onHistorico={setHistoricoItem}
             />
@@ -144,6 +151,24 @@ export default function InsumoSaldosClient({ initialData }: Props) {
         item={historicoItem}
         onClose={() => setHistoricoItem(null)}
       />
+
+      <InsumoPedidoCompraFormModal
+        open={Boolean(pedidoModal.pedido)}
+        pedido={pedidoModal.pedido}
+        insumoOpcoes={pedidoModal.insumoOpcoes}
+        onClose={pedidoModal.fechar}
+        onSaved={pedidoModal.handleSaved}
+        onError={(mensagem) => showToast(setToast, mensagem, 'error')}
+      />
     </div>
   );
+}
+
+function showToast(
+  setToast: (value: ToastState) => void,
+  message: string,
+  tone: 'success' | 'error',
+) {
+  setToast({ message, tone });
+  window.setTimeout(() => setToast(null), 4000);
 }
