@@ -6,6 +6,11 @@ export function offsetDiasIso(dataReferencia: string, dataAlvo: string): number 
   return Math.round((alvo - inicio) / 86_400_000);
 }
 
+export function addDaysIso(dataReferencia: string, dias: number): string {
+  const ms = Date.parse(`${dataReferencia}${MEIO_DIA_SP}`) + dias * 86_400_000;
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
 export function dataEfetivaIso(dataPrevista: string, dataReferencia: string): string {
   return dataPrevista < dataReferencia ? dataReferencia : dataPrevista;
 }

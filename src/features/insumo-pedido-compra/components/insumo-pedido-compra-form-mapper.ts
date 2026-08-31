@@ -3,6 +3,12 @@ import type { InsumoPedidoCompraItemInput } from '@/domain/insumos/insumo-pedido
 import type { SalvarInsumoPedidoCompraInput } from '@/lib/services/insumo-pedido-compra-manager';
 import type { InsumoPedidoFormLinha } from './InsumoPedidoCompraFormLinhas';
 
+export type InsumoPedidoCompraFormPrefill = {
+  fornecedorNome: string;
+  dataChegadaPrevista: string;
+  itens: Array<{ insumoId: string; quantidade: number }>;
+};
+
 export const ENCERRAR_PEDIDO_CONFIRM =
   'O saldo físico só aumenta quando a NF do Omie entrar. Encerrar o pedido?';
 
@@ -20,6 +26,19 @@ export function linhasFromPedido(
     key: item.id,
     insumoId: item.insumo_id,
     quantidade: String(item.quantidade),
+  }));
+}
+
+export function linhasFromPrefill(
+  prefill: InsumoPedidoCompraFormPrefill,
+): InsumoPedidoFormLinha[] {
+  if (prefill.itens.length === 0) {
+    return [{ key: crypto.randomUUID(), insumoId: '', quantidade: '' }];
+  }
+  return prefill.itens.map((item) => ({
+    key: crypto.randomUUID(),
+    insumoId: item.insumoId,
+    quantidade: item.quantidade > 0 ? String(item.quantidade) : '',
   }));
 }
 

@@ -18,11 +18,13 @@ import type {
   InsumoCompraSugestaoPageData,
 } from '@/lib/services/insumo-compra-sugestao-service';
 import InsumoAjusteModal from '@/features/insumo-estoque/components/InsumoAjusteModal';
+import InsumoPedidoCompraFormModal from '@/features/insumo-pedido-compra/components/InsumoPedidoCompraFormModal';
 import InsumoCompraSugestaoFornecedorGroups from './components/InsumoCompraSugestaoFornecedorGroups';
 import InsumoCompraSugestaoMobileList from './components/InsumoCompraSugestaoMobileList';
 import InsumoCompraSugestaoResumo from './components/InsumoCompraSugestaoResumo';
 import InsumoCompraSugestaoTable from './components/InsumoCompraSugestaoTable';
 import InsumoRegraCompraFormModal from './components/InsumoRegraCompraFormModal';
+import { useInsumoSugestaoPedidoModal } from './useInsumoSugestaoPedidoModal';
 
 type Props = {
   initialData: InsumoCompraSugestaoPageData;
@@ -30,6 +32,7 @@ type Props = {
 
 type AtencaoFilter = 'atencao' | 'todos';
 type LayoutMode = 'lista' | 'fornecedor';
+type ToastState = { message: string; tone: 'success' | 'error' } | null;
 
 const ATTENTION_STATUSES = new Set<InsumoCompraSugestaoStatus>([
   'urgente',
@@ -46,9 +49,13 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
   const [filter, setFilter] = useState<AtencaoFilter>('atencao');
   const [layout, setLayout] = useState<LayoutMode>('lista');
   const [itens, setItens] = useState(initialData.itens);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [regraTarget, setRegraTarget] = useState<InsumoCompraRegraConfig | null>(null);
   const [ajusteTarget, setAjusteTarget] = useState<InsumoSaldoComDetalhes | null>(null);
+  const pedidoModal = useInsumoSugestaoPedidoModal({
+    dataReferencia: initialData.dataReferencia,
+    onToast: (message, tone) => showToast(setToast, message, tone),
+  });
 
   useEffect(() => {
     setItens(initialData.itens);
@@ -87,9 +94,8 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
 
   const handleRegraSaved = () => {
     setRegraTarget(null);
-    setToast('Regra salva.');
+    showToast(setToast, 'Regra salva.', 'success');
     router.refresh();
-    window.setTimeout(() => setToast(null), 4000);
   };
 
   const handleAjusteSaved = (novoSaldo: number) => {
@@ -103,9 +109,8 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
       );
     }
     setAjusteTarget(null);
-    setToast('Saldo ajustado com sucesso');
+    showToast(setToast, 'Saldo ajustado com sucesso', 'success');
     router.refresh();
-    window.setTimeout(() => setToast(null), 4000);
   };
 
   const resultLabel =
@@ -237,6 +242,8 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
           grupos={filteredGroups}
           onCadastrarRegra={handleCadastrarRegra}
           onAjustarEstoque={handleAjustarEstoque}
+          onRegistrarPedido={pedidoModal.registrarPedido}
+          onPipelineClick={pedidoModal.abrirPipeline}
         />
       ) : (
         <Card padding="none" className="overflow-hidden">
@@ -244,18 +251,22 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
             items={filteredItems}
             onCadastrarRegra={handleCadastrarRegra}
             onAjustarEstoque={handleAjustarEstoque}
+            onRegistrarPedido={pedidoModal.registrarPedido}
+            onPipelineClick={pedidoModal.abrirPipeline}
           />
           <InsumoCompraSugestaoMobileList
             items={filteredItems}
             onCadastrarRegra={handleCadastrarRegra}
             onAjustarEstoque={handleAjustarEstoque}
+            onRegistrarPedido={pedidoModal.registrarPedido}
+            onPipelineClick={pedidoModal.abrirPipeline}
           />
         </Card>
       )}
 
       {toast ? (
-        <Toast tone="success" onClose={() => setToast(null)}>
-          {toast}
+        <Toast tone={toast.tone} onClose={() => setToast(null)}>
+          {toast.message}
         </Toast>
       ) : null}
 
@@ -271,6 +282,18 @@ export default function InsumoCompraSugestaoClient({ initialData }: Props) {
         item={ajusteTarget}
         onClose={() => setAjusteTarget(null)}
         onSaved={handleAjusteSaved}
+      />
+
+      <InsumoPedidoCompraFormModal
+        open={Boolean(pedidoModal.target)}
+        pedido={pedidoModal.target?.mode === 'edit' ? pedidoModal.target.pedido : null}
+        prefill={
+          pedidoModal.target?.mode === 'create' ? pedidoModal.target.prefill : undefined
+        }
+        insumoOpcoes={initialData.insumoOpcoes}
+        onClose={pedidoModal.fechar}
+        onSaved={pedidoModal.handleSaved}
+        onError={(mensagem) => showToast(setToast, mensagem, 'error')}
       />
     </div>
   );
@@ -319,4 +342,13 @@ function toSaldoDetalhes(item: InsumoCompraSugestaoLinha): InsumoSaldoComDetalhe
     ultimaEntradaEm: null,
     conversao: item.conversao,
   };
+}
+
+function showToast(
+  setToast: (value: ToastState) => void,
+  message: string,
+  tone: 'success' | 'error',
+) {
+  setToast({ message, tone });
+  window.setTimeout(() => setToast(null), 4000);
 }

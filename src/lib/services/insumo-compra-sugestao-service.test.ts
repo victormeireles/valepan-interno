@@ -23,6 +23,7 @@ vi.mock('@/data/insumos/InsumoRegraCompraRepository', () => ({
 vi.mock('@/lib/services/insumo-pedido-compra-manager', () => ({
   insumoPedidoCompraManager: {
     listarPipelineAberto: vi.fn().mockResolvedValue([]),
+    listarOpcoesInsumo: vi.fn().mockResolvedValue([]),
   },
   InsumoPedidoCompraManager: vi.fn(),
 }));
@@ -95,6 +96,7 @@ function createService(input: {
     created_at: string;
   }>;
   pipelineItems?: InsumoPedidoPipelineItem[];
+  insumoOpcoes?: Array<{ id: string; nome: string; unidade: string }>;
 }) {
   const consumoRepository = {
     listConsumoSemanal: vi.fn().mockResolvedValue(input.consumos),
@@ -112,6 +114,7 @@ function createService(input: {
     buildDefault: vi.fn().mockReturnValue(periodo),
   };
   const listPipelineAberto = vi.fn().mockResolvedValue(input.pipelineItems ?? []);
+  const listarOpcoesInsumo = vi.fn().mockResolvedValue(input.insumoOpcoes ?? []);
 
   return {
     service: new InsumoCompraSugestaoService({
@@ -121,9 +124,11 @@ function createService(input: {
       distribuidorRepository,
       periodoBuilder,
       listPipelineAberto,
+      listarOpcoesInsumo,
     }),
     periodoBuilder,
     listPipelineAberto,
+    listarOpcoesInsumo,
   };
 }
 
@@ -133,10 +138,14 @@ describe('InsumoCompraSugestaoService', () => {
       consumos: [],
       regras: [createRegra('farinha', 'Farinha')],
       estoques: { farinha: 25 },
+      insumoOpcoes: [{ id: 'farinha', nome: 'Farinha', unidade: 'kg' }],
     });
 
     const pageData = await service.buildPageData('2026-08-12');
 
+    expect(pageData.insumoOpcoes).toEqual([
+      { id: 'farinha', nome: 'Farinha', unidade: 'kg' },
+    ]);
     expect(pageData.itens).toEqual([
       expect.objectContaining({
         insumoId: 'farinha',

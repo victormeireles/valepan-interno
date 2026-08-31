@@ -23,14 +23,18 @@ import {
   buildSaveInput,
   cancelarPedidoConfirm,
   linhasFromPedido,
+  linhasFromPrefill,
   messageFromUnknown,
+  type InsumoPedidoCompraFormPrefill,
 } from './insumo-pedido-compra-form-mapper';
 
 export type { InsumoPedidoOpcao };
+export type { InsumoPedidoCompraFormPrefill };
 
 export type InsumoPedidoCompraFormModalProps = {
   open: boolean;
   pedido: InsumoPedidoCompraListItem | null;
+  prefill?: InsumoPedidoCompraFormPrefill;
   insumoOpcoes: InsumoPedidoOpcao[];
   onClose: () => void;
   onSaved: (mensagem: string) => void;
@@ -40,6 +44,7 @@ export type InsumoPedidoCompraFormModalProps = {
 export default function InsumoPedidoCompraFormModal({
   open,
   pedido,
+  prefill,
   insumoOpcoes,
   onClose,
   onSaved,
@@ -54,12 +59,9 @@ export default function InsumoPedidoCompraFormModal({
 
   useEffect(() => {
     if (!open) return;
-    setFornecedorNome(pedido?.fornecedor_nome ?? '');
-    setDataChegada(pedido?.data_chegada_prevista ?? '');
-    setObservacao(pedido?.observacao ?? '');
-    setLinhas(linhasFromPedido(pedido));
+    seedForm(pedido, prefill, setFornecedorNome, setDataChegada, setObservacao, setLinhas);
     setError('');
-  }, [open, pedido]);
+  }, [open, pedido, prefill]);
 
   if (!open) return null;
 
@@ -262,4 +264,32 @@ function reportError(
   const mensagem = messageFromUnknown(caught, fallback);
   setError(mensagem);
   onError?.(mensagem);
+}
+
+function seedForm(
+  pedido: InsumoPedidoCompraListItem | null,
+  prefill: InsumoPedidoCompraFormPrefill | undefined,
+  setFornecedorNome: (value: string) => void,
+  setDataChegada: (value: string) => void,
+  setObservacao: (value: string) => void,
+  setLinhas: (value: InsumoPedidoFormLinha[]) => void,
+) {
+  if (pedido) {
+    setFornecedorNome(pedido.fornecedor_nome);
+    setDataChegada(pedido.data_chegada_prevista);
+    setObservacao(pedido.observacao ?? '');
+    setLinhas(linhasFromPedido(pedido));
+    return;
+  }
+  if (prefill) {
+    setFornecedorNome(prefill.fornecedorNome);
+    setDataChegada(prefill.dataChegadaPrevista);
+    setObservacao('');
+    setLinhas(linhasFromPrefill(prefill));
+    return;
+  }
+  setFornecedorNome('');
+  setDataChegada('');
+  setObservacao('');
+  setLinhas(linhasFromPedido(null));
 }

@@ -7,6 +7,8 @@ import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/uti
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
 import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
+import InsumoCompraSugestaoPipelineSelo from './InsumoCompraSugestaoPipelineSelo';
+import InsumoCompraSugestaoRegistrarPedidoButton from './InsumoCompraSugestaoRegistrarPedidoButton';
 import InsumoCompraSugestaoRegraTrigger from './InsumoCompraSugestaoRegraTrigger';
 
 type Props = {
@@ -14,6 +16,8 @@ type Props = {
   embedded?: boolean;
   onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
   onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
+  onRegistrarPedido: (item: InsumoCompraSugestaoLinha) => void;
+  onPipelineClick: (item: InsumoCompraSugestaoLinha) => void;
 };
 
 export default function InsumoCompraSugestaoMobileList({
@@ -21,6 +25,8 @@ export default function InsumoCompraSugestaoMobileList({
   embedded = false,
   onCadastrarRegra,
   onAjustarEstoque,
+  onRegistrarPedido,
+  onPipelineClick,
 }: Props) {
   return (
     <div
@@ -33,20 +39,26 @@ export default function InsumoCompraSugestaoMobileList({
         return (
           <article key={item.insumoId} className={`p-4 ${visual.rowClassName}`}>
             <div className="flex items-start justify-between gap-3">
-              <InsumoCompraSugestaoRegraTrigger
-                item={item}
-                onCadastrarRegra={onCadastrarRegra}
-                className="min-w-0 flex-1"
-              >
-                <h2
-                  className={`font-semibold ${
-                    item.status === 'sem_regra' ? 'text-amber-900' : 'text-stone-900'
-                  }`}
+              <div className="flex min-w-0 flex-1 items-start gap-2">
+                <InsumoCompraSugestaoRegraTrigger
+                  item={item}
+                  onCadastrarRegra={onCadastrarRegra}
+                  className="min-w-0 flex-1"
                 >
-                  {item.nome}
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-stone-600">{item.motivo}</p>
-              </InsumoCompraSugestaoRegraTrigger>
+                  <h2
+                    className={`font-semibold ${
+                      item.status === 'sem_regra' ? 'text-amber-900' : 'text-stone-900'
+                    }`}
+                  >
+                    {item.nome}
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-stone-600">{item.motivo}</p>
+                </InsumoCompraSugestaoRegraTrigger>
+                <InsumoCompraSugestaoPipelineSelo
+                  item={item}
+                  onClick={onPipelineClick}
+                />
+              </div>
               <StatusBadge
                 item={item}
                 onCadastrarRegra={onCadastrarRegra}
@@ -104,7 +116,7 @@ export default function InsumoCompraSugestaoMobileList({
               <span className="material-icons text-lg text-stone-400" aria-hidden="true">
                 local_shipping
               </span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p>{item.distribuidorPreferencial ?? 'Sem fornecedor'}</p>
                 {item.distribuidoresAlternativos.length > 0 ? (
                   <p className="mt-0.5 text-xs text-stone-500">
@@ -112,6 +124,10 @@ export default function InsumoCompraSugestaoMobileList({
                   </p>
                 ) : null}
               </div>
+              <InsumoCompraSugestaoRegistrarPedidoButton
+                item={item}
+                onClick={onRegistrarPedido}
+              />
             </div>
           </article>
         );

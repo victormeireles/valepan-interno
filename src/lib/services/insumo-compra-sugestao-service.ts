@@ -65,6 +65,12 @@ export type InsumoCompraSugestaoLinha = {
   pipeline: InsumoPedidoPipelineResumo | null;
 };
 
+export type InsumoCompraSugestaoInsumoOpcao = {
+  id: string;
+  nome: string;
+  unidade: string;
+};
+
 export type InsumoCompraSugestaoPageData = {
   dataReferencia: string;
   resumo: {
@@ -78,6 +84,7 @@ export type InsumoCompraSugestaoPageData = {
     fornecedor: string;
     itens: InsumoCompraSugestaoLinha[];
   }>;
+  insumoOpcoes: InsumoCompraSugestaoInsumoOpcao[];
 };
 
 type ServiceDependencies = {
@@ -90,6 +97,7 @@ type ServiceDependencies = {
   sugestaoCalculator: Pick<InsumoCompraSugestaoCalculator, 'calculate'>;
   controleEstoqueFilter: Pick<InsumoControleEstoqueFilter, 'filterPorNomeControlavel'>;
   listPipelineAberto: (dataReferencia: string) => Promise<InsumoPedidoPipelineItem[]>;
+  listarOpcoesInsumo: () => Promise<InsumoCompraSugestaoInsumoOpcao[]>;
   pipelineAgrupador: Pick<InsumoPedidoPipelineAgrupador, 'agrupar'>;
 };
 
@@ -123,6 +131,7 @@ const DEFAULT_DEPENDENCIES: ServiceDependencies = {
   controleEstoqueFilter: insumoControleEstoqueFilter,
   listPipelineAberto: (dataReferencia) =>
     insumoPedidoCompraManager.listarPipelineAberto(dataReferencia),
+  listarOpcoesInsumo: () => insumoPedidoCompraManager.listarOpcoesInsumo(),
   pipelineAgrupador: insumoPedidoPipelineAgrupador,
 };
 
@@ -139,10 +148,11 @@ export class InsumoCompraSugestaoService {
   async buildPageData(dataReferencia?: string): Promise<InsumoCompraSugestaoPageData> {
     const referencia = this.dataReferenciaResolver.resolve(dataReferencia);
     const periodo = this.dependencies.periodoBuilder.buildDefault(referencia.anchor, 'semanal');
-    const [consumosBrutos, regrasBrutas, pipelineItens] = await Promise.all([
+    const [consumosBrutos, regrasBrutas, pipelineItens, insumoOpcoes] = await Promise.all([
       this.dependencies.consumoRepository.listConsumoSemanal(periodo),
       this.dependencies.regraRepository.listAllWithInsumo(),
       this.dependencies.listPipelineAberto(referencia.isoDate),
+      this.dependencies.listarOpcoesInsumo(),
     ]);
     const fontes = this.createFontes(consumosBrutos, regrasBrutas);
     const insumoIds = fontes.map((fonte) => fonte.insumoId);
@@ -173,6 +183,7 @@ export class InsumoCompraSugestaoService {
       resumo: this.createResumo(itens),
       itens,
       gruposPorFornecedor: this.createGruposPorFornecedor(itens),
+      insumoOpcoes,
     };
   }
 

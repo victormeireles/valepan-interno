@@ -10,12 +10,16 @@ type Props = {
   grupos: InsumoCompraSugestaoPageData['gruposPorFornecedor'];
   onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
   onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
+  onRegistrarPedido: (item: InsumoCompraSugestaoLinha) => void;
+  onPipelineClick: (item: InsumoCompraSugestaoLinha) => void;
 };
 
 export default function InsumoCompraSugestaoFornecedorGroups({
   grupos,
   onCadastrarRegra,
   onAjustarEstoque,
+  onRegistrarPedido,
+  onPipelineClick,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -37,12 +41,16 @@ export default function InsumoCompraSugestaoFornecedorGroups({
             embedded
             onCadastrarRegra={onCadastrarRegra}
             onAjustarEstoque={onAjustarEstoque}
+            onRegistrarPedido={onRegistrarPedido}
+            onPipelineClick={onPipelineClick}
           />
           <InsumoCompraSugestaoMobileList
             items={grupo.itens}
             embedded
             onCadastrarRegra={onCadastrarRegra}
             onAjustarEstoque={onAjustarEstoque}
+            onRegistrarPedido={onRegistrarPedido}
+            onPipelineClick={onPipelineClick}
           />
         </Card>
       ))}

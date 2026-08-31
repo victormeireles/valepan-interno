@@ -11,6 +11,8 @@ import { formatInsumoQuantidadeOperacional } from '@/features/insumo-estoque/uti
 import { insumoCompraSugestaoStatusTone } from '../insumo-compra-sugestao-status-tone';
 import InsumoCompraConsumoDiaHint from './InsumoCompraConsumoDiaHint';
 import InsumoCompraSugestaoEstoqueButton from './InsumoCompraSugestaoEstoqueButton';
+import InsumoCompraSugestaoPipelineSelo from './InsumoCompraSugestaoPipelineSelo';
+import InsumoCompraSugestaoRegistrarPedidoButton from './InsumoCompraSugestaoRegistrarPedidoButton';
 import InsumoCompraSugestaoRegraTrigger from './InsumoCompraSugestaoRegraTrigger';
 
 type Props = {
@@ -18,6 +20,8 @@ type Props = {
   embedded?: boolean;
   onCadastrarRegra: (item: InsumoCompraSugestaoLinha) => void;
   onAjustarEstoque: (item: InsumoCompraSugestaoLinha) => void;
+  onRegistrarPedido: (item: InsumoCompraSugestaoLinha) => void;
+  onPipelineClick: (item: InsumoCompraSugestaoLinha) => void;
 };
 
 export default function InsumoCompraSugestaoTable({
@@ -25,6 +29,8 @@ export default function InsumoCompraSugestaoTable({
   embedded = false,
   onCadastrarRegra,
   onAjustarEstoque,
+  onRegistrarPedido,
+  onPipelineClick,
 }: Props) {
   return (
     <div className={embedded ? 'hidden overflow-x-auto md:block' : 'hidden md:block'}>
@@ -41,6 +47,9 @@ export default function InsumoCompraSugestaoTable({
             <Cabecalho label="Lead time" numeric />
             <Cabecalho label="Sugestão" numeric />
             <Cabecalho label="Fornecedor" />
+            <th scope="col" className={configTableHeadCellClass}>
+              <span className="sr-only">Pedido</span>
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100">
@@ -52,19 +61,26 @@ export default function InsumoCompraSugestaoTable({
                 className={`${visual.rowClassName} transition-colors hover:bg-amber-50`}
               >
                 <td className={`${configTableBodyCellClass} min-w-48`}>
-                  <InsumoCompraSugestaoRegraTrigger
-                    item={item}
-                    onCadastrarRegra={onCadastrarRegra}
-                  >
-                    <p
-                      className={`font-medium ${
-                        item.status === 'sem_regra' ? 'text-amber-900' : 'text-stone-900'
-                      }`}
+                  <div className="flex items-start gap-2">
+                    <InsumoCompraSugestaoRegraTrigger
+                      item={item}
+                      onCadastrarRegra={onCadastrarRegra}
+                      className="min-w-0 flex-1"
                     >
-                      {item.nome}
-                    </p>
-                    <p className="mt-0.5 text-xs text-stone-500">{item.motivo}</p>
-                  </InsumoCompraSugestaoRegraTrigger>
+                      <p
+                        className={`font-medium ${
+                          item.status === 'sem_regra' ? 'text-amber-900' : 'text-stone-900'
+                        }`}
+                      >
+                        {item.nome}
+                      </p>
+                      <p className="mt-0.5 text-xs text-stone-500">{item.motivo}</p>
+                    </InsumoCompraSugestaoRegraTrigger>
+                    <InsumoCompraSugestaoPipelineSelo
+                      item={item}
+                      onClick={onPipelineClick}
+                    />
+                  </div>
                 </td>
                 <td className={configTableBodyCellClass}>
                   <StatusBadge
@@ -101,6 +117,12 @@ export default function InsumoCompraSugestaoTable({
                       Alternativos: {item.distribuidoresAlternativos.join(', ')}
                     </p>
                   ) : null}
+                </td>
+                <td className={`${configTableBodyCellClass} w-14 text-right`}>
+                  <InsumoCompraSugestaoRegistrarPedidoButton
+                    item={item}
+                    onClick={onRegistrarPedido}
+                  />
                 </td>
               </tr>
             );
