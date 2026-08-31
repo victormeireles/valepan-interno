@@ -1,0 +1,285 @@
+# Pedidos de compra de insumos (a chegar)
+
+Data: 2026-08-31  
+Status: aprovado em brainstorming  
+Complementa: `2026-08-12-sugestao-compra-insumos-design.mdx`
+
+## Objetivo
+
+Registrar pedidos de compra de insumos (várias linhas, uma data de chegada) para a sugestão **não mandar comprar de novo** o que já está a caminho, sem misturar isso com o saldo físico. Pedido atrasado ou NF ainda não lançada **não some sozinho** da conta. Nas telas de sugestão, estoque de insumos e lista de pedidos precisa ficar óbvio o que está a chegar e o que está atrasado.
+
+## Contexto atual
+
+- Saldo físico: `insumo_saldos`, sobe com NF Omie (`entrada_nf`) ou ajuste manual.
+- `/sugestao-compras` usa só o saldo físico + consumo + regras (`lead_time`, janela, min/max).
+- A spec de 12/08 deixou pedidos (“já pedi”) de fora, de propósito.
+
+## Escopo
+
+Inclui (v1):
+
+- Tabelas `insumo_pedido_compra` + `insumo_pedido_compra_item` com RLS
+- Tela `/compras-insumos` (listar, criar do zero, editar aberto, encerrar, cancelar, reagendar)
+- Modal **Registrar pedido** na sugestão, pré-preenchido
+- Selo único **A chegar** / **Atrasado** na sugestão, no estoque de insumos e na lista de pedidos
+- Projeção temporal no motor da sugestão (recebimentos no dia da chegada; atraso = hoje)
+- Testes unitários do motor, do manager e da prioridade do selo
+
+Fora de escopo (v1):
+
+- Amarrar NF Omie ao pedido
+- Recebimento parcial / quantidade recebida por linha
+- Data de chegada por item
+- Rascunho, WhatsApp, pedido de compra no Omie
+- Pedido gerar movimento em `insumo_saldos`
+
+## Decisão de abordagem
+
+**Pedido operacional + selos nas três telas.**
+
+- Cabeçalho (fornecedor, data prevista, status) + itens (insumo, quantidade).
+- Status persistido: `aberto` | `encerrado` | `cancelado`. **Atrasado é derivado** (`aberto` e data prevista &lt; hoje em `America/Sao_Paulo`).
+- Pedido aberto nunca sai da projeção por calendário. Só encerrar, cancelar ou reagendar.
+- Saldo físico continua só com a NF (e ajuste). Encerrar não dá entrada.
+
+Descartado: mini-ERP (parcial, vínculo NF) e compromisso avulso sem documento multi-item.
+
+## Dados
+
+### `insumo_pedido_compra`
+
+| Coluna | Tipo | Notas |
+|--------|------|--------|
+| `id` | uuid PK | `gen_random_uuid()` |
+| `numero` | integer | `GENERATED ALWAYS AS IDENTITY`, único, exibição “Pedido 47” |
+| `fornecedor_nome` | text | trim não vazio |
+| `data_chegada_prevista` | date | uma data para o pedido inteiro |
+| `status` | text | `aberto` \| `encerrado` \| `cancelado`; default `aberto` |
+| `observacao` | text null | |
+| `criado_por` | uuid null | FK → `usuarios`, preenchido pelo resolver de sessão (mesmo padrão de lotes/reclamações) |
+| `created_at` / `updated_at` | timestamptz | |
+
+Índice: `(status, data_chegada_prevista)` para listar abertos/atrasados.
+
+### `insumo_pedido_compra_item`
+
+| Coluna | Tipo | Notas |
+|--------|------|--------|
+| `id` | uuid PK | |
+| `pedido_id` | uuid FK | → `insumo_pedido_compra(id)` ON DELETE CASCADE |
+| `insumo_id` | uuid FK | → `insumos(id)` ON DELETE RESTRICT |
+| `quantidade` | numeric | `> 0`; unidade do cadastro do insumo |
+
+Unique `(pedido_id, insumo_id)`. Índice em `insumo_id` para selo e motor.
+
+### RLS
+
+Padrão das tabelas irmãs de insumos (`insumo_regra_compra`):
+
+- ENABLE RLS
+- SELECT / INSERT / UPDATE: autenticados `USING (true)` / `WITH CHECK (true)`
+- DELETE físico: admin `(SELECT is_admin())`
+- Encerrar e cancelar são UPDATE de `status`, não DELETE
+
+### Derivados (não persistir)
+
+- `atrasado` = `status = aberto` e `data_chegada_prevista < hoje (São Paulo)`
+- `data_efetiva` para o motor = `max(data_chegada_prevista, data_referencia)` quando `aberto`
+
+### Exclusão de insumo
+
+FK RESTRICT. Incluir pedidos (qualquer status) nos bloqueios de exclusão do insumo, no mesmo espírito de movimentos/receitas.
+
+## Motor da sugestão
+
+Nova classe `InsumoCompraProjecaoCalculator`. `InsumoCompraSugestaoService` carrega itens de pedidos **abertos** e passa a projeção para o calculator de status/quantidade.
+
+`insumo_saldos` não é alterado.
+
+### Horizonte H
+
+Igual ao uso atual de janela + lead time:
+
+```
+W = dias até a próxima janela (0 se hoje está na janela)
+H = W + lead_time_dias
+```
+
+Data de referência: a mesma da tela de sugestão (`America/Sao_Paulo`).
+
+Demanda até H: `insumoCompraDiaOperacional.demandaHorizonte` (pesos de dia útil já existentes). Meta **não muda**: `meta = demandaLead * 1,5` com `demandaLead` no lead time, como hoje.
+
+### Recebimentos no horizonte
+
+Por insumo, somar `quantidade` dos itens em pedidos `aberto` cujo offset `data_efetiva − data_referencia` está em `0 … H` (inclusive). Chegada no mesmo dia em que o pedido novo chegaria ainda conta no projetado.
+
+Pedido atrasado: `data_efetiva = data_referencia` (entra no dia 0).
+
+Vários pedidos abertos do mesmo insumo somam, cada um no seu dia.
+
+### Quantidade sugerida
+
+```
+projetado_em_H = saldo_fisico − demanda(H) + recebimentos_ate_H
+qtd_bruta      = max(0, meta − projetado_em_H)
+```
+
+Min/max da regra de compra continuam iguais, aplicados sobre `qtd_bruta`.
+
+Isto **substitui** `qtd_bruta = meta − estoque` da spec de 12/08. A meta (L × 1,5) permanece. Sem pedido aberto, `recebimentos_ate_H = 0`, então a quantidade passa a ser “o que falta para a meta na data de chegada do pedido novo”, não “o que falta hoje”.
+
+Exemplo numérico (consumo 10 / dia, L = 7, na janela, meta ≈ 105):
+
+| Saldo | A chegar | Projetado em H | Sugerido |
+|-------|----------|----------------|----------|
+| 20 | 100 amanhã | 20 − 70 + 100 = 50 | ≈ 55 |
+| 20 | nada | 20 − 70 = −50 | ≈ 155 |
+| 20 | 1000 amanhã | 20 − 70 + 1000 = 950 | 0 (ok) |
+
+(Na implementação, demanda usa pesos de dia útil, não 10 × 7 cegamente.)
+
+### Urgente e fora da janela
+
+Lumped em H **não** detecta ruptura no caminho. Simular os **H dias de espera** (offsets `0 … H-1`):
+
+1. No **início** do dia, somar recebimentos com aquele offset (`data_efetiva − data_referencia`).
+2. Descontar o consumo do dia (peso operacional).
+3. Se o saldo ficar `<= 0`, houve ruptura.
+
+Recebimento com offset `H` entra em `recebimentos_ate_H` (projetado), mas **não** na simulação de ruptura — chega junto com o pedido novo.
+
+Regras:
+
+- **urgente:** ruptura em algum dia `d` com `d < lead_time_dias` (um recebimento no caminho pode impedir).
+- **pedir_fora_janela:** fora da janela, não urgente, e ruptura em algum dia `d < H`.
+- **pedir_hoje / adiar / ok:** mesma máquina de estados de 12/08, usando a nova `qtd_bruta` e a simulação acima no lugar de `cobertura_atual < L` / `cobertura_atual < W+L`.
+
+### Cobertura exibida na UI
+
+Continua sendo a do **saldo físico** (formatter atual). Recebimento não entra nesse número — entra no selo.
+
+## Arquitetura
+
+### Domain
+
+- `InsumoCompraProjecaoCalculator` — saldo + consumo diário + recebimentos + H/L/janela → projetado, ruptura, lista de recebimentos efetivos
+- Tipos: status do pedido, item de pipeline (`insumoId`, `quantidade`, `dataEfetiva`, `pedidoId`, `atrasado`)
+- Badge: prioridade atrasado > a chegar; soma quantidades abertas
+
+### Data
+
+- `InsumoPedidoCompraRepository` — listar (filtros), get, insert cabeçalho+itens, update aberto, update status
+- Query de pipeline: itens de pedidos `aberto` agrupados por `insumo_id`
+
+### Application
+
+- `InsumoPedidoCompraManager` — validar, criar, editar, encerrar, cancelar, reagendar
+- `InsumoCompraSugestaoService` — passa a injetar pipeline no cálculo
+- Actions + `revalidatePath` em `/sugestao-compras`, `/estoque-insumos`, `/compras-insumos`
+
+### UI
+
+- Feature `insumo-pedido-compra/` (client da lista, tabela, mobile, modal de formulário)
+- `InsumoPedidoPipelineBadge` reutilizado nas três telas (arquivo pequeno, compartilhado)
+
+### Auth / nav
+
+- Módulo `interno_insumos` (mesmo de estoque/sugestão)
+- Rota `/compras-insumos` no grupo Insumos (`main-nav-config` + hub + `interno-route-access-map`)
+- Ícone Material `receipt_long`, label **Pedidos de compra**
+
+Arquivos novos abaixo de ~400 linhas; calculator e manager com uma responsabilidade cada.
+
+## UI e fluxos
+
+### Selo (`InsumoPedidoPipelineBadge`)
+
+- Atrasado (rose): prioridade se **qualquer** pedido aberto daquele insumo estiver atrasado. Texto **Atrasado** + quantidade ainda a chegar.
+- A chegar (amber): senão, se há aberto. Texto **A chegar** + quantidade + próxima `data_chegada_prevista` (`dd/MM`).
+- Vários pedidos: soma quantidade; se um atrasado, o selo é atrasado.
+- Clique (botão ≥44px, `aria-label` “{nome}: {qtd} {unidade} atrasados” / “a chegar em {data}”): um pedido → abre o modal desse pedido; vários → `/compras-insumos?insumo=` id.
+- Mesmo selo: sugestão (tabela, mobile, por fornecedor), estoque de insumos (junto do nome; o número de saldo não muda), lista de pedidos.
+
+### Sugestão de compras
+
+- Selo no nome.
+- Botão **Registrar pedido** em toda linha (≥44px). Sempre cria **pedido novo**.
+- Pré-preenchido: insumo da linha, quantidade sugerida se houver (senão vazio), `fornecedor_nome` = preferencial, `data_chegada_prevista` = data de referência + `lead_time_dias` (se não houver regra, data vazia para o usuário preencher).
+- No modal dá para acrescentar linhas antes de salvar. Para alterar um pedido já aberto, usa `/compras-insumos`.
+
+### Estoque de insumos
+
+- Selo na linha, junto do nome. Saldo numérico = físico.
+
+### `/compras-insumos`
+
+Toolbar: título **Pedidos de compra**, CTA **Novo pedido**.
+
+Resumo: `N atrasados • M abertos` (`M` = todos os `aberto`, inclusive os atrasados).
+
+Chips: **Abertos** (padrão, inclui atrasados) | **Atrasados** | **Encerrados** | **Cancelados** | **Todos**.
+
+Lista (desktop tabela / mobile cards): número, fornecedor, data prevista, status, qtd de itens. Atrasados primeiro; linha atrasada com tom rose.
+
+Clique na linha: modal do pedido. Query `?insumo=` filtra pedidos que contenham o insumo (abertos primeiro).
+
+### Modal criar/editar
+
+Campos: fornecedor, data prevista, observação, linhas (select de insumo + quantidade). CTA **Salvar**.
+
+Pedido `aberto`: editar linhas, reagendar (mudar data), **Encerrar**, **Cancelar pedido**.
+
+Pedido `encerrado` / `cancelado`: somente leitura.
+
+Validações: fornecedor e data obrigatórios; ≥1 linha; quantidade > 0; insumo sem repetir no mesmo pedido.
+
+### Encerrar / cancelar / reagendar
+
+| Ação | Efeito | Confirmação |
+|------|--------|-------------|
+| Reagendar | Muda `data_chegada_prevista`; se futura, deixa de ser atrasado | Não precisa (é o save) |
+| Encerrar | `status = encerrado`; some da projeção e dos selos. **Não** mexe no saldo | “O saldo físico só aumenta quando a NF do Omie entrar.” |
+| Cancelar | `status = cancelado`; some da projeção; sugestão volta a ver falta | Citar número e fornecedor |
+
+Se encerrar cedo demais (mercadoria ainda sem NF), a sugestão pode pedir de novo até a NF entrar. É o trade-off aceito na v1.
+
+Toasts (pt-BR): “Pedido 47 criado.” / “Pedido salvo.” / “Pedido encerrado.” / “Pedido cancelado.” / “Erro ao salvar pedido.”
+
+Empty state da lista: “Nenhum pedido neste filtro.” + CTA novo pedido.
+
+## Testes
+
+Unitários no domínio de projeção:
+
+- Exemplo 20 + 100 amanhã → projetado 50 e qtd ≈ 55 (com demanda simples controlada no teste)
+- Sem recebimento: `qtd = meta − (saldo − demanda(H))`
+- Atrasado conta no dia 0
+- Recebimento depois de H não entra em `recebimentos_ate_H`
+- Ruptura no caminho (saldo pequeno, chegada só no fim do horizonte) → urgente mesmo se o lumped em H for positivo
+- Chegada amanhã evita urgente se o saldo atravessa o dia 0
+- Dois pedidos do mesmo insumo somam nos dias certos
+
+Manager:
+
+- Recusa salvar sem linha / qtd ≤ 0 / insumo duplicado / fornecedor vazio
+- Recusa editar encerrado ou cancelado
+- Encerrar e cancelar só a partir de `aberto`
+
+Selo:
+
+- Atrasado ganha de a chegar
+- Soma de vários abertos
+- Sem aberto → não renderiza
+
+Não exigir teste E2E de browser nesta v1.
+
+## Critérios de sucesso
+
+- Comprador registra o pedido (atalho na sugestão ou tela) e a sugestão **ainda pede** para o próximo ciclo se, mesmo com o que está a caminho, faltar na data de chegada do pedido novo
+- Pedido atrasado continua a chegar até ação humana; as três telas mostram **Atrasado** com prioridade
+- Encerrar/cancelar não gera (nem estorna) movimento de estoque
+- NF Omie permanece a única entrada automática no saldo
+
+## Fase 2 (não implementar agora)
+
+Vínculo NF × pedido, recebimento parcial, data por item, criar a partir de pedido Omie.
