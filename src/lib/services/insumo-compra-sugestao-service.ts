@@ -169,6 +169,7 @@ export class InsumoCompraSugestaoService {
           distribuidoresByInsumo.get(fonte.insumoId) ?? [],
           periodo.colunas.map((coluna) => coluna.inicio),
           referencia.dayOfWeek,
+          referencia.isoDate,
         ),
       )
       .sort((left, right) => this.compareLinhas(left, right));
@@ -222,6 +223,7 @@ export class InsumoCompraSugestaoService {
     distribuidores: InsumoDistribuidorRow[],
     colunas: string[],
     dayOfWeek: number,
+    dataReferencia: string,
   ): InsumoCompraSugestaoLinha {
     const coberturaConsumo = this.dependencies.coberturaCalculator.calculate({
       visualizacao: 'semanal',
@@ -240,6 +242,8 @@ export class InsumoCompraSugestaoService {
       diasSemana: regra?.dias_semana ?? null,
       dayOfWeek,
       temRegraAtiva: regra !== null,
+      dataReferencia,
+      recebimentos: [],
     });
     const distribuidoresOrdenados = [...distribuidores].sort(
       (left, right) => left.ordem - right.ordem,

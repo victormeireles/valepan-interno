@@ -16,6 +16,8 @@ describe('InsumoCompraSugestaoCalculator', () => {
       diasSemana: null,
       dayOfWeek: 1, // segunda
       temRegraAtiva: true,
+      dataReferencia: '2026-08-31',
+      recebimentos: [],
       ...overrides,
     };
   }
@@ -23,9 +25,11 @@ describe('InsumoCompraSugestaoCalculator', () => {
   it('lead 7d: demanda = media semanal (equiv. modelo antigo media/7 * 7)', () => {
     const r = 100;
     const media = r * DIAS_UTEIS_POR_SEMANA; // 550
+    const meta = media * 1.5; // 825
     const result = calc.calculate(base({ consumoDiario: r, estoque: 0, leadTimeDias: 7 }));
-    expect(result.metaEstoque).toBeCloseTo(media * 1.5, 5);
-    expect(result.quantidadeSugerida).toBeCloseTo(media * 1.5, 5);
+    expect(result.metaEstoque).toBeCloseTo(meta, 5);
+    // qtd = meta − projetadoEmH = 825 − (0 − 550) = 1375
+    expect(result.quantidadeSugerida).toBeCloseTo(1375, 5);
     expect(result.status).toBe('urgente');
   });
 
@@ -37,31 +41,37 @@ describe('InsumoCompraSugestaoCalculator', () => {
     expect(qui.metaEstoque!).toBeGreaterThan(sex.metaEstoque!);
     expect(qui.metaEstoque).toBeCloseTo(375, 5);
     expect(sex.metaEstoque).toBeCloseTo(225, 5);
-    // ambos > media/7 * 3 * 1.5 se comparássemos quinta com calendário puro
     const antigo3 = (r * DIAS_UTEIS_POR_SEMANA) / 7 * 3 * 1.5;
     expect(qui.metaEstoque!).toBeGreaterThan(antigo3);
   });
 
-  it('cobertura calendário < L → urgente', () => {
-    // r=100, estoque=200 a partir de seg → 2,0 d < L=7
+  it('ruptura antes do lead → urgente', () => {
+    // r=100, estoque=200 a partir de seg → ruptura no caminho; cobertura física ~2d
     const result = calc.calculate(base({ estoque: 200, consumoDiario: 100, leadTimeDias: 7 }));
     expect(result.status).toBe('urgente');
     expect(result.coberturaAtualDias).toBeCloseTo(2, 5);
   });
 
-  it('cobertura >= L com reposição → pedir_hoje', () => {
-    // estoque alto o bastante para >=7d calendário; meta = 550*1.5=825
+  it('cobertura >= L com reposição → pedir_hoje (qtd via projetado)', () => {
+    // meta=825; projetado=700−550=150; qtd=675
     const result = calc.calculate(
       base({ estoque: 700, consumoDiario: 100, leadTimeDias: 7, dayOfWeek: 1 }),
     );
     expect(result.coberturaAtualDias!).toBeGreaterThanOrEqual(7);
     expect(result.status).toBe('pedir_hoje');
-    expect(result.quantidadeSugerida).toBeCloseTo(825 - 700, 5);
+    expect(result.quantidadeSugerida).toBeCloseTo(675, 5);
   });
 
-  it('estoque na meta → ok', () => {
-    const meta = 100 * DIAS_UTEIS_POR_SEMANA * 1.5;
+  it('estoque na meta física → ainda pede (projetado abaixo da meta)', () => {
+    const meta = 100 * DIAS_UTEIS_POR_SEMANA * 1.5; // 825
     const result = calc.calculate(base({ estoque: meta, consumoDiario: 100 }));
+    expect(result.status).toBe('pedir_hoje');
+    expect(result.quantidadeSugerida).toBeCloseTo(550, 5);
+  });
+
+  it('estoque cobre meta + demandaH → ok', () => {
+    // projetado = 1375 − 550 = 825 = meta → bruta 0
+    const result = calc.calculate(base({ estoque: 1375, consumoDiario: 100 }));
     expect(result.status).toBe('ok');
     expect(result.quantidadeSugerida).toBeNull();
   });
@@ -80,8 +90,8 @@ describe('InsumoCompraSugestaoCalculator', () => {
     expect(result.status).toBe('ok');
   });
 
-  it('fora da janela e cobertura < W+L → pedir_fora_janela', () => {
-    // estoque=400 a partir de terça → cobertura=4 (>= L=3 e < W+L=9)
+  it('fora da janela com ruptura no horizonte → pedir_fora_janela', () => {
+    // estoque=400 a partir de terça → ruptura no horizonte W+L, não antes do L
     const result = calc.calculate(
       base({
         estoque: 400,
@@ -96,11 +106,11 @@ describe('InsumoCompraSugestaoCalculator', () => {
   });
 
   it('adiar quando qtd < min e cobertura aguenta esperar o lote', () => {
-    // L=3 → meta=450; estoque=400 → bruta=50 < min 100
-    // cobertura=4; diasAteLote(50)=0.5; necessário=3.5 → adiar
+    // L=3 → meta=450; H=3; demandaH=300; estoque=700 → projetado=400; bruta=50 < min 100
+    // cobertura alta; diasAteLote(50)=0.5; necessário=3.5 → adiar
     const result = calc.calculate(
       base({
-        estoque: 400,
+        estoque: 700,
         consumoDiario: 100,
         leadTimeDias: 3,
         quantidadeMinima: 100,
@@ -117,6 +127,23 @@ describe('InsumoCompraSugestaoCalculator', () => {
     );
     expect(result.status).toBe('urgente');
     expect(result.quantidadeSugerida).toBe(200);
+  });
+
+  it('recebimento amanhã tira urgente e reduz quantidade', () => {
+    const semRecebimento = calc.calculate(base({ estoque: 20, consumoDiario: 100, leadTimeDias: 7 }));
+    const comRecebimento = calc.calculate(
+      base({
+        estoque: 20,
+        consumoDiario: 100,
+        leadTimeDias: 7,
+        recebimentos: [{ quantidade: 1000, dataEfetiva: '2026-09-01' }],
+      }),
+    );
+    expect(semRecebimento.status).toBe('urgente');
+    expect(comRecebimento.status).not.toBe('urgente');
+    expect(comRecebimento.quantidadeSugerida!).toBeLessThan(semRecebimento.quantidadeSugerida!);
+    // cobertura continua só no saldo físico
+    expect(comRecebimento.coberturaAtualDias).toBeCloseTo(semRecebimento.coberturaAtualDias!, 5);
   });
 
   it('sem consumo → sem_consumo', () => {

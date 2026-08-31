@@ -1,5 +1,6 @@
 import { insumoCompraDiaOperacional } from './insumo-compra-dia-operacional';
 import { insumoCompraJanela } from './insumo-compra-janela';
+import { insumoCompraProjecaoCalculator } from './insumo-compra-projecao-calculator';
 import type {
   InsumoCompraSugestaoInput,
   InsumoCompraSugestaoResult,
@@ -12,6 +13,8 @@ type CalculoContexto = {
   quantidadeBruta: number;
   diasAteJanela: number;
   naJanela: boolean;
+  rupturaAntesLeadTime: boolean;
+  rupturaAntesHorizonte: boolean;
 };
 
 export class InsumoCompraSugestaoCalculator {
@@ -26,10 +29,10 @@ export class InsumoCompraSugestaoCalculator {
     const contexto = this.createContext(input);
     const quantidadeComRisco = this.applyRiskLimits(input, contexto.quantidadeBruta);
 
-    if (contexto.cobertura < input.leadTimeDias) {
+    if (contexto.rupturaAntesLeadTime) {
       return this.createResult('urgente', quantidadeComRisco, contexto, 'Cobertura crítica');
     }
-    if (!contexto.naJanela && contexto.cobertura < contexto.diasAteJanela + input.leadTimeDias) {
+    if (!contexto.naJanela && contexto.rupturaAntesHorizonte) {
       return this.createResult(
         'pedir_fora_janela',
         quantidadeComRisco,
@@ -62,18 +65,30 @@ export class InsumoCompraSugestaoCalculator {
       input.leadTimeDias,
     );
     const metaEstoque = demandaLead * 1.5;
-    const quantidadeBruta = Math.max(0, metaEstoque - input.estoque);
     const diasAteJanela = insumoCompraJanela.diasAteProximoPermitido(
       input.janelaTipo,
       input.diasSemana,
       input.dayOfWeek,
     );
+    const horizonteDias = diasAteJanela + input.leadTimeDias;
+    const projecao = insumoCompraProjecaoCalculator.calculate({
+      estoque: input.estoque,
+      consumoDiario: input.consumoDiario,
+      dayOfWeek: input.dayOfWeek,
+      leadTimeDias: input.leadTimeDias,
+      horizonteDias,
+      dataReferencia: input.dataReferencia,
+      recebimentos: input.recebimentos,
+    });
+    const quantidadeBruta = Math.max(0, metaEstoque - projecao.projetadoEmH);
     return {
       cobertura,
       metaEstoque,
       quantidadeBruta,
       diasAteJanela,
       naJanela: diasAteJanela === 0,
+      rupturaAntesLeadTime: projecao.rupturaAntesLeadTime,
+      rupturaAntesHorizonte: projecao.rupturaAntesHorizonte,
     };
   }
 

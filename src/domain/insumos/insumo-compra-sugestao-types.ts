@@ -1,4 +1,5 @@
 import type { InsumoCompraJanelaTipo } from './insumo-compra-janela';
+import type { InsumoCompraRecebimentoInput } from './insumo-compra-projecao-calculator';
 
 export type InsumoCompraSugestaoStatus =
   | 'urgente'
@@ -20,6 +21,8 @@ export type InsumoCompraSugestaoInput = {
   diasSemana: number[] | null;
   dayOfWeek: number;
   temRegraAtiva: boolean;
+  dataReferencia: string;
+  recebimentos: InsumoCompraRecebimentoInput[];
 };
 
 export type InsumoCompraSugestaoResult = {
