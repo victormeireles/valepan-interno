@@ -50,6 +50,24 @@ vi.mock('@/lib/services/insumo-estoque-service', () => ({
   insumoEstoqueService: {},
 }));
 
+vi.mock('@/lib/services/insumo-compra-sugestao-service', () => ({
+  InsumoCompraDataReferenciaResolver: class {
+    resolve() {
+      return {
+        isoDate: '2026-08-12',
+        anchor: new Date('2026-08-12T12:00:00-03:00'),
+        dayOfWeek: 3,
+      };
+    }
+  },
+}));
+
+vi.mock('@/lib/services/insumo-pedido-compra-manager', () => ({
+  insumoPedidoCompraManager: {
+    listarPipelineAberto: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock('@/lib/services/insumo-vinculo-lote-applier', () => ({
   insumoVinculoLoteApplier: {},
 }));

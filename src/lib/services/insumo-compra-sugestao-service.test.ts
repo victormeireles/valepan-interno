@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { InsumoConsumoSemanalItem } from '@/domain/insumos/insumo-consumo-semanal-aggregator';
+import type { InsumoPedidoPipelineItem } from '@/domain/insumos/insumo-pedido-compra-types';
 import type { InsumoRegraCompraComInsumo } from '@/data/insumos/InsumoRegraCompraRepository';
 import { InsumoCompraSugestaoService } from './insumo-compra-sugestao-service';
 
@@ -18,6 +19,12 @@ vi.mock('@/data/insumos/InsumoEstoqueRepository', () => ({
 vi.mock('@/data/insumos/InsumoRegraCompraRepository', () => ({
   insumoRegraCompraRepository: {},
   InsumoRegraCompraRepository: vi.fn(),
+}));
+vi.mock('@/lib/services/insumo-pedido-compra-manager', () => ({
+  insumoPedidoCompraManager: {
+    listarPipelineAberto: vi.fn().mockResolvedValue([]),
+  },
+  InsumoPedidoCompraManager: vi.fn(),
 }));
 
 const periodo = {
@@ -87,6 +94,7 @@ function createService(input: {
     ordem: number;
     created_at: string;
   }>;
+  pipelineItems?: InsumoPedidoPipelineItem[];
 }) {
   const consumoRepository = {
     listConsumoSemanal: vi.fn().mockResolvedValue(input.consumos),
@@ -103,6 +111,7 @@ function createService(input: {
   const periodoBuilder = {
     buildDefault: vi.fn().mockReturnValue(periodo),
   };
+  const listPipelineAberto = vi.fn().mockResolvedValue(input.pipelineItems ?? []);
 
   return {
     service: new InsumoCompraSugestaoService({
@@ -111,8 +120,10 @@ function createService(input: {
       estoqueRepository,
       distribuidorRepository,
       periodoBuilder,
+      listPipelineAberto,
     }),
     periodoBuilder,
+    listPipelineAberto,
   };
 }
 
@@ -204,5 +215,49 @@ describe('InsumoCompraSugestaoService', () => {
       'Fornecedor A',
       'Sem fornecedor',
     ]);
+  });
+
+  it('reduz quantidadeSugerida quando há pipeline a chegar amanhã', async () => {
+    const base = {
+      consumos: [createConsumo('farinha', 'Farinha', [70, 70])],
+      regras: [createRegra('farinha', 'Farinha')],
+      estoques: { farinha: 10 },
+    };
+
+    const { service: semPipeline } = createService({ ...base, pipelineItems: [] });
+    const { service: comPipeline, listPipelineAberto } = createService({
+      ...base,
+      pipelineItems: [
+        {
+          insumoId: 'farinha',
+          pedidoId: 'pedido-1',
+          numero: 1,
+          quantidade: 100,
+          dataPrevista: '2026-08-13',
+          dataEfetiva: '2026-08-13',
+          atrasado: false,
+        },
+      ],
+    });
+
+    const pageSem = await semPipeline.buildPageData('2026-08-12');
+    const pageCom = await comPipeline.buildPageData('2026-08-12');
+
+    const qtdSem = pageSem.itens[0]?.quantidadeSugerida;
+    const qtdCom = pageCom.itens[0]?.quantidadeSugerida;
+
+    expect(listPipelineAberto).toHaveBeenCalledWith('2026-08-12');
+    expect(qtdSem).not.toBeNull();
+    // 100 a chegar pode zerar a sugestão (null = sem pedir); trata como 0 na comparação.
+    expect(qtdCom ?? 0).toBeLessThan(qtdSem!);
+    expect(pageCom.itens[0]?.pipeline).toEqual(
+      expect.objectContaining({
+        quantidade: 100,
+        atrasado: false,
+        proximaData: '2026-08-13',
+        pedidoIds: ['pedido-1'],
+      }),
+    );
+    expect(pageSem.itens[0]?.pipeline).toBeNull();
   });
 });

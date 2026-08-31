@@ -20,6 +20,7 @@ import {
   type InsumoCompraSugestaoCalculator,
 } from '@/domain/insumos/insumo-compra-sugestao-calculator';
 import { insumoCompraDiaOperacional } from '@/domain/insumos/insumo-compra-dia-operacional';
+import type { InsumoCompraRecebimentoInput } from '@/domain/insumos/insumo-compra-projecao-calculator';
 import type { InsumoCompraSugestaoStatus } from '@/domain/insumos/insumo-compra-sugestao-types';
 import {
   insumoConsumoCoberturaCalculator,
@@ -34,8 +35,17 @@ import {
   insumoControleEstoqueFilter,
   type InsumoControleEstoqueFilter,
 } from '@/domain/insumos/insumo-controle-estoque-filter';
+import type {
+  InsumoPedidoPipelineItem,
+  InsumoPedidoPipelineResumo,
+} from '@/domain/insumos/insumo-pedido-compra-types';
+import {
+  insumoPedidoPipelineAgrupador,
+  type InsumoPedidoPipelineAgrupador,
+} from '@/domain/insumos/insumo-pedido-pipeline';
 import type { InsumoDistribuidorRow } from '@/domain/types/insumo-compra-db';
 import type { InsumoConversaoVisual } from '@/domain/types/insumo-estoque';
+import { insumoPedidoCompraManager } from '@/lib/services/insumo-pedido-compra-manager';
 
 export type InsumoCompraSugestaoLinha = {
   insumoId: string;
@@ -51,6 +61,7 @@ export type InsumoCompraSugestaoLinha = {
   motivo: string;
   distribuidorPreferencial: string | null;
   distribuidoresAlternativos: string[];
+  pipeline: InsumoPedidoPipelineResumo | null;
 };
 
 export type InsumoCompraSugestaoPageData = {
@@ -77,6 +88,8 @@ type ServiceDependencies = {
   coberturaCalculator: Pick<InsumoConsumoCoberturaCalculator, 'calculate'>;
   sugestaoCalculator: Pick<InsumoCompraSugestaoCalculator, 'calculate'>;
   controleEstoqueFilter: Pick<InsumoControleEstoqueFilter, 'filterPorNomeControlavel'>;
+  listPipelineAberto: (dataReferencia: string) => Promise<InsumoPedidoPipelineItem[]>;
+  pipelineAgrupador: Pick<InsumoPedidoPipelineAgrupador, 'agrupar'>;
 };
 
 type InsumoFonte = {
@@ -107,6 +120,9 @@ const DEFAULT_DEPENDENCIES: ServiceDependencies = {
   coberturaCalculator: insumoConsumoCoberturaCalculator,
   sugestaoCalculator: insumoCompraSugestaoCalculator,
   controleEstoqueFilter: insumoControleEstoqueFilter,
+  listPipelineAberto: (dataReferencia) =>
+    insumoPedidoCompraManager.listarPipelineAberto(dataReferencia),
+  pipelineAgrupador: insumoPedidoPipelineAgrupador,
 };
 
 export class InsumoCompraDataReferenciaResolver {
@@ -150,9 +166,10 @@ export class InsumoCompraSugestaoService {
   async buildPageData(dataReferencia?: string): Promise<InsumoCompraSugestaoPageData> {
     const referencia = this.dataReferenciaResolver.resolve(dataReferencia);
     const periodo = this.dependencies.periodoBuilder.buildDefault(referencia.anchor, 'semanal');
-    const [consumosBrutos, regrasBrutas] = await Promise.all([
+    const [consumosBrutos, regrasBrutas, pipelineItens] = await Promise.all([
       this.dependencies.consumoRepository.listConsumoSemanal(periodo),
       this.dependencies.regraRepository.listAllWithInsumo(),
+      this.dependencies.listPipelineAberto(referencia.isoDate),
     ]);
     const fontes = this.createFontes(consumosBrutos, regrasBrutas);
     const insumoIds = fontes.map((fonte) => fonte.insumoId);
@@ -161,6 +178,8 @@ export class InsumoCompraSugestaoService {
       this.dependencies.distribuidorRepository.listByInsumoIds(insumoIds),
     ]);
     const distribuidoresByInsumo = this.groupDistribuidores(distribuidores);
+    const pipelinePorInsumo = this.dependencies.pipelineAgrupador.agrupar(pipelineItens);
+    const recebimentosPorInsumo = this.groupRecebimentos(pipelineItens);
     const itens = fontes
       .map((fonte) =>
         this.createLinha(
@@ -170,6 +189,8 @@ export class InsumoCompraSugestaoService {
           periodo.colunas.map((coluna) => coluna.inicio),
           referencia.dayOfWeek,
           referencia.isoDate,
+          pipelinePorInsumo.get(fonte.insumoId) ?? null,
+          recebimentosPorInsumo.get(fonte.insumoId) ?? [],
         ),
       )
       .sort((left, right) => this.compareLinhas(left, right));
@@ -224,6 +245,8 @@ export class InsumoCompraSugestaoService {
     colunas: string[],
     dayOfWeek: number,
     dataReferencia: string,
+    pipeline: InsumoPedidoPipelineResumo | null,
+    recebimentos: InsumoCompraRecebimentoInput[],
   ): InsumoCompraSugestaoLinha {
     const coberturaConsumo = this.dependencies.coberturaCalculator.calculate({
       visualizacao: 'semanal',
@@ -243,7 +266,7 @@ export class InsumoCompraSugestaoService {
       dayOfWeek,
       temRegraAtiva: regra !== null,
       dataReferencia,
-      recebimentos: [],
+      recebimentos,
     });
     const distribuidoresOrdenados = [...distribuidores].sort(
       (left, right) => left.ordem - right.ordem,
@@ -266,7 +289,21 @@ export class InsumoCompraSugestaoService {
       distribuidoresAlternativos: distribuidoresOrdenados
         .filter((item) => item.id !== preferencial?.id)
         .map((item) => item.nome),
+      pipeline,
     };
+  }
+
+  private groupRecebimentos(
+    itens: InsumoPedidoPipelineItem[],
+  ): Map<string, InsumoCompraRecebimentoInput[]> {
+    const groups = new Map<string, InsumoCompraRecebimentoInput[]>();
+    for (const item of itens) {
+      groups.set(item.insumoId, [
+        ...(groups.get(item.insumoId) ?? []),
+        { quantidade: item.quantidade, dataEfetiva: item.dataEfetiva },
+      ]);
+    }
+    return groups;
   }
 
   private compareLinhas(
