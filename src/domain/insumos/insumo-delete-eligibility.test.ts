@@ -26,6 +26,7 @@ describe('resolverBloqueiosExclusaoInsumo', () => {
         receitasCount: 0,
         vinculosOmieCount: 0,
         movimentosCount: 0,
+        pedidosCount: 0,
       }),
     ).toEqual([]);
   });
@@ -36,8 +37,20 @@ describe('resolverBloqueiosExclusaoInsumo', () => {
         receitasCount: 0,
         vinculosOmieCount: 0,
         movimentosCount: 2,
+        pedidosCount: 0,
       }),
     ).toEqual(['movimentos']);
+  });
+
+  it('inclui pedidos como bloqueio', () => {
+    expect(
+      resolverBloqueiosExclusaoInsumo({
+        receitasCount: 0,
+        vinculosOmieCount: 0,
+        movimentosCount: 0,
+        pedidosCount: 1,
+      }),
+    ).toEqual(['pedidos']);
   });
 });
 
@@ -46,5 +59,11 @@ describe('formatarMotivoBloqueioExclusaoInsumo', () => {
     expect(
       formatarMotivoBloqueioExclusaoInsumo(['receitas', 'omie']),
     ).toContain('receitas e produtos Omie');
+  });
+
+  it('formata bloqueio de pedidos de compra', () => {
+    expect(formatarMotivoBloqueioExclusaoInsumo(['pedidos'])).toBe(
+      'Insumo vinculado a pedidos de compra e não pode ser excluído.',
+    );
   });
 });

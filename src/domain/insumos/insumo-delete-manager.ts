@@ -34,16 +34,19 @@ export class InsumoDeleteManager {
 
   async delete(insumoId: string): Promise<DeleteResult> {
     try {
-      const [receitasCount, vinculosOmieCount, movimentosCount] = await Promise.all([
-        this.countRows('receita_ingredientes', insumoId),
-        this.countRows('integracao_insumos', insumoId),
-        this.countRows('insumo_movimentos', insumoId),
-      ]);
+      const [receitasCount, vinculosOmieCount, movimentosCount, pedidosCount] =
+        await Promise.all([
+          this.countRows('receita_ingredientes', insumoId),
+          this.countRows('integracao_insumos', insumoId),
+          this.countRows('insumo_movimentos', insumoId),
+          this.countRows('insumo_pedido_compra_item', insumoId),
+        ]);
 
       const blockers = resolverBloqueiosExclusaoInsumo({
         receitasCount,
         vinculosOmieCount,
         movimentosCount,
+        pedidosCount,
       });
 
       if (blockers.length > 0) {

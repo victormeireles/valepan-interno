@@ -1,4 +1,4 @@
-export type InsumoDeleteBlocker = 'receitas' | 'omie' | 'movimentos';
+export type InsumoDeleteBlocker = 'receitas' | 'omie' | 'movimentos' | 'pedidos';
 
 export function podeExcluirInsumo(
   receitasCount: number,
@@ -11,12 +11,14 @@ export function resolverBloqueiosExclusaoInsumo(input: {
   receitasCount: number;
   vinculosOmieCount: number;
   movimentosCount: number;
+  pedidosCount: number;
 }): InsumoDeleteBlocker[] {
   const blockers: InsumoDeleteBlocker[] = [];
 
   if (input.receitasCount > 0) blockers.push('receitas');
   if (input.vinculosOmieCount > 0) blockers.push('omie');
   if (input.movimentosCount > 0) blockers.push('movimentos');
+  if (input.pedidosCount > 0) blockers.push('pedidos');
 
   return blockers;
 }
@@ -29,6 +31,7 @@ export function formatarMotivoBloqueioExclusaoInsumo(
   const temReceitas = blockers.includes('receitas');
   const temOmie = blockers.includes('omie');
   const temMovimentos = blockers.includes('movimentos');
+  const temPedidos = blockers.includes('pedidos');
 
   if (temReceitas && temOmie) {
     return 'Insumo vinculado a receitas e produtos Omie. Remova os vínculos antes de excluir.';
@@ -41,6 +44,9 @@ export function formatarMotivoBloqueioExclusaoInsumo(
   }
   if (temMovimentos) {
     return 'Insumo possui movimentações de estoque e não pode ser excluído.';
+  }
+  if (temPedidos) {
+    return 'Insumo vinculado a pedidos de compra e não pode ser excluído.';
   }
 
   return 'Não é possível excluir este insumo.';

@@ -127,6 +127,7 @@ export default function InsumoModal({
       receitasCount: receitas.length,
       vinculosOmieCount: integracoes.length,
       movimentosCount: 0,
+      pedidosCount: 0,
     }),
   );
 
