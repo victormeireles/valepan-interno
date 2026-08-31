@@ -291,6 +291,11 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/compras-insumos',
+    requirement: modulo('interno_insumos', 'ler'),
+  },
+  {
+    match: 'prefix',
     prefix: '/painel/dashboard-estoque',
     requirement: modulo('interno_estoque', 'ler'),
   },

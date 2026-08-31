@@ -97,6 +97,13 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_insumos',
   },
   {
+    href: '/compras-insumos',
+    title: 'Pedidos de compra',
+    description: 'Pedidos a chegar, atrasados e histórico',
+    icon: 'receipt_long',
+    moduloId: 'interno_insumos',
+  },
+  {
     href: '/painel/dashboard-estoque',
     title: 'Estoque',
     description: 'Dashboards em TV e monitor',

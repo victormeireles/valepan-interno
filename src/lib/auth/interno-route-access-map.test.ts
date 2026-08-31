@@ -40,6 +40,14 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
+  it('protege pedidos de compra de insumos', () => {
+    expect(map.resolve('/compras-insumos')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_insumos',
+      minimo: 'ler',
+    });
+  });
+
   it('protege reclamações', () => {
     expect(map.resolve('/reclamacoes')).toEqual({
       kind: 'modulo',
