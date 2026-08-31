@@ -14,7 +14,6 @@ import {
   isPendenciaVinculavel,
 } from '@/domain/insumos/insumo-pendencia-acao';
 import type { InsumoPedidoPipelineResumo } from '@/domain/insumos/insumo-pedido-compra-types';
-import { insumoPedidoPipelineAgrupador } from '@/domain/insumos/insumo-pedido-pipeline';
 import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
@@ -30,9 +29,8 @@ import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository'
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
 import { toInsumoHistoricoIsoRange, INSUMO_HISTORICO_LIMITE } from '@/domain/insumos/insumo-historico-periodo';
-import { InsumoCompraDataReferenciaResolver } from '@/lib/services/insumo-compra-sugestao-service';
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
-import { insumoPedidoCompraManager } from '@/lib/services/insumo-pedido-compra-manager';
+import { insumoEstoquePipelineLoader } from '@/lib/services/insumo-estoque-pipeline-loader';
 import { insumoVinculoLoteApplier } from '@/lib/services/insumo-vinculo-lote-applier';
 import { insumoEntradaFatorRecalcIntegracaoService } from '@/lib/services/insumo-entrada-fator-recalc-integracao-service';
 
@@ -62,15 +60,11 @@ export type InsumoEstoqueDashboardData = InsumoSaldosPageData & InsumoMapeamento
 
 export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
   await requireInternoModulo('interno_insumos', 'ler');
-  const hojeSp = new InsumoCompraDataReferenciaResolver().resolve().isoDate;
-  const [saldos, pendenciasCount, pipelineItens] = await Promise.all([
+  const [saldos, pendenciasCount, pipelinePorInsumo] = await Promise.all([
     insumoEstoqueRepository.listSaldosComDetalhes(),
     insumoPendenciaRepository.countPendentes(),
-    insumoPedidoCompraManager.listarPipelineAberto(hojeSp),
+    insumoEstoquePipelineLoader.load(),
   ]);
-  const pipelinePorInsumo = Object.fromEntries(
-    insumoPedidoPipelineAgrupador.agrupar(pipelineItens),
-  );
 
   return {
     saldos: insumoControleEstoqueFilter.filterSaldosControlaveis(saldos),
