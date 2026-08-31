@@ -195,7 +195,7 @@ export class InsumoPedidoCompraRepository {
     },
   ): Promise<InsumoPedidoCompraListItem> {
     const now = new Date().toISOString();
-    const { error: updateError } = await this.db
+    const { data: updatedRows, error: updateError } = await this.db
       .from('insumo_pedido_compra')
       .update({
         fornecedor_nome: input.fornecedorNome,
@@ -203,10 +203,15 @@ export class InsumoPedidoCompraRepository {
         observacao: input.observacao,
         updated_at: now,
       })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('status', 'aberto')
+      .select('id');
 
     if (updateError) {
       throw new Error(`Erro ao atualizar pedido de compra: ${updateError.message}`);
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      throw new Error('Pedido não encontrado ou não está aberto.');
     }
 
     const { error: deleteError } = await this.db
@@ -227,13 +232,18 @@ export class InsumoPedidoCompraRepository {
   }
 
   async updateStatus(id: string, status: 'encerrado' | 'cancelado'): Promise<void> {
-    const { error } = await this.db
+    const { data, error } = await this.db
       .from('insumo_pedido_compra')
       .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('status', 'aberto')
+      .select('id');
 
     if (error) {
       throw new Error(`Erro ao atualizar status do pedido: ${error.message}`);
+    }
+    if (!data || data.length === 0) {
+      throw new Error('Pedido não encontrado ou não está aberto.');
     }
   }
 
