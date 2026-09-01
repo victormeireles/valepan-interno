@@ -1,0 +1,194 @@
+# Quadros de etapa para TV (fermentação / forno / embalagem)
+
+Data: 2026-09-01  
+Status: aprovado em brainstorming
+
+## Objetivo
+
+Três telas de monitoramento para TV, uma por área, com o recorte do Fluxo daquela etapa mais o último lançamento e as próximas OPs do dia. Quem lança na área (ou já tem Painéis) abre o quadro correspondente sem usar a nav global — o conteúdo cabe em 1080p.
+
+## Contexto
+
+Hoje o **Fluxo** (`/realizado/fluxo-processo`) mostra os três cards + gráfico, mas exige `interno_painel` e não cabe como quadro de uma área. O **Realizado** de cada etapa é tela de lançamento (worklist + dashboard). O **Painel Produção** é visão unificada produto × etapas.
+
+Nenhuma dessas telas serve para um monitor na fermentação (ou forno, ou embalagem) olhar só a sua linha.
+
+## Decisão de abordagem
+
+**Grade TV reusando card/gráfico do Fluxo e card de OP do Realizado**, duas cargas já existentes em paralelo.
+
+Descartado: coluna única (risco de scroll na TV); API agregada nova (custo sem ganho visível).
+
+## Escopo
+
+Inclui:
+
+- Três rotas estáticas: `/painel/fermentacao`, `/painel/forno`, `/painel/embalagem`
+- Itens no grupo **Painéis** (barra e hub): **Quadro fermentação**, **Quadro forno**, **Quadro embalagem**
+- Chrome de TV: nav vinho oculta; logo no cabeçalho volta ao Início
+- Cabeçalho com título, resumo produzido/meta, relógio e filtro de data
+- Card do Fluxo da etapa (não clicável) + gráfico por hora sem abas das outras etapas
+- Último lançamento (lote + card da OP) e até 3 OPs seguintes, sem repetir a OP do último lote
+- Unidade fixa: LT (assadeiras) em fermentação/forno; CX em embalagem
+- Permissão: módulo da área **ou** `interno_painel`, mínimo **ler**
+- Ampliar leitura das APIs de carga usadas pela tela
+- Refresh silencioso a cada 60s
+
+Fora de escopo:
+
+- Substituir ou alterar Painel Produção e Fluxo atuais
+- Lançar lote, reabrir OP, editar, trocar unidade
+- Quadro de saídas
+- Rota dinâmica `/painel/[etapa]` (colidiria com `/painel/dashboard-estoque`)
+- Endpoint novo de payload agregado
+- Conta/kiosk dedicada além das permissões já existentes
+
+## Rotas e navegação
+
+Páginas estáticas (não `[etapa]` sob `/painel`):
+
+| URL | Quadro |
+|-----|--------|
+| `/painel/fermentacao` | Fermentação |
+| `/painel/forno` | Forno |
+| `/painel/embalagem` | Embalagem |
+
+Menu e hub: grupo **Painéis**, depois de Fluxo e antes de Estoque. Labels **Quadro fermentação / forno / embalagem** para não colidir com os itens de lançamento em Produção.
+
+Cabeçalho da TV: eyebrow “Quadro” + nome da etapa (Fermentação / Forno / Embalagem).
+
+`ConditionalNavigationClient` esconde a nav nestas três URLs (mesmo mecanismo de `/login`). Padding do shell reduzido; a tela usa `h-dvh` para preencher o monitor.
+
+## Permissão
+
+Mínimo **ler**. Dono do sistema vê os três.
+
+| Pessoa | Quadros visíveis | Fluxo (`/realizado/fluxo-processo`) |
+|--------|------------------|-------------------------------------|
+| `interno_fermentacao` | só fermentação | não (continua exigindo Painéis) |
+| `interno_forno` | só forno | não |
+| `interno_embalagem` | só embalagem | não |
+| `interno_painel` | os três | sim, como hoje |
+| área + Painéis | os da área ∪ os três | sim |
+
+`InternoRouteAccessMap` para cada quadro: `anyModulo([moduloDaArea, 'interno_painel'], 'ler')`.
+
+Itens de menu/hub passam a aceitar `moduloIds?: InternoModuloId[]` (OR, mínimo ler). Se `moduloIds` existir, vale ele; senão o `moduloId` atual. Cada quadro: `[interno_<area>, interno_painel]`. Itens antigos não mudam.
+
+### APIs
+
+Os prefixes de rota já existentes passam a ser `anyModulo` (cobrem tanto `/carga` quanto o GET curto da etapa):
+
+| Prefix | Hoje | Quadro TV |
+|--------|------|-----------|
+| `/api/painel/fluxo-processo` | só `interno_painel` ler | `anyModulo([interno_painel, interno_fermentacao, interno_forno, interno_embalagem], 'ler')` |
+| `/api/painel/fermentacao` | só fermentação | `anyModulo([interno_fermentacao, interno_painel], 'ler')` |
+| `/api/painel/forno` | só forno | `anyModulo([interno_forno, interno_painel], 'ler')` |
+| `/api/painel/embalagem` | só embalagem | `anyModulo([interno_embalagem, interno_painel], 'ler')` |
+
+A **página** Fluxo permanece só Painéis. Operador da área não ganha aquela tela; só o JSON para montar o quadro.
+
+Painel Produção (`/realizado/painel-producao` e sua API) não muda.
+
+## Layout (1080p, sem scroll)
+
+```
+Cabeçalho full width (logo → Início, título, resumo, agora, data)
+┌─────────────────────┬──────────────────────────────────────┐
+│ Card Fluxo da etapa │ Produção por hora                    │
+│ (~1/3, não clicável)│ (~2/3, sem tabs de etapa)            │
+├─────────────────────┼──────────────────────────────────────┤
+│ Último lançamento   │ Até 3 OPs próximas                   │
+│ lote + card da OP   │ cards Realizado, só leitura          │
+└─────────────────────┴──────────────────────────────────────┘
+```
+
+Cima ~60% da altura útil; baixo ~40%. Faixa de 3px e acento da etapa iguais ao Realizado (gold / brasa / vinho).
+
+Unidade **sem seletor**: fermentação e forno = `lt`; embalagem = `cx`. `FluxoDisplayScale` inicia nesse modo e não oferece troca.
+
+Gráfico: o mesmo `FluxoBarrasHora`; marcador “agora” só se a data selecionada for hoje (BR).
+
+## Regras de negócio
+
+### Cabeçalho — resumo
+
+Produzido / meta do dia na unidade da tela, mesma origem da toolbar do Realizado da etapa (`toolbarMetricsEtapaDiaCivil` / equivalente embalagem). Barra de progresso + pill de falta quando houver meta.
+
+### Último lançamento
+
+Entre os lotes da etapa na data, o de `produzidoEm` mais recente. Empate: `loteId` descendente (resultado estável).
+
+- Faixa: quantidade na unidade da tela, hora, nome do produto.
+- Card: OP daquele lote, `EtapaProductAccordion` fechado (sem lista de lotes, sem Novo lote / Reabrir).
+- Sem lote no dia: “Nenhum lançamento hoje”. Sem card de OP nesse caso.
+
+### Três OPs próximas
+
+1. Ordens da data na ordem de planejamento (`sortPorOrdemPlanejamento`).
+2. Só **não finalizadas**. Parciais (`produzido > 0`) antes das que ainda não começaram.
+3. Excluir a OP do último lançamento, se ela ainda estiver na fila.
+4. Pegar no máximo 3. Não completar com finalizadas.
+5. Zero itens: “Nenhuma OP na fila”.
+
+### Card do Fluxo
+
+O card da etapa correspondente (`ferm` / `forno` / `emb`) com controle OP/AGORA, ritmo, ontem/semana e alerta de bloco. Não seleciona etapa (não há as outras duas).
+
+## Arquitetura
+
+```
+page.tsx (etapa fixa)
+  → PainelEtapaTvPageClient (data + refresh 60s)
+       GET fluxo-processo/carga ─┐
+       GET <etapa>/carga ────────┤ paralelo
+                                 ↓
+       PainelEtapaTvScreen
+         Header | Card Fluxo | BarrasHora | UltimoLote | ProximasOps
+```
+
+Páginas finas só passam a etapa. Um screen compartilhado.
+
+Seletores puros no domain (testáveis sem UI):
+
+- `PainelEtapaTvUltimoLotePicker` — lote mais recente + id da OP
+- `PainelEtapaTvProximasOpsPicker` — até 3 OPs, regras acima
+
+Reuso: `FluxoEtapaCard` (modo não selecionável), `FluxoBarrasHora`, `FluxoDisplayContext` com modo fixo, `EtapaProductAccordion` sem callbacks de ação, `EtapaToolbar` metrics pattern no header próprio (`PainelEtapaTvHeader`).
+
+### Componentes novos (um arquivo, uma responsabilidade)
+
+| Unidade | Faz |
+|---------|-----|
+| `PainelEtapaTvScreen` | Grade + estados loading/erro/vazio |
+| `PainelEtapaTvHeader` | Logo, título, resumo, data |
+| `PainelEtapaTvUltimoLote` | Faixa do lote |
+| `PainelEtapaTvProximasOps` | Até 3 cards |
+| `PainelEtapaTvPageClient` | Cargas paralelas, data, interval 60s |
+| pickers no domain | Regras de último lote e fila |
+
+Arquivos < 400 linhas; funções < 40 linhas.
+
+### Dados e erros
+
+Duas cargas em paralelo. Uma falhou: mostra o bloco que veio + aviso. As duas falharam: erro de tela com retry. Refresh em background não apaga conteúdo se a nova carga falhar.
+
+Loading inicial: skeleton da grade (reserva espaço, sem CLS).
+
+## Testes
+
+- Route map: fermentação-only 200 no quadro dela, 403 nos outros; Painéis nos três; página Fluxo ainda só Painéis; APIs de carga alinhadas.
+- Menu e hub: `moduloIds` (área **ou** Painéis); labels Quadro *; fermentação-only não vê forno/embalagem.
+- Domain último lote: mais recente; empate de timestamp → um resultado estável; lista vazia.
+- Domain 3 OPs: parciais na frente; exclui OP do último lote; não preenche com finalizadas; vazio.
+- Unidade: ferm/forno → `lt`; embalagem → `cx`.
+
+## Critério de pronto
+
+- TV 1080p nas três URLs: header + card + gráfico + último lote + OPs visíveis sem scroll e sem nav vinho.
+- Conta só fermentação abre `/painel/fermentacao` e não abre forno/embalagem nem Fluxo.
+- Conta só Painéis abre os três quadros.
+- Embalagem em CX; fermentação e forno em LT.
+- Cards de OP sem ação de lançamento.
+- Painel Produção e Fluxo atuais intactos.
+)
