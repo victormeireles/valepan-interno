@@ -11,6 +11,17 @@ import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-ca
 import Navigation from './Navigation';
 
 const AUTH_PATH_PREFIXES = ['/login'];
+const TV_PATH_PREFIXES = [
+  '/painel/fermentacao',
+  '/painel/forno',
+  '/painel/embalagem',
+];
+
+function pathHasPrefix(pathname: string, prefixes: string[]): boolean {
+  return prefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 type ConditionalNavigationClientProps = {
   isSystemOwner: boolean;
@@ -22,9 +33,9 @@ export default function ConditionalNavigationClient({
   modulosEfetivos,
 }: ConditionalNavigationClientProps) {
   const pathname = usePathname();
-  const hideNav = AUTH_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  const hideNav =
+    pathHasPrefix(pathname, AUTH_PATH_PREFIXES) ||
+    pathHasPrefix(pathname, TV_PATH_PREFIXES);
 
   if (hideNav) return null;
 
