@@ -6,6 +6,8 @@ export interface HubNavItem {
   description: string;
   icon: string;
   moduloId: InternoModuloId;
+  /** Se presente, vale o OR (mínimo ler). Senão usa `moduloId`. */
+  moduloIds?: InternoModuloId[];
 }
 
 export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
@@ -50,6 +52,33 @@ export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
     description: 'Hora a hora por etapa e por assadeira',
     icon: 'timeline',
     moduloId: 'interno_painel',
+  },
+];
+
+export const HUB_PAINEIS_ITEMS: HubNavItem[] = [
+  {
+    href: '/painel/fermentacao',
+    title: 'Quadro fermentação',
+    description: 'Monitor da fermentação na TV',
+    icon: 'bakery_dining',
+    moduloId: 'interno_fermentacao',
+    moduloIds: ['interno_fermentacao', 'interno_painel'],
+  },
+  {
+    href: '/painel/forno',
+    title: 'Quadro forno',
+    description: 'Monitor do forno na TV',
+    icon: 'local_fire_department',
+    moduloId: 'interno_forno',
+    moduloIds: ['interno_forno', 'interno_painel'],
+  },
+  {
+    href: '/painel/embalagem',
+    title: 'Quadro embalagem',
+    description: 'Monitor da embalagem na TV',
+    icon: 'inventory_2',
+    moduloId: 'interno_embalagem',
+    moduloIds: ['interno_embalagem', 'interno_painel'],
   },
 ];
 

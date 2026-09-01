@@ -7,6 +7,8 @@ export type MainNavLink = {
   icon: string;
   /** Ausente = sempre visível para quem já passou a porta do app (ex.: Início). */
   moduloId?: InternoModuloId;
+  /** Se presente, vale o OR (mínimo ler). Senão usa `moduloId`. */
+  moduloIds?: InternoModuloId[];
   match: (pathname: string) => boolean;
 };
 
@@ -36,7 +38,10 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     icon: 'precision_manufacturing',
     match: (pathname) =>
       pathname.startsWith('/ordens-producao') ||
-      pathname.startsWith('/realizado') ||
+      pathname.startsWith('/realizado/fermentacao') ||
+      pathname.startsWith('/realizado/forno') ||
+      pathname.startsWith('/realizado/embalagem') ||
+      pathname.startsWith('/realizado/saidas') ||
       pathname.startsWith('/etiquetas') ||
       pathname.startsWith('/reclamacoes'),
     children: [
@@ -96,10 +101,26 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         moduloId: 'interno_reclamacoes',
         match: (pathname) => pathname.startsWith('/reclamacoes'),
       },
+    ],
+  },
+  {
+    type: 'group',
+    id: 'paineis',
+    label: 'Painéis',
+    icon: 'monitor',
+    match: (pathname) =>
+      pathname.startsWith('/realizado/painel-producao') ||
+      pathname.startsWith('/realizado/fluxo-processo') ||
+      pathname.startsWith('/painel/fermentacao') ||
+      pathname.startsWith('/painel/forno') ||
+      pathname.startsWith('/painel/embalagem') ||
+      pathname.startsWith('/painel/dashboard-estoque') ||
+      pathname.startsWith('/estoque/'),
+    children: [
       {
         type: 'link',
         href: '/realizado/painel-producao',
-        label: 'Painel',
+        label: 'Produção',
         icon: 'monitor',
         moduloId: 'interno_painel',
         match: (pathname) => pathname.startsWith('/realizado/painel-producao'),
@@ -112,17 +133,44 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         moduloId: 'interno_painel',
         match: (pathname) => pathname.startsWith('/realizado/fluxo-processo'),
       },
+      {
+        type: 'link',
+        href: '/painel/fermentacao',
+        label: 'Quadro fermentação',
+        icon: 'bakery_dining',
+        moduloId: 'interno_fermentacao',
+        moduloIds: ['interno_fermentacao', 'interno_painel'],
+        match: (pathname) => pathname.startsWith('/painel/fermentacao'),
+      },
+      {
+        type: 'link',
+        href: '/painel/forno',
+        label: 'Quadro forno',
+        icon: 'local_fire_department',
+        moduloId: 'interno_forno',
+        moduloIds: ['interno_forno', 'interno_painel'],
+        match: (pathname) => pathname.startsWith('/painel/forno'),
+      },
+      {
+        type: 'link',
+        href: '/painel/embalagem',
+        label: 'Quadro embalagem',
+        icon: 'inventory_2',
+        moduloId: 'interno_embalagem',
+        moduloIds: ['interno_embalagem', 'interno_painel'],
+        match: (pathname) => pathname.startsWith('/painel/embalagem'),
+      },
+      {
+        type: 'link',
+        href: '/painel/dashboard-estoque',
+        label: 'Estoque',
+        icon: 'dashboard',
+        moduloId: 'interno_estoque',
+        match: (pathname) =>
+          pathname.startsWith('/painel/dashboard-estoque') ||
+          pathname.startsWith('/estoque/'),
+      },
     ],
-  },
-  {
-    type: 'link',
-    href: '/painel/dashboard-estoque',
-    label: 'Estoque',
-    icon: 'dashboard',
-    moduloId: 'interno_estoque',
-    match: (pathname) =>
-      pathname.startsWith('/painel/dashboard-estoque') ||
-      pathname.startsWith('/estoque/'),
   },
   {
     type: 'group',

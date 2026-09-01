@@ -9,7 +9,10 @@ export function filterHubNavItems(
   snap: UsuarioAuthzSnapshot,
   manager: InternoAccessManager = new InternoAccessManager(),
 ): HubNavItem[] {
-  return items.filter((item) =>
-    manager.temModulo(snap, item.moduloId, 'ler'),
-  );
+  return items.filter((item) => {
+    if (item.moduloIds?.length) {
+      return item.moduloIds.some((id) => manager.temModulo(snap, id, 'ler'));
+    }
+    return manager.temModulo(snap, item.moduloId, 'ler');
+  });
 }

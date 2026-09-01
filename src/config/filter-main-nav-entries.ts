@@ -2,17 +2,17 @@ import {
   InternoAccessManager,
   type UsuarioAuthzSnapshot,
 } from '@/lib/auth/interno-access-manager';
-import type {
-  MainNavEntry,
-  MainNavGroup,
-  MainNavLink,
-} from '@/config/main-nav-config';
+import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import type { MainNavEntry, MainNavGroup } from '@/config/main-nav-config';
 
 function linkVisivel(
-  link: MainNavLink,
+  link: { moduloId?: InternoModuloId; moduloIds?: InternoModuloId[] },
   snap: UsuarioAuthzSnapshot,
   manager: InternoAccessManager,
 ): boolean {
+  if (link.moduloIds?.length) {
+    return link.moduloIds.some((id) => manager.temModulo(snap, id, 'ler'));
+  }
   if (!link.moduloId) return true;
   return manager.temModulo(snap, link.moduloId, 'ler');
 }

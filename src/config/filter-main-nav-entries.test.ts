@@ -31,13 +31,48 @@ describe('filterMainNavEntries', () => {
     expect(entries.map((e) => (e.type === 'link' ? e.href : e.id))).toEqual([
       '/',
       'producao',
+      'paineis',
     ]);
 
     const producao = entries.find((e) => e.type === 'group' && e.id === 'producao');
     expect(producao?.type === 'group' ? producao.children.map((c) => c.href) : []).toEqual([
       '/realizado/fermentacao',
+    ]);
+
+    const paineis = entries.find((e) => e.type === 'group' && e.id === 'paineis');
+    expect(paineis?.type === 'group' ? paineis.children.map((c) => c.href) : []).toEqual([
       '/realizado/painel-producao',
       '/realizado/fluxo-processo',
+      '/painel/fermentacao',
+      '/painel/forno',
+      '/painel/embalagem',
     ]);
+  });
+
+  it('quadro fermentação aparece com módulo da área ou com painel', () => {
+    const soFerm = {
+      isSystemOwner: false,
+      identidades: ['interno'],
+      modulosEfetivos: { interno_fermentacao: 'editar' as const },
+    };
+    const soPainel = {
+      isSystemOwner: false,
+      identidades: ['interno'],
+      modulosEfetivos: { interno_painel: 'ler' as const },
+    };
+    const hrefs = (snap: typeof soFerm) => {
+      const entries = filterMainNavEntries(MAIN_NAV_ENTRIES, snap, manager);
+      const paineis = entries.find((e) => e.type === 'group' && e.id === 'paineis');
+      return paineis?.type === 'group' ? paineis.children.map((c) => c.href) : [];
+    };
+    expect(hrefs(soFerm)).toContain('/painel/fermentacao');
+    expect(hrefs(soFerm)).not.toContain('/painel/forno');
+    expect(hrefs(soPainel)).toEqual(
+      expect.arrayContaining([
+        '/painel/fermentacao',
+        '/painel/forno',
+        '/painel/embalagem',
+      ]),
+    );
   });
 });
