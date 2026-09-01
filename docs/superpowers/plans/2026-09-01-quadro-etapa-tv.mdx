@@ -1,0 +1,803 @@
+# Quadros de etapa para TV — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Três telas de TV (`/painel/fermentacao|forno|embalagem`) com o card/gráfico do Fluxo da área, último lançamento e até 3 OPs seguintes, sem nav global.
+
+**Architecture:** Páginas finas + `PainelEtapaTvPageClient` busca em paralelo `GET /api/painel/fluxo-processo/carga` e `GET /api/painel/<etapa>/carga`. Pickers de domínio escolhem último lote e próximas OPs. UI reusa `FluxoEtapaCard` (não selecionável), `FluxoBarrasHora` e `EtapaProductAccordion` (sem ações). Permissão `anyModulo(área | interno_painel, ler)`.
+
+**Tech Stack:** Next.js 15 App Router, Vitest, Tailwind v4, Material Icons, design system Valepan.
+
+**Spec:** `docs/superpowers/specs/2026-09-01-quadro-etapa-tv-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; preferir < 400; uma responsabilidade por arquivo; funções < 40 linhas.
+- UI pt-BR, Material Icons (sem emoji estrutural), stone/amber, alvos ≥44px, Geist Mono/`tabular-nums` em quantidades.
+- Unidade fixa: fermentação/forno = `lt`; embalagem = `cx`. Sem seletor.
+- Cards de OP só leitura (sem lote/reabrir). Não alterar Painel Produção nem a página Fluxo.
+- Refresh 60s em silêncio; falha no refresh não apaga a tela.
+- Rotas estáticas (não `/painel/[etapa]`).
+- Timezone `America/Sao_Paulo`.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/lib/auth/interno-route-access-map.ts` | `anyModulo` nos quadros e nas APIs de carga |
+| `src/config/main-nav-config.ts` | Links Quadro * + `moduloIds` |
+| `src/config/filter-main-nav-entries.ts` | OR de `moduloIds` |
+| `src/components/Hub/hub-nav-config.ts` | Cards Quadro * |
+| `src/components/Hub/filter-hub-nav-items.ts` | OR de `moduloIds` |
+| `src/components/ConditionalNavigationClient.tsx` | Esconde nav nas 3 URLs |
+| `src/domain/painel-etapa-tv/painel-etapa-tv-types.ts` | Fontes de lote/OP |
+| `src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.ts` | Lote mais recente |
+| `src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.ts` | Até 3 OPs |
+| `src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.ts` | Ordens/pedidos → fontes |
+| `src/domain/painel-etapa-tv/painel-etapa-tv-config.ts` | Mapa etapa → fluxo key, modo, accent |
+| `src/components/FluxoProcesso/FluxoEtapaCard.tsx` | Prop `selecionavel` |
+| `src/components/Realizado/etapa/EtapaProductAccordion.tsx` | Prop `expandable` |
+| `src/components/PainelEtapaTv/*` | Header, grade, último lote, OPs, client |
+| `src/app/painel/fermentacao/page.tsx` (e forno/embalagem) | Páginas finas |
+
+---
+
+### Task 1: Permissão de rotas e APIs
+
+**Files:**
+- Modify: `src/lib/auth/interno-route-access-map.ts`
+- Test: `src/lib/auth/interno-route-access-map.test.ts`
+- Test: `src/lib/auth/interno-middleware-guard.test.ts`
+
+**Interfaces:**
+- Produces: `resolve('/painel/fermentacao')` = `{ kind: 'anyModulo', modulos: ['interno_fermentacao', 'interno_painel'], minimo: 'ler' }` (forno/embalagem no mesmo padrão). `resolve('/api/painel/fluxo-processo/carga')` = `{ kind: 'anyModulo', modulos: ['interno_painel', 'interno_fermentacao', 'interno_forno', 'interno_embalagem'], minimo: 'ler' }`. Página `/realizado/fluxo-processo` permanece `{ kind: 'modulo', modulo: 'interno_painel', minimo: 'ler' }`.
+
+- [ ] **Step 1: Escrever os testes que falham**
+
+Em `interno-route-access-map.test.ts`, adicionar:
+
+```ts
+it('quadros de etapa TV: área ou painel, leitura', () => {
+  const ferm = {
+    kind: 'anyModulo' as const,
+    modulos: ['interno_fermentacao', 'interno_painel'],
+    minimo: 'ler' as const,
+  };
+  expect(map.resolve('/painel/fermentacao')).toEqual(ferm);
+  expect(map.resolve('/painel/fermentacao/x')).toEqual(ferm);
+  expect(map.resolve('/painel/forno')).toEqual({
+    kind: 'anyModulo',
+    modulos: ['interno_forno', 'interno_painel'],
+    minimo: 'ler',
+  });
+  expect(map.resolve('/painel/embalagem')).toEqual({
+    kind: 'anyModulo',
+    modulos: ['interno_embalagem', 'interno_painel'],
+    minimo: 'ler',
+  });
+});
+
+it('APIs de carga do quadro: área ou painel; fluxo JSON para as 4 leituras', () => {
+  expect(map.resolve('/api/painel/fermentacao/carga')).toEqual({
+    kind: 'anyModulo',
+    modulos: ['interno_fermentacao', 'interno_painel'],
+    minimo: 'ler',
+  });
+  expect(map.resolve('/api/painel/fluxo-processo/carga')).toEqual({
+    kind: 'anyModulo',
+    modulos: [
+      'interno_painel',
+      'interno_fermentacao',
+      'interno_forno',
+      'interno_embalagem',
+    ],
+    minimo: 'ler',
+  });
+});
+
+it('página Fluxo continua só interno_painel', () => {
+  expect(map.resolve('/realizado/fluxo-processo')).toEqual({
+    kind: 'modulo',
+    modulo: 'interno_painel',
+    minimo: 'ler',
+  });
+});
+```
+
+Atualizar o expect de `/api/painel/fermentacao` no teste existente “mapeia APIs de produção” para o `anyModulo` acima.
+
+Em `interno-middleware-guard.test.ts`, fixture só fermentação (sem `interno_painel`):
+
+```ts
+const soFermentacao = {
+  sub: 'user-ferm',
+  isSystemOwner: false,
+  modulosEfetivos: { interno_fermentacao: 'editar' as const },
+};
+
+it('só fermentação acessa quadro e JSON do fluxo, não forno nem página Fluxo', () => {
+  expect(guard.decide({ pathname: '/painel/fermentacao', token: soFermentacao })).toBe('allow');
+  expect(guard.decide({ pathname: '/api/painel/fluxo-processo/carga', token: soFermentacao })).toBe('allow');
+  expect(guard.decide({ pathname: '/painel/forno', token: soFermentacao })).toEqual({
+    redirect: '/?erro=sem-permissao',
+  });
+  expect(guard.decide({ pathname: '/realizado/fluxo-processo', token: soFermentacao })).toEqual({
+    redirect: '/?erro=sem-permissao',
+  });
+});
+
+it('só painel acessa os três quadros', () => {
+  const soPainel = {
+    sub: 'user-painel',
+    isSystemOwner: false,
+    modulosEfetivos: { interno_painel: 'ler' as const },
+  };
+  expect(guard.decide({ pathname: '/painel/forno', token: soPainel })).toBe('allow');
+  expect(guard.decide({ pathname: '/api/painel/embalagem/carga', token: soPainel })).toBe('allow');
+});
+```
+
+- [ ] **Step 2: Rodar testes e confirmar falha**
+
+Run: `npx vitest run src/lib/auth/interno-route-access-map.test.ts src/lib/auth/interno-middleware-guard.test.ts`
+
+Expected: FAIL — `/painel/fermentacao` ainda é `{ kind: 'app' }`; APIs ainda são `modulo` único.
+
+- [ ] **Step 3: Implementar o mapa**
+
+Em `interno-route-access-map.ts`, **antes** das regras de UI de realizado, inserir:
+
+```ts
+{
+  match: 'prefix',
+  prefix: '/painel/fermentacao',
+  requirement: anyModulo(['interno_fermentacao', 'interno_painel'], 'ler'),
+},
+{
+  match: 'prefix',
+  prefix: '/painel/forno',
+  requirement: anyModulo(['interno_forno', 'interno_painel'], 'ler'),
+},
+{
+  match: 'prefix',
+  prefix: '/painel/embalagem',
+  requirement: anyModulo(['interno_embalagem', 'interno_painel'], 'ler'),
+},
+```
+
+Trocar os quatro prefixes de API:
+
+```ts
+{ match: 'prefix', prefix: '/api/painel/fermentacao', requirement: anyModulo(['interno_fermentacao', 'interno_painel'], 'ler') },
+{ match: 'prefix', prefix: '/api/painel/forno', requirement: anyModulo(['interno_forno', 'interno_painel'], 'ler') },
+{ match: 'prefix', prefix: '/api/painel/embalagem', requirement: anyModulo(['interno_embalagem', 'interno_painel'], 'ler') },
+{ match: 'prefix', prefix: '/api/painel/fluxo-processo', requirement: anyModulo(['interno_painel', 'interno_fermentacao', 'interno_forno', 'interno_embalagem'], 'ler') },
+```
+
+Não alterar `/api/painel/producao` nem `/realizado/fluxo-processo`.
+
+- [ ] **Step 4: Rodar testes**
+
+Run: `npx vitest run src/lib/auth/interno-route-access-map.test.ts src/lib/auth/interno-middleware-guard.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/auth/interno-route-access-map.ts src/lib/auth/interno-route-access-map.test.ts src/lib/auth/interno-middleware-guard.test.ts
+git commit -m "feat(auth): libera quadros de etapa TV por área ou painel"
+```
+
+---
+
+### Task 2: Menu e hub com `moduloIds`
+
+**Files:**
+- Modify: `src/config/main-nav-config.ts`
+- Modify: `src/config/filter-main-nav-entries.ts`
+- Modify: `src/config/filter-main-nav-entries.test.ts`
+- Modify: `src/config/main-nav-config.test.ts`
+- Modify: `src/components/Hub/hub-nav-config.ts`
+- Modify: `src/components/Hub/filter-hub-nav-items.ts`
+- Modify: `src/components/Hub/filter-hub-nav-items.test.ts`
+
+**Interfaces:**
+- Consumes: `InternoModuloId`
+- Produces: `MainNavLink.moduloIds?: InternoModuloId[]`; `HubNavItem.moduloIds?: InternoModuloId[]`. Filtro: se `moduloIds` existe, `moduloIds.some(id => temModulo(snap, id, 'ler'))`; senão `moduloId`.
+
+- [ ] **Step 1: Testes que falham**
+
+Em `filter-main-nav-entries.test.ts`:
+
+```ts
+it('quadro fermentação aparece com módulo da área ou com painel', () => {
+  const soFerm = {
+    isSystemOwner: false,
+    identidades: ['interno'],
+    modulosEfetivos: { interno_fermentacao: 'editar' as const },
+  };
+  const soPainel = {
+    isSystemOwner: false,
+    identidades: ['interno'],
+    modulosEfetivos: { interno_painel: 'ler' as const },
+  };
+  const hrefs = (snap: typeof soFerm) => {
+    const entries = filterMainNavEntries(MAIN_NAV_ENTRIES, snap, manager);
+    const paineis = entries.find((e) => e.type === 'group' && e.id === 'paineis');
+    return paineis?.type === 'group' ? paineis.children.map((c) => c.href) : [];
+  };
+  expect(hrefs(soFerm)).toContain('/painel/fermentacao');
+  expect(hrefs(soFerm)).not.toContain('/painel/forno');
+  expect(hrefs(soPainel)).toEqual(expect.arrayContaining([
+    '/painel/fermentacao',
+    '/painel/forno',
+    '/painel/embalagem',
+  ]));
+});
+```
+
+Em `main-nav-config.test.ts`, hrefs de painéis:
+
+```ts
+expect(groupHrefs('paineis')).toEqual([
+  '/realizado/painel-producao',
+  '/realizado/fluxo-processo',
+  '/painel/fermentacao',
+  '/painel/forno',
+  '/painel/embalagem',
+  '/painel/dashboard-estoque',
+]);
+```
+
+Espelhar hrefs em `filter-hub-nav-items.test.ts` (`HUB_PAINEIS_ITEMS`) e o caso fermentação-only.
+
+- [ ] **Step 2: Rodar e confirmar falha**
+
+Run: `npx vitest run src/config/filter-main-nav-entries.test.ts src/config/main-nav-config.test.ts src/components/Hub/filter-hub-nav-items.test.ts`
+
+Expected: FAIL — hrefs de painéis ainda sem os quadros.
+
+- [ ] **Step 3: Tipos + filtro + itens**
+
+`MainNavLink` e `HubNavItem`: adicionar `moduloIds?: InternoModuloId[]`.
+
+`filter-main-nav-entries.ts` / `filter-hub-nav-items.ts`:
+
+```ts
+function linkVisivel(link: { moduloId?: InternoModuloId; moduloIds?: InternoModuloId[] }, snap, manager) {
+  if (link.moduloIds?.length) {
+    return link.moduloIds.some((id) => manager.temModulo(snap, id, 'ler'));
+  }
+  if (!link.moduloId) return true;
+  return manager.temModulo(snap, link.moduloId, 'ler');
+}
+```
+
+Três children no grupo `paineis`, **depois de Fluxo e antes de Estoque**:
+
+```ts
+{
+  type: 'link',
+  href: '/painel/fermentacao',
+  label: 'Quadro fermentação',
+  icon: 'bakery_dining',
+  moduloId: 'interno_fermentacao',
+  moduloIds: ['interno_fermentacao', 'interno_painel'],
+  match: startsWith('/painel/fermentacao'),
+},
+```
+
+Forno: `local_fire_department` / `interno_forno`. Embalagem: `inventory_2` / `interno_embalagem`.
+
+Atualizar `match` do grupo `paineis` para incluir `pathname.startsWith('/painel/fermentacao')` (e forno/embalagem). Hub: mesmos três itens (title/description: “Quadro fermentação” / “Monitor da fermentação na TV”).
+
+- [ ] **Step 4: Testes PASS**
+
+Run: mesmo comando do Step 2. Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/config/main-nav-config.ts src/config/filter-main-nav-entries.ts src/config/filter-main-nav-entries.test.ts src/config/main-nav-config.test.ts src/components/Hub/hub-nav-config.ts src/components/Hub/filter-hub-nav-items.ts src/components/Hub/filter-hub-nav-items.test.ts
+git commit -m "feat(nav): quadros de etapa TV no menu Painéis"
+```
+
+---
+
+### Task 3: Esconder a nav vinho nas 3 URLs
+
+**Files:**
+- Modify: `src/components/ConditionalNavigationClient.tsx`
+
+**Interfaces:**
+- Consumes: `usePathname()`
+- Produces: `hideNav === true` em `/painel/fermentacao`, `/painel/forno`, `/painel/embalagem` (prefixo, como `/login`). `/painel/dashboard-estoque` continua com nav.
+
+- [ ] **Step 1: Implementar**
+
+```ts
+const AUTH_PATH_PREFIXES = ['/login'];
+const TV_PATH_PREFIXES = [
+  '/painel/fermentacao',
+  '/painel/forno',
+  '/painel/embalagem',
+];
+
+function pathHasPrefix(pathname: string, prefixes: string[]): boolean {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+const hideNav =
+  pathHasPrefix(pathname, AUTH_PATH_PREFIXES) ||
+  pathHasPrefix(pathname, TV_PATH_PREFIXES);
+```
+
+Não há teste de componente neste arquivo; o critério é pathname. Não esconder `/painel/dashboard-estoque`.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/ConditionalNavigationClient.tsx
+git commit -m "feat(nav): oculta chrome global nos quadros de TV"
+```
+
+---
+
+### Task 4: Picker do último lote
+
+**Files:**
+- Create: `src/domain/painel-etapa-tv/painel-etapa-tv-types.ts`
+- Create: `src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.ts`
+- Test: `src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.test.ts`
+
+**Interfaces:**
+- Produces:
+
+```ts
+export type PainelEtapaTvLoteFonte = {
+  loteId: string;
+  ordemId: string;
+  produtoNome: string;
+  produzidoEm: string;
+  quantidade: number;
+};
+
+export type PainelEtapaTvUltimoLote = PainelEtapaTvLoteFonte;
+
+export class PainelEtapaTvUltimoLotePicker {
+  static fromLotes(lotes: PainelEtapaTvLoteFonte[]): PainelEtapaTvUltimoLote | null
+}
+```
+
+Regra: maior `Date.parse(produzidoEm)`; empate → `loteId` descendente (localeCompare). Lista vazia → `null`.
+
+- [ ] **Step 1: Teste que falha**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { PainelEtapaTvUltimoLotePicker } from './painel-etapa-tv-ultimo-lote-picker';
+import type { PainelEtapaTvLoteFonte } from './painel-etapa-tv-types';
+
+function lote(over: Partial<PainelEtapaTvLoteFonte>): PainelEtapaTvLoteFonte {
+  return {
+    loteId: 'l1',
+    ordemId: 'op1',
+    produtoNome: 'Brioche',
+    produzidoEm: '2026-09-01T12:00:00-03:00',
+    quantidade: 10,
+    ...over,
+  };
+}
+
+describe('PainelEtapaTvUltimoLotePicker', () => {
+  it('retorna null se não há lotes', () => {
+    expect(PainelEtapaTvUltimoLotePicker.fromLotes([])).toBeNull();
+  });
+
+  it('escolhe o produzidoEm mais recente', () => {
+    const got = PainelEtapaTvUltimoLotePicker.fromLotes([
+      lote({ loteId: 'a', produzidoEm: '2026-09-01T10:00:00-03:00' }),
+      lote({ loteId: 'b', produzidoEm: '2026-09-01T14:00:00-03:00', quantidade: 48 }),
+    ]);
+    expect(got?.loteId).toBe('b');
+    expect(got?.quantidade).toBe(48);
+  });
+
+  it('empate de timestamp: loteId descendente', () => {
+    const ts = '2026-09-01T14:00:00-03:00';
+    const got = PainelEtapaTvUltimoLotePicker.fromLotes([
+      lote({ loteId: 'aaa', produzidoEm: ts }),
+      lote({ loteId: 'zzz', produzidoEm: ts }),
+    ]);
+    expect(got?.loteId).toBe('zzz');
+  });
+});
+```
+
+- [ ] **Step 2: Rodar — FAIL** (`PainelEtapaTvUltimoLotePicker` não existe)
+
+Run: `npx vitest run src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.test.ts`
+
+- [ ] **Step 3: Implementar picker + types**
+
+```ts
+export class PainelEtapaTvUltimoLotePicker {
+  static fromLotes(lotes: PainelEtapaTvLoteFonte[]): PainelEtapaTvUltimoLote | null {
+    if (lotes.length === 0) return null;
+    return [...lotes].sort((a, b) => {
+      const byTime = Date.parse(b.produzidoEm) - Date.parse(a.produzidoEm);
+      if (byTime !== 0) return byTime;
+      return b.loteId.localeCompare(a.loteId);
+    })[0];
+  }
+}
+```
+
+- [ ] **Step 4: PASS** — mesmo comando do Step 2.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/painel-etapa-tv/painel-etapa-tv-types.ts src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.ts src/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker.test.ts
+git commit -m "feat(painel-tv): picker do último lote da etapa"
+```
+
+---
+
+### Task 5: Picker das 3 OPs próximas
+
+**Files:**
+- Modify: `src/domain/painel-etapa-tv/painel-etapa-tv-types.ts` (adicionar `PainelEtapaTvOpFonte`)
+- Create: `src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.ts`
+- Test: `src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.test.ts`
+
+**Interfaces:**
+- Produces:
+
+```ts
+export type PainelEtapaTvOpFonte = {
+  ordemId: string;
+  ordemPlanejamento: number;
+  finalizada: boolean;
+  produzido: number;
+};
+
+export class PainelEtapaTvProximasOpsPicker {
+  static pick(ops: PainelEtapaTvOpFonte[], excludeOrdemId: string | null, limite = 3): PainelEtapaTvOpFonte[]
+}
+```
+
+Regras: ignorar `finalizada`; excluir `excludeOrdemId`; ordenar parciais (`produzido > 0`) antes das zeradas, cada grupo por `ordemPlanejamento` asc; `slice(0, limite)`. Não completar com finalizadas.
+
+- [ ] **Step 1: Testes que falham**
+
+```ts
+function op(over: Partial<PainelEtapaTvOpFonte>): PainelEtapaTvOpFonte {
+  return { ordemId: 'a', ordemPlanejamento: 1, finalizada: false, produzido: 0, ...over };
+}
+
+it('vazio se todas finalizadas', () => {
+  expect(PainelEtapaTvProximasOpsPicker.pick([
+    op({ ordemId: 'x', finalizada: true, produzido: 10 }),
+  ], null)).toEqual([]);
+});
+
+it('parciais na frente das pendentes, respeitando planejamento', () => {
+  const got = PainelEtapaTvProximasOpsPicker.pick([
+    op({ ordemId: 'p1', ordemPlanejamento: 1, produzido: 0 }),
+    op({ ordemId: 'a1', ordemPlanejamento: 2, produzido: 5 }),
+    op({ ordemId: 'p2', ordemPlanejamento: 3, produzido: 0 }),
+    op({ ordemId: 'a2', ordemPlanejamento: 4, produzido: 1 }),
+  ], null);
+  expect(got.map((o) => o.ordemId)).toEqual(['a1', 'a2', 'p1']);
+});
+
+it('exclui a OP do último lote e não puxa finalizada para completar', () => {
+  const got = PainelEtapaTvProximasOpsPicker.pick([
+    op({ ordemId: 'last', ordemPlanejamento: 1, produzido: 8 }),
+    op({ ordemId: 'n1', ordemPlanejamento: 2, produzido: 0 }),
+    op({ ordemId: 'done', ordemPlanejamento: 3, finalizada: true, produzido: 9 }),
+  ], 'last');
+  expect(got.map((o) => o.ordemId)).toEqual(['n1']);
+});
+```
+
+- [ ] **Step 2: FAIL** — classe inexistente.
+
+Run: `npx vitest run src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.test.ts`
+
+- [ ] **Step 3: Implementar**
+
+```ts
+export class PainelEtapaTvProximasOpsPicker {
+  static pick(
+    ops: PainelEtapaTvOpFonte[],
+    excludeOrdemId: string | null,
+    limite = 3,
+  ): PainelEtapaTvOpFonte[] {
+    const abertas = ops.filter((op) => !op.finalizada && op.ordemId !== excludeOrdemId);
+    const parciais = abertas
+      .filter((op) => op.produzido > 0)
+      .sort((a, b) => a.ordemPlanejamento - b.ordemPlanejamento);
+    const pendentes = abertas
+      .filter((op) => op.produzido <= 0)
+      .sort((a, b) => a.ordemPlanejamento - b.ordemPlanejamento);
+    return [...parciais, ...pendentes].slice(0, limite);
+  }
+}
+```
+
+- [ ] **Step 4: PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/painel-etapa-tv/painel-etapa-tv-types.ts src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.ts src/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker.test.ts
+git commit -m "feat(painel-tv): picker das próximas OPs sem repetir a última"
+```
+
+---
+
+### Task 6: Adaptadores de fonte (ordens e pedidos)
+
+**Files:**
+- Create: `src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.ts`
+- Test: `src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.test.ts`
+
+**Interfaces:**
+- Consumes: `PainelOrdemEtapa`, `PainelPedidoEmbalagem`, types da Task 4/5
+- Produces:
+
+```ts
+export class PainelEtapaTvFonteAdapter {
+  static fromOrdens(ordens: PainelOrdemEtapa[]): {
+    lotes: PainelEtapaTvLoteFonte[];
+    ops: PainelEtapaTvOpFonte[];
+  }
+  static fromPedidos(pedidos: PainelPedidoEmbalagem[]): {
+    lotes: PainelEtapaTvLoteFonte[];
+    ops: PainelEtapaTvOpFonte[];
+  }
+}
+```
+
+Ordens: `ordemId = ordemProducaoId`, `produzido = ordem.produzido`, lote `quantidade = lote.assadeiras`. Pedidos: `ordemId = pedidoEmbalagemId`, `produzido = produzidoScalar`, lote `quantidade = lote.quantidade.caixas`.
+
+- [ ] **Step 1: Teste que falha**
+
+Copiar o factory de `PainelOrdemEtapa` de `src/domain/realizado/etapa-painel-adapter.test.ts` (mínimo: `ordemProducaoId`, `ordemPlanejamento`, `produto`, `finalizada`, `produzido`, `lotes[].loteId/produzidoEm/assadeiras`). Copiar `PainelPedidoEmbalagem` de `src/domain/embalagem/embalagem-etapa-adapter.test.ts` (mínimo: `pedidoEmbalagemId`, `produzidoScalar`, `lotes[].quantidade.caixas`).
+
+```ts
+it('fromOrdens: um OP e um lote por linha de lote', () => {
+  const { lotes, ops } = PainelEtapaTvFonteAdapter.fromOrdens([
+    ordemComLotes([
+      { loteId: 'l1', produzidoEm: '2026-09-01T10:00:00-03:00', assadeiras: 12 },
+      { loteId: 'l2', produzidoEm: '2026-09-01T11:00:00-03:00', assadeiras: 8 },
+    ]),
+  ]);
+  expect(ops).toEqual([expect.objectContaining({ ordemId: 'op-1', produzido: 20 })]);
+  expect(lotes.map((l) => l.quantidade)).toEqual([12, 8]);
+});
+
+it('fromPedidos: quantidade em caixas e id do pedido', () => {
+  const { lotes, ops } = PainelEtapaTvFonteAdapter.fromPedidos([pedidoComLoteCx(6)]);
+  expect(ops[0]?.ordemId).toBe('ped-1');
+  expect(lotes[0]?.quantidade).toBe(6);
+});
+```
+
+Ajustar `produzido` da ordem factory para a soma dos lotes (20) ou o campo `produzido` explícito do fixture.
+
+- [ ] **Step 2: FAIL**
+
+Run: `npx vitest run src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.test.ts`
+
+- [ ] **Step 3: Implementar o adapter (map + flatMap, sem lógica de pick)**
+
+- [ ] **Step 4: PASS**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.ts src/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter.test.ts
+git commit -m "feat(painel-tv): adapta ordens e pedidos de embalagem para o quadro"
+```
+
+---
+
+### Task 7: Config da etapa + unidade
+
+**Files:**
+- Create: `src/domain/painel-etapa-tv/painel-etapa-tv-config.ts`
+- Test: `src/domain/painel-etapa-tv/painel-etapa-tv-config.test.ts`
+
+**Interfaces:**
+- Consumes: `FERMENTACAO_ETAPA_CONFIG`, `FORNO_ETAPA_CONFIG`, `EMBALAGEM_ETAPA_CONFIG`, `FluxoEtapaKey`, `FluxoDisplayMode`
+- Produces:
+
+```ts
+export type PainelEtapaTvId = 'fermentacao' | 'forno' | 'embalagem';
+
+export type PainelEtapaTvConfig = {
+  id: PainelEtapaTvId;
+  fluxoKey: FluxoEtapaKey;
+  mode: FluxoDisplayMode;
+  realizado: RealizadoEtapaConfig; // title: 'Quadro'
+};
+
+export function getPainelEtapaTvConfig(id: PainelEtapaTvId): PainelEtapaTvConfig
+```
+
+- [ ] **Step 1: Teste**
+
+```ts
+it('trava unidade LT/CX e mapeia chave do fluxo', () => {
+  expect(getPainelEtapaTvConfig('fermentacao')).toMatchObject({
+    fluxoKey: 'ferm',
+    mode: 'lt',
+    realizado: { title: 'Quadro', stageName: 'Fermentação', unit: 'lt' },
+  });
+  expect(getPainelEtapaTvConfig('forno').mode).toBe('lt');
+  expect(getPainelEtapaTvConfig('embalagem')).toMatchObject({
+    fluxoKey: 'emb',
+    mode: 'cx',
+    realizado: { unit: 'cx', stageName: 'Embalagem' },
+  });
+});
+```
+
+- [ ] **Step 2: FAIL** → **Step 3:** `{ ...FERMENTACAO_ETAPA_CONFIG, title: 'Quadro' }` etc. → **Step 4: PASS** → **Step 5: Commit**
+
+```bash
+git add src/domain/painel-etapa-tv/painel-etapa-tv-config.ts src/domain/painel-etapa-tv/painel-etapa-tv-config.test.ts
+git commit -m "feat(painel-tv): config de etapa com unidade travada"
+```
+
+---
+
+### Task 8: Reuso dos cards (não clicável / não expansível)
+
+**Files:**
+- Modify: `src/components/FluxoProcesso/FluxoEtapaCard.tsx`
+- Modify: `src/components/Realizado/etapa/EtapaProductAccordion.tsx`
+- Modify: `src/components/Realizado/etapa/EtapaProductCardHeader.tsx` (esconder chevron/lote se `expandable === false`)
+
+**Interfaces:**
+- `FluxoEtapaCardProps.selecionavel?: boolean` default `true`. Se `false`: sem `role="button"`, sem `onSelect`, `cursor-default`, tratar visualmente como ativo (`ativa` forçado ou borda da etapa).
+- `EtapaProductAccordionProps.expandable?: boolean` default `true`. Se `false`: não chama `onToggleExpanded`; não renderiza botão de expandir nem `onNovoLote`/`onReabrirOp`.
+
+- [ ] **Step 1: Implementar as props com default compatível** (Fluxo e Realizado atuais não passam as props → comportamento igual).
+
+No card do Fluxo, quando `selecionavel === false`, o wrapper é `div` sem handlers.
+
+No header do accordion, quando `expandable === false`, omitir o `IconButton` de expand e os botões de lote/reabrir.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add src/components/FluxoProcesso/FluxoEtapaCard.tsx src/components/Realizado/etapa/EtapaProductAccordion.tsx src/components/Realizado/etapa/EtapaProductCardHeader.tsx
+git commit -m "feat(ui): cards de fluxo e OP em modo só leitura para TV"
+```
+
+---
+
+### Task 9: Header + grade + client + páginas
+
+**Files:**
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvHeader.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvUltimoLote.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvProximasOps.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvGrafico.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvSkeleton.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvScreen.tsx`
+- Create: `src/components/PainelEtapaTv/PainelEtapaTvPageClient.tsx`
+- Create: `src/components/PainelEtapaTv/painel-etapa-tv-product-mapper.ts`
+- Create: `src/app/painel/fermentacao/page.tsx`
+- Create: `src/app/painel/forno/page.tsx`
+- Create: `src/app/painel/embalagem/page.tsx`
+
+**Interfaces:**
+- Consumes: config Task 7, pickers 4–6, `toolbarMetricsEtapaDiaCivil`, `buildEmbalagemToolbarMetrics`, `VpFluxoPayload`, `CargaEtapaResponse` / `CargaEmbalagemResponse`, `FluxoDisplayContext` + `FluxoDisplayScale`, `FluxoEtapaCard`, `FluxoBarrasHora`, `EtapaProductAccordion`, `buildFermentacaoWorklistData` / `buildFornoWorklistData` / `buildEmbalagemWorklistData`, `splitOrdensPorFinalizacao`, `splitPedidosEmbalagemPorStatus`
+- Produces: três rotas renderizando o mesmo client com `etapa` fixa.
+
+- [ ] **Step 1: Header**
+
+Espelhar `EtapaToolbar` + logo como no Fluxo: `Link href="/"` com `logo-full-dark.png` (fundo claro) + ícone da etapa, eyebrow `config.realizado.title`, `h1` = `stageName`, métricas `produzido/meta unit` + barra + `MetaGapPill`, `diaLabel · agora {agora}` (`formatOpLabelFromDate` + `formatAgoraLabel`), `input type="date"`. Sem botão extra. Sticky com `pageShellBreakoutX`, **não** usar `belowAppNavStickyTop` (nav oculta) → `top-0`. Fundo `getEtapaToolbarBackgroundStyle`. Alvos ≥44px no date.
+
+- [ ] **Step 2: Mapper de card de OP**
+
+Função `mapPainelEtapaTvProducts(id, ordens|pedidos, selectedDate): EtapaProductItem[]`: monta worklist existente com ids de loading `null` e achata `gruposAtivos` + `gruposFinalizados` → `products`. Lookup por `product.id`.
+
+- [ ] **Step 3: Último lote e próximas OPs**
+
+`PainelEtapaTvUltimoLote`: se `null`, texto “Nenhum lançamento hoje”. Senão faixa `quantidade.toLocaleString('pt-BR') {unit} · HH:mm · produto` (`formatLocalTimeHHmm`) + accordion da OP (`expandable={false}`, `renderLots={() => null}`, sem `onNovoLote`).
+
+`PainelEtapaTvProximasOps`: 0 itens → “Nenhuma OP na fila”. Senão até 3 accordions iguais, `showTipoEstoqueMarcaBadge` só embalagem.
+
+- [ ] **Step 4: Gráfico**
+
+Card “Produção por hora” **sem** tabs de etapa. Reusar o subtítulo de totais de `FluxoProducaoPorHora` (`fmtQty` + `scale.unitLabel`). `FluxoBarrasHora` + `FluxoFaixaEtapa`. `mostrarAgora` se `extractCalendarDate(fluxo.dia) === getTodayISOInBrazilTimezone()`. Não incluir `FluxoOpRelogioList` (a spec não pede o relógio de OPs do Fluxo).
+
+- [ ] **Step 5: Screen**
+
+`min-h-dvh`, `-mt-6 -mb-6`, `pageShellBreakoutX` interno com padding curto (`px-3 py-2`). Grid `lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]` duas linhas: card fluxo (`selecionavel={false}`, `ativa`, etapa = `fluxo.etapas.find(e => e.key === config.fluxoKey)`) | gráfico; último lote | 3 OPs. `h-[calc(100dvh-header)]` / `minmax(0,1fr)` para não scrollar em 1080p. Skeleton com as 4 células na mesma grade.
+
+Envolver com:
+
+```ts
+const scale = useMemo(() => new FluxoDisplayScale(fluxo, config.mode), [fluxo, config.mode]);
+<FluxoDisplayContext.Provider value={{ mode: config.mode, setMode: () => {}, scale }}>
+```
+
+Não renderizar `FluxoEtapaCard` se `fluxo` for null.
+
+- [ ] **Step 6: PageClient — cargas paralelas**
+
+Estado: `selectedDate` (hoje BR), `fluxo`, `ordens`/`pedidos`, `dashboardDia`, `loading`, `fluxoErro`, `etapaErro`.
+
+```ts
+const [fluxoRes, etapaRes] = await Promise.all([
+  fetch(`/api/painel/fluxo-processo/carga?date=${date}`),
+  fetch(`/api/painel/${config.id}/carga?date=${date}`),
+]);
+```
+
+Parse JSON; `!ok` → preencher só o erro daquela perna. Primeira carga: `loading` true. Interval 60s: `loading` false; se falhar, `console.error` e **não** zerar `fluxo`/ordens. `ultimaDataComDados` no primeiro load (mesmo padrão de `useFluxoProcessoCarga` / `useEtapaPainelCarga`): se vier data diferente, `setSelectedDate` e return.
+
+Toolbar: fermentação/forno `toolbarMetricsEtapaDiaCivil(ordens, 'LT', dashboardDia)`; embalagem `buildEmbalagemToolbarMetrics(pedidos)`.
+
+Se `loading && !fluxo && !ordens && !pedidos` → skeleton. Se as duas pernas falharam na carga inicial → mensagem + botão “Tentar de novo” (`min-h-11`). Uma perna ok: screen + `Toast` com o erro da outra.
+
+- [ ] **Step 7: Páginas**
+
+Cada `page.tsx`:
+
+```tsx
+import PainelEtapaTvPageClient from '@/components/PainelEtapaTv/PainelEtapaTvPageClient';
+export const dynamic = 'force-dynamic';
+export default function Page() {
+  return <PainelEtapaTvPageClient etapa="fermentacao" />;
+}
+```
+
+Forno/embalagem idem. Quebrar arquivos se algum passar de ~350 linhas (extrair `usePainelEtapaTvCarga.ts`).
+
+- [ ] **Step 8: Testes de regressão**
+
+Run: `npx vitest run src/lib/auth src/config src/components/Hub src/domain/painel-etapa-tv src/domain/fluxo-processo src/domain/producao-etapa`
+
+Expected: PASS. Cards do Fluxo/Realizado sem as novas props continuam iguais.
+
+- [ ] **Step 9: Verificação visual (1080p)**
+
+Abrir `/painel/fermentacao` (conta com fermentação **ou** painel): sem nav vinho; logo volta ao `/`; card + gráfico + último lote + OPs visíveis sem scroll; unidade LT. `/painel/embalagem`: CX. Conta só fermentação em `/painel/forno` → redirect hub. `/realizado/fluxo-processo` e `/realizado/painel-producao` intactos.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/components/PainelEtapaTv src/app/painel/fermentacao/page.tsx src/app/painel/forno/page.tsx src/app/painel/embalagem/page.tsx
+git commit -m "feat(painel-tv): quadros de fermentação, forno e embalagem"
+```
+
+---
+
+## Cobertura da spec
+
+| Requisito | Task |
+|-----------|------|
+| 3 URLs estáticas | 9 |
+| Labels Quadro * no Painéis (barra + hub) | 2 |
+| Nav oculta + logo → Início | 3, 9 |
+| Header título/resumo/data | 9 |
+| Card Fluxo da etapa, não clicável | 8, 9 |
+| Gráfico sem tabs | 9 |
+| Último lote + card OP, sem repetir nas 3 | 4, 5, 6, 9 |
+| 3 OPs parciais → pendentes, sem finalizadas | 5, 9 |
+| LT ferm/forno, CX embalagem | 7, 9 |
+| `anyModulo` área ou painel, ler | 1 |
+| APIs carga ampliadas; página Fluxo intacta | 1 |
+| Refresh 60s; erro parcial | 9 |
+| Fora de escopo (não substituir painéis atuais) | 1 (não mexe em `/api/painel/producao`) |
