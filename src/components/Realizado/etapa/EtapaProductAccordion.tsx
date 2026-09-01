@@ -42,6 +42,7 @@ export type EtapaProductAccordionProps = {
   onProductPhotoClick?: () => void;
   /** Badge D/T à direita do produto (embalagem). Valepan sem tag. */
   showTipoEstoqueMarcaBadge?: boolean;
+  expandable?: boolean;
 };
 
 function sanitizeForHtmlId(value: string): string {
@@ -77,6 +78,7 @@ export default function EtapaProductAccordion({
   hasMeta = true,
   onProductPhotoClick,
   showTipoEstoqueMarcaBadge = false,
+  expandable = true,
 }: EtapaProductAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const reactId = useId();
@@ -135,6 +137,7 @@ export default function EtapaProductAccordion({
         expanded={expanded}
         panelId={panelId}
         onToggleExpanded={() => setExpanded((v) => !v)}
+        expandable={expandable}
       />
 
       {expanded ? (

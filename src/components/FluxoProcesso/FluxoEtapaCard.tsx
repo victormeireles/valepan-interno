@@ -12,7 +12,8 @@ type FluxoEtapaCardProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaResumo;
   ativa: boolean;
-  onSelect: (key: FluxoEtapaResumo['key']) => void;
+  onSelect?: (key: FluxoEtapaResumo['key']) => void;
+  selecionavel?: boolean;
 };
 
 export default function FluxoEtapaCard({
@@ -20,17 +21,19 @@ export default function FluxoEtapaCard({
   etapa: e,
   ativa,
   onSelect,
+  selecionavel = true,
 }: FluxoEtapaCardProps) {
   const cor = FLUXO_UI_ETAPA_COR[e.key];
   const numeros =
     fluxo.controle?.disponivel === true ? fluxo.controle.etapas[e.key] : null;
+  const destacado = selecionavel ? ativa : true;
 
   return (
     <Card
       padding="md"
       className="min-w-0"
       style={
-        ativa
+        destacado
           ? {
               border: `1px solid ${cor}`,
               boxShadow: `0 0 0 3px color-mix(in srgb, ${cor} 12%, transparent)`,
@@ -39,17 +42,21 @@ export default function FluxoEtapaCard({
       }
     >
       <div
-        role="button"
-        tabIndex={0}
-        aria-pressed={ativa}
-        className="min-h-11 cursor-pointer"
-        onClick={() => onSelect(e.key)}
-        onKeyDown={(ev) => {
-          if (ev.key === 'Enter' || ev.key === ' ') {
-            ev.preventDefault();
-            onSelect(e.key);
-          }
-        }}
+        role={selecionavel ? 'button' : undefined}
+        tabIndex={selecionavel ? 0 : undefined}
+        aria-pressed={selecionavel ? ativa : undefined}
+        className={selecionavel ? 'min-h-11 cursor-pointer' : 'min-w-0'}
+        onClick={selecionavel && onSelect ? () => onSelect(e.key) : undefined}
+        onKeyDown={
+          selecionavel && onSelect
+            ? (ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                  ev.preventDefault();
+                  onSelect(e.key);
+                }
+              }
+            : undefined
+        }
       >
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span

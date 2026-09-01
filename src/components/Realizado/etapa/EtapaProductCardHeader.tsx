@@ -41,6 +41,7 @@ export type EtapaProductCardHeaderProps = {
   expanded: boolean;
   panelId: string;
   onToggleExpanded: () => void;
+  expandable?: boolean;
 };
 
 function CardActions({
@@ -54,6 +55,7 @@ function CardActions({
   expanded,
   panelId,
   onToggleExpanded,
+  expandable,
 }: Pick<
   EtapaProductCardHeaderProps,
   | 'produto'
@@ -66,7 +68,9 @@ function CardActions({
   | 'expanded'
   | 'panelId'
   | 'onToggleExpanded'
+  | 'expandable'
 >) {
+  if (expandable === false) return null;
   return (
     <>
       {onReabrirOp ? (
@@ -240,18 +244,20 @@ export default function EtapaProductCardHeader({
   expanded,
   panelId,
   onToggleExpanded,
+  expandable = true,
 }: EtapaProductCardHeaderProps) {
   const actionProps = {
     produto,
-    onNovoLote,
+    onNovoLote: expandable ? onNovoLote : undefined,
     addLabel,
-    onReabrirOp,
+    onReabrirOp: expandable ? onReabrirOp : undefined,
     reabrirLabel,
     isNovoLoteLoading,
     isReabrindoOp,
     expanded,
     panelId,
     onToggleExpanded,
+    expandable,
   };
 
   const quantityProps = {
