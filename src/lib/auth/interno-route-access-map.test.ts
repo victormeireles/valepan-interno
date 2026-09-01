@@ -83,8 +83,8 @@ describe('InternoRouteAccessMap', () => {
       minimo: 'editar',
     });
     expect(map.resolve('/api/painel/fermentacao')).toEqual({
-      kind: 'modulo',
-      modulo: 'interno_fermentacao',
+      kind: 'anyModulo',
+      modulos: ['interno_fermentacao', 'interno_painel'],
       minimo: 'ler',
     });
     expect(map.resolve('/api/ordens-producao')).toEqual({
@@ -151,6 +151,52 @@ describe('InternoRouteAccessMap', () => {
     expect(map.resolve('/api/options/embalagem')).toEqual({
       kind: 'anyModulo',
       modulos: ['interno_embalagem', 'interno_ordens'],
+      minimo: 'ler',
+    });
+  });
+
+  it('quadros de etapa TV: área ou painel, leitura', () => {
+    const ferm = {
+      kind: 'anyModulo' as const,
+      modulos: ['interno_fermentacao', 'interno_painel'],
+      minimo: 'ler' as const,
+    };
+    expect(map.resolve('/painel/fermentacao')).toEqual(ferm);
+    expect(map.resolve('/painel/fermentacao/x')).toEqual(ferm);
+    expect(map.resolve('/painel/forno')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_forno', 'interno_painel'],
+      minimo: 'ler',
+    });
+    expect(map.resolve('/painel/embalagem')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_embalagem', 'interno_painel'],
+      minimo: 'ler',
+    });
+  });
+
+  it('APIs de carga do quadro: área ou painel; fluxo JSON para as 4 leituras', () => {
+    expect(map.resolve('/api/painel/fermentacao/carga')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_fermentacao', 'interno_painel'],
+      minimo: 'ler',
+    });
+    expect(map.resolve('/api/painel/fluxo-processo/carga')).toEqual({
+      kind: 'anyModulo',
+      modulos: [
+        'interno_painel',
+        'interno_fermentacao',
+        'interno_forno',
+        'interno_embalagem',
+      ],
+      minimo: 'ler',
+    });
+  });
+
+  it('página Fluxo continua só interno_painel', () => {
+    expect(map.resolve('/realizado/fluxo-processo')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_painel',
       minimo: 'ler',
     });
   });

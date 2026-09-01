@@ -166,6 +166,49 @@ describe('InternoMiddlewareGuard', () => {
     ).toBe('allow');
   });
 
+  const soFermentacao = {
+    sub: 'user-ferm',
+    isSystemOwner: false,
+    modulosEfetivos: { interno_fermentacao: 'editar' as const },
+  };
+
+  it('só fermentação acessa quadro e JSON do fluxo, não forno nem página Fluxo', () => {
+    expect(
+      guard.decide({ pathname: '/painel/fermentacao', token: soFermentacao }),
+    ).toBe('allow');
+    expect(
+      guard.decide({
+        pathname: '/api/painel/fluxo-processo/carga',
+        token: soFermentacao,
+      }),
+    ).toBe('allow');
+    expect(guard.decide({ pathname: '/painel/forno', token: soFermentacao })).toEqual({
+      redirect: '/?erro=sem-permissao',
+    });
+    expect(
+      guard.decide({ pathname: '/realizado/fluxo-processo', token: soFermentacao }),
+    ).toEqual({
+      redirect: '/?erro=sem-permissao',
+    });
+  });
+
+  it('só painel acessa os três quadros', () => {
+    const soPainel = {
+      sub: 'user-painel',
+      isSystemOwner: false,
+      modulosEfetivos: { interno_painel: 'ler' as const },
+    };
+    expect(guard.decide({ pathname: '/painel/forno', token: soPainel })).toBe(
+      'allow',
+    );
+    expect(
+      guard.decide({
+        pathname: '/api/painel/embalagem/carga',
+        token: soPainel,
+      }),
+    ).toBe('allow');
+  });
+
   it('tablet fermentação não limpa fotos (cleanup é config)', () => {
     expect(
       guard.decide({

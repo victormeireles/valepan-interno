@@ -63,7 +63,7 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/painel/fermentacao',
-    requirement: modulo('interno_fermentacao', 'ler'),
+    requirement: anyModulo(['interno_fermentacao', 'interno_painel'], 'ler'),
   },
   {
     match: 'prefix',
@@ -73,7 +73,7 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/painel/forno',
-    requirement: modulo('interno_forno', 'ler'),
+    requirement: anyModulo(['interno_forno', 'interno_painel'], 'ler'),
   },
   {
     match: 'prefix',
@@ -83,7 +83,7 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/painel/embalagem',
-    requirement: modulo('interno_embalagem', 'ler'),
+    requirement: anyModulo(['interno_embalagem', 'interno_painel'], 'ler'),
   },
   {
     match: 'prefix',
@@ -152,7 +152,15 @@ const ROUTE_RULES: RouteRule[] = [
   {
     match: 'prefix',
     prefix: '/api/painel/fluxo-processo',
-    requirement: modulo('interno_painel', 'ler'),
+    requirement: anyModulo(
+      [
+        'interno_painel',
+        'interno_fermentacao',
+        'interno_forno',
+        'interno_embalagem',
+      ],
+      'ler',
+    ),
   },
   {
     match: 'prefix',
@@ -229,6 +237,21 @@ const ROUTE_RULES: RouteRule[] = [
   },
 
   // —— Páginas UI ——
+  {
+    match: 'prefix',
+    prefix: '/painel/fermentacao',
+    requirement: anyModulo(['interno_fermentacao', 'interno_painel'], 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/painel/forno',
+    requirement: anyModulo(['interno_forno', 'interno_painel'], 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/painel/embalagem',
+    requirement: anyModulo(['interno_embalagem', 'interno_painel'], 'ler'),
+  },
   {
     match: 'prefix',
     prefix: '/realizado/fermentacao',
