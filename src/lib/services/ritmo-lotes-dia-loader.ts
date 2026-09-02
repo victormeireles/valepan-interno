@@ -19,6 +19,10 @@ export function brazilCivilDayRangeIso(dateISO: string): { startIso: string; end
 export class RitmoLotesDiaLoader {
   async load(dateISO: string): Promise<FluxoRitmoLotesDia> {
     const { startIso, endIso } = brazilCivilDayRangeIso(dateISO);
+    return this.loadRange(startIso, endIso);
+  }
+
+  async loadRange(startIso: string, endIso: string): Promise<FluxoRitmoLotesDia> {
     const [ferm, forno, emb] = await Promise.all([
       fermentacaoLoteRepository.listByProduzidoEmRange(startIso, endIso),
       fornoLoteRepository.listByProduzidoEmRange(startIso, endIso),

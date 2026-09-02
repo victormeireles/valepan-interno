@@ -2,6 +2,8 @@ import type { FluxoControleDia } from '@/domain/fluxo-processo/controle/fluxo-co
 import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoEtapaRitmo } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
 import type { FluxoProdutividadeMeta } from '@/domain/fluxo-processo/fluxo-produtividade-capacidade';
+import type { JanelaOperacional } from '@/domain/producao-turno/janela-operacional';
+import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 
 export type FluxoEtapaKey = 'ferm' | 'forno' | 'emb';
 
@@ -157,6 +159,8 @@ export type VpFluxoPayload = {
   controle: FluxoControleDia | null;
   /** Filas WIP (a produzir / fermentando / resfriando / embalado / perdas); null se não há OPs do dia. */
   filas: FluxoFilasDia | null;
+  /** Janela T1 de cada etapa; preenchido pelo service após o builder. */
+  janelasPorEtapa?: Record<FluxoEtapaKey, JanelaOperacional>;
 };
 
 export type FluxoApontamentoEvento = {
@@ -170,6 +174,8 @@ export type FluxoApontamentoEvento = {
   dataOp?: string;
   /** Presente em ferm/forno; embalagem envia quando o lote tem `pedidoEmbalagemId` (filas casam por OP). */
   ordemProducaoId?: string;
+  turno?: ProducaoTurnoNumero | null;
+  loteId?: string;
 };
 
 export type FluxoOrdemFatorInput = {

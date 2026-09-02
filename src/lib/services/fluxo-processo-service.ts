@@ -16,6 +16,7 @@ import type {
   FluxoBuilderInput,
   FluxoOrdemFatorInput,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
+import { JanelaOperacionalResolver } from '@/domain/producao-turno/janela-operacional';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { FornoLoteRecord } from '@/domain/types/forno-lote';
@@ -35,6 +36,7 @@ import {
   FluxoProcessoRitmoAttach,
 } from '@/lib/services/fluxo-processo-ritmo-attach';
 import { ritmoLotesDiaLoader } from '@/lib/services/ritmo-lotes-dia-loader';
+import { FluxoJanelaLotesLoader } from '@/lib/services/fluxo-janela-lotes-loader';
 import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
 import { resolveReferenceEndMs } from '@/domain/painel-producao/painel-producao-areas';
 import {
@@ -47,7 +49,7 @@ import {
 type AssadeiraRow = { id: string; nome: string; cor_hex: string | null };
 
 /**
- * Carrega apontamentos do dia civil BR e monta o payload VP_FLUXO.
+ * Carrega apontamentos na união das janelas T1 e monta o payload VP_FLUXO.
  */
 export class FluxoProcessoService {
   private readonly builder = new FluxoProcessoBuilder();
@@ -60,14 +62,23 @@ export class FluxoProcessoService {
   async getCargaCompleta(date: string): Promise<CargaFluxoProcessoResponse> {
     const dateSemana = addCalendarDaysISO(date, -7);
 
-    const [ultimaDataComDados, dateAnterior, lotesHoje, ordensDia, config] =
-      await Promise.all([
-        ordemProducaoRepository.findUltimaDataComPedidos(14),
-        ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
-        ritmoLotesDiaLoader.load(date),
-        ordemProducaoRepository.listByDataProducao(date),
-        configOperacaoService.getConfig(),
-      ]);
+    const [ultimaDataComDados, dateAnterior, ordensDia, config] = await Promise.all([
+      ordemProducaoRepository.findUltimaDataComPedidos(14),
+      ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
+      ordemProducaoRepository.listByDataProducao(date),
+      configOperacaoService.getConfig(),
+    ]);
+
+    const resolver = new JanelaOperacionalResolver();
+    const janelaLotes = new FluxoJanelaLotesLoader(resolver);
+    const janelasPorEtapa = {
+      ferm: resolver.forDate(date, config.horarioInicioProducao),
+      forno: resolver.forDate(date, config.horarioInicioForno),
+      emb: resolver.forDate(date, config.horarioInicioEmbalagem),
+    };
+    const uniao = resolver.union([janelasPorEtapa.ferm, janelasPorEtapa.forno, janelasPorEtapa.emb]);
+    const { startIso, endIso } = resolver.toIsoRange(uniao);
+    const lotesHoje = await ritmoLotesDiaLoader.loadRange(startIso, endIso);
     const { ferm: fermLotes, forno: fornoLotes, emb: embLotes } = lotesHoje;
 
     const ordemIds = collectOrdemIds(fermLotes, fornoLotes, embLotes, ordensDia);
@@ -91,7 +102,7 @@ export class FluxoProcessoService {
     const [produtos, assadeiras, lotesComparacao, categoriasVisiveis] = await Promise.all([
       produtoIds.length > 0 ? this.productService.findByIds(produtoIds) : [],
       this.loadAssadeiraNames(assadeiraIds),
-      ritmoLotesDiaLoader.loadComparacao(dateSemana, dateAnterior),
+      janelaLotes.loadComparacao(dateSemana, dateAnterior, config),
       categoriaVisibilidadeManager.getIdsVisiveisEmbalagem(),
     ]);
 
@@ -154,6 +165,8 @@ export class FluxoProcessoService {
         latas: l.assadeiras,
         dataOp: ordem?.dataProducao,
         ordemProducaoId: l.ordemProducaoId,
+        turno: l.turno,
+        loteId: l.id,
       };
     });
 
@@ -167,6 +180,8 @@ export class FluxoProcessoService {
         latas: l.assadeiras,
         dataOp: ordem?.dataProducao,
         ordemProducaoId: l.ordemProducaoId,
+        turno: l.turno,
+        loteId: l.id,
       };
     });
 
@@ -181,6 +196,8 @@ export class FluxoProcessoService {
         caixas: l.quantidade.caixas,
         dataOp: l.dataPedido || ordem?.dataProducao,
         ordemProducaoId: ordemId,
+        turno: l.turno,
+        loteId: l.id,
       };
     });
 
@@ -199,6 +216,7 @@ export class FluxoProcessoService {
     };
 
     const fluxo = this.builder.build(input);
+    fluxo.janelasPorEtapa = janelasPorEtapa;
     await this.syncEstimativa(date);
     const [estimativas, produtividade] = await Promise.all([
       estimativaProducaoService.listByOrdemIds(ordensDia.map((o) => o.id)),
