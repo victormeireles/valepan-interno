@@ -37,6 +37,7 @@ import {
 } from '@/lib/services/fluxo-processo-ritmo-attach';
 import { ritmoLotesDiaLoader } from '@/lib/services/ritmo-lotes-dia-loader';
 import { FluxoJanelaLotesLoader } from '@/lib/services/fluxo-janela-lotes-loader';
+import { FluxoProcessoTvAttach } from '@/lib/services/fluxo-processo-tv-attach';
 import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
 import { resolveReferenceEndMs } from '@/domain/painel-producao/painel-producao-areas';
 import {
@@ -56,6 +57,7 @@ export class FluxoProcessoService {
   private readonly controleAttach = new FluxoControleServiceAttach();
   private readonly filasAttach = new FluxoFilasServiceAttach();
   private readonly ritmoAttach = new FluxoProcessoRitmoAttach();
+  private readonly tvAttach = new FluxoProcessoTvAttach();
 
   constructor(private readonly productService = new SupabaseProductService()) {}
 
@@ -217,6 +219,13 @@ export class FluxoProcessoService {
 
     const fluxo = this.builder.build(input);
     fluxo.janelasPorEtapa = janelasPorEtapa;
+    this.tvAttach.attach(fluxo, {
+      dateISO: date,
+      snapshot: config,
+      fermentacao,
+      forno,
+      embalagem,
+    });
     await this.syncEstimativa(date);
     const [estimativas, produtividade] = await Promise.all([
       estimativaProducaoService.listByOrdemIds(ordensDia.map((o) => o.id)),

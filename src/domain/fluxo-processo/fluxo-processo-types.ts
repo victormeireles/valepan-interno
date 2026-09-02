@@ -2,6 +2,8 @@ import type { FluxoControleDia } from '@/domain/fluxo-processo/controle/fluxo-co
 import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoEtapaRitmo } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
 import type { FluxoProdutividadeMeta } from '@/domain/fluxo-processo/fluxo-produtividade-capacidade';
+import type { PainelEtapaTvTurnosResumoDto } from '@/domain/painel-etapa-tv/painel-etapa-tv-turnos-resumo';
+import type { PainelEtapaTvLoteFonte } from '@/domain/painel-etapa-tv/painel-etapa-tv-types';
 import type { JanelaOperacional } from '@/domain/producao-turno/janela-operacional';
 import type { ProducaoTurnoNumero } from '@/domain/producao-turno/producao-turno-types';
 
@@ -161,6 +163,10 @@ export type VpFluxoPayload = {
   filas: FluxoFilasDia | null;
   /** Janela T1 de cada etapa; preenchido pelo service após o builder. */
   janelasPorEtapa?: Record<FluxoEtapaKey, JanelaOperacional>;
+  /** Resumo T1/T2/T3 da janela; preenchido pelo service após o builder. */
+  turnosResumo?: Record<FluxoEtapaKey, PainelEtapaTvTurnosResumoDto>;
+  /** Último lote da janela por etapa; preenchido pelo service após o builder. */
+  ultimoPorEtapa?: Record<FluxoEtapaKey, PainelEtapaTvLoteFonte | null>;
 };
 
 export type FluxoApontamentoEvento = {
