@@ -76,7 +76,7 @@ export default function ReclamacaoFiltros({
         ]}
       />
       <Input
-        label="De"
+        label="Problema de"
         type="date"
         value={filtro.dataProblemaDe ?? ''}
         onChange={(event) =>
@@ -84,7 +84,7 @@ export default function ReclamacaoFiltros({
         }
       />
       <Input
-        label="Até"
+        label="Problema até"
         type="date"
         value={filtro.dataProblemaAte ?? ''}
         onChange={(event) =>

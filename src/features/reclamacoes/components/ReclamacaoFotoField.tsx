@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { RECLAMACAO_MAX_FOTOS } from '@/domain/reclamacoes/reclamacao-fotos-limite';
 import type { ReclamacaoFotoRecord } from '@/domain/reclamacoes/reclamacao-types';
+import { ReclamacaoFotoLightbox } from '@/features/reclamacoes/components/ReclamacaoFotoLightbox';
 
 type Props = {
   existentes: ReclamacaoFotoRecord[];
@@ -26,7 +27,7 @@ export default function ReclamacaoFotoField({
   onRemovidosChange,
   onNovosChange,
 }: Props) {
-  const [ampliada, setAmpliada] = useState<string | null>(null);
+  const [ampliada, setAmpliada] = useState<number | null>(null);
   const visiveis = existentes.filter((f) => !fotoIdsRemovidos.includes(f.id));
   const restantes = RECLAMACAO_MAX_FOTOS - visiveis.length - novos.length;
 
@@ -59,6 +60,8 @@ export default function ReclamacaoFotoField({
     const images = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
     onNovosChange([...novos, ...images.slice(0, restantes)]);
   };
+
+  const srcs = miniaturas.map((item) => item.src).filter((src) => src.length > 0);
 
   return (
     <div className="space-y-3">
@@ -109,9 +112,10 @@ export default function ReclamacaoFotoField({
             <li key={item.key} className="relative">
               <button
                 type="button"
-                className="block h-20 w-20 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                className="block h-20 w-20 cursor-pointer overflow-hidden rounded-xl border border-stone-200 bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                 onClick={() => {
-                  if (item.src) setAmpliada(item.src);
+                  const indice = srcs.indexOf(item.src);
+                  if (indice >= 0) setAmpliada(indice);
                 }}
                 aria-label="Ampliar foto"
               >
@@ -136,20 +140,12 @@ export default function ReclamacaoFotoField({
         </ul>
       ) : null}
 
-      {ampliada ? (
-        <dialog
-          open
-          className="fixed inset-0 z-[80] flex h-full max-h-none w-full max-w-none items-center justify-center bg-stone-900/70 p-4"
-          onClick={() => setAmpliada(null)}
-          onCancel={() => setAmpliada(null)}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={ampliada}
-            alt="Foto da reclamação"
-            className="max-h-[90dvh] max-w-full rounded-xl object-contain"
-          />
-        </dialog>
+      {ampliada !== null ? (
+        <ReclamacaoFotoLightbox
+          srcs={srcs}
+          inicial={ampliada}
+          onClose={() => setAmpliada(null)}
+        />
       ) : null}
     </div>
   );

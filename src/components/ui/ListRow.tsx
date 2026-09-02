@@ -6,6 +6,8 @@ export interface ListRowColumn {
   value: ReactNode;
   width?: string;
   emphasize?: boolean;
+  align?: 'left' | 'right';
+  tabular?: boolean;
 }
 
 export interface ListRowProps {
@@ -87,12 +89,17 @@ export function ListRow({
 
       {columns.map((c, i) => {
         const empty = c.value == null || c.value === '';
+        const align = c.align === 'left' ? 'text-left' : 'text-right';
+        const typeface =
+          c.tabular === false ? 'font-sans text-sm' : 'font-mono text-sm tabular-nums';
         return (
           <span
             key={i}
             style={{ width: c.width ?? '3.5rem' }}
             className={[
-              'shrink-0 text-right font-mono text-sm tabular-nums',
+              'shrink-0',
+              align,
+              typeface,
               empty
                 ? 'text-stone-400'
                 : c.emphasize

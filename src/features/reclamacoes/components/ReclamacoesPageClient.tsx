@@ -7,22 +7,18 @@ import {
   listReclamacoes,
   type ReclamacaoFormOpcoes,
 } from '@/app/actions/reclamacao-actions';
-import OverflowMenu from '@/components/OverflowMenu/OverflowMenu';
-import OverflowMenuItem from '@/components/OverflowMenu/OverflowMenuItem';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
-import { formatarDataIsoPtBr } from '@/domain/reclamacoes/reclamacao-data';
 import {
   RECLAMACAO_FILTRO_VAZIO,
   type ReclamacaoListFiltro,
   type ReclamacaoListItem,
 } from '@/domain/reclamacoes/reclamacao-types';
-import { formatarReclamacaoQuantidade } from '@/domain/reclamacoes/reclamacao-unidade';
 import { categoriasDoFiltro } from '@/features/reclamacoes/reclamacao-form-options';
+import ReclamacoesLista from '@/features/reclamacoes/components/ReclamacoesLista';
 import {
   CONFIRMAR_EXCLUIR_RECLAMACAO,
   EMPTY_RECLAMACOES,
@@ -162,53 +158,14 @@ export default function ReclamacoesPageClient({ initialItens, opcoes }: Props) {
             }
           />
         ) : (
-          itens.map((item, index) => (
-            <ListRow
-              key={item.id}
-              even={index % 2 === 1}
-              title={item.clienteNome}
-              subtitle={`${item.produtoNome} · ${item.categoriaNome}`}
-              onClick={() => openEdit(item)}
-              columns={[
-                { value: formatarDataIsoPtBr(item.dataProblema), width: '6.5rem' },
-                {
-                  value: formatarReclamacaoQuantidade(item.quantidade, item.unidade),
-                  width: '7.5rem',
-                  emphasize: true,
-                },
-                { value: formatarDataIsoPtBr(item.dataFabricacao), width: '6.5rem' },
-                {
-                  value:
-                    item.fotos.length > 0 ? (
-                      <span className="material-icons text-xl text-stone-500" aria-hidden>
-                        photo
-                      </span>
-                    ) : (
-                      '\u00a0'
-                    ),
-                  width: '2rem',
-                },
-              ]}
-              menu={
-                <OverflowMenu ariaLabel={`Ações para ${item.clienteNome}`} menuWidth={160}>
-                  <OverflowMenuItem
-                    label="Editar"
-                    icon="edit"
-                    onClick={() => openEdit(item)}
-                  />
-                  <OverflowMenuItem
-                    label="Excluir"
-                    icon="delete"
-                    tone="danger"
-                    disabled={deletingId === item.id}
-                    onClick={() => {
-                      void handleDelete(item);
-                    }}
-                  />
-                </OverflowMenu>
-              }
-            />
-          ))
+          <ReclamacoesLista
+            itens={itens}
+            deletingId={deletingId}
+            onEdit={openEdit}
+            onDelete={(item) => {
+              void handleDelete(item);
+            }}
+          />
         )}
       </Card>
 
