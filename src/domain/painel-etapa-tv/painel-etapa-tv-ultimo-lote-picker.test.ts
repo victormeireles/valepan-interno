@@ -19,6 +19,77 @@ describe('PainelEtapaTvUltimoLotePicker', () => {
     expect(PainelEtapaTvUltimoLotePicker.fromLotes([])).toBeNull();
   });
 
+  it('fromLotesPorOp: até 3 OPs, a mais recente de cada, ordenadas pelo último lote', () => {
+    const got = PainelEtapaTvUltimoLotePicker.fromLotesPorOp([
+      lote({
+        loteId: 'op1-old',
+        ordemId: 'op1',
+        produzidoEm: '2026-09-02T10:00:00-03:00',
+        quantidade: 5,
+      }),
+      lote({
+        loteId: 'op1-new',
+        ordemId: 'op1',
+        produtoNome: 'Brioche 65g',
+        produzidoEm: '2026-09-02T14:00:00-03:00',
+        quantidade: 12,
+      }),
+      lote({
+        loteId: 'op2',
+        ordemId: 'op2',
+        produtoNome: 'Hot Dog',
+        produzidoEm: '2026-09-02T13:00:00-03:00',
+        quantidade: 8,
+      }),
+      lote({
+        loteId: 'op3',
+        ordemId: 'op3',
+        produtoNome: 'Mini',
+        produzidoEm: '2026-09-02T12:00:00-03:00',
+        quantidade: 30,
+      }),
+      lote({
+        loteId: 'op4',
+        ordemId: 'op4',
+        produzidoEm: '2026-09-02T11:00:00-03:00',
+        quantidade: 99,
+      }),
+    ]);
+    expect(got.map((item) => item.ordemId)).toEqual(['op1', 'op2', 'op3']);
+    expect(got[0]?.loteId).toBe('op1-new');
+    expect(got[0]?.quantidade).toBe(12);
+    expect(got[1]?.quantidade).toBe(8);
+    expect(got[2]?.quantidade).toBe(30);
+  });
+
+  it('fromLotesPorOp ignora lote sem ordem e respeita a janela', () => {
+    const janela = new JanelaOperacionalResolver().forDate('2026-09-02', '22:00');
+    const got = PainelEtapaTvUltimoLotePicker.fromLotesPorOp(
+      [
+        lote({
+          loteId: 'sem-op',
+          ordemId: '',
+          produzidoEm: '2026-09-01T23:00:00-03:00',
+          quantidade: 1,
+        }),
+        lote({
+          loteId: 'fora',
+          ordemId: 'op-fora',
+          produzidoEm: '2026-09-01T21:00:00-03:00',
+        }),
+        lote({
+          loteId: 'ok',
+          ordemId: 'op-ok',
+          produzidoEm: '2026-09-01T22:30:00-03:00',
+          quantidade: 7,
+        }),
+      ],
+      { iniMs: janela.iniMs, fimMs: janela.fimMs },
+    );
+    expect(got).toHaveLength(1);
+    expect(got[0]?.loteId).toBe('ok');
+  });
+
   it('escolhe o produzidoEm mais recente', () => {
     const got = PainelEtapaTvUltimoLotePicker.fromLotes([
       lote({ loteId: 'a', produzidoEm: '2026-09-01T10:00:00-03:00' }),

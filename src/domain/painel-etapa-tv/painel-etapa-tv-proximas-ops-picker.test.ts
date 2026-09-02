@@ -17,7 +17,7 @@ describe('PainelEtapaTvProximasOpsPicker', () => {
     expect(
       PainelEtapaTvProximasOpsPicker.pick(
         [op({ ordemId: 'x', finalizada: true, produzido: 10 })],
-        null,
+        [],
       ),
     ).toEqual([]);
   });
@@ -30,7 +30,7 @@ describe('PainelEtapaTvProximasOpsPicker', () => {
         op({ ordemId: 'p2', ordemPlanejamento: 3, produzido: 0 }),
         op({ ordemId: 'a2', ordemPlanejamento: 4, produzido: 1 }),
       ],
-      null,
+      [],
     );
     expect(got.map((item) => item.ordemId)).toEqual(['a1', 'a2', 'p1']);
   });
@@ -42,7 +42,19 @@ describe('PainelEtapaTvProximasOpsPicker', () => {
         op({ ordemId: 'n1', ordemPlanejamento: 2, produzido: 0 }),
         op({ ordemId: 'done', ordemPlanejamento: 3, finalizada: true, produzido: 9 }),
       ],
-      'last',
+      ['last'],
+    );
+    expect(got.map((item) => item.ordemId)).toEqual(['n1']);
+  });
+
+  it('exclui várias OPs já mostradas nos últimos lançamentos', () => {
+    const got = PainelEtapaTvProximasOpsPicker.pick(
+      [
+        op({ ordemId: 'u1', ordemPlanejamento: 1, produzido: 8 }),
+        op({ ordemId: 'u2', ordemPlanejamento: 2, produzido: 3 }),
+        op({ ordemId: 'n1', ordemPlanejamento: 3, produzido: 0 }),
+      ],
+      ['u1', 'u2'],
     );
     expect(got.map((item) => item.ordemId)).toEqual(['n1']);
   });

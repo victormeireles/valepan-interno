@@ -54,19 +54,23 @@ export default function PainelEtapaTvScreen({
     [config.id, ordens, pedidos, selectedDate],
   );
 
-  const { ultimoLote, proximasOps } = useMemo(() => {
+  const { ultimoLotes, proximasOps } = useMemo(() => {
     const fonte =
       config.id === 'embalagem'
         ? PainelEtapaTvFonteAdapter.fromPedidos(pedidos)
         : PainelEtapaTvFonteAdapter.fromOrdens(ordens);
-    const ultimoFluxo = fluxo?.ultimoPorEtapa?.[config.fluxoKey];
     const janelaMs = janela ? { iniMs: janela.iniMs, fimMs: janela.fimMs } : undefined;
-    const ultimo =
-      ultimoFluxo ??
-      PainelEtapaTvUltimoLotePicker.fromLotes(fonte.lotes, janelaMs);
+    const doFluxo = fluxo?.ultimoPorEtapa?.[config.fluxoKey];
+    const ultimos =
+      doFluxo && doFluxo.length > 0
+        ? doFluxo
+        : PainelEtapaTvUltimoLotePicker.fromLotesPorOp(fonte.lotes, janelaMs);
     return {
-      ultimoLote: ultimo,
-      proximasOps: PainelEtapaTvProximasOpsPicker.pick(fonte.ops, ultimo?.ordemId ?? null),
+      ultimoLotes: ultimos,
+      proximasOps: PainelEtapaTvProximasOpsPicker.pick(
+        fonte.ops,
+        ultimos.map((lote) => lote.ordemId),
+      ),
     };
   }, [config.id, config.fluxoKey, fluxo?.ultimoPorEtapa, janela, ordens, pedidos]);
 
@@ -80,9 +84,6 @@ export default function PainelEtapaTvScreen({
     return PainelEtapaTvOpProgresso.fromLotes(lotesDaEtapa, metrics.meta, janela);
   }, [janela, lotesDaEtapa, metrics.meta]);
 
-  const ultimoProduct = ultimoLote
-    ? PainelEtapaTvProductMapper.findById(products, ultimoLote.ordemId)
-    : undefined;
   const scale = useMemo(
     () => (fluxo ? new FluxoDisplayScale(fluxo, config.mode) : null),
     [fluxo, config.mode],
@@ -97,8 +98,7 @@ export default function PainelEtapaTvScreen({
       turnos={turnos}
       t1Label={t1Label}
       dateISO={selectedDate}
-      ultimoLote={ultimoLote}
-      ultimoProduct={ultimoProduct}
+      ultimoLotes={ultimoLotes}
       proximasOps={proximasOps}
       products={products}
       unit={unit}

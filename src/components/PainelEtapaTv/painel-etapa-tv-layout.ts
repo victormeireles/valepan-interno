@@ -1,5 +1,5 @@
 /**
- * Grade do quadro de TV: resumo + último + próximas no topo, gráfico embaixo.
+ * Grade do quadro de TV: resumo + últimos lançamentos + próximas no topo, gráfico embaixo.
  * Ativa a partir de 480px para TVs com zoom/escala alta ainda receberem colunas.
  */
 export const PAINEL_ETAPA_TV_GRID_CLASS = [

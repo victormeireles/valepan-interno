@@ -29,8 +29,7 @@ type PainelEtapaTvGridProps = {
   turnos: PainelEtapaTvTurnosResumoDto | null;
   t1Label: string;
   dateISO: string;
-  ultimoLote: PainelEtapaTvUltimoLote | null;
-  ultimoProduct: EtapaProductItem | undefined;
+  ultimoLotes: PainelEtapaTvUltimoLote[];
   proximasOps: PainelEtapaTvOpFonte[];
   products: EtapaProductItem[];
   unit: string;
@@ -63,8 +62,7 @@ export default function PainelEtapaTvGrid({
   turnos,
   t1Label,
   dateISO,
-  ultimoLote,
-  ultimoProduct,
+  ultimoLotes,
   proximasOps,
   products,
   unit,
@@ -87,8 +85,8 @@ export default function PainelEtapaTvGrid({
       </div>
       <TopPanel>
         <PainelEtapaTvUltimoLotePanel
-          lote={ultimoLote}
-          product={ultimoProduct}
+          lotes={ultimoLotes}
+          products={products}
           unit={unit}
           showTipoEstoqueMarcaBadge={showMarca}
         />

@@ -3,11 +3,12 @@ import type { PainelEtapaTvOpFonte } from './painel-etapa-tv-types';
 export class PainelEtapaTvProximasOpsPicker {
   static pick(
     ops: PainelEtapaTvOpFonte[],
-    excludeOrdemId: string | null,
+    excludeOrdemIds: readonly string[],
     limite = 3,
   ): PainelEtapaTvOpFonte[] {
+    const excluded = new Set(excludeOrdemIds);
     const abertas = ops.filter(
-      (op) => !op.finalizada && op.ordemId !== excludeOrdemId,
+      (op) => !op.finalizada && !excluded.has(op.ordemId),
     );
     const parciais = abertas
       .filter((op) => op.produzido > 0)

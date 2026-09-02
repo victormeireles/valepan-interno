@@ -41,10 +41,10 @@ export class FluxoProcessoTvAttach {
       emb: input.embalagem,
     };
     const turnosResumo = {} as Record<FluxoEtapaKey, PainelEtapaTvTurnosResumoDto>;
-    const ultimoPorEtapa = {} as Record<FluxoEtapaKey, PainelEtapaTvLoteFonte | null>;
+    const ultimoPorEtapa = {} as Record<FluxoEtapaKey, PainelEtapaTvLoteFonte[]>;
     for (const key of ETAPAS) {
       turnosResumo[key] = resumoDaEtapa(byKey[key], key, input);
-      ultimoPorEtapa[key] = ultimoDaEtapa(byKey[key], key);
+      ultimoPorEtapa[key] = ultimosDaEtapa(byKey[key], key);
     }
     fluxo.turnosResumo = turnosResumo;
     fluxo.ultimoPorEtapa = ultimoPorEtapa;
@@ -68,11 +68,11 @@ function resumoDaEtapa(
   );
 }
 
-function ultimoDaEtapa(
+function ultimosDaEtapa(
   eventos: FluxoApontamentoEvento[],
   key: FluxoEtapaKey,
-): PainelEtapaTvLoteFonte | null {
-  return PainelEtapaTvUltimoLotePicker.fromLotes(
+): PainelEtapaTvLoteFonte[] {
+  return PainelEtapaTvUltimoLotePicker.fromLotesPorOp(
     eventos.flatMap((e) => loteFonteOf(e, key)),
   );
 }

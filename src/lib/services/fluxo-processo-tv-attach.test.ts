@@ -76,9 +76,10 @@ describe('FluxoProcessoTvAttach', () => {
     expect(fluxo.turnosResumo?.forno.outraOp).toBe(8);
     expect(fluxo.turnosResumo?.forno.outraOpData).toBe(DATE_ANT);
     expect(fluxo.turnosResumo?.forno.total).toBe(20);
-    expect(fluxo.ultimoPorEtapa?.forno?.loteId).toBe('lote-d');
-    expect(fluxo.ultimoPorEtapa?.forno?.quantidade).toBe(12);
-    expect(fluxo.ultimoPorEtapa?.ferm).toBeNull();
-    expect(fluxo.ultimoPorEtapa?.emb).toBeNull();
+    expect(fluxo.ultimoPorEtapa?.forno[0]?.loteId).toBe('lote-d');
+    expect(fluxo.ultimoPorEtapa?.forno[0]?.quantidade).toBe(12);
+    expect(fluxo.ultimoPorEtapa?.forno).toHaveLength(2);
+    expect(fluxo.ultimoPorEtapa?.ferm).toEqual([]);
+    expect(fluxo.ultimoPorEtapa?.emb).toEqual([]);
   });
 });

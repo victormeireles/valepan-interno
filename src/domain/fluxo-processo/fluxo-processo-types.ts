@@ -166,7 +166,7 @@ export type VpFluxoPayload = {
   /** Resumo T1/T2/T3 da janela; preenchido pelo service após o builder. */
   turnosResumo?: Record<FluxoEtapaKey, PainelEtapaTvTurnosResumoDto>;
   /** Último lote da janela por etapa; preenchido pelo service após o builder. */
-  ultimoPorEtapa?: Record<FluxoEtapaKey, PainelEtapaTvLoteFonte | null>;
+  ultimoPorEtapa?: Record<FluxoEtapaKey, PainelEtapaTvLoteFonte[]>;
 };
 
 export type FluxoApontamentoEvento = {
