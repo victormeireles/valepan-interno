@@ -1,0 +1,264 @@
+# Painéis de etapa: OP vs janela operacional (22h–22h)
+
+Data: 2026-09-02  
+Status: aprovado em brainstorming  
+Telas: `/painel/fermentacao`, `/painel/forno`, `/painel/embalagem`  
+Atualiza: [quadro-etapa-tv](2026-09-01-quadro-etapa-tv-design.mdx) (header, card, gráfico, “dia”)
+
+## Objetivo
+
+No quadro de TV, responder duas perguntas sem misturá-las:
+
+1. **Quanto da OP da data foi ou falta entregar** — todos os lotes dessa `dataProducao`, inclusive véspera (começo) e dia seguinte (cauda).
+2. **Quanto os turnos produziram na janela** — tudo apontado no intervalo T1→T1+24h, qualquer OP, quebrado pelo carimbo `turno` do lote.
+
+Quem olha a TV não precisa saber a regra: cada cifra tem rótulo de recorte, e a janela está escrita no cabeçalho.
+
+### Sucesso da v1
+
+- Selecionar 02/09 mostra janela `[01/09 22:00, 02/09 22:00)` quando o T1 da etapa é 22:00 (derivado da config, não chumbado).
+- Header = pergunta 1 (feito / meta da OP, completo no tempo).
+- Card de TV = pergunta 1 detalhada + pergunta 2 por T1/T2/T3.
+- Gráfico = só pergunta 2: 24 barras começando na hora do T1; hachura = outra OP.
+- Lote da OP de 02/09 às 22h de 01/09 entra no gráfico e no feito da OP de 02/09.
+- Lote da OP de 01/09 embalado de manhã em 02/09 entra no gráfico de 02/09 (hachura) e no feito da OP de 01/09 (cauda, se essa data estiver selecionada).
+- Nenhuma tela usa a palavra “dia” sozinha.
+
+## Contexto
+
+Três relógios hoje:
+
+| Relógio | Uso atual |
+|---------|-----------|
+| Dia civil 00:00–24:00 | Carga de lotes do fluxo (`brazilCivilDayRangeIso`) e eixo do gráfico `00…23` |
+| Data da OP | Filtro de fermentação/forno no dashboard e no builder (`!opAnterior`); header ferm/forno (`toolbarMetricsEtapaDiaCivil`) |
+| Dia operacional (T1 → +24h) | Já existe em `ProducaoTurnoDiaResolver`; o quadro **não lê** |
+
+Efeitos no chão (T1 = 22h, OP de 02/09 começa 22h de 01/09):
+
+- Gráfico de 02/09 começa à meia-noite e perde 22h–24h de 01/09.
+- Fermentação/forno **descartam** lote de outra OP; o turno 22h–07h do forno some pela metade.
+- Header ferm/forno: meta da OP, produzido só no dia civil — as duas perguntas num número só.
+- Embalagem já hachura OP anterior no gráfico e o header já soma lotes do pedido (completo). Fermentação/forno não.
+
+Turnos já estão cadastrados por etapa e carimbados no lote. Sobreposição é válida (ferm T2 07–16 e T3 13–22). Volume por turno **não** se infere pelo relógio.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Duas perguntas | Duas zonas. Não alongar o gráfico depois das 22h |
+| Data no seletor | Continua sendo a **data da OP** |
+| Janela | 24h alinhada ao T1 da etapa, a única que contém o **meio-dia** da data selecionada |
+| Horário na UI | Vem da config (`22h–22h` hoje). Sem constante de 2h |
+| Gráfico | Só a janela; hachura = outra OP nas **três** etapas |
+| Feito da OP | Sem recorte de hora (todos os lotes da `dataProducao`) |
+| Turnos | Carimbo `turno` do lote na janela; `null` → linha “sem turno” só se houver volume |
+| Card da TV | Novo. Não esvaziar `FluxoEtapaCard` (tela de fluxo) |
+| Previsto no gráfico | “Previsto nesta janela”, eixos iguais ao realizado |
+| Realizado (lançamento) | Fora. Toolbar civil de lá não muda nesta entrega |
+| Faixas de turno no gráfico | Fora (v1 = totais no card) |
+
+Descartado: eixo variável (22h de ontem até agora); dois gráficos; inferir turno pelo relógio.
+
+## Vocabulário (obrigatório)
+
+Nunca “produção do dia”, “no dia”, “ontem” sem dizer se é OP ou janela.
+
+| Recorte | Nome na UI |
+|---------|------------|
+| Pergunta 1 | **OP 02/09** (sempre com a data) |
+| Pergunta 2 | **Turnos 22h–22h** (relógios do T1 da etapa) |
+| Pedaço da OP dentro da janela | **nesta janela** |
+| Pedaço da OP depois do fim da janela | **depois desta janela** |
+| Volume da janela que não é a OP da data | **outra OP** (com a data se for uma só: **OP 01/09**) |
+| Fantasma do gráfico | **previsto nesta janela** |
+
+Hachura: **outra OP** / **OP 01/09**. Não “hachurado = OP de ontem” se a outra data não for ontem.
+
+## Janela operacional da data
+
+`JanelaOperacionalResolver.forDate(dateISO, t1Inicio)`:
+
+1. Meio-dia da data em Brasília.
+2. Candidato A: T1 no calendário `dateISO`. Candidato B: T1 no dia anterior.
+3. Escolher o intervalo `[T1, T1+24h)` que contém o meio-dia.
+4. Fim exclusivo.
+
+Exemplos:
+
+| T1 | Data 02/09 | Janela |
+|----|------------|--------|
+| 22:00 | contém 02/09 12:00 | `[01/09 22:00, 02/09 22:00)` |
+| 07:00 | contém 02/09 12:00 | `[02/09 07:00, 03/09 07:00)` |
+| 00:00 | contém 02/09 12:00 | `[02/09 00:00, 03/09 00:00)` |
+
+Cada painel usa o T1 da **própria** etapa. Os três T1 atuais são 22:00 — visual igual, regra única.
+
+No fluxo (três etapas, um payload): carregar a **união** das três janelas da data; o gráfico de cada etapa ordena as horas pelo T1 dela.
+
+`ProducaoTurnoDiaResolver` continua respondendo “qual dia operacional contém *agora*” (lançamento). Não reutilizar para “janela da data selecionada”.
+
+## Layout do quadro TV
+
+```
+Cabeçalho: logo · Quadro / etapa · OP feito/meta · “OP 2 set · turnos 22h de 1 set → 22h de 2 set” · agora · data
+┌──────────────────────────┬─────────────────────────────────┐
+│ Card TV (novo)           │ Por hora nesta janela           │
+│ ORDEM + TURNOS           │ eixo 22 23 00 … 21              │
+├──────────────────────────┼─────────────────────────────────┤
+│ Último lançamento        │ Próximas OPs (da data)          │
+└──────────────────────────┴─────────────────────────────────┘
+```
+
+Some da TV: `FluxoEtapaCard` (previsto vs agora, ritmo, continuidade, bloco). Continua na tela de fluxo. Some `FluxoFaixaEtapa` debaixo do gráfico da TV.
+
+### Header
+
+Só pergunta 1: `feito / meta` da OP da data, unidade da tela (LT / CX), barra + pill de falta.
+
+Ferm/forno: deixar de usar `toolbarMetricsEtapaDiaCivil` (produzido civil). Passar a `buildOrdensEtapaToolbarMetrics` sobre as OPs visíveis — `ordem.produzido` já é a vida inteira da OP.
+
+Embalagem: `buildEmbalagemToolbarMetrics` já soma o pedido (completo). Manter.
+
+Subtítulo obrigatório ao lado do relógio:
+
+`OP 2 set · turnos 22h de 1 set → 22h de 2 set`
+
+“Agora” no header continua o relógio de parede. Marcador no gráfico: só se *agora* ∈ janela da data selecionada (não “se a data é o calendário de hoje”). Depois das 22h de 02/09, o quadro 02/09 não marca “agora”.
+
+### Card TV — duas zonas
+
+Rótulos UPPERCASE, blocos empilhados (não dois números soltos).
+
+**ORDEM 02/09**
+
+- `feito / meta` + unidade (mesmo par do header, detalhado aqui).
+- Micro-cifras: `nesta janela` · `depois desta janela` (omitir se 0) · `falta`.
+- `antes desta janela` só se volume > 0 (apontamento antes do T1; raro).
+- Invariante: `antes + nesta + depois = feito`.
+
+**TURNOS 22H–22H**
+
+- Total da janela (qualquer OP).
+- T1 T2 T3 com relógio curto (`22h–07h`) e volume. Omitir turno desligado na config.
+- `sem turno` só se houver lote `turno = null` na janela.
+- Se parte não é a OP da data: `800 de outra OP` / `800 de OP 01/09`.
+
+Soma T1+T2+T3+sem turno = total da janela.
+
+### Gráfico
+
+Título: **Por hora nesta janela**. Legenda do total: `{n} LT nesta janela` — nunca “no dia”.
+
+Eixo: 24 horas a partir da hora civil do T1 (`22 23 00 … 21`). Lotes filtrados pelo instante da janela; barra da primeira hora pode ficar vazia na fração antes do T1 (T1 22:30 → barra 22 só conta 22:30–23:00).
+
+Barras = volume da janela (todas as OPs), empilhado por assadeira. Hachura = parcela `dataOp ≠ dateISO` (`matrizAnt` nas três etapas, não só embalagem).
+
+Previsto: mesmo eixo; rótulo **previsto nesta janela**. Não precisa somar a meta da OP (a cauda da embalagem não cabe nesta janela).
+
+## Regras de volume
+
+Unidade de tela: LT ferm/forno, CX embalagem. Fonte em unidades no fluxo; card/header na unidade operacional da etapa.
+
+### Pergunta 1 — OP da data `D`
+
+Conjunto: OPs/pedidos com `dataProducao` / `dataPedido` = `D`, recorte visível já existente.
+
+| Cifra | Definição |
+|-------|-----------|
+| feito | Σ lotes desses pedidos/OPs, qualquer `produzidoEm` |
+| meta | meta efetiva já usada no Realizado |
+| nesta janela | lote da OP `D` com `produzidoEm ∈ [ini, fim)` |
+| depois desta janela | lote da OP `D` com `produzidoEm ≥ fim` |
+| falta | `max(0, meta − feito)` |
+
+Header e zona ORDEM usam o mesmo `feito` / `meta`.
+
+### Pergunta 2 — janela
+
+Conjunto: lotes da etapa com `produzidoEm ∈ [ini, fim)`, recorte visível, **qualquer** OP.
+
+Quebra T1/T2/T3 pelo campo `turno` (não por `isClockInJanela`). Outra OP = `dataOp ≠ D`.
+
+Gráfico = este conjunto por hora civil, depois reordenado a partir do T1.
+
+## Dados e blast radius
+
+O gráfico da TV é o `FluxoBarrasHora` alimentado por `GET /api/painel/fluxo-processo/carga`. Sem mudar a carga, 22h–24h da véspera **não existem** no payload.
+
+v1 **muda a definição de dia da carga do fluxo**: de civil 00:00–24:00 para a união das janelas operacionais da data. A tela `/realizado/fluxo-processo` herda eixo 22h–22h, hachura em ferm/forno e lotes da véspera. O **card** do fluxo (`FluxoEtapaCard`) não é redesenhado; o gráfico compartilhado ganha o mesmo título/eixo/legenda (“nesta janela”, hachura “outra OP”) para não haver dois idiomas.
+
+Filas e ritmo do fluxo passam a ver a mesma janela (comparar ontem/D-7 no mesmo recorte T1). Estimativa/previsto horário alinha ao mesmo eixo.
+
+Fora: Painel Produção, lançamento Realizado, config de turnos (já existe), WhatsApp.
+
+### Carga
+
+- Substituir `brazilCivilDayRangeIso(date)` na carga de fluxo (e no ritmo que ela usa) por `JanelaOperacionalResolver` da data × T1s.
+- Evento de fluxo ganha `turno` (1\|2\|3\|null) para o card da TV; se o card calcular turnos na etapa `/carga`, ainda precisa dos lotes de **outra** OP — então a janela tem de vir do fluxo (ou a etapa `/carga` passar a listar lotes da janela, não só OPs de `D`). Preferência: **anexar resumo de turnos no payload de fluxo da etapa visível**, para a TV não reimplementar soma.
+- `matrizAnt` preenchida para `ferm`, `forno` e `emb`. Builder deixa de filtrar `!opAnterior` em ferm/forno na matriz do gráfico. A TV lê `matrizAnt[etapa]` (não só `emb`).
+- Matriz = janela inteira (qualquer OP). `matrizAnt` = parcela outra OP. Total da janela = soma da matriz; hachura = `matrizAnt`.
+- Card do **fluxo** (não TV): número grande continua sendo a OP da data **na janela** (como a embalagem já faz: `etapaTotal − matrizAnt`). Não redesenhar o card; só não inflar com outra OP.
+- Card da **TV**, zona TURNOS: soma da matriz (janela). Zona ORDEM: OPs/pedidos da `/carga` da etapa (feito completo no tempo).
+- Resumo T1/T2/T3 por etapa vai no payload de fluxo (`turnosResumo[etapa]`), porque a `/carga` da etapa só traz OPs da data e o T1 noturno mistura OPs.
+
+### Último lançamento
+
+Mais recente na **janela**, qualquer OP (o que acabou de sair na linha). Empate: `loteId` descendente. Vazio: “Nenhum lançamento nesta janela”.
+
+Próximas OPs: inalterado (OPs da data, não finalizadas).
+
+## Arquitetura
+
+```
+JanelaOperacionalResolver.forDate(date, t1Inicio) → { iniMs, fimMs, iniClock, fimClock }
+
+FluxoProcessoService
+  load lotes em união das janelas das 3 etapas
+  copia turno + dataOp
+  builder: matriz janela; matrizAnt nas 3 etapas
+  previsto horário na mesma janela
+  anexa turnosResumo[etapa] = { t1, t2, t3, semTurno, outraOp }
+
+PainelEtapaTv
+  Header: métricas OP completa (ordens/pedidos)
+  PainelEtapaTvResumoCard: zona ORDEM (lotes da OP × janela) + zona TURNOS (resumo)
+  PainelEtapaTvGrafico: eixo a partir do T1; título “nesta janela”
+```
+
+Unidades novas, arquivos < 400 linhas:
+
+| Unidade | Faz |
+|---------|-----|
+| `JanelaOperacionalResolver` | Meio-dia → `[T1, T1+24h)` |
+| `PainelEtapaTvOpProgresso` | feito / nesta / depois / falta a partir dos lotes da OP |
+| `PainelEtapaTvResumoCard` | Duas zonas, só apresentação |
+| Eixo de horas no gráfico | Ordem a partir da hora do T1; “agora” se `now ∈ janela` |
+
+Não inferir turno no resolver da janela.
+
+## Casos
+
+- 02/09 10h, quadro 02/09: janela aberta; sem “depois desta janela”; gráfico 22…21; “agora” na barra 10; OP 02/09 inclui fermentação da 22h de 01/09.
+- 02/09 10h, quadro 01/09: janela fechada; ORDEM mostra cauda embalada hoje; TURNOS de 01/09 **não** incluem a manhã de 02/09; sem marcador agora.
+- Forno 22h–07h: barras 22–06 com hachura (OP 01/09) + sólido (OP 02/09) conforme `dataOp`.
+- T2 e T3 sobrepostos: volumes pelos carimbos, os dois > 0 no mesmo relógio.
+- Sem T2 na config: não mostrar T2.
+
+## Testes (domínio)
+
+- Resolver: T1 22:00 / 07:00 / 00:00 nas tabelas acima; instante na fronteira `fim` pertence à janela seguinte.
+- OP progresso: lote véspera conta no feito e em nesta janela; lote depois do fim só em depois; soma fecha.
+- Matriz: lote 22h D-1 na barra 22; lote de outra OP em `matrizAnt` de ferm e forno.
+- Turnos: dois lotes no overlap T2/T3 somam no carimbo, não no relógio.
+- “Agora”: 02/09 23h + data 02/09 + T1 22:00 → não marca; data 03/09 → marca na barra 23.
+
+## Critério de pronto
+
+- Nos três quadros, header = OP completa; card = duas zonas nomeadas; gráfico = janela T1 com eixo deslocado.
+- Subtítulo da janela visível sem abrir config.
+- Olhar 01/09 na embalagem depois das 22h mostra a cauda em **depois desta janela** e não nos turnos de 01/09.
+- Olhar 02/09 mostra a mesma cauda hachurada no gráfico (outra OP) e nos turnos de 02/09.
+- Config T1 21:00 desloca eixo e subtítulo; nenhum `22` chumbado.
+- Tela de lançamento Realizado inalterada nesta entrega.
