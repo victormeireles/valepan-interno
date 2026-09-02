@@ -64,12 +64,12 @@ export class FluxoProcessoBuilder {
     const cores = this.buildCores(ordemAss, input.coresByNome);
 
     const byEtapa: Record<FluxoEtapaKey, FluxoMatrizEntry[]> = {
-      ferm: ferm.map((e) => ({
+      ferm: ferm.filter((e) => !e.opAnterior).map((e) => ({
         assadeiraNome: e.assadeiraNome,
         unidades: e.unidades,
         timestamp: e.produzidoEm,
       })),
-      forno: forno.map((e) => ({
+      forno: forno.filter((e) => !e.opAnterior).map((e) => ({
         assadeiraNome: e.assadeiraNome,
         unidades: e.unidades,
         timestamp: e.produzidoEm,
@@ -86,7 +86,8 @@ export class FluxoProcessoBuilder {
 
     const etapas: FluxoEtapaResumo[] = (['ferm', 'forno', 'emb'] as FluxoEtapaKey[]).map(
       (key) => {
-        const events = key === 'ferm' ? ferm : key === 'forno' ? forno : emb;
+        const raw = key === 'ferm' ? ferm : key === 'forno' ? forno : emb;
+        const events = key === 'emb' ? raw : raw.filter((e) => !e.opAnterior);
         const timestamps = events.map((e) => e.produzidoEm);
         const parada = this.paradas.compute(timestamps);
         const un = sumMatrizEtapa(matriz, key);
@@ -206,16 +207,16 @@ export class FluxoProcessoBuilder {
           assadeiraNome: ass,
           converter,
         });
-        const opAnterior =
-          etapa === 'emb' && r.dataOp != null && r.dataOp.trim() !== '' && r.dataOp < dateISO;
+        const dataOp = (r.dataOp ?? '').trim();
+        const opAnterior = dataOp !== '' && dataOp !== dateISO;
         return {
           produzidoEm: r.produzidoEm,
           produtoNome: r.produtoNome,
           assadeiraNome: ass,
           unidades,
           quantidadeOperacional,
-          dataOp: (r.dataOp ?? '').trim(),
-          opAnterior: Boolean(opAnterior),
+          dataOp,
+          opAnterior,
         };
       })
       .filter((e) => e.unidades > 0)

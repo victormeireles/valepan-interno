@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isOrdemContaAssadeirasDashboard,
+  lotesDaDataOp,
   lotesToDashboardSnapshots,
   ordensToDashboardItems,
   ordensToDashboardSnapshots,
@@ -73,6 +74,21 @@ describe('ordensToDashboardSnapshots', () => {
 describe('ordensToDashboardItems', () => {
   it('espelha snapshots', () => {
     expect(ordensToDashboardItems([ordem()])).toEqual(ordensToDashboardSnapshots([ordem()]));
+  });
+});
+
+describe('lotesDaDataOp', () => {
+  it('não soma lote de OP de outro dia no produzido do dia (ex. 310 da OP de amanhã)', () => {
+    const lotes = [
+      { ordemProducaoId: 'op-31', assadeiras: 1, produzidoEm: '2026-08-31T21:06:00-03:00' },
+      { ordemProducaoId: 'op-01', assadeiras: 310, produzidoEm: '2026-08-31T22:38:00-03:00' },
+    ];
+    const dataPorOp = new Map([
+      ['op-31', '2026-08-31'],
+      ['op-01', '2026-09-01'],
+    ]);
+
+    expect(lotesDaDataOp(lotes, dataPorOp, '2026-08-31')).toEqual([lotes[0]]);
   });
 });
 

@@ -8,7 +8,7 @@ export type FluxoMatrizEntry = {
   unidades: number;
   hour?: number;
   timestamp?: string;
-  /** true = OP de data anterior (só embalagem). */
+  /** true = OP de outra data (embalagem vai para matrizAnt). */
   opAnterior?: boolean;
 };
 

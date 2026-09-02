@@ -330,6 +330,54 @@ describe('FluxoProcessoBuilder', () => {
     expect(() => assertMatrizFechaComEtapas(payload)).not.toThrow();
   });
 
+  it('fermentação/forno não contam lote de OP de outro dia no volume da OP', () => {
+    const payload = new FluxoProcessoBuilder().build({
+      dateISO: '2026-08-31',
+      planoUn: 311,
+      ordensDia: [
+        {
+          produtoNome: 'HB Gergelim 60g',
+          assadeiraNome: '60g',
+          unidades: 7440,
+          latas: 310,
+          caixas: 155,
+        },
+      ],
+      fermentacao: [
+        {
+          produzidoEm: isoAt('2026-08-31', 21, 6),
+          produtoNome: 'HB Gergelim 60g',
+          assadeiraNome: '60g',
+          unidades: 0,
+          latas: 1,
+          dataOp: '2026-08-31',
+        },
+        {
+          produzidoEm: isoAt('2026-08-31', 22, 38),
+          produtoNome: 'HB Gergelim 60g',
+          assadeiraNome: '60g',
+          unidades: 0,
+          latas: 310,
+          dataOp: '2026-09-01',
+        },
+      ],
+      forno: [
+        {
+          produzidoEm: isoAt('2026-08-31', 23, 0),
+          produtoNome: 'HB Gergelim 60g',
+          assadeiraNome: '60g',
+          unidades: 0,
+          latas: 40,
+          dataOp: '2026-09-01',
+        },
+      ],
+      embalagem: [],
+    });
+
+    expect(payload.etapas.find((e) => e.key === 'ferm')!.volOperacional).toBe(1);
+    expect(payload.etapas.find((e) => e.key === 'forno')!.volOperacional).toBe(0);
+  });
+
   it('usa tempos médios informados no padrao', () => {
     const payload = new FluxoProcessoBuilder().build({
       dateISO: '2026-08-12',

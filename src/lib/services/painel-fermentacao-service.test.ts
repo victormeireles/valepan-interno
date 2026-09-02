@@ -244,9 +244,30 @@ describe('PainelFermentacaoService.getCargaCompleta', () => {
     expect(result.dashboardDia).toEqual([
       { assadeiras: 3, pedidoAssadeiras: 0, produzidoEm: '2026-06-17T10:00:00Z' },
     ]);
-    expect(result.comparacaoSemana.items).toEqual(result.dashboardDia);
+    expect(result.comparacaoSemana.items).toEqual([]);
+    expect(result.comparacaoAnterior.items).toEqual([]);
     expect(result.turnos).toEqual([{ numero: 1, inicio: '07:00', fim: '18:00' }]);
     expect(result).not.toHaveProperty('turnoAtivo');
     expect(mockGetConfig).toHaveBeenCalled();
+  });
+
+  it('não soma no dashboard o lote de OP de outro dia (ex. 310 da OP de amanhã)', async () => {
+    listByDataProducao.mockResolvedValue([makeOrdem('op-1')]);
+    listByOrdemProducaoIds.mockResolvedValue(
+      new Map([['op-1', [makeLote('l1', 1)]]]),
+    );
+    listByProduzidoEmRange.mockResolvedValue([
+      makeLote('l1', 1),
+      { ...makeLote('l-amanha', 310), ordemProducaoId: 'op-amanha' },
+    ]);
+    findByIdsOrdens.mockResolvedValue([
+      { ...makeOrdem('op-amanha'), dataProducao: '2026-06-18' },
+    ]);
+
+    const result = await painelFermentacaoService.getCargaCompleta('2026-06-17');
+
+    expect(result.dashboardDia).toEqual([
+      { assadeiras: 1, pedidoAssadeiras: 0, produzidoEm: '2026-06-17T10:00:00Z' },
+    ]);
   });
 });

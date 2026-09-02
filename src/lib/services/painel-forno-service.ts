@@ -3,7 +3,11 @@ import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import { assadeiraResolver } from '@/domain/assadeiras/assadeira-resolver';
 import { buildPainelOrdem } from '@/domain/producao-etapa/painel-ordem-builder';
 import { somarAssadeirasLotes } from '@/domain/embalagem/painel-embalagem-enrichment';
-import { lotesToDashboardSnapshots } from '@/domain/producao-etapa/painel-dashboard-adapter';
+import {
+  lotesDashboardEtapaDia,
+  lotesToDashboardSnapshots,
+  mapaDataProducaoOrdens,
+} from '@/domain/producao-etapa/painel-dashboard-adapter';
 import { sortOrdensPorPlanejamento } from '@/domain/realizado/etapa-painel-adapter';
 import type {
   CargaEtapaResponse,
@@ -77,11 +81,13 @@ export class PainelFornoService {
             new Map<string, FermentacaoLoteRecord[]>(),
           ];
 
-    const visivelOrdemIds = await etapaPainelRecorteLoader.visivelOrdemIds(ordens, [
+    const recorte = await etapaPainelRecorteLoader.resolve(ordens, [
       ...lotesDia,
       ...lotesSemana,
       ...lotesAnterior,
     ]);
+    const visivelOrdemIds = recorte.visivelOrdemIds;
+    const dataPorOp = mapaDataProducaoOrdens([...ordens, ...recorte.extraOrdens]);
     const ordensMain = await this.buildOrdensPainel(
       ordens,
       lotesByOrdem,
@@ -94,18 +100,20 @@ export class PainelFornoService {
       ultimaDataComDados,
       ordens: ordensMain,
       dashboardDia: lotesToDashboardSnapshots(
-        lotesDia.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+        lotesDashboardEtapaDia(lotesDia, visivelOrdemIds, dataPorOp, date),
       ),
       comparacaoSemana: {
         date: dateSemana,
         items: lotesToDashboardSnapshots(
-          lotesSemana.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+          lotesDashboardEtapaDia(lotesSemana, visivelOrdemIds, dataPorOp, dateSemana),
         ),
       },
       comparacaoAnterior: {
         date: dateAnterior,
         items: lotesToDashboardSnapshots(
-          lotesAnterior.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+          dateAnterior
+            ? lotesDashboardEtapaDia(lotesAnterior, visivelOrdemIds, dataPorOp, dateAnterior)
+            : [],
         ),
       },
     });

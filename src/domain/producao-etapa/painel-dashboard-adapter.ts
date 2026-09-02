@@ -43,6 +43,39 @@ export function snapshotsToDashboardItems(
   return snapshots.map((snapshot) => ({ ...snapshot }));
 }
 
+/**
+ * Produzido vs plano do dia: só lotes cuja OP é da data selecionada.
+ * Lote noturno de OP de amanhã não entra no 31/08.
+ */
+export function lotesDaDataOp<T extends { ordemProducaoId: string }>(
+  lotes: T[],
+  dataProducaoByOrdemId: ReadonlyMap<string, string>,
+  dateISO: string,
+): T[] {
+  return lotes.filter(
+    (lote) => dataProducaoByOrdemId.get(lote.ordemProducaoId) === dateISO,
+  );
+}
+
+export function mapaDataProducaoOrdens(
+  ordens: Array<{ id: string; dataProducao: string }>,
+): Map<string, string> {
+  return new Map(ordens.map((ordem) => [ordem.id, ordem.dataProducao]));
+}
+
+export function lotesDashboardEtapaDia<T extends { ordemProducaoId: string }>(
+  lotes: T[],
+  visivelOrdemIds: ReadonlySet<string>,
+  dataProducaoByOrdemId: ReadonlyMap<string, string>,
+  dateISO: string,
+): T[] {
+  return lotesDaDataOp(
+    lotes.filter((lote) => visivelOrdemIds.has(lote.ordemProducaoId)),
+    dataProducaoByOrdemId,
+    dateISO,
+  );
+}
+
 export function lotesToDashboardSnapshots(
   lotes: Array<{ assadeiras: number; produzidoEm: string }>,
 ): EtapaDashboardSnapshot[] {

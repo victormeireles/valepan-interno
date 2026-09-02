@@ -12,7 +12,7 @@ export function ordensParaTotaisLt(ordens: PainelOrdemEtapa[]): PainelOrdemEtapa
 }
 
 /**
- * Meta = OP visível do dia. Produzido = apontamentos do dia civil (mesma língua do gráfico).
+ * Meta = OP visível do dia. Produzido = apontamentos do dia civil das OPs dessa data.
  */
 export function toolbarMetricsEtapaDiaCivil(
   ordens: PainelOrdemEtapa[],
