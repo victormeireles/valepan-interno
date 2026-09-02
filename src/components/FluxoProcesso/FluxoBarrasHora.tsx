@@ -12,6 +12,7 @@ import { FluxoHoraLegendaBuilder } from './FluxoHoraLegendaBuilder';
 import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 import FluxoOverflowX from './FluxoOverflowX';
 import { FluxoHoraTrack } from './fluxo-hora-track';
+import { useMeasuredHeight } from './use-measured-height';
 import { FLUXO_UI_ETAPA_COR, rotuloAssadeira } from './fluxo-processo-format';
 
 const CHART_H = 210;
@@ -21,15 +22,21 @@ const legendaBuilder = new FluxoHoraLegendaBuilder();
 type FluxoBarrasHoraProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaKey;
+  fillHeight?: boolean;
 };
 
 /**
  * Barras empilhadas no eixo T1 + fantasma previsto e marcador agora (na janela).
  */
-export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) {
+export default function FluxoBarrasHora({
+  fluxo,
+  etapa,
+  fillHeight = false,
+}: FluxoBarrasHoraProps) {
   const { scale } = useFluxoDisplay();
   const chartId = useId();
   const [horaAtiva, setHoraAtiva] = useState<number | null>(null);
+  const plotBox = useMeasuredHeight(fillHeight, CHART_H);
 
   const eixo = new FluxoHoraEixo(fluxo, etapa);
   const HORAS = eixo.hoursAxis();
@@ -47,7 +54,8 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
   const maxHora = scale.maxHoraComum();
   const cap = scale.capacidade(etapa);
   const cor = FLUXO_UI_ETAPA_COR[etapa];
-  const plotH = CHART_H - LABEL_H;
+  const chartH = plotBox.height;
+  const plotH = Math.max(chartH - LABEL_H, 80);
 
   const itensAtivos =
     horaAtiva == null
@@ -55,7 +63,7 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
       : legendaBuilder.build(fluxo.cores, usadas, scale, etapa, horaAtiva);
 
   return (
-    <div>
+    <div className={fillHeight ? 'flex h-full min-h-0 flex-col' : undefined}>
       <FluxoBarrasHoraLegenda
         fluxo={fluxo}
         usadas={usadas}
@@ -64,8 +72,11 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
         mostrarAgora={mostrarAgora}
       />
 
-      <div className="flex min-w-0">
-        <div className="relative w-[46px] shrink-0" style={{ height: CHART_H }}>
+      <div className={fillHeight ? 'flex min-h-0 min-w-0 flex-1' : 'flex min-w-0'}>
+        <div
+          className="relative w-[46px] shrink-0 self-start"
+          style={{ height: chartH }}
+        >
           {[0, 0.5, 1].map((f) => (
             <span
               key={f}
@@ -77,11 +88,22 @@ export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) 
           ))}
         </div>
 
-        <FluxoOverflowX label={FluxoJanelaGraficoCopy.TITULO} className="flex-1">
-          <div style={{ minWidth: FluxoHoraTrack.plotMinWidthPx() }}>
+        <FluxoOverflowX
+          label={FluxoJanelaGraficoCopy.TITULO}
+          hint={fillHeight ? '' : undefined}
+          className={fillHeight ? 'min-h-0 flex-1' : 'flex-1'}
+        >
+          <div
+            style={{ minWidth: FluxoHoraTrack.plotMinWidthPx() }}
+            className={fillHeight ? 'flex h-full min-h-0 flex-col' : undefined}
+          >
             <div
-              className="relative border-b border-border-default"
-              style={{ height: CHART_H }}
+              ref={plotBox.ref}
+              className={[
+                'relative border-b border-border-default',
+                fillHeight ? 'min-h-0 flex-1' : '',
+              ].join(' ')}
+              style={fillHeight ? undefined : { height: CHART_H }}
               role="list"
               aria-label={FluxoJanelaGraficoCopy.TITULO}
               onMouseLeave={() => setHoraAtiva(null)}

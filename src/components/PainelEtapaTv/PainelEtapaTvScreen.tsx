@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { FluxoDisplayContext } from '@/components/FluxoProcesso/fluxo-display-context';
 import { FluxoDisplayScale } from '@/components/FluxoProcesso/fluxo-display-scale';
-import { pageShellBreakoutX } from '@/components/ui/page-shell';
 import type { RealizadoEtapaToolbarMetrics } from '@/components/Realizado/etapa/types';
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
@@ -19,6 +18,7 @@ import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import PainelEtapaTvGrid from './PainelEtapaTvGrid';
 import PainelEtapaTvHeader from './PainelEtapaTvHeader';
+import { PAINEL_ETAPA_TV_SHELL_CLASS } from './painel-etapa-tv-layout';
 import { PainelEtapaTvProductMapper } from './painel-etapa-tv-product-mapper';
 
 type PainelEtapaTvScreenProps = {
@@ -107,7 +107,7 @@ export default function PainelEtapaTvScreen({
   );
 
   return (
-    <div className={`${pageShellBreakoutX} flex min-h-dvh flex-col overflow-hidden -mt-6 -mb-6`}>
+    <div className={PAINEL_ETAPA_TV_SHELL_CLASS}>
       <PainelEtapaTvHeader
         config={config.realizado}
         selectedDate={selectedDate}

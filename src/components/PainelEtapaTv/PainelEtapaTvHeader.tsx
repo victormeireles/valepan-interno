@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { controlInputClassName } from '@/components/ui/Input';
 import { MetaGapPill } from '@/components/ui/MetaGapPill';
-import { pageShellBreakoutX, pageShellPaddingX } from '@/components/ui/page-shell';
+import { pageShellPaddingX } from '@/components/ui/page-shell';
 import {
   getEtapaAccentClasses,
   getEtapaToolbarBackgroundStyle,
@@ -45,10 +45,7 @@ export default function PainelEtapaTvHeader({
 
   return (
     <header
-      className={[
-        'sticky top-0 z-20 min-w-0 border-b border-border-default backdrop-blur-sm',
-        pageShellBreakoutX,
-      ].join(' ')}
+      className="sticky top-0 z-20 min-w-0 shrink-0 border-b border-border-default backdrop-blur-sm"
       style={toolbarBg}
     >
       <div className={`h-[3px] ${accent.topBar}`} aria-hidden="true" />

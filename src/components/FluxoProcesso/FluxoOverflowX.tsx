@@ -19,9 +19,9 @@ export default function FluxoOverflowX({
   children,
 }: FluxoOverflowXProps) {
   return (
-    <div className={['min-w-0', className].filter(Boolean).join(' ')}>
+    <div className={['min-w-0 min-h-0', className].filter(Boolean).join(' ')}>
       <div
-        className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
+        className="h-full min-h-0 overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
         aria-label={label}
       >
         {children}

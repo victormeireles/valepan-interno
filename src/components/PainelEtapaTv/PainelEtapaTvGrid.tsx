@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/Card';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
 import type { PainelEtapaTvOpProgressoDto } from '@/domain/painel-etapa-tv/painel-etapa-tv-op-progresso';
@@ -14,6 +15,11 @@ import PainelEtapaTvProximasOps from './PainelEtapaTvProximasOps';
 import PainelEtapaTvResumoCard from './PainelEtapaTvResumoCard';
 import PainelEtapaTvUltimoLotePanel from './PainelEtapaTvUltimoLote';
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
+import {
+  PAINEL_ETAPA_TV_CHART_CELL_CLASS,
+  PAINEL_ETAPA_TV_GRID_CLASS,
+  PAINEL_ETAPA_TV_TOP_CELL_CLASS,
+} from './painel-etapa-tv-layout';
 
 type PainelEtapaTvGridProps = {
   config: PainelEtapaTvConfig;
@@ -39,6 +45,16 @@ function FluxoIndisponivel() {
   );
 }
 
+function TopPanel({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className={`${PAINEL_ETAPA_TV_TOP_CELL_CLASS} rounded-xl border border-border-default bg-surface p-3 shadow-control`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function PainelEtapaTvGrid({
   config,
   fluxo,
@@ -55,13 +71,8 @@ export default function PainelEtapaTvGrid({
   showMarca,
 }: PainelEtapaTvGridProps) {
   return (
-    <div
-      className={[
-        'grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-hidden',
-        'lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]',
-      ].join(' ')}
-    >
-      <div className="min-h-0 overflow-auto">
+    <div className={PAINEL_ETAPA_TV_GRID_CLASS}>
+      <div className={PAINEL_ETAPA_TV_TOP_CELL_CLASS}>
         {progresso && turnos && t1Label ? (
           <PainelEtapaTvResumoCard
             progresso={progresso}
@@ -74,27 +85,27 @@ export default function PainelEtapaTvGrid({
           <FluxoIndisponivel />
         )}
       </div>
-      <div className="min-h-0 overflow-hidden">
-        {fluxo && hasScale ? (
-          <PainelEtapaTvGrafico fluxo={fluxo} etapa={config.fluxoKey} />
-        ) : (
-          <FluxoIndisponivel />
-        )}
-      </div>
-      <div className="min-h-0 overflow-hidden rounded-xl border border-border-default bg-surface p-3 shadow-control">
+      <TopPanel>
         <PainelEtapaTvUltimoLotePanel
           lote={ultimoLote}
           product={ultimoProduct}
           unit={unit}
           showTipoEstoqueMarcaBadge={showMarca}
         />
-      </div>
-      <div className="min-h-0 overflow-hidden rounded-xl border border-border-default bg-surface p-3 shadow-control">
+      </TopPanel>
+      <TopPanel>
         <PainelEtapaTvProximasOps
           ops={proximasOps}
           products={products}
           showTipoEstoqueMarcaBadge={showMarca}
         />
+      </TopPanel>
+      <div className={PAINEL_ETAPA_TV_CHART_CELL_CLASS}>
+        {fluxo && hasScale ? (
+          <PainelEtapaTvGrafico fluxo={fluxo} etapa={config.fluxoKey} />
+        ) : (
+          <FluxoIndisponivel />
+        )}
       </div>
     </div>
   );

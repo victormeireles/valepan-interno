@@ -57,7 +57,10 @@ export default function PainelEtapaTvPageClient({ etapa }: PainelEtapaTvPageClie
   return (
     <>
       {partialError ? (
-        <Toast tone="error" className="mb-3">
+        <Toast
+          tone="error"
+          className="fixed bottom-4 left-1/2 z-50 w-[min(32rem,calc(100%-2rem))] -translate-x-1/2"
+        >
           {partialError}
         </Toast>
       ) : null}

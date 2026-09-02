@@ -38,7 +38,7 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
         </span>
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-        <FluxoBarrasHora fluxo={fluxo} etapa={etapa} />
+        <FluxoBarrasHora fluxo={fluxo} etapa={etapa} fillHeight />
       </div>
     </Card>
   );
