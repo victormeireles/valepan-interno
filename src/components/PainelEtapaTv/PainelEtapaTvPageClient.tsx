@@ -8,7 +8,8 @@ import {
   getPainelEtapaTvConfig,
   type PainelEtapaTvId,
 } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
-import { toolbarMetricsEtapaDiaCivil } from '@/domain/producao-etapa/etapa-totais-visiveis';
+import { buildOrdensEtapaToolbarMetrics } from '@/domain/producao-etapa/build-etapa-toolbar-metrics';
+import { ordensParaTotaisLt } from '@/domain/producao-etapa/etapa-totais-visiveis';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import PainelEtapaTvScreen from './PainelEtapaTvScreen';
 import PainelEtapaTvSkeleton from './PainelEtapaTvSkeleton';
@@ -31,8 +32,8 @@ export default function PainelEtapaTvPageClient({ etapa }: PainelEtapaTvPageClie
     if (config.id === 'embalagem') {
       return buildEmbalagemToolbarMetrics(carga.pedidos ?? []);
     }
-    return toolbarMetricsEtapaDiaCivil(carga.ordens ?? [], 'LT', carga.dashboardDia);
-  }, [config.id, carga.pedidos, carga.ordens, carga.dashboardDia]);
+    return buildOrdensEtapaToolbarMetrics(ordensParaTotaisLt(carga.ordens ?? []), 'LT');
+  }, [config.id, carga.pedidos, carga.ordens]);
 
   if (carga.loading && !hasAnyData) {
     return <PainelEtapaTvSkeleton />;

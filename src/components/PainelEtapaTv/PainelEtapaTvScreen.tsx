@@ -8,6 +8,7 @@ import type { RealizadoEtapaToolbarMetrics } from '@/components/Realizado/etapa/
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
 import { PainelEtapaTvFonteAdapter } from '@/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter';
+import { PainelEtapaTvJanelaLabel } from '@/domain/painel-etapa-tv/painel-etapa-tv-janela-label';
 import { PainelEtapaTvProximasOpsPicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker';
 import { PainelEtapaTvUltimoLotePicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker';
 import { formatOpLabelFromDate } from '@/domain/painel-producao/painel-producao-time';
@@ -38,7 +39,10 @@ export default function PainelEtapaTvScreen({
 }: PainelEtapaTvScreenProps) {
   const unit = config.realizado.unit.toUpperCase();
   const showMarca = Boolean(config.realizado.tipoEstoqueMarcaBadge);
-  const diaLabel = fluxo?.diaLabel ?? formatOpLabelFromDate(selectedDate);
+  const janela = fluxo?.janelasPorEtapa?.[config.fluxoKey];
+  const janelaLabel = janela
+    ? PainelEtapaTvJanelaLabel.format(selectedDate, janela)
+    : formatOpLabelFromDate(selectedDate);
 
   const products = useMemo(
     () => PainelEtapaTvProductMapper.fromCarga(config.id, { ordens, pedidos }, selectedDate),
@@ -86,7 +90,7 @@ export default function PainelEtapaTvScreen({
         selectedDate={selectedDate}
         onDateChange={onDateChange}
         metrics={metrics}
-        diaLabel={diaLabel}
+        janelaLabel={janelaLabel}
       />
       <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
         {fluxo && scale ? (
