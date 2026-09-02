@@ -17,7 +17,7 @@ describe('filterMainNavEntries', () => {
     );
   });
 
-  it('tablet fermentação vê Início + Produção (fermentação/painel)', () => {
+  it('tablet fermentação vê Início + Produção + Painéis', () => {
     const snap = {
       isSystemOwner: false,
       identidades: ['interno'],

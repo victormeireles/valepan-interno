@@ -2,11 +2,7 @@ import { HubHeader } from '@/components/Hub/HubHeader';
 import { HubNavCard } from '@/components/Hub/HubNavCard';
 import { HubSection } from '@/components/Hub/HubSection';
 import { filterHubNavItems } from '@/components/Hub/filter-hub-nav-items';
-import {
-  HUB_OPERACAO_ITEMS,
-  HUB_PAINEIS_ITEMS,
-  HUB_PRODUCAO_ITEMS,
-} from '@/components/Hub/hub-nav-config';
+import { HUB_SECTIONS } from '@/components/Hub/hub-nav-config';
 import { auth } from '@/lib/auth';
 import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
 import { sessionToAuthzSnapshot } from '@/lib/auth/session-authz-snapshot';
@@ -25,9 +21,10 @@ export default async function Home() {
         modulosEfetivos: {},
       };
 
-  const producao = filterHubNavItems(HUB_PRODUCAO_ITEMS, snap, manager);
-  const paineis = filterHubNavItems(HUB_PAINEIS_ITEMS, snap, manager);
-  const operacao = filterHubNavItems(HUB_OPERACAO_ITEMS, snap, manager);
+  const sections = HUB_SECTIONS.map((section) => ({
+    ...section,
+    items: filterHubNavItems(section.items, snap, manager),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -36,35 +33,15 @@ export default async function Home() {
         etiquetasPendentes={stats.etiquetasPendentes}
       />
 
-      {producao.length > 0 ? (
-        <HubSection title="Produção realizada">
+      {sections.map((section) => (
+        <HubSection key={section.id} title={section.title}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {producao.map((item) => (
+            {section.items.map((item) => (
               <HubNavCard key={item.href} item={item} />
             ))}
           </div>
         </HubSection>
-      ) : null}
-
-      {paineis.length > 0 ? (
-        <HubSection title="Painéis">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {paineis.map((item) => (
-              <HubNavCard key={item.href} item={item} />
-            ))}
-          </div>
-        </HubSection>
-      ) : null}
-
-      {operacao.length > 0 ? (
-        <HubSection title="Operação">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {operacao.map((item) => (
-              <HubNavCard key={item.href} item={item} />
-            ))}
-          </div>
-        </HubSection>
-      ) : null}
+      ))}
     </div>
   );
 }

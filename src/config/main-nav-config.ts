@@ -23,6 +23,11 @@ export type MainNavGroup = {
 
 export type MainNavEntry = MainNavLink | MainNavGroup;
 
+const startsWith =
+  (prefix: string) =>
+  (pathname: string): boolean =>
+    pathname.startsWith(prefix);
+
 export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
   {
     type: 'link',
@@ -37,29 +42,19 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     label: 'Produção',
     icon: 'precision_manufacturing',
     match: (pathname) =>
-      pathname.startsWith('/ordens-producao') ||
       pathname.startsWith('/realizado/fermentacao') ||
       pathname.startsWith('/realizado/forno') ||
       pathname.startsWith('/realizado/embalagem') ||
       pathname.startsWith('/realizado/saidas') ||
-      pathname.startsWith('/etiquetas') ||
-      pathname.startsWith('/reclamacoes'),
+      pathname.startsWith('/etiquetas'),
     children: [
-      {
-        type: 'link',
-        href: '/ordens-producao',
-        label: 'Ordens',
-        icon: 'format_list_numbered',
-        moduloId: 'interno_ordens',
-        match: (pathname) => pathname.startsWith('/ordens-producao'),
-      },
       {
         type: 'link',
         href: '/realizado/fermentacao',
         label: 'Fermentação',
         icon: 'bakery_dining',
         moduloId: 'interno_fermentacao',
-        match: (pathname) => pathname.startsWith('/realizado/fermentacao'),
+        match: startsWith('/realizado/fermentacao'),
       },
       {
         type: 'link',
@@ -67,7 +62,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Forno',
         icon: 'local_fire_department',
         moduloId: 'interno_forno',
-        match: (pathname) => pathname.startsWith('/realizado/forno'),
+        match: startsWith('/realizado/forno'),
       },
       {
         type: 'link',
@@ -75,7 +70,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Embalagem',
         icon: 'inventory_2',
         moduloId: 'interno_embalagem',
-        match: (pathname) => pathname.startsWith('/realizado/embalagem'),
+        match: startsWith('/realizado/embalagem'),
       },
       {
         type: 'link',
@@ -83,7 +78,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Saídas',
         icon: 'local_shipping',
         moduloId: 'interno_saidas',
-        match: (pathname) => pathname.startsWith('/realizado/saidas'),
+        match: startsWith('/realizado/saidas'),
       },
       {
         type: 'link',
@@ -91,7 +86,25 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Etiquetas',
         icon: 'label',
         moduloId: 'interno_etiquetas',
-        match: (pathname) => pathname.startsWith('/etiquetas'),
+        match: startsWith('/etiquetas'),
+      },
+    ],
+  },
+  {
+    type: 'group',
+    id: 'planejamento',
+    label: 'Planejamento',
+    icon: 'assignment',
+    match: (pathname) =>
+      pathname.startsWith('/ordens-producao') || pathname.startsWith('/reclamacoes'),
+    children: [
+      {
+        type: 'link',
+        href: '/ordens-producao',
+        label: 'Ordens',
+        icon: 'format_list_numbered',
+        moduloId: 'interno_ordens',
+        match: startsWith('/ordens-producao'),
       },
       {
         type: 'link',
@@ -99,7 +112,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Reclamações',
         icon: 'report_problem',
         moduloId: 'interno_reclamacoes',
-        match: (pathname) => pathname.startsWith('/reclamacoes'),
+        match: startsWith('/reclamacoes'),
       },
     ],
   },
@@ -123,7 +136,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Produção',
         icon: 'monitor',
         moduloId: 'interno_painel',
-        match: (pathname) => pathname.startsWith('/realizado/painel-producao'),
+        match: startsWith('/realizado/painel-producao'),
       },
       {
         type: 'link',
@@ -131,7 +144,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Fluxo',
         icon: 'timeline',
         moduloId: 'interno_painel',
-        match: (pathname) => pathname.startsWith('/realizado/fluxo-processo'),
+        match: startsWith('/realizado/fluxo-processo'),
       },
       {
         type: 'link',
@@ -187,18 +200,10 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
       {
         type: 'link',
         href: '/estoque-insumos',
-        label: 'Estoque',
+        label: 'Saldos',
         icon: 'inventory',
         moduloId: 'interno_insumos',
-        match: (pathname) => pathname.startsWith('/estoque-insumos'),
-      },
-      {
-        type: 'link',
-        href: '/mapeamento-insumos',
-        label: 'Mapeamento',
-        icon: 'link',
-        moduloId: 'interno_insumos',
-        match: (pathname) => pathname.startsWith('/mapeamento-insumos'),
+        match: startsWith('/estoque-insumos'),
       },
       {
         type: 'link',
@@ -206,7 +211,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Consumo',
         icon: 'query_stats',
         moduloId: 'interno_insumos',
-        match: (pathname) => pathname.startsWith('/consumo-insumos'),
+        match: startsWith('/consumo-insumos'),
       },
       {
         type: 'link',
@@ -214,15 +219,23 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         label: 'Sugestão de compra',
         icon: 'shopping_cart',
         moduloId: 'interno_insumos',
-        match: (pathname) => pathname.startsWith('/sugestao-compras'),
+        match: startsWith('/sugestao-compras'),
       },
       {
         type: 'link',
         href: '/compras-insumos',
-        label: 'Pedidos de compra',
+        label: 'Pedidos',
         icon: 'receipt_long',
         moduloId: 'interno_insumos',
-        match: (pathname) => pathname.startsWith('/compras-insumos'),
+        match: startsWith('/compras-insumos'),
+      },
+      {
+        type: 'link',
+        href: '/mapeamento-insumos',
+        label: 'Mapeamento',
+        icon: 'link',
+        moduloId: 'interno_insumos',
+        match: startsWith('/mapeamento-insumos'),
       },
     ],
   },
@@ -232,7 +245,6 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     label: 'Configurações',
     icon: 'settings',
     moduloId: 'interno_config',
-    match: (pathname) =>
-      pathname === '/config' || pathname.startsWith('/config/'),
+    match: (pathname) => pathname === '/config' || pathname.startsWith('/config/'),
   },
 ];

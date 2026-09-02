@@ -24,10 +24,31 @@ describe('MAIN_NAV_ENTRIES', () => {
       MAIN_NAV_ENTRIES.map((entry) =>
         entry.type === 'link' ? entry.href : entry.id,
       ),
-    ).toEqual(['/', 'producao', 'paineis', 'insumos', '/config']);
+    ).toEqual([
+      '/',
+      'producao',
+      'planejamento',
+      'paineis',
+      'insumos',
+      '/config',
+    ]);
   });
 
-  it('coloca os quadros TV em Painéis, depois do Fluxo', () => {
+  it('coloca etiquetas em produção, depois de saídas', () => {
+    expect(groupHrefs('producao')).toEqual([
+      '/realizado/fermentacao',
+      '/realizado/forno',
+      '/realizado/embalagem',
+      '/realizado/saidas',
+      '/etiquetas',
+    ]);
+  });
+
+  it('separa planejamento, painéis e insumos', () => {
+    expect(groupHrefs('planejamento')).toEqual([
+      '/ordens-producao',
+      '/reclamacoes',
+    ]);
     expect(groupHrefs('paineis')).toEqual([
       '/realizado/painel-producao',
       '/realizado/fluxo-processo',
@@ -36,5 +57,19 @@ describe('MAIN_NAV_ENTRIES', () => {
       '/painel/embalagem',
       '/painel/dashboard-estoque',
     ]);
+    expect(groupHrefs('insumos')).toEqual([
+      '/estoque-insumos',
+      '/consumo-insumos',
+      '/sugestao-compras',
+      '/compras-insumos',
+      '/mapeamento-insumos',
+    ]);
+  });
+
+  it('não marca painel de produção como item de Produção', () => {
+    const producao = groupById('producao');
+    expect(producao.match('/realizado/painel-producao')).toBe(false);
+    expect(producao.match('/realizado/fluxo-processo')).toBe(false);
+    expect(producao.match('/etiquetas')).toBe(true);
   });
 });

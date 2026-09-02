@@ -10,6 +10,12 @@ export interface HubNavItem {
   moduloIds?: InternoModuloId[];
 }
 
+export interface HubNavSection {
+  id: string;
+  title: string;
+  items: HubNavItem[];
+}
+
 export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
   {
     href: '/realizado/fermentacao',
@@ -40,22 +46,46 @@ export const HUB_PRODUCAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_saidas',
   },
   {
+    href: '/etiquetas',
+    title: 'Etiquetas',
+    description: 'Fila de etiquetas e reimpressão',
+    icon: 'label',
+    moduloId: 'interno_etiquetas',
+  },
+];
+
+export const HUB_PLANEJAMENTO_ITEMS: HubNavItem[] = [
+  {
+    href: '/ordens-producao',
+    title: 'Ordens',
+    description: 'Fila e planejamento do dia',
+    icon: 'list_alt',
+    moduloId: 'interno_ordens',
+  },
+  {
+    href: '/reclamacoes',
+    title: 'Reclamações',
+    description: 'Problemas reportados pelos clientes',
+    icon: 'report_problem',
+    moduloId: 'interno_reclamacoes',
+  },
+];
+
+export const HUB_PAINEIS_ITEMS: HubNavItem[] = [
+  {
     href: '/realizado/painel-producao',
-    title: 'Painel',
+    title: 'Produção',
     description: 'Visão unificada de fermentação, forno e embalagem',
     icon: 'monitor',
     moduloId: 'interno_painel',
   },
   {
     href: '/realizado/fluxo-processo',
-    title: 'Fluxo de Produção',
+    title: 'Fluxo',
     description: 'Hora a hora por etapa e por assadeira',
     icon: 'timeline',
     moduloId: 'interno_painel',
   },
-];
-
-export const HUB_PAINEIS_ITEMS: HubNavItem[] = [
   {
     href: '/painel/fermentacao',
     title: 'Quadro fermentação',
@@ -80,58 +110,6 @@ export const HUB_PAINEIS_ITEMS: HubNavItem[] = [
     moduloId: 'interno_embalagem',
     moduloIds: ['interno_embalagem', 'interno_painel'],
   },
-];
-
-export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
-  {
-    href: '/ordens-producao',
-    title: 'Ordens de Produção',
-    description: 'Fila e planejamento do dia',
-    icon: 'list_alt',
-    moduloId: 'interno_ordens',
-  },
-  {
-    href: '/etiquetas',
-    title: 'Etiquetas',
-    description: 'Fila de etiquetas e reimpressão',
-    icon: 'label',
-    moduloId: 'interno_etiquetas',
-  },
-  {
-    href: '/reclamacoes',
-    title: 'Reclamações',
-    description: 'Problemas reportados pelos clientes',
-    icon: 'report_problem',
-    moduloId: 'interno_reclamacoes',
-  },
-  {
-    href: '/estoque-insumos',
-    title: 'Estoque de insumos',
-    description: 'Saldos, histórico e ajustes manuais',
-    icon: 'grain',
-    moduloId: 'interno_insumos',
-  },
-  {
-    href: '/mapeamento-insumos',
-    title: 'Mapeamento de insumos',
-    description: 'Vínculos Omie, pendências de NF e sugestões com IA',
-    icon: 'link',
-    moduloId: 'interno_insumos',
-  },
-  {
-    href: '/consumo-insumos',
-    title: 'Consumo de insumos',
-    description: 'Tabela semanal de saídas do estoque de insumos',
-    icon: 'query_stats',
-    moduloId: 'interno_insumos',
-  },
-  {
-    href: '/compras-insumos',
-    title: 'Pedidos de compra',
-    description: 'Pedidos a chegar, atrasados e histórico',
-    icon: 'receipt_long',
-    moduloId: 'interno_insumos',
-  },
   {
     href: '/painel/dashboard-estoque',
     title: 'Estoque',
@@ -139,11 +117,49 @@ export const HUB_OPERACAO_ITEMS: HubNavItem[] = [
     icon: 'inventory',
     moduloId: 'interno_estoque',
   },
+];
+
+export const HUB_INSUMOS_ITEMS: HubNavItem[] = [
   {
-    href: '/config',
-    title: 'Configurações',
-    description: 'Assadeiras, produtos, insumos e mais',
-    icon: 'settings',
-    moduloId: 'interno_config',
+    href: '/estoque-insumos',
+    title: 'Saldos',
+    description: 'Saldos, histórico e ajustes manuais',
+    icon: 'grain',
+    moduloId: 'interno_insumos',
   },
+  {
+    href: '/consumo-insumos',
+    title: 'Consumo',
+    description: 'Tabela semanal de saídas do estoque de insumos',
+    icon: 'query_stats',
+    moduloId: 'interno_insumos',
+  },
+  {
+    href: '/sugestao-compras',
+    title: 'Sugestão de compra',
+    description: 'Sugestão de pedido a partir do consumo e do saldo',
+    icon: 'shopping_cart',
+    moduloId: 'interno_insumos',
+  },
+  {
+    href: '/compras-insumos',
+    title: 'Pedidos',
+    description: 'Pedidos a chegar, atrasados e histórico',
+    icon: 'receipt_long',
+    moduloId: 'interno_insumos',
+  },
+  {
+    href: '/mapeamento-insumos',
+    title: 'Mapeamento',
+    description: 'Vínculos Omie, pendências de NF e sugestões com IA',
+    icon: 'link',
+    moduloId: 'interno_insumos',
+  },
+];
+
+export const HUB_SECTIONS: HubNavSection[] = [
+  { id: 'producao', title: 'Produção', items: HUB_PRODUCAO_ITEMS },
+  { id: 'planejamento', title: 'Planejamento', items: HUB_PLANEJAMENTO_ITEMS },
+  { id: 'paineis', title: 'Painéis', items: HUB_PAINEIS_ITEMS },
+  { id: 'insumos', title: 'Insumos', items: HUB_INSUMOS_ITEMS },
 ];
