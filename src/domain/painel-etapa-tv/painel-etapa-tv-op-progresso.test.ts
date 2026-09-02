@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { JanelaOperacionalResolver } from '@/domain/producao-turno/janela-operacional';
 import { PainelEtapaTvOpProgresso } from './painel-etapa-tv-op-progresso';
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { PainelEtapaTvTurnosResumo } from './painel-etapa-tv-turnos-resumo';
 
 it('soma pelo carimbo, não pelo relógio, no overlap T2/T3', () => {
