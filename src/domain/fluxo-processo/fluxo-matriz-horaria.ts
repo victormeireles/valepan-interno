@@ -8,7 +8,7 @@ export type FluxoMatrizEntry = {
   unidades: number;
   hour?: number;
   timestamp?: string;
-  /** true = OP de outra data (embalagem vai para matrizAnt). */
+  /** true = OP de outra data (parcela vai para matrizAnt). */
   opAnterior?: boolean;
 };
 
@@ -44,7 +44,7 @@ export function sumMatrizEtapa(matriz: FluxoMatrizEtapas, key: FluxoEtapaKey): n
 
 /**
  * matriz[etapa][assadeira][hora] = Σ unidades.
- * matrizAnt isola só emb de OP anterior.
+ * matrizAnt isola a parcela de OP anterior em ferm, forno e emb.
  */
 export class FluxoMatrizHorariaBuilder {
   build(
@@ -67,8 +67,8 @@ export class FluxoMatrizHorariaBuilder {
           (entry.timestamp ? getBrazilHourFromIso(entry.timestamp) : null);
         if (hour == null || hour < 0 || hour > 23) continue;
         matriz[key][ass][hour] += entry.unidades;
-        if (key === 'emb' && entry.opAnterior) {
-          matrizAnt.emb[ass][hour] += entry.unidades;
+        if (entry.opAnterior) {
+          matrizAnt[key][ass][hour] += entry.unidades;
         }
       }
     }

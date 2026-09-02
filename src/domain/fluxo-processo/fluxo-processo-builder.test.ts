@@ -5,7 +5,7 @@ import {
   FluxoProcessoBuilder,
 } from './fluxo-processo-builder';
 import { FluxoLeadTimeCalculator } from './fluxo-lead-time';
-import { sumMatrizEtapa } from './fluxo-matriz-horaria';
+import { sumMatrizEtapa, sumMatrizHoras } from './fluxo-matriz-horaria';
 import { FluxoParadasCalculator } from './fluxo-paradas';
 import { FluxoQualidadeBlocoCalculator } from './fluxo-qualidade-bloco';
 import { FluxoUnidadesConverter } from './fluxo-unidades-converter';
@@ -376,6 +376,13 @@ describe('FluxoProcessoBuilder', () => {
 
     expect(payload.etapas.find((e) => e.key === 'ferm')!.volOperacional).toBe(1);
     expect(payload.etapas.find((e) => e.key === 'forno')!.volOperacional).toBe(0);
+
+    const extraFermUn = 7440;
+    expect(sumMatrizEtapa(payload.matriz, 'ferm')).toBe(24 + extraFermUn);
+    expect(sumMatrizHoras(payload.matrizAnt.ferm)).toBe(extraFermUn);
+    expect(sumMatrizEtapa(payload.matriz, 'forno')).toBe(960);
+    expect(sumMatrizHoras(payload.matrizAnt.forno)).toBe(960);
+    expect(() => assertMatrizFechaComEtapas(payload)).not.toThrow();
   });
 
   it('usa tempos médios informados no padrao', () => {

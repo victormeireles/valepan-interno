@@ -64,15 +64,17 @@ export class FluxoProcessoBuilder {
     const cores = this.buildCores(ordemAss, input.coresByNome);
 
     const byEtapa: Record<FluxoEtapaKey, FluxoMatrizEntry[]> = {
-      ferm: ferm.filter((e) => !e.opAnterior).map((e) => ({
+      ferm: ferm.map((e) => ({
         assadeiraNome: e.assadeiraNome,
         unidades: e.unidades,
         timestamp: e.produzidoEm,
+        opAnterior: e.opAnterior,
       })),
-      forno: forno.filter((e) => !e.opAnterior).map((e) => ({
+      forno: forno.map((e) => ({
         assadeiraNome: e.assadeiraNome,
         unidades: e.unidades,
         timestamp: e.produzidoEm,
+        opAnterior: e.opAnterior,
       })),
       emb: emb.map((e) => ({
         assadeiraNome: e.assadeiraNome,
@@ -87,7 +89,7 @@ export class FluxoProcessoBuilder {
     const etapas: FluxoEtapaResumo[] = (['ferm', 'forno', 'emb'] as FluxoEtapaKey[]).map(
       (key) => {
         const raw = key === 'ferm' ? ferm : key === 'forno' ? forno : emb;
-        const events = key === 'emb' ? raw : raw.filter((e) => !e.opAnterior);
+        const events = raw.filter((e) => !e.opAnterior);
         const timestamps = events.map((e) => e.produzidoEm);
         const parada = this.paradas.compute(timestamps);
         const un = sumMatrizEtapa(matriz, key);
