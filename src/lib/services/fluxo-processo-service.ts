@@ -219,6 +219,9 @@ export class FluxoProcessoService {
       unidades: o.quantidade.unidades,
       assadeiras: o.assadeiras,
       caixas: o.quantidade.caixas,
+      fermentacaoMetaConfirmada: o.fermentacaoMetaConfirmada,
+      fornoMetaConfirmada: o.fornoMetaConfirmada,
+      embalagemMetaConfirmada: o.embalagemMetaConfirmada,
     }));
     this.controleAttach.attach(fluxo, {
       dateISO: date,

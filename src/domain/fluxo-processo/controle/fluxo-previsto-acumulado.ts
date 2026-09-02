@@ -15,7 +15,7 @@ export class FluxoPrevistoAcumulado {
   ): number {
     const { ini, fim } = janelaPrevista(op, etapa);
     const t = asOfMs;
-    const unidades = controleVolumeOp(op, unidade);
+    const unidades = controleVolumeOp(op, unidade, etapa);
 
     if (fim === ini) {
       return t >= ini ? unidades : 0;

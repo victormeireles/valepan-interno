@@ -30,7 +30,7 @@ export class FluxoPrevistoHora {
     hour: number,
   ): number {
     const { ini, fim } = janelaPrevista(op, etapa);
-    const unidades = controleVolumeOp(op, 'lt');
+    const unidades = controleVolumeOp(op, 'lt', etapa);
     const { ini: hIni, fim: hFim } = horaLimites(dateISO, hour);
 
     if (fim === ini) {

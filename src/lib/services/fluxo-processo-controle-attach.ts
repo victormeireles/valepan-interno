@@ -22,6 +22,9 @@ export type FluxoControleAttachOrdem = {
   unidades: number;
   assadeiras: number;
   caixas: number;
+  fermentacaoMetaConfirmada?: number | null;
+  fornoMetaConfirmada?: number | null;
+  embalagemMetaConfirmada?: number | null;
 };
 
 export type FluxoControleAttachInput = {
@@ -82,6 +85,9 @@ export class FluxoControleServiceAttach {
           unidades: o.unidades,
           assadeiras: o.assadeiras,
           caixas: o.caixas,
+          fermentacaoMetaConfirmada: o.fermentacaoMetaConfirmada,
+          fornoMetaConfirmada: o.fornoMetaConfirmada,
+          embalagemMetaConfirmada: o.embalagemMetaConfirmada,
         },
       ];
     });

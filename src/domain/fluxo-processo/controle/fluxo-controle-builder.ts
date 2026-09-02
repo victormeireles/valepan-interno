@@ -59,11 +59,11 @@ export class FluxoControleBuilder {
     key: FluxoEtapaKey,
   ): FluxoControleEtapaNumeros {
     const objetivoLt = input.ops.reduce(
-      (s, op) => s + controleVolumeOp(op, 'lt'),
+      (s, op) => s + controleVolumeOp(op, 'lt', key),
       0,
     );
     const objetivoCx = input.ops.reduce(
-      (s, op) => s + controleVolumeOp(op, 'cx'),
+      (s, op) => s + controleVolumeOp(op, 'cx', key),
       0,
     );
     const fechado = input.dateISO !== input.todayISO;

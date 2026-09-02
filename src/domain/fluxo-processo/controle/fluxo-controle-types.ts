@@ -15,6 +15,10 @@ export type FluxoControleOpInput = EstimativaProducaoHorarios & {
   assadeiras: number;
   /** Caixas planejadas — usadas em emb no controle. */
   caixas: number;
+  /** Travada ao finalizar a etapa; se ausente, o volume cai para a OP. */
+  fermentacaoMetaConfirmada?: number | null;
+  fornoMetaConfirmada?: number | null;
+  embalagemMetaConfirmada?: number | null;
 };
 
 export type FluxoControleEventoInput = {

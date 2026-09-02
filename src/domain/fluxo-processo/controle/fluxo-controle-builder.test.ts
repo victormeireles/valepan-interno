@@ -101,6 +101,28 @@ describe('FluxoControleBuilder', () => {
     expect(result.etapas.ferm.estaUn).toBe(80);
   });
 
+  it('objetivo por etapa usa meta confirmada, não a OP cheia fechada parcial', () => {
+    const result = builder.build(
+      baseInput({
+        ops: [
+          op({
+            assadeiras: 310,
+            caixas: 155,
+            fermentacaoMetaConfirmada: 1,
+            fornoMetaConfirmada: 1,
+            embalagemMetaConfirmada: 1,
+          }),
+        ],
+        etapasVol: { ferm: 1, forno: 1, emb: 1 },
+        opAnteriorVol: 0,
+      }),
+    );
+
+    expect(result.etapas.ferm.objetivoLt).toBe(310);
+    expect(result.etapas.forno.objetivoLt).toBe(1);
+    expect(result.etapas.emb.objetivoCx).toBe(1);
+  });
+
   it('sem ops → indisponível', () => {
     const result = builder.build(
       baseInput({
