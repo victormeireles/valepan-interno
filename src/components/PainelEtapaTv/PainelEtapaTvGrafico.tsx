@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/Card';
 import { useFluxoDisplay } from '@/components/FluxoProcesso/fluxo-display-context';
 import { fmtQty } from '@/components/FluxoProcesso/fluxo-display-scale';
 import FluxoBarrasHora from '@/components/FluxoProcesso/FluxoBarrasHora';
-import FluxoFaixaEtapa from '@/components/FluxoProcesso/FluxoFaixaEtapa';
 import { FluxoJanelaGraficoCopy } from '@/components/FluxoProcesso/fluxo-janela-grafico-copy';
 import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 
@@ -17,7 +16,6 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
   const { scale } = useFluxoDisplay();
   const total = scale.etapaTotal(etapa);
   const outraOp = scale.opAnteriorTotal(etapa);
-  const etapaResumo = fluxo.etapas.find((item) => item.key === etapa);
   const caption = FluxoJanelaGraficoCopy.caption(
     fmtQty(total, scale.mode),
     scale.unitLabel,
@@ -41,7 +39,6 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
         <FluxoBarrasHora fluxo={fluxo} etapa={etapa} />
-        {etapaResumo ? <FluxoFaixaEtapa etapa={etapaResumo} /> : null}
       </div>
     </Card>
   );

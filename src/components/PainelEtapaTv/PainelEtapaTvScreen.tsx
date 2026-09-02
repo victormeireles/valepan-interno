@@ -9,7 +9,10 @@ import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-type
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
 import { PainelEtapaTvFonteAdapter } from '@/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter';
 import { PainelEtapaTvJanelaLabel } from '@/domain/painel-etapa-tv/painel-etapa-tv-janela-label';
+import { PainelEtapaTvOpProgresso } from '@/domain/painel-etapa-tv/painel-etapa-tv-op-progresso';
 import { PainelEtapaTvProximasOpsPicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker';
+import { PainelEtapaTvResumoCopy } from '@/domain/painel-etapa-tv/painel-etapa-tv-resumo-copy';
+import { PainelEtapaTvResumoLotes } from '@/domain/painel-etapa-tv/painel-etapa-tv-resumo-lotes';
 import { PainelEtapaTvUltimoLotePicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker';
 import { formatOpLabelFromDate } from '@/domain/painel-producao/painel-producao-time';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
@@ -40,6 +43,8 @@ export default function PainelEtapaTvScreen({
   const unit = config.realizado.unit.toUpperCase();
   const showMarca = Boolean(config.realizado.tipoEstoqueMarcaBadge);
   const janela = fluxo?.janelasPorEtapa?.[config.fluxoKey];
+  const turnos = fluxo?.turnosResumo?.[config.fluxoKey] ?? null;
+  const t1Label = janela ? PainelEtapaTvResumoCopy.t1Label(janela.t1Inicio) : '';
   const janelaLabel = janela
     ? PainelEtapaTvJanelaLabel.format(selectedDate, janela)
     : formatOpLabelFromDate(selectedDate);
@@ -61,6 +66,16 @@ export default function PainelEtapaTvScreen({
     };
   }, [config.id, ordens, pedidos]);
 
+  const lotesDaEtapa = useMemo(
+    () => PainelEtapaTvResumoLotes.fromCarga(config.id, ordens, pedidos),
+    [config.id, ordens, pedidos],
+  );
+
+  const progresso = useMemo(() => {
+    if (!janela) return null;
+    return PainelEtapaTvOpProgresso.fromLotes(lotesDaEtapa, metrics.meta, janela);
+  }, [janela, lotesDaEtapa, metrics.meta]);
+
   const ultimoProduct = ultimoLote
     ? PainelEtapaTvProductMapper.findById(products, ultimoLote.ordemId)
     : undefined;
@@ -74,6 +89,10 @@ export default function PainelEtapaTvScreen({
       config={config}
       fluxo={fluxo}
       hasScale={scale !== null}
+      progresso={progresso}
+      turnos={turnos}
+      t1Label={t1Label}
+      dateISO={selectedDate}
       ultimoLote={ultimoLote}
       ultimoProduct={ultimoProduct}
       proximasOps={proximasOps}

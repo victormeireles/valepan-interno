@@ -1,22 +1,28 @@
 'use client';
 
-import FluxoEtapaCard from '@/components/FluxoProcesso/FluxoEtapaCard';
 import { Card } from '@/components/ui/Card';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
+import type { PainelEtapaTvOpProgressoDto } from '@/domain/painel-etapa-tv/painel-etapa-tv-op-progresso';
+import type { PainelEtapaTvTurnosResumoDto } from '@/domain/painel-etapa-tv/painel-etapa-tv-turnos-resumo';
+import type { EtapaProductItem } from '@/components/Realizado/etapa/types';
 import type {
   PainelEtapaTvOpFonte,
   PainelEtapaTvUltimoLote,
 } from '@/domain/painel-etapa-tv/painel-etapa-tv-types';
-import type { EtapaProductItem } from '@/components/Realizado/etapa/types';
-import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import PainelEtapaTvGrafico from './PainelEtapaTvGrafico';
 import PainelEtapaTvProximasOps from './PainelEtapaTvProximasOps';
+import PainelEtapaTvResumoCard from './PainelEtapaTvResumoCard';
 import PainelEtapaTvUltimoLotePanel from './PainelEtapaTvUltimoLote';
+import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 
 type PainelEtapaTvGridProps = {
   config: PainelEtapaTvConfig;
   fluxo: VpFluxoPayload | null;
   hasScale: boolean;
+  progresso: PainelEtapaTvOpProgressoDto | null;
+  turnos: PainelEtapaTvTurnosResumoDto | null;
+  t1Label: string;
+  dateISO: string;
   ultimoLote: PainelEtapaTvUltimoLote | null;
   ultimoProduct: EtapaProductItem | undefined;
   proximasOps: PainelEtapaTvOpFonte[];
@@ -37,6 +43,10 @@ export default function PainelEtapaTvGrid({
   config,
   fluxo,
   hasScale,
+  progresso,
+  turnos,
+  t1Label,
+  dateISO,
   ultimoLote,
   ultimoProduct,
   proximasOps,
@@ -44,8 +54,6 @@ export default function PainelEtapaTvGrid({
   unit,
   showMarca,
 }: PainelEtapaTvGridProps) {
-  const etapaFluxo = fluxo?.etapas.find((item) => item.key === config.fluxoKey);
-
   return (
     <div
       className={[
@@ -54,8 +62,14 @@ export default function PainelEtapaTvGrid({
       ].join(' ')}
     >
       <div className="min-h-0 overflow-auto">
-        {fluxo && etapaFluxo ? (
-          <FluxoEtapaCard fluxo={fluxo} etapa={etapaFluxo} ativa selecionavel={false} />
+        {progresso && turnos && t1Label ? (
+          <PainelEtapaTvResumoCard
+            progresso={progresso}
+            turnos={turnos}
+            dateISO={dateISO}
+            unit={unit}
+            t1Label={t1Label}
+          />
         ) : (
           <FluxoIndisponivel />
         )}
