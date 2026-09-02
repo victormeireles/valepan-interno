@@ -44,4 +44,14 @@ describe('FluxoPrevistoHora', () => {
     expect(matriz.ferm.Bun[10]).toBe(100);
     expect(matriz.ferm.Bun[11]).toBe(100);
   });
+
+  it('T1 22h: previsto 22:00–23:00 de 01/09 cai na hora 22, não na 22 de 02/09', () => {
+    const row = {
+      ...op(),
+      fermentacaoInicioPrevisto: new Date(brazilClockUtcMs('2026-09-01', '22:00')).toISOString(),
+      fermentacaoFimPrevisto: new Date(brazilClockUtcMs('2026-09-01', '23:00')).toISOString(),
+    };
+    expect(hora.rateioOpHora(row, 'ferm', '2026-09-02', 22, '22:00')).toBe(200);
+    expect(hora.rateioOpHora(row, 'ferm', '2026-09-02', 10, '22:00')).toBe(0);
+  });
 });

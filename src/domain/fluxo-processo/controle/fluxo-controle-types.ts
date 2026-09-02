@@ -86,4 +86,6 @@ export type FluxoControleBuilderInput = {
   ativoMin: Record<FluxoEtapaKey, number>;
   produtividade: FluxoProdutividadeMeta | null;
   capacidadeContext: FluxoCapacidadeContext;
+  /** Relógio T1 por etapa; omitido = dia civil (`00:00`). */
+  t1PorEtapa?: Record<FluxoEtapaKey, string>;
 };

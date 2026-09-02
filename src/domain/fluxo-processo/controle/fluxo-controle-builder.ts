@@ -27,7 +27,12 @@ export class FluxoControleBuilder {
     return {
       disponivel: true,
       etapas,
-      matrizPrevisto: this.hora.buildMatriz(input.ops, input.ordemAss, input.dateISO),
+      matrizPrevisto: this.hora.buildMatriz(
+        input.ops,
+        input.ordemAss,
+        input.dateISO,
+        input.t1PorEtapa,
+      ),
       relogio: this.buildRelogio(input),
       embalagemFifo: true,
     };

@@ -47,6 +47,7 @@ export class FluxoControleServiceAttach {
 
   attach(fluxo: VpFluxoPayload, input: FluxoControleAttachInput): void {
     const ops = this.buildOps(input.ordens, input.estimativas);
+    const t1PorEtapa = t1PorEtapaFrom(fluxo);
     fluxo.controle = this.builder.build({
       dateISO: input.dateISO,
       todayISO: input.todayISO,
@@ -64,6 +65,7 @@ export class FluxoControleServiceAttach {
       ativoMin: this.etapasField(fluxo, 'ativo'),
       produtividade: fluxo.produtividade,
       capacidadeContext: buildCapacidadeContext(fluxo),
+      ...(t1PorEtapa ? { t1PorEtapa } : {}),
     });
   }
 
@@ -117,6 +119,18 @@ export class FluxoControleServiceAttach {
       emb: fluxo.etapas.find((e) => e.key === 'emb')?.[field] ?? 0,
     };
   }
+}
+
+function t1PorEtapaFrom(
+  fluxo: VpFluxoPayload,
+): Record<FluxoEtapaKey, string> | undefined {
+  const janelas = fluxo.janelasPorEtapa;
+  if (!janelas) return undefined;
+  return {
+    ferm: janelas.ferm.t1Inicio,
+    forno: janelas.forno.t1Inicio,
+    emb: janelas.emb.t1Inicio,
+  };
 }
 
 function horariosFrom(est: EstimativaProducaoRow): EstimativaProducaoHorarios {
