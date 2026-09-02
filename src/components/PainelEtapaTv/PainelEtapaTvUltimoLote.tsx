@@ -24,7 +24,7 @@ export default function PainelEtapaTvUltimoLote({
         Último lançamento
       </h2>
       {lote == null ? (
-        <p className="text-sm text-text-muted">Nenhum lançamento hoje</p>
+        <p className="text-sm text-text-muted">Nenhum lançamento nesta janela</p>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           <p className="shrink-0 font-mono text-sm tabular-nums text-text-strong">

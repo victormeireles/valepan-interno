@@ -59,12 +59,16 @@ export default function PainelEtapaTvScreen({
       config.id === 'embalagem'
         ? PainelEtapaTvFonteAdapter.fromPedidos(pedidos)
         : PainelEtapaTvFonteAdapter.fromOrdens(ordens);
-    const ultimo = PainelEtapaTvUltimoLotePicker.fromLotes(fonte.lotes);
+    const ultimoFluxo = fluxo?.ultimoPorEtapa?.[config.fluxoKey];
+    const janelaMs = janela ? { iniMs: janela.iniMs, fimMs: janela.fimMs } : undefined;
+    const ultimo =
+      ultimoFluxo ??
+      PainelEtapaTvUltimoLotePicker.fromLotes(fonte.lotes, janelaMs);
     return {
       ultimoLote: ultimo,
       proximasOps: PainelEtapaTvProximasOpsPicker.pick(fonte.ops, ultimo?.ordemId ?? null),
     };
-  }, [config.id, ordens, pedidos]);
+  }, [config.id, config.fluxoKey, fluxo?.ultimoPorEtapa, janela, ordens, pedidos]);
 
   const lotesDaEtapa = useMemo(
     () => PainelEtapaTvResumoLotes.fromCarga(config.id, ordens, pedidos),
