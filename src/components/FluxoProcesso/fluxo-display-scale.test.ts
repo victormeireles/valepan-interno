@@ -212,6 +212,13 @@ describe('FluxoDisplayScale', () => {
     expect(scale.unitLabel).toBe('LT');
   });
 
+  it('opAnteriorTotal(ferm) em lt soma matrizAnt.ferm via fromUn por assadeira', () => {
+    const fluxo = miniFluxo();
+    fluxo.matrizAnt.ferm['65g verde'] = [40, ...Array(23).fill(0)];
+    const scale = new FluxoDisplayScale(fluxo, 'lt');
+    expect(scale.opAnteriorTotal('ferm')).toBe(40 / 24);
+  });
+
   it('960 un ÷ 24 un/LT da assadeira da OP = 40 LT (não usa média do dia)', () => {
     const fluxo = miniFluxo();
     // Outra assadeira puxa a média para longe de 24

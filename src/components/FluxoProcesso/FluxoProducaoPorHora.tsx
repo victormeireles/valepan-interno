@@ -6,17 +6,12 @@ import type {
   FluxoEtapaResumo,
   VpFluxoPayload,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
-import {
-  extractCalendarDate,
-  getBrazilHourMinuteNow,
-  getTodayISOInBrazilTimezone,
-} from '@/lib/utils/date-utils';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtQty } from './fluxo-display-scale';
 import FluxoBarrasHora from './FluxoBarrasHora';
 import FluxoFaixaEtapa from './FluxoFaixaEtapa';
+import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 import FluxoOpRelogioList from './FluxoOpRelogioList';
-import { diaAnteriorLabelFromDia } from './fluxo-processo-format';
 
 type FluxoProducaoPorHoraProps = {
   fluxo: VpFluxoPayload;
@@ -34,16 +29,25 @@ export default function FluxoProducaoPorHora({
     FluxoEtapaKey,
     FluxoEtapaResumo
   >;
-  const antLabel = diaAnteriorLabelFromDia(fluxo.dia);
   const total = scale.etapaTotal(etapa);
-  const mostrarAgora =
-    extractCalendarDate(fluxo.dia) === getTodayISOInBrazilTimezone();
-  const horaAgora = getBrazilHourMinuteNow().hour;
+  const outraOp = scale.opAnteriorTotal(etapa);
+  const caption = FluxoJanelaGraficoCopy.caption(
+    fmtQty(total, scale.mode),
+    scale.unitLabel,
+    outraOp > 0
+      ? FluxoJanelaGraficoCopy.outraOpCaption(
+          fmtQty(outraOp, scale.mode),
+          fluxo.turnosResumo?.[etapa]?.outraOpData,
+        )
+      : '',
+  );
 
   return (
     <Card padding="md" className="min-w-0">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
-        <span className="text-base font-bold text-text-strong">Produção por hora</span>
+        <span className="text-base font-bold text-text-strong">
+          {FluxoJanelaGraficoCopy.TITULO}
+        </span>
         <div
           className="flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain rounded-full bg-surface-sunken p-0.5"
           role="tablist"
@@ -68,18 +72,10 @@ export default function FluxoProducaoPorHora({
           ))}
         </div>
         <span className="font-mono text-[11px] tabular-nums text-text-muted lg:ml-auto">
-          {fmtQty(total, scale.mode)} {scale.unitLabel} no dia · empilhado por assadeira
-          {etapa === 'emb' && scale.opAnteriorTotal() > 0
-            ? ` · ${fmtQty(scale.opAnteriorTotal(), scale.mode)} de OP de ${antLabel}`
-            : ''}
+          {caption}
         </span>
       </div>
-      <FluxoBarrasHora
-        fluxo={fluxo}
-        etapa={etapa}
-        mostrarAgora={mostrarAgora}
-        horaAgora={horaAgora}
-      />
+      <FluxoBarrasHora fluxo={fluxo} etapa={etapa} />
       <FluxoFaixaEtapa etapa={byKey[etapa]} />
       <FluxoOpRelogioList etapa={etapa} controle={fluxo.controle} />
     </Card>

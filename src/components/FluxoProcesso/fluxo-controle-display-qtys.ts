@@ -53,7 +53,7 @@ export class FluxoControleDisplayQtysBuilder {
   ): number {
     if (etapa === 'emb') {
       if (scale.mode === 'cx') return numeros.estaUn;
-      return Math.max(0, scale.etapaTotal('emb') - scale.opAnteriorTotal());
+      return Math.max(0, scale.etapaTotal('emb') - scale.opAnteriorTotal('emb'));
     }
     if (scale.mode === 'lt') return numeros.estaUn;
     return scale.etapaTotal(etapa);

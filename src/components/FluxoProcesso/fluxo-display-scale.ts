@@ -164,14 +164,25 @@ export class FluxoDisplayScale {
     return total;
   }
 
-  opAnteriorTotal(): number {
-    if (this.mode === 'un') return this.fluxo.opAnterior.un;
-    if (this.mode === 'cx') return this.fluxo.opAnterior.volOperacional;
+  opAnteriorTotal(etapa: FluxoEtapaKey = 'emb'): number {
+    if (this.mode === 'un') return this.somaMatrizAntUn(etapa);
+    if (this.mode === 'cx') {
+      return etapa === 'emb' ? this.fluxo.opAnterior.volOperacional : 0;
+    }
     let total = 0;
     for (const ass of this.fluxo.ordemAss) {
-      const horas = this.fluxo.matrizAnt.emb[ass] ?? [];
+      const horas = this.fluxo.matrizAnt[etapa][ass] ?? [];
       const un = horas.reduce((t, v) => t + v, 0);
       total += this.fromUn(un, ass);
+    }
+    return total;
+  }
+
+  private somaMatrizAntUn(etapa: FluxoEtapaKey): number {
+    let total = 0;
+    for (const ass of this.fluxo.ordemAss) {
+      const horas = this.fluxo.matrizAnt[etapa][ass] ?? [];
+      total += horas.reduce((t, v) => t + v, 0);
     }
     return total;
   }

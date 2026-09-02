@@ -3,7 +3,7 @@
 import type { FluxoEtapaResumo, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtQtyExact } from './fluxo-display-scale';
-import { diaAnteriorLabelFromDia } from './fluxo-processo-format';
+import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 
 type FluxoEtapaCardSemControleProps = {
   fluxo: VpFluxoPayload;
@@ -15,7 +15,11 @@ export default function FluxoEtapaCardSemControle({
   etapa: e,
 }: FluxoEtapaCardSemControleProps) {
   const { scale } = useFluxoDisplay();
-  const antLabel = diaAnteriorLabelFromDia(fluxo.dia);
+  const outraOp = scale.opAnteriorTotal(e.key);
+  const opLabel = FluxoJanelaGraficoCopy.cardOpLabel(
+    fluxo.turnosResumo?.[e.key]?.outraOpData,
+    fluxo.dia,
+  );
   const volume = scale.etapaTotal(e.key);
   const fermVol = scale.etapaTotal('ferm');
   const plano = scale.planoTotal();
@@ -29,9 +33,9 @@ export default function FluxoEtapaCardSemControle({
           {scale.unitLabel}
         </span>
       </div>
-      {e.key === 'emb' && scale.opAnteriorTotal() > 0 ? (
+      {outraOp > 0 ? (
         <div className="mt-0.5 text-[11px] text-text-faint">
-          {fmtQtyExact(scale.opAnteriorTotal())} de OP de {antLabel}
+          {fmtQtyExact(outraOp)} de {opLabel}
         </div>
       ) : null}
       {e.key === 'ferm' ? (

@@ -1,15 +1,18 @@
 'use client';
 
 import { fmtQty, type FluxoDisplayMode } from './fluxo-display-scale';
+import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 import type { FluxoHoraLegendaItem } from './FluxoHoraLegendaBuilder';
 
 type FluxoBarrasHoraTooltipProps = {
   hora: number;
+  axisIndex: number;
   total: number;
   previsto: number;
   unitLabel: string;
   mode: FluxoDisplayMode;
   itens: FluxoHoraLegendaItem[];
+  outraOpData?: string | null;
 };
 
 /**
@@ -18,11 +21,13 @@ type FluxoBarrasHoraTooltipProps = {
  */
 export default function FluxoBarrasHoraTooltip({
   hora,
+  axisIndex,
   total,
   previsto,
   unitLabel,
   mode,
   itens,
+  outraOpData,
 }: FluxoBarrasHoraTooltipProps) {
   const hh = String(hora).padStart(2, '0');
   const delta = total - previsto;
@@ -32,8 +37,13 @@ export default function FluxoBarrasHoraTooltip({
       role="tooltip"
       className="pointer-events-none absolute top-2 z-20 min-w-[160px] max-w-[min(220px,calc(100%-8px))] rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-lg"
       style={{
-        left: `calc(${(hora + 0.5) / 24} * 100%)`,
-        transform: hora < 4 ? 'translateX(0)' : hora > 19 ? 'translateX(-100%)' : 'translateX(-50%)',
+        left: `calc(${(axisIndex + 0.5) / 24} * 100%)`,
+        transform:
+          axisIndex < 4
+            ? 'translateX(0)'
+            : axisIndex > 19
+              ? 'translateX(-100%)'
+              : 'translateX(-50%)',
       }}
     >
       <div className="font-mono text-[12px] font-bold tabular-nums text-text-strong">
@@ -41,7 +51,8 @@ export default function FluxoBarrasHoraTooltip({
       </div>
 
       <p className="mt-1 font-mono text-[10px] tabular-nums text-text-muted">
-        previsto {fmtQty(previsto, mode)} · realizado {fmtQty(total, mode)} · Δ{' '}
+        {FluxoJanelaGraficoCopy.PREVISTO} {fmtQty(previsto, mode)} · realizado{' '}
+        {fmtQty(total, mode)} · Δ{' '}
         {fmtQty(delta, mode)}
       </p>
 
@@ -67,7 +78,7 @@ export default function FluxoBarrasHoraTooltip({
 
       {itens.some((i) => i.valorOpAnterior > 0) ? (
         <p className="mt-1.5 text-[10px] text-text-muted">
-          Hachurado = OP de dia anterior
+          {FluxoJanelaGraficoCopy.hachura(outraOpData)}
         </p>
       ) : null}
     </div>

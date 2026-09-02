@@ -7,7 +7,7 @@ import { FluxoControleDisplayQtysBuilder } from './fluxo-controle-display-qtys';
 import { fmtQtyExact } from './fluxo-display-scale';
 import FluxoEtapaMeter from './FluxoEtapaMeter';
 import { FluxoEtapaStatusChipResolver } from './fluxo-etapa-status-chip';
-import { diaAnteriorLabelFromDia } from './fluxo-processo-format';
+import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 
 const statusChip = new FluxoEtapaStatusChipResolver();
 const displayQtys = new FluxoControleDisplayQtysBuilder();
@@ -43,7 +43,11 @@ export default function FluxoEtapaCardComControle({
   cor,
 }: FluxoEtapaCardComControleProps) {
   const { scale } = useFluxoDisplay();
-  const antLabel = diaAnteriorLabelFromDia(fluxo.dia);
+  const outraOp = scale.opAnteriorTotal(e.key);
+  const opLabel = FluxoJanelaGraficoCopy.cardOpLabel(
+    fluxo.turnosResumo?.[e.key]?.outraOpData,
+    fluxo.dia,
+  );
   const qtys = displayQtys.build(scale, fluxo, e.key, numeros);
   const chip = statusChip.resolve(qtys.status);
 
@@ -60,9 +64,9 @@ export default function FluxoEtapaCardComControle({
           {scale.unitLabel}
         </span>
       </div>
-      {e.key === 'emb' && scale.opAnteriorTotal() > 0 ? (
+      {outraOp > 0 ? (
         <div className="mt-1 text-[11px] text-text-faint">
-          {fmtQtyExact(scale.opAnteriorTotal())} de OP de {antLabel}
+          {fmtQtyExact(outraOp)} de {opLabel}
         </div>
       ) : null}
 

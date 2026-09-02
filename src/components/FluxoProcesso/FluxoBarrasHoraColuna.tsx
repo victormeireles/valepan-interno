@@ -48,7 +48,7 @@ export default function FluxoBarrasHoraColuna({
 
   const ariaLabel =
     previsto > 0 || total > 0
-      ? `${hh}:00, previsto ${fmtQty(previsto, scale.mode)} · realizado ${fmtQty(total, scale.mode)} · Δ ${fmtQty(delta, scale.mode)}`
+      ? `${hh}:00, previsto nesta janela ${fmtQty(previsto, scale.mode)} · realizado ${fmtQty(total, scale.mode)} · Δ ${fmtQty(delta, scale.mode)}`
       : `${hh}:00, sem apontamento`;
 
   return (

@@ -2,20 +2,18 @@
 
 import { useId, useState } from 'react';
 import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
+import { getBrazilHourMinuteNow } from '@/lib/utils/date-utils';
 import { useFluxoDisplay } from './fluxo-display-context';
 import { fmtQtyK } from './fluxo-display-scale';
 import FluxoBarrasHoraColuna from './FluxoBarrasHoraColuna';
 import FluxoBarrasHoraTooltip from './FluxoBarrasHoraTooltip';
+import { FluxoHoraEixo } from './fluxo-hora-eixo';
 import { FluxoHoraLegendaBuilder } from './FluxoHoraLegendaBuilder';
+import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
 import FluxoOverflowX from './FluxoOverflowX';
 import { FluxoHoraTrack } from './fluxo-hora-track';
-import {
-  diaAnteriorLabelFromDia,
-  FLUXO_UI_ETAPA_COR,
-  rotuloAssadeira,
-} from './fluxo-processo-format';
+import { FLUXO_UI_ETAPA_COR, rotuloAssadeira } from './fluxo-processo-format';
 
-const HORAS = Array.from({ length: 24 }, (_, i) => i);
 const CHART_H = 210;
 const LABEL_H = 16;
 const legendaBuilder = new FluxoHoraLegendaBuilder();
@@ -23,34 +21,32 @@ const legendaBuilder = new FluxoHoraLegendaBuilder();
 type FluxoBarrasHoraProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaKey;
-  mostrarAgora: boolean;
-  horaAgora: number;
 };
 
 /**
- * Barras empilhadas por hora + fantasma previsto e marcador agora (hoje).
+ * Barras empilhadas no eixo T1 + fantasma previsto e marcador agora (na janela).
  */
-export default function FluxoBarrasHora({
-  fluxo,
-  etapa,
-  mostrarAgora,
-  horaAgora,
-}: FluxoBarrasHoraProps) {
+export default function FluxoBarrasHora({ fluxo, etapa }: FluxoBarrasHoraProps) {
   const { scale } = useFluxoDisplay();
   const chartId = useId();
   const [horaAtiva, setHoraAtiva] = useState<number | null>(null);
+
+  const eixo = new FluxoHoraEixo(fluxo, etapa);
+  const HORAS = eixo.hoursAxis();
+  const mostrarAgora = eixo.mostrarAgora();
+  const horaAgora = getBrazilHourMinuteNow().hour;
+  const outraOpData = fluxo.turnosResumo?.[etapa]?.outraOpData;
 
   const m = fluxo.matriz[etapa];
   const usadas = fluxo.ordemAss.filter((a) => (m[a] ?? []).some((v) => v > 0));
   const temAnt = fluxo.ordemAss.some((a) =>
     (fluxo.matrizAnt[etapa][a] ?? []).some((v) => v > 0),
   );
-  const totais = HORAS.map((h) => scale.horaTotal(etapa, h));
-  const previstos = HORAS.map((h) => scale.horaPrevisto(etapa, h));
+  const totais = Array.from({ length: 24 }, (_, h) => scale.horaTotal(etapa, h));
+  const previstos = Array.from({ length: 24 }, (_, h) => scale.horaPrevisto(etapa, h));
   const maxHora = scale.maxHoraComum();
   const cap = scale.capacidade(etapa);
   const cor = FLUXO_UI_ETAPA_COR[etapa];
-  const antLabel = diaAnteriorLabelFromDia(fluxo.dia);
   const plotH = CHART_H - LABEL_H;
 
   const itensAtivos =
@@ -64,7 +60,7 @@ export default function FluxoBarrasHora({
         fluxo={fluxo}
         usadas={usadas}
         temAnt={temAnt}
-        antLabel={antLabel}
+        outraOpData={outraOpData}
         mostrarAgora={mostrarAgora}
       />
 
@@ -81,13 +77,13 @@ export default function FluxoBarrasHora({
           ))}
         </div>
 
-        <FluxoOverflowX label="Produção por hora" className="flex-1">
+        <FluxoOverflowX label={FluxoJanelaGraficoCopy.TITULO} className="flex-1">
           <div style={{ minWidth: FluxoHoraTrack.plotMinWidthPx() }}>
             <div
               className="relative border-b border-border-default"
               style={{ height: CHART_H }}
               role="list"
-              aria-label="Produção por hora"
+              aria-label={FluxoJanelaGraficoCopy.TITULO}
               onMouseLeave={() => setHoraAtiva(null)}
             >
               {[0.25, 0.5, 0.75, 1].map((f) => (
@@ -118,11 +114,13 @@ export default function FluxoBarrasHora({
               {horaAtiva != null ? (
                 <FluxoBarrasHoraTooltip
                   hora={horaAtiva}
+                  axisIndex={HORAS.indexOf(horaAtiva)}
                   total={totais[horaAtiva]}
                   previsto={previstos[horaAtiva]}
                   unitLabel={scale.unitLabel}
                   mode={scale.mode}
                   itens={itensAtivos}
+                  outraOpData={outraOpData}
                 />
               ) : null}
 
@@ -174,7 +172,7 @@ type FluxoBarrasHoraLegendaProps = {
   fluxo: VpFluxoPayload;
   usadas: string[];
   temAnt: boolean;
-  antLabel: string;
+  outraOpData: string | null | undefined;
   mostrarAgora: boolean;
 };
 
@@ -182,7 +180,7 @@ function FluxoBarrasHoraLegenda({
   fluxo,
   usadas,
   temAnt,
-  antLabel,
+  outraOpData,
   mostrarAgora,
 }: FluxoBarrasHoraLegendaProps) {
   return (
@@ -202,7 +200,7 @@ function FluxoBarrasHoraLegenda({
       ))}
       <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
         <span className="h-[9px] w-2.5 rounded-[2px] bg-stone-200/80" aria-hidden />
-        previsto
+        {FluxoJanelaGraficoCopy.PREVISTO}
       </span>
       {mostrarAgora ? (
         <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted">
@@ -220,7 +218,7 @@ function FluxoBarrasHoraLegenda({
             }}
             aria-hidden
           />
-          hachurado = OP de {antLabel}
+          {FluxoJanelaGraficoCopy.hachura(outraOpData)}
         </span>
       ) : null}
     </div>
