@@ -10,6 +10,11 @@ export type JanelaOperacional = {
 };
 
 export class JanelaOperacionalResolver {
+  /**
+   * Janela de 24h a partir do relógio do T1.
+   * O meio-dia escolhe qual ocorrência civil desse relógio (véspera se T1 > 12h),
+   * não qual turno cadastrado — quem chama deve passar o `inicio` do numero 1.
+   */
   forDate(dateISO: string, t1Inicio: string): JanelaOperacional {
     const noonMs = brazilClockUtcMs(dateISO, '12:00');
     const startMs = brazilClockUtcMs(dateISO, t1Inicio);

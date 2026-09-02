@@ -16,7 +16,7 @@ import type {
   FluxoBuilderInput,
   FluxoOrdemFatorInput,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
-import { JanelaOperacionalResolver } from '@/domain/producao-turno/janela-operacional';
+import { FluxoEventosJanelaFilter } from '@/domain/fluxo-processo/fluxo-eventos-janela-filter';
 import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
 import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
 import type { FornoLoteRecord } from '@/domain/types/forno-lote';
@@ -58,6 +58,7 @@ export class FluxoProcessoService {
   private readonly filasAttach = new FluxoFilasServiceAttach();
   private readonly ritmoAttach = new FluxoProcessoRitmoAttach();
   private readonly tvAttach = new FluxoProcessoTvAttach();
+  private readonly janelaFilter = new FluxoEventosJanelaFilter();
 
   constructor(private readonly productService = new SupabaseProductService()) {}
 
@@ -71,15 +72,9 @@ export class FluxoProcessoService {
       configOperacaoService.getConfig(),
     ]);
 
-    const resolver = new JanelaOperacionalResolver();
-    const janelaLotes = new FluxoJanelaLotesLoader(resolver);
-    const janelasPorEtapa = {
-      ferm: resolver.forDate(date, config.horarioInicioProducao),
-      forno: resolver.forDate(date, config.horarioInicioForno),
-      emb: resolver.forDate(date, config.horarioInicioEmbalagem),
-    };
-    const uniao = resolver.union([janelasPorEtapa.ferm, janelasPorEtapa.forno, janelasPorEtapa.emb]);
-    const { startIso, endIso } = resolver.toIsoRange(uniao);
+    const janelaLotes = new FluxoJanelaLotesLoader();
+    const janelasPorEtapa = janelaLotes.janelasPorEtapa(date, config);
+    const { startIso, endIso } = janelaLotes.isoRangeUniao(janelasPorEtapa);
     const lotesHoje = await ritmoLotesDiaLoader.loadRange(startIso, endIso);
     const { ferm: fermLotes, forno: fornoLotes, emb: embLotes } = lotesHoje;
 
@@ -157,51 +152,60 @@ export class FluxoProcessoService {
 
     const planoUn = ordensDia.reduce((t, o) => t + o.quantidade.unidades, 0);
 
-    const fermentacao: FluxoApontamentoEvento[] = fermVisivel.map((l) => {
-      const ordem = ordemById.get(l.ordemProducaoId);
-      return {
-        produzidoEm: l.produzidoEm,
-        produtoNome: resolveProduto(ordem?.produtoId, ordem),
-        assadeiraNome: resolveAssadeira(ordem),
-        unidades: l.unidades,
-        latas: l.assadeiras,
-        dataOp: ordem?.dataProducao,
-        ordemProducaoId: l.ordemProducaoId,
-        turno: l.turno,
-        loteId: l.id,
-      };
-    });
+    const fermentacao: FluxoApontamentoEvento[] = this.janelaFilter.filter(
+      fermVisivel.map((l) => {
+        const ordem = ordemById.get(l.ordemProducaoId);
+        return {
+          produzidoEm: l.produzidoEm,
+          produtoNome: resolveProduto(ordem?.produtoId, ordem),
+          assadeiraNome: resolveAssadeira(ordem),
+          unidades: l.unidades,
+          latas: l.assadeiras,
+          dataOp: ordem?.dataProducao,
+          ordemProducaoId: l.ordemProducaoId,
+          turno: l.turno,
+          loteId: l.id,
+        };
+      }),
+      janelasPorEtapa.ferm,
+    );
 
-    const forno: FluxoApontamentoEvento[] = fornoVisivel.map((l) => {
-      const ordem = ordemById.get(l.ordemProducaoId);
-      return {
-        produzidoEm: l.produzidoEm,
-        produtoNome: resolveProduto(ordem?.produtoId, ordem),
-        assadeiraNome: resolveAssadeira(ordem),
-        unidades: l.unidades,
-        latas: l.assadeiras,
-        dataOp: ordem?.dataProducao,
-        ordemProducaoId: l.ordemProducaoId,
-        turno: l.turno,
-        loteId: l.id,
-      };
-    });
+    const forno: FluxoApontamentoEvento[] = this.janelaFilter.filter(
+      fornoVisivel.map((l) => {
+        const ordem = ordemById.get(l.ordemProducaoId);
+        return {
+          produzidoEm: l.produzidoEm,
+          produtoNome: resolveProduto(ordem?.produtoId, ordem),
+          assadeiraNome: resolveAssadeira(ordem),
+          unidades: l.unidades,
+          latas: l.assadeiras,
+          dataOp: ordem?.dataProducao,
+          ordemProducaoId: l.ordemProducaoId,
+          turno: l.turno,
+          loteId: l.id,
+        };
+      }),
+      janelasPorEtapa.forno,
+    );
 
-    const embalagem: FluxoApontamentoEvento[] = embVisivel.map((l) => {
-      const ordemId = l.pedidoEmbalagemId ?? undefined;
-      const ordem = ordemId ? ordemById.get(ordemId) : undefined;
-      return {
-        produzidoEm: l.produzidoEm,
-        produtoNome: resolveProduto(l.produtoId, ordem),
-        assadeiraNome: resolveAssadeira(ordem),
-        unidades: l.quantidade.unidades,
-        caixas: l.quantidade.caixas,
-        dataOp: l.dataPedido || ordem?.dataProducao,
-        ordemProducaoId: ordemId,
-        turno: l.turno,
-        loteId: l.id,
-      };
-    });
+    const embalagem: FluxoApontamentoEvento[] = this.janelaFilter.filter(
+      embVisivel.map((l) => {
+        const ordemId = l.pedidoEmbalagemId ?? undefined;
+        const ordem = ordemId ? ordemById.get(ordemId) : undefined;
+        return {
+          produzidoEm: l.produzidoEm,
+          produtoNome: resolveProduto(l.produtoId, ordem),
+          assadeiraNome: resolveAssadeira(ordem),
+          unidades: l.quantidade.unidades,
+          caixas: l.quantidade.caixas,
+          dataOp: l.dataPedido || ordem?.dataProducao,
+          ordemProducaoId: ordemId,
+          turno: l.turno,
+          loteId: l.id,
+        };
+      }),
+      janelasPorEtapa.emb,
+    );
 
     const input: FluxoBuilderInput = {
       dateISO: date,
