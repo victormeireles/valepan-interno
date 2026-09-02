@@ -47,7 +47,6 @@ export class PainelEtapaTvTurnosResumo {
       if (evento.dataOp !== dateISO) {
         outraOp += evento.volume;
         datasOutraOp.add(evento.dataOp);
-        continue;
       }
 
       const turnoNumero = parseProducaoTurnoNumero(evento.turno);

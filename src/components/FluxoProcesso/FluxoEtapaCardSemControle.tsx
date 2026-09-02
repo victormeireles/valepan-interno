@@ -20,8 +20,9 @@ export default function FluxoEtapaCardSemControle({
     fluxo.turnosResumo?.[e.key]?.outraOpData,
     fluxo.dia,
   );
-  const volume = scale.etapaTotal(e.key);
-  const fermVol = scale.etapaTotal('ferm');
+  const volume = scale.etapaTotal(e.key) - outraOp;
+  const fermVol =
+    scale.etapaTotal('ferm') - scale.opAnteriorTotal('ferm');
   const plano = scale.planoTotal();
 
   return (
