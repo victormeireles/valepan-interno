@@ -105,8 +105,9 @@ export class FluxoUnidadesConverter {
   }
 
   /**
-   * Fator un/caixa só quando a OP do produto tem caixas (>0).
-   * Sem conversão → null (exibição em CX ignora o produto).
+   * Fator un/caixa conhecido: OP do dia com caixas, ou lote em caixa
+   * resolvido nesta carga (inclui outra OP na janela).
+   * Sem conversão → null (exibição em CX ignora produto só em unidades).
    */
   unPorCaixaKnown(produtoNome: string): number | null {
     return this.fatores.unPorCaixaByProduto.get(produtoNome) ?? null;
@@ -120,6 +121,8 @@ export class FluxoUnidadesConverter {
    * Resolve unidades do apontamento.
    * Com latas/caixas digitadas, deriva unidades pelo fator da OP (mesma língua).
    * Sem latas/caixas (Broa, Pão Francês, etc.), usa unidades diretas.
+   * Caixas/latas de produto fora da OP do dia gravam o fator usado, senão o
+   * gráfico CX ignora o lote (buraco na barra).
    */
   resolveUnidades(input: {
     unidades: number;
@@ -132,13 +135,33 @@ export class FluxoUnidadesConverter {
     const ass = input.assadeiraNome || FLUXO_ASSADEIRA_SEM;
     if (input.etapa === 'emb') {
       const cx = input.caixas ?? 0;
-      if (cx > 0) return Math.round(cx * this.unPorCaixa(input.produtoNome, ass));
+      if (cx > 0) {
+        return Math.round(cx * this.rememberCaixaFactor(input.produtoNome, ass));
+      }
       if (input.unidades > 0) return Math.round(input.unidades);
       return 0;
     }
     const lt = input.latas ?? 0;
-    if (lt > 0) return Math.round(lt * this.unPorLata(input.produtoNome, ass));
+    if (lt > 0) {
+      return Math.round(lt * this.rememberLataFactor(input.produtoNome, ass));
+    }
     if (input.unidades > 0) return Math.round(input.unidades);
     return 0;
+  }
+
+  private rememberCaixaFactor(produtoNome: string, ass: string): number {
+    const known = this.fatores.unPorCaixaByProduto.get(produtoNome);
+    if (known != null && known > 0) return known;
+    const used = this.unPorCaixa(produtoNome, ass);
+    this.fatores.unPorCaixaByProduto.set(produtoNome, used);
+    return used;
+  }
+
+  private rememberLataFactor(produtoNome: string, ass: string): number {
+    const known = this.fatores.unPorLataByProduto.get(produtoNome);
+    if (known != null && known > 0) return known;
+    const used = this.unPorLata(produtoNome, ass);
+    this.fatores.unPorLataByProduto.set(produtoNome, used);
+    return used;
   }
 }
