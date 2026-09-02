@@ -3,6 +3,7 @@ import type {
   ProducaoTurnoCadastrado,
   ProducaoTurnoNumero,
 } from '@/domain/producao-turno/producao-turno-types';
+import type { PainelEtapaTvTurnoJanela } from './painel-etapa-tv-turno-vigente';
 
 export type PainelEtapaTvTurnoEvento = {
   volume: number;
@@ -10,10 +11,7 @@ export type PainelEtapaTvTurnoEvento = {
   dataOp: string;
 };
 
-export type PainelEtapaTvTurnoFatia = {
-  numero: ProducaoTurnoNumero;
-  inicio: string;
-  fim: string;
+export type PainelEtapaTvTurnoFatia = PainelEtapaTvTurnoJanela & {
   volume: number;
 };
 

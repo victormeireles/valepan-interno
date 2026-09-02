@@ -18,7 +18,6 @@ describe('PainelEtapaTvResumoCopy', () => {
         numero: 1,
         inicio: '22:00',
         fim: '07:00',
-        volume: 0,
       }),
     ).toBe('T1 22h–7h');
   });

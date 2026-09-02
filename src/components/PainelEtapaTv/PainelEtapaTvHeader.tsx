@@ -26,7 +26,6 @@ type PainelEtapaTvHeaderProps = {
   selectedDate: string;
   onDateChange: (date: string) => void;
   metrics: RealizadoEtapaToolbarMetrics;
-  janelaLabel: string;
 };
 
 export default function PainelEtapaTvHeader({
@@ -34,7 +33,6 @@ export default function PainelEtapaTvHeader({
   selectedDate,
   onDateChange,
   metrics,
-  janelaLabel,
 }: PainelEtapaTvHeaderProps) {
   const accent = getEtapaAccentClasses(config.accent);
   const toolbarBg = getEtapaToolbarBackgroundStyle(config.pageBackground, config.accent);
@@ -137,7 +135,7 @@ export default function PainelEtapaTvHeader({
             <span className="material-icons text-base" aria-hidden="true">
               schedule
             </span>
-            {janelaLabel} · agora {agora}
+            agora {agora}
           </span>
 
           <input

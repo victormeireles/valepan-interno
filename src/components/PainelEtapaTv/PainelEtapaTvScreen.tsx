@@ -7,13 +7,11 @@ import type { RealizadoEtapaToolbarMetrics } from '@/components/Realizado/etapa/
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
 import { PainelEtapaTvFonteAdapter } from '@/domain/painel-etapa-tv/painel-etapa-tv-fonte-adapter';
-import { PainelEtapaTvJanelaLabel } from '@/domain/painel-etapa-tv/painel-etapa-tv-janela-label';
 import { PainelEtapaTvOpProgresso } from '@/domain/painel-etapa-tv/painel-etapa-tv-op-progresso';
 import { PainelEtapaTvProximasOpsPicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-proximas-ops-picker';
 import { PainelEtapaTvResumoCopy } from '@/domain/painel-etapa-tv/painel-etapa-tv-resumo-copy';
 import { PainelEtapaTvResumoLotes } from '@/domain/painel-etapa-tv/painel-etapa-tv-resumo-lotes';
 import { PainelEtapaTvUltimoLotePicker } from '@/domain/painel-etapa-tv/painel-etapa-tv-ultimo-lote-picker';
-import { formatOpLabelFromDate } from '@/domain/painel-producao/painel-producao-time';
 import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import PainelEtapaTvGrid from './PainelEtapaTvGrid';
@@ -45,9 +43,6 @@ export default function PainelEtapaTvScreen({
   const janela = fluxo?.janelasPorEtapa?.[config.fluxoKey];
   const turnos = fluxo?.turnosResumo?.[config.fluxoKey] ?? null;
   const t1Label = janela ? PainelEtapaTvResumoCopy.t1Label(janela.t1Inicio) : '';
-  const janelaLabel = janela
-    ? PainelEtapaTvJanelaLabel.format(selectedDate, janela)
-    : formatOpLabelFromDate(selectedDate);
 
   const products = useMemo(
     () => PainelEtapaTvProductMapper.fromCarga(config.id, { ordens, pedidos }, selectedDate),
@@ -97,7 +92,6 @@ export default function PainelEtapaTvScreen({
       progresso={progresso}
       turnos={turnos}
       t1Label={t1Label}
-      dateISO={selectedDate}
       ultimoLotes={ultimoLotes}
       proximasOps={proximasOps}
       products={products}
@@ -113,7 +107,6 @@ export default function PainelEtapaTvScreen({
         selectedDate={selectedDate}
         onDateChange={onDateChange}
         metrics={metrics}
-        janelaLabel={janelaLabel}
       />
       <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
         {fluxo && scale ? (

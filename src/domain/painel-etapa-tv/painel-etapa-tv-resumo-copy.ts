@@ -1,5 +1,5 @@
 import { formatJanelaClockLabel } from '@/domain/painel-producao/painel-producao-time';
-import type { PainelEtapaTvTurnoFatia } from './painel-etapa-tv-turnos-resumo';
+import type { PainelEtapaTvTurnoJanela } from './painel-etapa-tv-turno-vigente';
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -15,7 +15,7 @@ export class PainelEtapaTvResumoCopy {
     return `${clock}–${clock}`;
   }
 
-  static fatiaLabel(fatia: PainelEtapaTvTurnoFatia): string {
+  static fatiaLabel(fatia: PainelEtapaTvTurnoJanela): string {
     const inicio = formatJanelaClockLabel(fatia.inicio);
     const fim = formatJanelaClockLabel(fatia.fim);
     return `T${fatia.numero} ${inicio}–${fim}`;

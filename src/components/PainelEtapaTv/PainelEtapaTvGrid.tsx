@@ -28,7 +28,6 @@ type PainelEtapaTvGridProps = {
   progresso: PainelEtapaTvOpProgressoDto | null;
   turnos: PainelEtapaTvTurnosResumoDto | null;
   t1Label: string;
-  dateISO: string;
   ultimoLotes: PainelEtapaTvUltimoLote[];
   proximasOps: PainelEtapaTvOpFonte[];
   products: EtapaProductItem[];
@@ -61,7 +60,6 @@ export default function PainelEtapaTvGrid({
   progresso,
   turnos,
   t1Label,
-  dateISO,
   ultimoLotes,
   proximasOps,
   products,
@@ -75,9 +73,9 @@ export default function PainelEtapaTvGrid({
           <PainelEtapaTvResumoCard
             progresso={progresso}
             turnos={turnos}
-            dateISO={dateISO}
             unit={unit}
             t1Label={t1Label}
+            accent={config.realizado.accent}
           />
         ) : (
           <FluxoIndisponivel />
