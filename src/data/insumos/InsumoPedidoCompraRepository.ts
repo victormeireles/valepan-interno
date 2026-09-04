@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { dataEfetivaIso } from '@/domain/insumos/insumo-compra-data-offset';
+import { dataEfetivaIso, hojeSaoPauloIso } from '@/domain/insumos/insumo-compra-data-offset';
 import { resolveUnidadeResumida } from '@/domain/insumos/insumo-conversao-params';
 import type {
   InsumoPedidoCompraItemInput,
@@ -80,7 +80,7 @@ export class InsumoPedidoCompraRepository {
     filtro: InsumoPedidoCompraFiltro,
     insumoId?: string,
   ): Promise<InsumoPedidoCompraListItem[]> {
-    const hoje = this.hojeSaoPauloIso();
+    const hoje = hojeSaoPauloIso();
     const pedidoIds = insumoId ? await this.listPedidoIdsByInsumoId(insumoId) : null;
     if (pedidoIds !== null && pedidoIds.length === 0) return [];
 
@@ -247,6 +247,31 @@ export class InsumoPedidoCompraRepository {
     }
   }
 
+  async listAbertosParaAbaterPorInsumo(
+    insumoId: string,
+  ): Promise<Array<{ id: string; dataChegadaPrevista: string; numero: number }>> {
+    const pedidoIds = await this.listPedidoIdsByInsumoId(insumoId);
+    if (pedidoIds.length === 0) return [];
+
+    const { data, error } = await this.db
+      .from('insumo_pedido_compra')
+      .select('id, numero, data_chegada_prevista')
+      .eq('status', 'aberto')
+      .in('id', pedidoIds);
+
+    if (error) {
+      throw new Error(`Erro ao listar pedidos para abater: ${error.message}`);
+    }
+
+    return ((data as Array<{ id: string; numero: number; data_chegada_prevista: string }>) ?? []).map(
+      (row) => ({
+        id: row.id,
+        numero: row.numero,
+        dataChegadaPrevista: row.data_chegada_prevista,
+      }),
+    );
+  }
+
   async countItensByInsumoId(insumoId: string): Promise<number> {
     const { count, error } = await this.db
       .from('insumo_pedido_compra_item')
@@ -356,16 +381,6 @@ export class InsumoPedidoCompraRepository {
     });
   }
 
-  private hojeSaoPauloIso(): string {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date());
-    const valueByType = new Map(parts.map((part) => [part.type, part.value]));
-    return `${valueByType.get('year')}-${valueByType.get('month')}-${valueByType.get('day')}`;
-  }
 }
 
 export const insumoPedidoCompraRepository = new InsumoPedidoCompraRepository();

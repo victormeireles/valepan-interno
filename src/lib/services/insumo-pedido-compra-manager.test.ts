@@ -18,6 +18,7 @@ describe('InsumoPedidoCompraManager', () => {
   const updateStatus = vi.fn();
   const listInsumoOpcoes = vi.fn();
   const listPipelineAberto = vi.fn();
+  const listAbertosParaAbaterPorInsumo = vi.fn();
 
   let manager: InsumoPedidoCompraManager;
 
@@ -43,6 +44,7 @@ describe('InsumoPedidoCompraManager', () => {
     updateStatus.mockResolvedValue(undefined);
     listInsumoOpcoes.mockResolvedValue([]);
     listPipelineAberto.mockResolvedValue([]);
+    listAbertosParaAbaterPorInsumo.mockResolvedValue([]);
 
     manager = new InsumoPedidoCompraManager({
       repository: {
@@ -53,6 +55,7 @@ describe('InsumoPedidoCompraManager', () => {
         updateStatus,
         listInsumoOpcoes,
         listPipelineAberto,
+        listAbertosParaAbaterPorInsumo,
       },
     });
   });
@@ -111,5 +114,25 @@ describe('InsumoPedidoCompraManager', () => {
     await manager.encerrar('pedido-1');
 
     expect(updateStatus).toHaveBeenCalledWith('pedido-1', 'encerrado');
+  });
+
+  it('abaterPorEntradaNf encerra o pedido escolhido', async () => {
+    listAbertosParaAbaterPorInsumo.mockResolvedValue([
+      { id: 'p2', dataChegadaPrevista: '2026-09-06', numero: 2 },
+      { id: 'p1', dataChegadaPrevista: '2026-09-03', numero: 1 },
+    ]);
+
+    const encerradoId = await manager.abaterPorEntradaNf('insumo-gema', '2026-09-04');
+
+    expect(encerradoId).toBe('p1');
+    expect(updateStatus).toHaveBeenCalledWith('p1', 'encerrado');
+  });
+
+  it('abaterPorEntradaNf sem candidato não chama updateStatus', async () => {
+    listAbertosParaAbaterPorInsumo.mockResolvedValue([]);
+
+    await expect(manager.abaterPorEntradaNf('insumo-x', '2026-09-04')).resolves.toBeNull();
+
+    expect(updateStatus).not.toHaveBeenCalled();
   });
 });

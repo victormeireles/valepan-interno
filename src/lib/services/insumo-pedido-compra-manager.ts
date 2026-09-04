@@ -4,6 +4,8 @@ import {
   type InsumoPedidoCompraListItem,
   type InsumoPedidoCompraRepository,
 } from '@/data/insumos/InsumoPedidoCompraRepository';
+import { hojeSaoPauloIso } from '@/domain/insumos/insumo-compra-data-offset';
+import { escolherPedidoParaAbaterPorNf } from '@/domain/insumos/insumo-pedido-compra-abater-por-nf';
 import type {
   InsumoPedidoCompraItemInput,
   InsumoPedidoPipelineItem,
@@ -28,6 +30,7 @@ type PedidoRepository = Pick<
   | 'updateStatus'
   | 'listInsumoOpcoes'
   | 'listPipelineAberto'
+  | 'listAbertosParaAbaterPorInsumo'
 >;
 
 export type InsumoPedidoCompraManagerDeps = {
@@ -119,6 +122,18 @@ export class InsumoPedidoCompraManager {
 
   listarPipelineAberto(dataReferencia: string): Promise<InsumoPedidoPipelineItem[]> {
     return this.repository.listPipelineAberto(dataReferencia);
+  }
+
+  async abaterPorEntradaNf(
+    insumoId: string,
+    hojeIso?: string,
+  ): Promise<string | null> {
+    const hoje = hojeIso ?? hojeSaoPauloIso();
+    const candidatos = await this.repository.listAbertosParaAbaterPorInsumo(insumoId);
+    const pedidoId = escolherPedidoParaAbaterPorNf(candidatos, hoje);
+    if (!pedidoId) return null;
+    await this.repository.updateStatus(pedidoId, 'encerrado');
+    return pedidoId;
   }
 
   private async requireAberto(id: string): Promise<void> {

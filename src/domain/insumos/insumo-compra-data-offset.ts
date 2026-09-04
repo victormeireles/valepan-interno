@@ -14,3 +14,14 @@ export function addDaysIso(dataReferencia: string, dias: number): string {
 export function dataEfetivaIso(dataPrevista: string, dataReferencia: string): string {
   return dataPrevista < dataReferencia ? dataReferencia : dataPrevista;
 }
+
+export function hojeSaoPauloIso(agora: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(agora);
+  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${valueByType.get('year')}-${valueByType.get('month')}-${valueByType.get('day')}`;
+}
