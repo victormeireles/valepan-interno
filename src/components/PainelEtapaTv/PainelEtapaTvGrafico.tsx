@@ -6,6 +6,9 @@ import { fmtQty } from '@/components/FluxoProcesso/fluxo-display-scale';
 import FluxoBarrasHora from '@/components/FluxoProcesso/FluxoBarrasHora';
 import { FluxoJanelaGraficoCopy } from '@/components/FluxoProcesso/fluxo-janela-grafico-copy';
 import type { FluxoEtapaKey, VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
+import { usePainelEtapaTvKiosk } from './usePainelEtapaTvKiosk';
+
+const MOBILE_PLOT_H = 240;
 
 type PainelEtapaTvGraficoProps = {
   fluxo: VpFluxoPayload;
@@ -13,6 +16,7 @@ type PainelEtapaTvGraficoProps = {
 };
 
 export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraficoProps) {
+  const kiosk = usePainelEtapaTvKiosk();
   const { scale } = useFluxoDisplay();
   const total = scale.etapaTotal(etapa);
   const outraOp = scale.opAnteriorTotal(etapa);
@@ -28,7 +32,10 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
   );
 
   return (
-    <Card padding="md" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <Card
+      padding="md"
+      className="flex min-w-0 flex-col overflow-hidden lg:h-full lg:min-h-0"
+    >
       <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-base font-bold text-text-strong">
           {FluxoJanelaGraficoCopy.TITULO}
@@ -37,8 +44,17 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
           {caption}
         </span>
       </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-        <FluxoBarrasHora fluxo={fluxo} etapa={etapa} fillHeight />
+      <div
+        className={
+          kiosk ? 'min-h-0 min-w-0 flex-1 overflow-hidden' : 'min-w-0'
+        }
+      >
+        <FluxoBarrasHora
+          fluxo={fluxo}
+          etapa={etapa}
+          fillHeight={kiosk}
+          plotHeight={MOBILE_PLOT_H}
+        />
       </div>
     </Card>
   );

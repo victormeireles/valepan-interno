@@ -23,6 +23,7 @@ type FluxoBarrasHoraProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaKey;
   fillHeight?: boolean;
+  plotHeight?: number;
 };
 
 /**
@@ -32,11 +33,12 @@ export default function FluxoBarrasHora({
   fluxo,
   etapa,
   fillHeight = false,
+  plotHeight = CHART_H,
 }: FluxoBarrasHoraProps) {
   const { scale } = useFluxoDisplay();
   const chartId = useId();
   const [horaAtiva, setHoraAtiva] = useState<number | null>(null);
-  const plotBox = useMeasuredHeight(fillHeight, CHART_H);
+  const plotBox = useMeasuredHeight(fillHeight, plotHeight);
 
   const eixo = new FluxoHoraEixo(fluxo, etapa);
   const HORAS = eixo.hoursAxis();
@@ -103,7 +105,7 @@ export default function FluxoBarrasHora({
                 'relative border-b border-border-default',
                 fillHeight ? 'min-h-0 flex-1' : '',
               ].join(' ')}
-              style={fillHeight ? undefined : { height: CHART_H }}
+              style={fillHeight ? undefined : { height: plotHeight }}
               role="list"
               aria-label={FluxoJanelaGraficoCopy.TITULO}
               onMouseLeave={() => setHoraAtiva(null)}

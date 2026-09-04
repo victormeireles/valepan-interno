@@ -39,7 +39,7 @@ export default function PainelEtapaTvResumoCard({
   return (
     <Card
       padding="md"
-      className="flex h-full min-h-0 flex-col gap-3 overflow-auto border-stone-200 bg-white"
+      className="flex h-full min-h-min flex-col gap-3 overflow-hidden border-stone-200 bg-white"
     >
       <PainelEtapaTvResumoOrdem
         progresso={progresso}
