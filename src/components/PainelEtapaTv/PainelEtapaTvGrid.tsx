@@ -10,6 +10,8 @@ import type {
   PainelEtapaTvOpFonte,
   PainelEtapaTvUltimoLote,
 } from '@/domain/painel-etapa-tv/painel-etapa-tv-types';
+import type { PainelEtapaTvFilaOp } from '@/domain/painel-etapa-tv/fila-anterior/painel-etapa-tv-fila-op';
+import PainelEtapaTvFilaAnterior from './PainelEtapaTvFilaAnterior';
 import PainelEtapaTvGrafico from './PainelEtapaTvGrafico';
 import PainelEtapaTvProximasOps from './PainelEtapaTvProximasOps';
 import PainelEtapaTvResumoCard from './PainelEtapaTvResumoCard';
@@ -30,6 +32,7 @@ type PainelEtapaTvGridProps = {
   t1Label: string;
   ultimoLotes: PainelEtapaTvUltimoLote[];
   proximasOps: PainelEtapaTvOpFonte[];
+  filaOps: PainelEtapaTvFilaOp[];
   products: EtapaProductItem[];
   unit: string;
   showMarca: boolean;
@@ -53,6 +56,38 @@ function TopPanel({ children }: { children: ReactNode }) {
   );
 }
 
+function FilaOuProximas({
+  configId,
+  proximasOps,
+  filaOps,
+  products,
+  showMarca,
+}: {
+  configId: PainelEtapaTvConfig['id'];
+  proximasOps: PainelEtapaTvOpFonte[];
+  filaOps: PainelEtapaTvFilaOp[];
+  products: EtapaProductItem[];
+  showMarca: boolean;
+}) {
+  if (configId === 'fermentacao') {
+    return (
+      <PainelEtapaTvProximasOps
+        ops={proximasOps}
+        products={products}
+        showTipoEstoqueMarcaBadge={showMarca}
+      />
+    );
+  }
+  return (
+    <PainelEtapaTvFilaAnterior
+      etapa={configId === 'forno' ? 'forno' : 'embalagem'}
+      ops={filaOps}
+      products={products}
+      showTipoEstoqueMarcaBadge={showMarca}
+    />
+  );
+}
+
 export default function PainelEtapaTvGrid({
   config,
   fluxo,
@@ -62,6 +97,7 @@ export default function PainelEtapaTvGrid({
   t1Label,
   ultimoLotes,
   proximasOps,
+  filaOps,
   products,
   unit,
   showMarca,
@@ -90,10 +126,12 @@ export default function PainelEtapaTvGrid({
         />
       </TopPanel>
       <TopPanel>
-        <PainelEtapaTvProximasOps
-          ops={proximasOps}
+        <FilaOuProximas
+          configId={config.id}
+          proximasOps={proximasOps}
+          filaOps={filaOps}
           products={products}
-          showTipoEstoqueMarcaBadge={showMarca}
+          showMarca={showMarca}
         />
       </TopPanel>
       <div className={PAINEL_ETAPA_TV_CHART_CELL_CLASS}>

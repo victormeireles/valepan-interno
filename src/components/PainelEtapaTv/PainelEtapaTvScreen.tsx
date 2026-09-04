@@ -16,7 +16,11 @@ import type { PainelPedidoEmbalagem } from '@/domain/types/painel-embalagem';
 import type { PainelOrdemEtapa } from '@/domain/types/painel-etapa';
 import PainelEtapaTvGrid from './PainelEtapaTvGrid';
 import PainelEtapaTvHeader from './PainelEtapaTvHeader';
-import { PAINEL_ETAPA_TV_SHELL_CLASS } from './painel-etapa-tv-layout';
+import { PainelEtapaTvFilaBuilder } from './painel-etapa-tv-fila-builder';
+import {
+  PAINEL_ETAPA_TV_BODY_CLASS,
+  PAINEL_ETAPA_TV_SHELL_CLASS,
+} from './painel-etapa-tv-layout';
 import { PainelEtapaTvProductMapper } from './painel-etapa-tv-product-mapper';
 
 type PainelEtapaTvScreenProps = {
@@ -69,6 +73,17 @@ export default function PainelEtapaTvScreen({
     };
   }, [config.id, config.fluxoKey, fluxo?.ultimoPorEtapa, janela, ordens, pedidos]);
 
+  const filaOps = useMemo(() => {
+    if (config.id === 'fermentacao' || !fluxo?.filas) return [];
+    return PainelEtapaTvFilaBuilder.fromFluxo(
+      config.id,
+      fluxo,
+      fluxo.filas,
+      ordens,
+      pedidos,
+    );
+  }, [config.id, fluxo, ordens, pedidos]);
+
   const lotesDaEtapa = useMemo(
     () => PainelEtapaTvResumoLotes.fromCarga(config.id, ordens, pedidos),
     [config.id, ordens, pedidos],
@@ -94,6 +109,7 @@ export default function PainelEtapaTvScreen({
       t1Label={t1Label}
       ultimoLotes={ultimoLotes}
       proximasOps={proximasOps}
+      filaOps={filaOps}
       products={products}
       unit={unit}
       showMarca={showMarca}
@@ -108,7 +124,7 @@ export default function PainelEtapaTvScreen({
         onDateChange={onDateChange}
         metrics={metrics}
       />
-      <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
+      <div className={PAINEL_ETAPA_TV_BODY_CLASS}>
         {fluxo && scale ? (
           <FluxoDisplayContext.Provider value={{ mode: config.mode, setMode: () => {}, scale }}>
             {grid}
