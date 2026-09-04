@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+import { AuthDevBypass } from '@/lib/auth/dev-bypass';
 import { LoginForm } from './login-form';
 
 export default async function LoginPage({
@@ -5,6 +7,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string; email?: string; callbackUrl?: string }>;
 }) {
+  if (AuthDevBypass.isEnabled()) {
+    redirect('/');
+  }
+
   const params = await searchParams;
 
   return (

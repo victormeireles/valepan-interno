@@ -5,6 +5,7 @@ import {
   getAuthSecret,
   getAuthTokenCookieName,
 } from '@/lib/auth/auth-secret';
+import { AuthDevBypass } from '@/lib/auth/dev-bypass';
 import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
 import { InternoMiddlewareGuard } from '@/lib/auth/interno-middleware-guard';
 import { InternoRouteAccessMap } from '@/lib/auth/interno-route-access-map';
@@ -28,6 +29,11 @@ function clearAuthCookies(response: NextResponse): void {
 }
 
 export async function middleware(req: NextRequest) {
+  if (AuthDevBypass.isEnabled()) {
+    AuthDevBypass.logOnce();
+    return NextResponse.next();
+  }
+
   const secureCookie = req.nextUrl.protocol === 'https:';
   const tokenCookieName = getAuthTokenCookieName(req.nextUrl.protocol);
   const token = await getToken({
