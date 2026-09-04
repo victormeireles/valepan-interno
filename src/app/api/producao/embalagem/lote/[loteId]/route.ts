@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
@@ -8,6 +7,7 @@ import {
   embalagemLoteService,
   EstoqueResolverError,
 } from '@/lib/services/embalagem-lote-service';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 
 export async function GET(
   _request: Request,
@@ -134,8 +134,7 @@ export async function PUT(
       throw e;
     }
 
-    revalidatePath('/api/painel/embalagem');
-    revalidatePath('/api/painel/estoque');
+    PainelEtapaRevalidator.run('embalagem');
 
     return NextResponse.json({ message: 'Lote atualizado com sucesso', insumoConsumo });
   } catch (error) {
@@ -177,8 +176,7 @@ export async function DELETE(
 
     await embalagemLoteService.excluirLote(loteId);
 
-    revalidatePath('/api/painel/embalagem');
-    revalidatePath('/api/painel/estoque');
+    PainelEtapaRevalidator.run('embalagem');
 
     return NextResponse.json({ message: 'Lote excluído com sucesso' });
   } catch (error) {

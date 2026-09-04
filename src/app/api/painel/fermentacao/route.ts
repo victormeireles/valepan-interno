@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { painelFermentacaoService } from '@/lib/services/painel-fermentacao-service';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date') || getTodayISOInBrazilTimezone();

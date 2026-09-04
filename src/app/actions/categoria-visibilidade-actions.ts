@@ -7,6 +7,7 @@ import {
   categoriaVisibilidadeManager,
   type CategoriaVisibilidadeRow,
 } from '@/domain/categorias/categoria-visibilidade-manager';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 
 type ActionResult<T = void> =
   | { success: true; data: T }
@@ -29,8 +30,7 @@ export async function updateCategoriaVisivelEmbalagem(
   try {
     await categoriaVisibilidadeManager.updateVisivelEmbalagem(categoriaId, visivel);
     revalidatePath('/realizado/embalagem');
-    revalidatePath('/api/painel/embalagem');
-    revalidatePath('/api/painel/embalagem/carga');
+    PainelEtapaRevalidator.run('embalagem');
     revalidatePath('/config/categorias');
     return { success: true, data: undefined };
   } catch (err) {

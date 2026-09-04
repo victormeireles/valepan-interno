@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
@@ -11,6 +10,7 @@ import {
 import { fermentacaoLoteService } from '@/lib/services/fermentacao-lote-service';
 import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 import { notifyEtapaProductionAfterLoteSave } from '@/lib/services/etapa-production-notification';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
 export async function POST(
@@ -71,7 +71,7 @@ export async function POST(
       // notificação opcional
     }
 
-    revalidatePath('/api/painel/fermentacao');
+    PainelEtapaRevalidator.run('fermentacao');
 
     return NextResponse.json({
       message: 'Lote criado com sucesso',

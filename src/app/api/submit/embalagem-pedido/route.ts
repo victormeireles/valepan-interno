@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 import { loteFromDataFabricacaoEtiqueta } from '@/domain/embalagem/lote-from-data-fabricacao';
 import { PedidoEmbalagemPayload } from '@/config/embalagem';
 import {
   ordemProducaoMetaService,
   EstoqueResolverError,
 } from '@/lib/services/ordem-producao-meta-service';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 function isValidDateISO(date: string) {
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       throw e;
     }
 
-    revalidatePath('/api/painel/embalagem');
+    PainelEtapaRevalidator.run('embalagem');
 
     const newLote = loteFromDataFabricacaoEtiqueta(payload.dataFabricacao) ?? 0;
     return NextResponse.json({ message: 'Pedido salvo com sucesso', lote: newLote });

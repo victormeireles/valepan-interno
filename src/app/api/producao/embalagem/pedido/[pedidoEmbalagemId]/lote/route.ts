@@ -14,6 +14,7 @@ import { estoqueService } from '@/lib/services/estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { whatsAppNotificationService } from '@/lib/services/whatsapp-notification-service';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 import { sessionUsuarioIdResolver } from '@/lib/auth/session-usuario-id-resolver';
 
 export async function POST(
@@ -131,6 +132,8 @@ export async function POST(
       } catch {
         // notificação opcional
       }
+
+      PainelEtapaRevalidator.run('embalagem');
 
       return NextResponse.json({
         message: 'Lote criado com sucesso',

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 import { pedidoEmbalagemRepository } from '@/data/embalagem/PedidoEmbalagemRepository';
 import {
   ordemProducaoMetaService,
   EstoqueResolverError,
 } from '@/lib/services/ordem-producao-meta-service';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 import { tiposEstoqueService } from '@/lib/services/tipos-estoque-service';
 import { SupabaseProductService } from '@/lib/services/products/supabase-product-service';
 
@@ -119,7 +119,7 @@ export async function PUT(
       return NextResponse.json({ error: message }, { status });
     }
 
-    revalidatePath('/api/painel/embalagem');
+    PainelEtapaRevalidator.run('embalagem');
     return NextResponse.json({ message: 'Pedido atualizado com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -145,7 +145,7 @@ export async function DELETE(
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    revalidatePath('/api/painel/embalagem');
+    PainelEtapaRevalidator.run('embalagem');
     return NextResponse.json({ message: 'Pedido deletado com sucesso' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

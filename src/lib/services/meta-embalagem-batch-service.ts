@@ -1,4 +1,3 @@
-import { revalidatePath } from 'next/cache';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
 import {
   parseMetaEmbalagemBatchText,
@@ -9,6 +8,7 @@ import {
   deriveQuantidadesFromAssadeiras,
   deriveQuantidadesFromUnidades,
 } from '@/domain/producao/ordem-derivados';
+import { PainelEtapaRevalidator } from '@/lib/painel/revalidate-painel-etapa';
 import {
   pedidoEmbalagemService,
   EstoqueResolverError,
@@ -374,7 +374,7 @@ export class MetaEmbalagemBatchService {
       alterados += 1;
     }
 
-    revalidatePath('/api/painel/embalagem');
+    PainelEtapaRevalidator.run('embalagem');
 
     return {
       criados,
