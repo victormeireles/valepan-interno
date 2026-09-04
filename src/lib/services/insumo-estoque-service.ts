@@ -1,5 +1,8 @@
 import { insumoEstoqueRepository, InsumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import type { InsumoMovimentoOrigem } from '@/domain/types/insumo-estoque';
+import { insumoPedidoCompraManager } from '@/lib/services/insumo-pedido-compra-manager';
+
+type PedidoAbater = { abaterPorEntradaNf(insumoId: string): Promise<string | null> };
 
 type RegistrarEntradaInput = {
   insumoId: string;
@@ -46,9 +49,10 @@ function isUniqueViolation(error: unknown): boolean {
 export class InsumoEstoqueService {
   constructor(
     private readonly repository: InsumoEstoqueRepository = insumoEstoqueRepository,
+    private readonly pedidoAbater: PedidoAbater = insumoPedidoCompraManager,
   ) {}
 
-  async registrarEntrada(input: RegistrarEntradaInput): Promise<void> {
+  async registrarEntrada(input: RegistrarEntradaInput): Promise<boolean> {
     if (input.origem === 'entrada_nf') {
       const jaExiste = await this.repository.movimentoEntradaJaExiste(
         input.empresaId,
@@ -56,7 +60,7 @@ export class InsumoEstoqueService {
         input.omieNIdItem,
       );
       if (jaExiste) {
-        return;
+        return false;
       }
     }
 
@@ -82,12 +86,21 @@ export class InsumoEstoqueService {
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        return;
+        return false;
       }
       throw error;
     }
 
     await this.repository.updateInsumoCustoUnitario(input.insumoId, input.custoUnitario);
+
+    try {
+      await this.pedidoAbater.abaterPorEntradaNf(input.insumoId);
+    } catch (error) {
+      // Estoque já creditado — não falhar o fluxo por erro no abatimento do pedido.
+      console.error('Falha ao abater pedido após entrada NF:', error);
+    }
+
+    return true;
   }
 
   async ajustarSaldo(input: AjustarSaldoInput): Promise<void> {

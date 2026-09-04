@@ -24,6 +24,9 @@ vi.mock('@/lib/clients/omie-recebimento-client', () => ({
   omieRecebimentoClient: {},
   OmieRecebimentoClient: class {},
 }));
+vi.mock('@/lib/services/insumo-pedido-compra-manager', () => ({
+  insumoPedidoCompraManager: { abaterPorEntradaNf: vi.fn() },
+}));
 
 import type { OmieRecebimentoItem } from '@/domain/types/insumo-estoque';
 import type { IntegracaoInsumoRow } from '@/domain/types/insumo-estoque-db';
@@ -145,7 +148,7 @@ describe('InsumoRecebimentoProcessor', () => {
     createPendente.mockResolvedValue({ id: 'pend-1' });
     marcarIgnorado.mockResolvedValue(undefined);
     existsByCnpj.mockResolvedValue(false);
-    registrarEntrada.mockResolvedValue(undefined);
+    registrarEntrada.mockResolvedValue(true);
     produtoFoiIgnoradoAnteriormente.mockResolvedValue(false);
     resolverMapeamentoPorDescricao.mockResolvedValue(null);
   });
