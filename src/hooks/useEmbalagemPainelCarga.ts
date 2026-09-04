@@ -11,6 +11,8 @@ import type {
   DashboardSnapshot,
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
+import { usePainelAutoRefresh } from '@/hooks/usePainelAutoRefresh';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 import {
   addCalendarDaysISO,
   getTodayISOInBrazilTimezone,
@@ -91,7 +93,10 @@ export function useEmbalagemPainelCarga({
       if (showSpinner) setLoading(true);
       else setRefreshing(true);
       try {
-        const res = await fetch(`/api/painel/embalagem/carga?date=${selectedDate}`);
+        const res = await fetch(
+          PainelCargaRequest.url('/api/painel/embalagem/carga', selectedDate),
+          PAINEL_FETCH_INIT,
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
         applyCargaResponse(data as EmbalagemPainelCargaResponse, selectedDate);
@@ -112,7 +117,10 @@ export function useEmbalagemPainelCarga({
   const refreshPedidosOnly = useCallback(async (): Promise<PainelPedidoEmbalagem[]> => {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/painel/embalagem?date=${selectedDate}`);
+      const res = await fetch(
+        PainelCargaRequest.url('/api/painel/embalagem', selectedDate),
+        PAINEL_FETCH_INIT,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
       const nextPedidos = (data.pedidos || []) as PainelPedidoEmbalagem[];
@@ -130,11 +138,9 @@ export function useEmbalagemPainelCarga({
     void loadCargaEmbalagem(true);
   }, [selectedDate, loadCargaEmbalagem]);
 
-  useEffect(() => {
-    if (producaoModalOpen) return;
-    const interval = setInterval(() => void loadCargaEmbalagem(false), 60_000);
-    return () => clearInterval(interval);
-  }, [selectedDate, producaoModalOpen, loadCargaEmbalagem]);
+  usePainelAutoRefresh(() => {
+    void loadCargaEmbalagem(false);
+  }, !producaoModalOpen);
 
   return {
     pedidos,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 
 type ApiEndpoint = 'embalagem' | 'fermentacao' | 'forno' | 'saidas';
 
@@ -34,7 +35,10 @@ export function useLatestDataDate(endpoint: ApiEndpoint): string {
           const dd = String(checkDate.getDate()).padStart(2, '0');
           const dateString = `${yyyy}-${mm}-${dd}`;
           
-          const res = await fetch(`/api/painel/${endpoint}?date=${dateString}`);
+          const res = await fetch(
+            PainelCargaRequest.url(`/api/painel/${endpoint}`, dateString),
+            PAINEL_FETCH_INIT,
+          );
           
           if (res.ok) {
             const data = await res.json();

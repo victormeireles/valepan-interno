@@ -5,6 +5,7 @@ import type {
   CargaFluxoProcessoResponse,
   VpFluxoPayload,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
@@ -45,7 +46,8 @@ export function useFluxoProcessoCarga() {
 
       try {
         const res = await fetch(
-          `/api/painel/fluxo-processo/carga?date=${encodeURIComponent(date)}`,
+          PainelCargaRequest.url('/api/painel/fluxo-processo/carga', date),
+          PAINEL_FETCH_INIT,
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar fluxo do processo');

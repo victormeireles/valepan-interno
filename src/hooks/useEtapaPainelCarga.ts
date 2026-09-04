@@ -13,6 +13,8 @@ import type {
   EtapaDashboardSnapshot,
   PainelOrdemEtapa,
 } from '@/domain/types/painel-etapa';
+import { usePainelAutoRefresh } from '@/hooks/usePainelAutoRefresh';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 import { addCalendarDaysISO, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 type EtapaPainelCargaResponse = {
@@ -92,7 +94,10 @@ export function useEtapaPainelCarga({
       else setRefreshing(true);
 
       try {
-        const res = await fetch(`/api/painel/${etapa}/carga?date=${selectedDate}`);
+        const res = await fetch(
+          PainelCargaRequest.url(`/api/painel/${etapa}/carga`, selectedDate),
+          PAINEL_FETCH_INIT,
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
         applyCargaResponse(data as EtapaPainelCargaResponse, selectedDate);
@@ -113,7 +118,10 @@ export function useEtapaPainelCarga({
   const refreshOrdensOnly = useCallback(async (): Promise<PainelOrdemEtapa[]> => {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/painel/${etapa}?date=${selectedDate}`);
+      const res = await fetch(
+        PainelCargaRequest.url(`/api/painel/${etapa}`, selectedDate),
+        PAINEL_FETCH_INIT,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
       const nextOrdens = (data.ordens || []) as PainelOrdemEtapa[];
@@ -131,11 +139,9 @@ export function useEtapaPainelCarga({
     void loadCarga(true);
   }, [loadCarga]);
 
-  useEffect(() => {
-    if (producaoModalOpen) return;
-    const interval = setInterval(() => void loadCarga(false), 60_000);
-    return () => clearInterval(interval);
-  }, [producaoModalOpen, loadCarga]);
+  usePainelAutoRefresh(() => {
+    void loadCarga(false);
+  }, !producaoModalOpen);
 
   return {
     ordens,

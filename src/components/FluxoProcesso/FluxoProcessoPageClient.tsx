@@ -6,6 +6,7 @@ import {
   useFluxoProcessoCarga,
   useFluxoProcessoDateState,
 } from '@/hooks/useFluxoProcessoCarga';
+import { usePainelAutoRefresh } from '@/hooks/usePainelAutoRefresh';
 
 export default function FluxoProcessoPageClient() {
   const { selectedDate, setSelectedDate } = useFluxoProcessoDateState();
@@ -15,12 +16,9 @@ export default function FluxoProcessoPageClient() {
     void loadCarga(selectedDate, setSelectedDate, true);
   }, [loadCarga, selectedDate, setSelectedDate]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void loadCarga(selectedDate, setSelectedDate, false);
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [loadCarga, selectedDate, setSelectedDate]);
+  usePainelAutoRefresh(() => {
+    void loadCarga(selectedDate, setSelectedDate, false);
+  });
 
   if (loading && !fluxo) {
     return (

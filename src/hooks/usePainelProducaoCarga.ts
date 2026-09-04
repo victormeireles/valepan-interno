@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { CargaPainelProducaoResponse, PainelProducaoData } from '@/domain/painel-producao/painel-producao-types';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 function getVisibleErrorMessage(error: unknown, fallback: string): string | null {
@@ -40,7 +41,10 @@ export function usePainelProducaoCarga() {
       else setRefreshing(true);
 
       try {
-        const res = await fetch(`/api/painel/producao/carga?date=${encodeURIComponent(date)}`);
+        const res = await fetch(
+          PainelCargaRequest.url('/api/painel/producao/carga', date),
+          PAINEL_FETCH_INIT,
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao carregar painel');
         applyResponse(data as CargaPainelProducaoResponse, date, setDate);

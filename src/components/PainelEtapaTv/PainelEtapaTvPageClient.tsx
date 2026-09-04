@@ -67,7 +67,7 @@ export default function PainelEtapaTvPageClient({ etapa }: PainelEtapaTvPageClie
       <PainelEtapaTvScreen
         config={config}
         selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
+        onDateChange={carga.onDateChange}
         metrics={metrics}
         fluxo={carga.fluxo}
         ordens={carga.ordens ?? []}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PainelCargaDateFollow } from '@/domain/painel-carga/painel-carga-date-follow';
 import type { PainelEtapaTvConfig } from '@/domain/painel-etapa-tv/painel-etapa-tv-config';
 import type {
   CargaFluxoProcessoResponse,
@@ -11,6 +12,8 @@ import type {
   PainelPedidoEmbalagem,
 } from '@/domain/types/painel-embalagem';
 import type { CargaEtapaResponse, PainelOrdemEtapa } from '@/domain/types/painel-etapa';
+import { usePainelAutoRefresh } from '@/hooks/usePainelAutoRefresh';
+import { PAINEL_FETCH_INIT, PainelCargaRequest } from '@/lib/painel/painel-fetch';
 
 type FetchLegResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -38,7 +41,7 @@ async function readJson(res: Response): Promise<unknown> {
 
 async function fetchLeg<T>(url: string, fallback: string): Promise<FetchLegResult<T>> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, PAINEL_FETCH_INIT);
     const body = await readJson(res);
     if (!res.ok) return { ok: false, error: errorFromBody(body, fallback) };
     return { ok: true, data: body as T };
@@ -66,12 +69,22 @@ function applyFetchLeg<T>(
   console.error(refreshLog, res.error);
 }
 
+function ultimaDataDaCarga(
+  etapaRes: FetchLegResult<CargaEtapaResponse | CargaEmbalagemResponse>,
+  fluxoRes: FetchLegResult<CargaFluxoProcessoResponse>,
+): string | null {
+  return (
+    (etapaRes.ok ? etapaRes.data.ultimaDataComDados : null) ??
+    (fluxoRes.ok ? fluxoRes.data.ultimaDataComDados : null)
+  );
+}
+
 export function usePainelEtapaTvCarga(
   config: PainelEtapaTvConfig,
   selectedDate: string,
   setSelectedDate: (date: string) => void,
 ) {
-  const initialDateResolved = useRef(false);
+  const userPickedDate = useRef(false);
   const [fluxo, setFluxo] = useState<VpFluxoPayload | null>(null);
   const [ordens, setOrdens] = useState<PainelOrdemEtapa[] | null>(null);
   const [pedidos, setPedidos] = useState<PainelPedidoEmbalagem[] | null>(null);
@@ -79,6 +92,14 @@ export function usePainelEtapaTvCarga(
   const [loading, setLoading] = useState(true);
   const [fluxoErro, setFluxoErro] = useState<string | null>(null);
   const [etapaErro, setEtapaErro] = useState<string | null>(null);
+
+  const onDateChange = useCallback(
+    (date: string) => {
+      userPickedDate.current = true;
+      setSelectedDate(date);
+    },
+    [setSelectedDate],
+  );
 
   const applyEtapa = useCallback(
     (data: CargaEtapaResponse | CargaEmbalagemResponse) => {
@@ -97,29 +118,27 @@ export function usePainelEtapaTvCarga(
   const loadCarga = useCallback(
     async (showSpinner: boolean) => {
       if (showSpinner) setLoading(true);
-      const date = encodeURIComponent(selectedDate);
+      const date = selectedDate;
       const [fluxoRes, etapaRes] = await Promise.all([
         fetchLeg<CargaFluxoProcessoResponse>(
-          `/api/painel/fluxo-processo/carga?date=${date}`,
+          PainelCargaRequest.url('/api/painel/fluxo-processo/carga', date),
           'Não foi possível carregar o fluxo',
         ),
         fetchLeg<CargaEtapaResponse | CargaEmbalagemResponse>(
-          `/api/painel/${config.id}/carga?date=${date}`,
+          PainelCargaRequest.url(`/api/painel/${config.id}/carga`, date),
           'Não foi possível carregar as OPs da etapa',
         ),
       ]);
 
-      if (!initialDateResolved.current) {
-        const ultima =
-          (etapaRes.ok ? etapaRes.data.ultimaDataComDados : null) ??
-          (fluxoRes.ok ? fluxoRes.data.ultimaDataComDados : null);
-        if (ultima && ultima !== selectedDate) {
-          initialDateResolved.current = true;
-          setSelectedDate(ultima);
-          if (showSpinner) setLoading(false);
-          return;
-        }
-        initialDateResolved.current = true;
+      const nextDate = PainelCargaDateFollow.nextDate({
+        userPickedDate: userPickedDate.current,
+        ultimaDataComDados: ultimaDataDaCarga(etapaRes, fluxoRes),
+        selectedDate: date,
+      });
+      if (nextDate) {
+        setSelectedDate(nextDate);
+        if (showSpinner) setLoading(false);
+        return;
       }
 
       applyFetchLeg(
@@ -146,12 +165,9 @@ export function usePainelEtapaTvCarga(
     void loadCarga(true);
   }, [loadCarga]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void loadCarga(false);
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [loadCarga]);
+  usePainelAutoRefresh(() => {
+    void loadCarga(false);
+  });
 
   return {
     fluxo,
@@ -162,5 +178,6 @@ export function usePainelEtapaTvCarga(
     fluxoErro,
     etapaErro,
     reload: () => void loadCarga(true),
+    onDateChange,
   };
 }
