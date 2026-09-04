@@ -1,0 +1,85 @@
+# Design: Abater pedido de compra na Entrada NF
+
+**Data:** 2026-09-04  
+**Fatia da Fase 2** de `2026-08-31-pedidos-compra-insumos-design.mdx`  
+**Status:** aprovado para implementação
+
+## Problema
+
+Na v1, pedido de compra e Entrada NF Omie são independentes. Depois que a NF sobe o saldo físico, o pedido `aberto` continua na projeção (“a chegar” / “Atrasado”) até alguém clicar **Encerrar** — contagem dupla e selo enganoso.
+
+## Objetivo
+
+Quando uma **nova** `entrada_nf` for registrada para um `insumo_id`, encerrar **automaticamente um** pedido aberto elegível desse insumo.
+
+## Fora de escopo
+
+- Recebimento parcial / quantidade recebida por linha
+- Match por quantidade (24 kg vs 48 kg)
+- Persistência de vínculo NF ↔ pedido (FK, `n_id_receb` no pedido)
+- Data de chegada por item
+- Criar pedido a partir do Omie
+- UI nova / toasts de abatimento
+- Encerrar todos os pedidos abertos do insumo
+
+## Regras
+
+### Gatilho
+
+Após `InsumoEstoqueService.registrarEntrada` criar de fato um movimento com origem `entrada_nf` **ou** `resolucao_pendencia` (NF via webhook mapeado ou via resolução de pendência). Ignorar se o movimento já existia (idempotência Omie).
+
+### Candidatos
+
+Pedidos com:
+
+- `status = 'aberto'`
+- pelo menos uma linha com o `insumo_id` da entrada
+- `data_chegada_prevista ≤ hoje (America/Sao_Paulo) + 3 dias`
+
+Constante: `JANELA_ABATIMENTO_PEDIDO_DIAS = 3`.
+
+### Escolha (um pedido)
+
+Entre os candidatos, o de menor `data_chegada_prevista`; empate → menor `numero`.
+
+### Ação
+
+`status = 'encerrado'` — mesmo efeito do Encerrar manual:
+
+- some da projeção e dos selos
+- **não** mexe em `insumo_saldos` / movimentos
+- pedido multi-item: o documento inteiro encerra (trade-off aceito nesta fatia)
+
+Se não houver candidato, não faz nada.
+
+### Idempotência
+
+Reprocessar o mesmo item Omie **não** deve abater outro pedido. Só abater quando a entrada for **nova**.
+
+## Arquitetura
+
+```
+registrarEntrada (entrada_nf | resolucao_pendencia)
+  → se criou movimento novo
+  → escolher + encerrar um pedido elegível
+```
+
+Ponto único: `InsumoEstoqueService.registrarEntrada` retorna se criou e, quando origem for NF/pendência, dispara o abatimento. Assim webhook mapeado e resolução de pendência ficam cobertos sem duplicar chamada.
+
+- Domínio puro: filtrar janela + escolher id (testável sem DB)
+- Repository: listar candidatos abertos do insumo até `dataLimite`
+- Manager: orquestra escolha + `updateStatus(..., 'encerrado')`
+- Estoque service: após criar movimento NF/pendência, chama o manager
+
+Constante de janela em domínio (`JANELA_ABATIMENTO_PEDIDO_DIAS = 3`).
+## Critérios de sucesso
+
+- Caso Gema: pedido 24 kg com chegada 03/09 + NF no mesmo dia → pedido vira `encerrado`; some “Atrasado 24 kg”
+- Pedido com chegada `hoje + 4` **não** é abatido
+- Dois pedidos elegíveis → só o mais antigo (data, depois número) encerra
+- Reprocessamento do mesmo `nIdReceb`/`nIdItem` não encerra um segundo pedido
+- Encerrar automático não gera movimento de estoque
+
+## Relação com a Fase 2 completa
+
+Esta fatia cobre só “NF encerra um pedido” com janela. Ainda pendente na Fase 2 macro: vínculo persistido, parcial, data por item, pedido Omie.

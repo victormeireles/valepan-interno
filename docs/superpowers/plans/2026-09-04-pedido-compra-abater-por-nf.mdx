@@ -1,0 +1,468 @@
+# Pedido compra — abater na Entrada NF — Plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ao registrar uma nova entrada de NF (`entrada_nf` ou `resolucao_pendencia`), encerrar automaticamente um pedido de compra aberto elegível do mesmo insumo (janela hoje+3 dias).
+
+**Architecture:** Domínio puro escolhe o pedido; repository lista candidatos; manager encerra; `InsumoEstoqueService.registrarEntrada` retorna se criou o movimento e dispara o abatimento — cobre webhook mapeado e resolução de pendência sem duplicar chamada.
+
+**Tech Stack:** Next.js 15, Supabase, Vitest, TypeScript.
+
+**Spec:** `docs/superpowers/specs/2026-09-04-pedido-compra-abater-por-nf-design.mdx`
+
+## Global Constraints
+
+- Arquivos ≤ 500 linhas; classes SRP; funções < 40 linhas.
+- Não criar migration / coluna de vínculo NF↔pedido nesta fatia.
+- Não checar quantidade; não parcial; encerrar no máximo **um** pedido por entrada criada.
+- Janela: `data_chegada_prevista ≤ hoje (America/Sao_Paulo) + 3` (`JANELA_ABATIMENTO_PEDIDO_DIAS = 3`).
+- Encerrar = `status = encerrado`; não mexe em saldo/movimentos.
+- Só abater se o movimento de entrada foi **criado** (não reprocessamento idempotente).
+- Reusar `addDaysIso` de `src/domain/insumos/insumo-compra-data-offset.ts`.
+
+---
+
+## Mapa de arquivos
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `src/domain/insumos/insumo-pedido-compra-abater-por-nf.ts` | Constante + escolha pura do pedido |
+| `src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts` | Testes da escolha |
+| `src/data/insumos/InsumoPedidoCompraRepository.ts` | `listAbertosParaAbaterPorInsumo` |
+| `src/lib/services/insumo-pedido-compra-manager.ts` | `abaterPorEntradaNf(insumoId)` |
+| `src/lib/services/insumo-pedido-compra-manager.test.ts` | Testes do abatimento |
+| `src/lib/services/insumo-estoque-service.ts` | Retornar se criou; chamar abater |
+| `src/lib/services/insumo-estoque-service.test.ts` | Testes (criar se não existir) |
+| Specs já atualizadas | `2026-09-04-...` + ponte na spec 31/08 |
+
+---
+
+### Task 1: Domínio — escolher pedido para abater
+
+**Files:**
+- Create: `src/domain/insumos/insumo-pedido-compra-abater-por-nf.ts`
+- Create: `src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts`
+
+**Interfaces:**
+- Produces: `JANELA_ABATIMENTO_PEDIDO_DIAS`, `InsumoPedidoAbaterCandidato`, `escolherPedidoParaAbaterPorNf`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import {
+  JANELA_ABATIMENTO_PEDIDO_DIAS,
+  escolherPedidoParaAbaterPorNf,
+} from './insumo-pedido-compra-abater-por-nf';
+
+describe('escolherPedidoParaAbaterPorNf', () => {
+  const hoje = '2026-09-04';
+
+  it('escolhe o mais antigo na janela hoje+3', () => {
+    const id = escolherPedidoParaAbaterPorNf(
+      [
+        { id: 'b', dataChegadaPrevista: '2026-09-06', numero: 2 },
+        { id: 'a', dataChegadaPrevista: '2026-09-03', numero: 1 },
+        { id: 'c', dataChegadaPrevista: '2026-09-08', numero: 3 }, // fora
+      ],
+      hoje,
+    );
+    expect(id).toBe('a');
+    expect(JANELA_ABATIMENTO_PEDIDO_DIAS).toBe(3);
+  });
+
+  it('empate de data → menor numero', () => {
+    const id = escolherPedidoParaAbaterPorNf(
+      [
+        { id: 'x', dataChegadaPrevista: '2026-09-05', numero: 10 },
+        { id: 'y', dataChegadaPrevista: '2026-09-05', numero: 4 },
+      ],
+      hoje,
+    );
+    expect(id).toBe('y');
+  });
+
+  it('inclui chegada = hoje+3 e exclui hoje+4', () => {
+    expect(
+      escolherPedidoParaAbaterPorNf(
+        [{ id: 'limite', dataChegadaPrevista: '2026-09-07', numero: 1 }],
+        hoje,
+      ),
+    ).toBe('limite');
+    expect(
+      escolherPedidoParaAbaterPorNf(
+        [{ id: 'fora', dataChegadaPrevista: '2026-09-08', numero: 1 }],
+        hoje,
+      ),
+    ).toBeNull();
+  });
+
+  it('lista vazia → null', () => {
+    expect(escolherPedidoParaAbaterPorNf([], hoje)).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts`
+
+Expected: FAIL (módulo inexistente)
+
+- [ ] **Step 3: Write minimal implementation**
+
+```ts
+import { addDaysIso } from '@/domain/insumos/insumo-compra-data-offset';
+
+export const JANELA_ABATIMENTO_PEDIDO_DIAS = 3;
+
+export type InsumoPedidoAbaterCandidato = {
+  id: string;
+  dataChegadaPrevista: string;
+  numero: number;
+};
+
+export function escolherPedidoParaAbaterPorNf(
+  candidatos: InsumoPedidoAbaterCandidato[],
+  hojeIso: string,
+  janelaDias: number = JANELA_ABATIMENTO_PEDIDO_DIAS,
+): string | null {
+  const dataLimite = addDaysIso(hojeIso, janelaDias);
+  const elegiveis = candidatos
+    .filter((c) => c.dataChegadaPrevista <= dataLimite)
+    .sort((a, b) => {
+      if (a.dataChegadaPrevista !== b.dataChegadaPrevista) {
+        return a.dataChegadaPrevista < b.dataChegadaPrevista ? -1 : 1;
+      }
+      return a.numero - b.numero;
+    });
+  return elegiveis[0]?.id ?? null;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/domain/insumos/insumo-pedido-compra-abater-por-nf.ts src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts
+git commit -m "$(cat <<'EOF'
+feat(insumos): escolhe pedido elegível para abater na NF
+
+EOF
+)"
+```
+
+---
+
+### Task 2: Repository + Manager — abaterPorEntradaNf
+
+**Files:**
+- Modify: `src/data/insumos/InsumoPedidoCompraRepository.ts`
+- Modify: `src/lib/services/insumo-pedido-compra-manager.ts`
+- Modify: `src/lib/services/insumo-pedido-compra-manager.test.ts`
+
+**Interfaces:**
+- Consumes: `escolherPedidoParaAbaterPorNf`, `JANELA_ABATIMENTO_PEDIDO_DIAS`, `addDaysIso`
+- Produces: `repository.listAbertosParaAbaterPorInsumo(insumoId)`, `manager.abaterPorEntradaNf(insumoId): Promise<string | null>`
+
+- [ ] **Step 1: Write the failing manager tests**
+
+Adicionar ao mock do repository `listAbertosParaAbaterPorInsumo` e casos:
+
+```ts
+it('abaterPorEntradaNf encerra o pedido escolhido', async () => {
+  listAbertosParaAbaterPorInsumo.mockResolvedValue([
+    { id: 'p2', dataChegadaPrevista: '2026-09-06', numero: 2 },
+    { id: 'p1', dataChegadaPrevista: '2026-09-03', numero: 1 },
+  ]);
+  // mock hoje via injetar hojeIso opcional OU spy — preferir parâmetro opcional hojeIso no manager só para teste:
+  const encerradoId = await manager.abaterPorEntradaNf('insumo-gema', '2026-09-04');
+  expect(encerradoId).toBe('p1');
+  expect(updateStatus).toHaveBeenCalledWith('p1', 'encerrado');
+});
+
+it('abaterPorEntradaNf sem candidato não chama updateStatus', async () => {
+  listAbertosParaAbaterPorInsumo.mockResolvedValue([]);
+  await expect(manager.abaterPorEntradaNf('insumo-x', '2026-09-04')).resolves.toBeNull();
+  expect(updateStatus).not.toHaveBeenCalled();
+});
+```
+
+Incluir `listAbertosParaAbaterPorInsumo` no `PedidoRepository` Pick e no beforeEach.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/services/insumo-pedido-compra-manager.test.ts`
+
+Expected: FAIL (`abaterPorEntradaNf` / método repo ausente)
+
+- [ ] **Step 3: Implement repository method**
+
+Em `InsumoPedidoCompraRepository`:
+
+```ts
+async listAbertosParaAbaterPorInsumo(
+  insumoId: string,
+): Promise<Array<{ id: string; dataChegadaPrevista: string; numero: number }>> {
+  const pedidoIds = await this.listPedidoIdsByInsumoId(insumoId);
+  if (pedidoIds.length === 0) return [];
+
+  const { data, error } = await this.db
+    .from('insumo_pedido_compra')
+    .select('id, numero, data_chegada_prevista')
+    .eq('status', 'aberto')
+    .in('id', pedidoIds);
+
+  if (error) {
+    throw new Error(`Erro ao listar pedidos para abater: ${error.message}`);
+  }
+
+  return ((data as Array<{ id: string; numero: number; data_chegada_prevista: string }>) ?? []).map(
+    (row) => ({
+      id: row.id,
+      numero: row.numero,
+      dataChegadaPrevista: row.data_chegada_prevista,
+    }),
+  );
+}
+```
+
+Filtrar janela no domínio (não no SQL), para a constante ficar num só lugar.
+
+- [ ] **Step 4: Implement manager method**
+
+```ts
+async abaterPorEntradaNf(
+  insumoId: string,
+  hojeIso?: string,
+): Promise<string | null> {
+  const hoje = hojeIso ?? this.hojeSaoPauloIso();
+  const candidatos = await this.repository.listAbertosParaAbaterPorInsumo(insumoId);
+  const pedidoId = escolherPedidoParaAbaterPorNf(candidatos, hoje);
+  if (!pedidoId) return null;
+  await this.repository.updateStatus(pedidoId, 'encerrado');
+  return pedidoId;
+}
+```
+
+Extrair `hojeSaoPauloIso` igual ao do repository (copiar o `Intl.DateTimeFormat` private no manager, ou helper compartilhado mínimo em `insumo-compra-data-offset.ts` se quiser DRY — preferível:
+
+```ts
+// em insumo-compra-data-offset.ts
+export function hojeSaoPauloIso(agora: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(agora);
+  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${valueByType.get('year')}-${valueByType.get('month')}-${valueByType.get('day')}`;
+}
+```
+
+Opcional nesta task: repository passa a usar o helper exportado (refactor pequeno).
+
+- [ ] **Step 5: Run tests**
+
+Run: `npx vitest run src/lib/services/insumo-pedido-compra-manager.test.ts src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/data/insumos/InsumoPedidoCompraRepository.ts src/lib/services/insumo-pedido-compra-manager.ts src/lib/services/insumo-pedido-compra-manager.test.ts src/domain/insumos/insumo-compra-data-offset.ts
+git commit -m "$(cat <<'EOF'
+feat(insumos): abate pedido aberto elegível após entrada NF
+
+EOF
+)"
+```
+
+---
+
+### Task 3: Estoque — disparar abatimento só se criou movimento
+
+**Files:**
+- Modify: `src/lib/services/insumo-estoque-service.ts`
+- Create: `src/lib/services/insumo-estoque-service.test.ts` (se ainda não cobrir `registrarEntrada`)
+
+**Interfaces:**
+- Consumes: `insumoPedidoCompraManager.abaterPorEntradaNf`
+- Produces: `registrarEntrada(...): Promise<boolean>` — `true` se criou movimento
+
+- [ ] **Step 1: Write failing tests**
+
+```ts
+describe('InsumoEstoqueService.registrarEntrada', () => {
+  it('retorna false e não abate se movimento já existe', async () => {
+    movimentoEntradaJaExiste.mockResolvedValue(true);
+    const criada = await service.registrarEntrada({ ...entradaNfInput });
+    expect(criada).toBe(false);
+    expect(abaterPorEntradaNf).not.toHaveBeenCalled();
+  });
+
+  it('retorna true, persiste e abate pedido no insumo', async () => {
+    movimentoEntradaJaExiste.mockResolvedValue(false);
+    findSaldo.mockResolvedValue({ quantidade: 10 });
+    const criada = await service.registrarEntrada({
+      insumoId: 'insumo-1',
+      empresaId: 'emp-1',
+      quantidadeEntrada: 48,
+      custoUnitario: 36.99,
+      origem: 'entrada_nf',
+      omieNIdReceb: 1,
+      omieNIdItem: 2,
+    });
+    expect(criada).toBe(true);
+    expect(insertMovimento).toHaveBeenCalled();
+    expect(abaterPorEntradaNf).toHaveBeenCalledWith('insumo-1');
+  });
+
+  it('resolucao_pendencia também abate quando cria', async () => {
+    movimentoEntradaJaExiste.mockResolvedValue(false); // se a checagem for só entrada_nf, simular insert ok
+    // ...
+    expect(abaterPorEntradaNf).toHaveBeenCalledWith('insumo-1');
+  });
+
+  it('unique violation → false, sem abater', async () => {
+    movimentoEntradaJaExiste.mockResolvedValue(false);
+    insertMovimento.mockRejectedValue({ message: 'duplicate key' /* shape isUniqueViolation */ });
+    // ajustar mock para passar isUniqueViolation do service
+    const criada = await service.registrarEntrada({ ... });
+    expect(criada).toBe(false);
+    expect(abaterPorEntradaNf).not.toHaveBeenCalled();
+  });
+});
+```
+
+Injetar deps: repository mock + `pedidoAbater: { abaterPorEntradaNf }`.
+
+**Nota:** hoje `jaExiste` só roda para `origem === 'entrada_nf'`. Para `resolucao_pendencia`, manter comportamento atual; abater após insert bem-sucedido; unique violation → false.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/services/insumo-estoque-service.test.ts`
+
+Expected: FAIL (retorno void / sem abater)
+
+- [ ] **Step 3: Implement**
+
+Alterar constructor para aceitar deps opcionais:
+
+```ts
+type PedidoAbater = { abaterPorEntradaNf(insumoId: string): Promise<string | null> };
+
+export class InsumoEstoqueService {
+  constructor(
+    private readonly repository: InsumoEstoqueRepository = insumoEstoqueRepository,
+    private readonly pedidoAbater: PedidoAbater = insumoPedidoCompraManager,
+  ) {}
+
+  async registrarEntrada(input: RegistrarEntradaInput): Promise<boolean> {
+    if (input.origem === 'entrada_nf') {
+      const jaExiste = await this.repository.movimentoEntradaJaExiste(
+        input.empresaId,
+        input.omieNIdReceb,
+        input.omieNIdItem,
+      );
+      if (jaExiste) return false;
+    }
+
+    // ... upsertSaldo igual ...
+
+    try {
+      await this.repository.insertMovimento({ ... });
+    } catch (error) {
+      if (isUniqueViolation(error)) return false;
+      throw error;
+    }
+
+    await this.repository.updateInsumoCustoUnitario(input.insumoId, input.custoUnitario);
+    await this.pedidoAbater.abaterPorEntradaNf(input.insumoId);
+    return true;
+  }
+}
+```
+
+Importar `insumoPedidoCompraManager` com cuidado de ciclo: manager não importa estoque — OK.
+
+Call sites de `registrarEntrada` que ignoram retorno continuam válidos.
+
+Se `abaterPorEntradaNf` lançar, a entrada já foi gravada — **engolir erro e logar** (`console.error`) para não falhar o webhook após crédito de estoque. Documentar no código com um comentário curto.
+
+```ts
+try {
+  await this.pedidoAbater.abaterPorEntradaNf(input.insumoId);
+} catch (error) {
+  console.error('Falha ao abater pedido após entrada NF:', error);
+}
+return true;
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `npx vitest run src/lib/services/insumo-estoque-service.test.ts src/lib/services/insumo-pedido-compra-manager.test.ts src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts src/lib/services/insumo-recebimento-processor.test.ts`
+
+Expected: PASS (processor mock de `registrarEntrada` pode precisar retornar `true` se tipagem quebrar)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/services/insumo-estoque-service.ts src/lib/services/insumo-estoque-service.test.ts src/lib/services/insumo-recebimento-processor.test.ts
+git commit -m "$(cat <<'EOF'
+feat(insumos): abate pedido ao criar entrada NF no estoque
+
+EOF
+)"
+```
+
+---
+
+### Task 4: Docs + verificação final
+
+**Files:**
+- Already: `docs/superpowers/specs/2026-09-04-pedido-compra-abater-por-nf-design.mdx`
+- Already: ponte em `docs/superpowers/specs/2026-08-31-pedidos-compra-insumos-design.mdx`
+- Create: este plano
+
+- [ ] **Step 1: Confirmar specs no git status**
+
+- [ ] **Step 2: Suite focada**
+
+Run: `npx vitest run src/domain/insumos/insumo-pedido-compra-abater-por-nf.test.ts src/lib/services/insumo-pedido-compra-manager.test.ts src/lib/services/insumo-estoque-service.test.ts`
+
+Expected: PASS
+
+- [ ] **Step 3: Commit docs**
+
+```bash
+git add docs/superpowers/specs/2026-09-04-pedido-compra-abater-por-nf-design.mdx docs/superpowers/specs/2026-08-31-pedidos-compra-insumos-design.mdx docs/superpowers/plans/2026-09-04-pedido-compra-abater-por-nf.mdx
+git commit -m "$(cat <<'EOF'
+docs(insumos): spec e plano de abater pedido na Entrada NF
+
+EOF
+)"
+```
+
+---
+
+## Self-review do plano
+
+| Spec | Task |
+|------|------|
+| Gatilho entrada_nf / resolucao_pendencia | Task 3 |
+| Janela hoje+3 | Task 1 |
+| Um pedido, data depois número | Task 1–2 |
+| Encerrar sem mexer saldo | Task 2 (`updateStatus`) |
+| Idempotência (só se criou) | Task 3 |
+| Sem parcial / sem vínculo FK | Global + nenhum task cria migration |
+| Caso Gema | coberto pelos testes de janela + escolha |
+
+Sem placeholders TBD. Assinaturas alinhadas: `abaterPorEntradaNf(insumoId, hojeIso?)` / `registrarEntrada → Promise<boolean>`.
