@@ -10,7 +10,7 @@ import {
 import EtiquetaManualFormFields, {
   type ManualFormValues,
 } from '@/components/Etiquetas/EtiquetaManualFormFields';
-import EtiquetaModalToggleField from '@/components/Etiquetas/EtiquetaModalToggleField';
+import { EtiquetaGerarCoordinator } from '@/components/Etiquetas/EtiquetaGerarCoordinator';
 import { loadEtiquetaPrefillData } from '@/components/Etiquetas/etiqueta-prefill-loader';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
@@ -42,6 +42,7 @@ type EtiquetaGerarModalProps = {
 };
 
 const readOnlyInputClass = 'bg-stone-50 text-text-muted cursor-not-allowed';
+const gerarCoordinator = new EtiquetaGerarCoordinator();
 
 export default function EtiquetaGerarModal({
   isOpen,
@@ -64,9 +65,6 @@ export default function EtiquetaGerarModal({
 
   const [nomeEtiqueta, setNomeEtiqueta] = useState('');
   const [diasValidade, setDiasValidade] = useState(21);
-  const [diasValidadeCongelado, setDiasValidadeCongelado] = useState(90);
-  const [congelado, setCongelado] = useState(false);
-  const [mostrarTextoCongelado, setMostrarTextoCongelado] = useState(false);
   const [lote, setLote] = useState(0);
 
   const [manualValues, setManualValues] = useState<ManualFormValues>({
@@ -90,9 +88,6 @@ export default function EtiquetaGerarModal({
       });
       setNomeEtiqueta(resolved.nomeEtiqueta);
       setDiasValidade(resolved.diasValidade);
-      setDiasValidadeCongelado(resolved.diasValidadeCongelado);
-      setCongelado(resolved.congelado);
-      setMostrarTextoCongelado(resolved.mostrarTextoCongelado);
       setLote(resolved.lote);
     },
     [],
@@ -135,9 +130,6 @@ export default function EtiquetaGerarModal({
       setOrdemProducaoId(undefined);
       setNomeEtiqueta('');
       setDiasValidade(21);
-      setDiasValidadeCongelado(90);
-      setCongelado(false);
-      setMostrarTextoCongelado(false);
       setLote(0);
       setManualValues({
         produtoId: '',
@@ -194,65 +186,20 @@ export default function EtiquetaGerarModal({
 
     setSubmitting(true);
     setError(null);
-
     try {
       const resolved = resolveEtiquetaConfig({
-        produto,
-        tipo,
-        dataFabricacao,
-        overrides: {
-          nomeEtiqueta,
-          diasValidade,
-          diasValidadeCongelado,
-        },
+        produto, tipo, dataFabricacao,
+        overrides: { nomeEtiqueta, diasValidade },
       });
-
       const body = buildLegacyEtiquetaGerarBody({
-        produtoNome: produto.nome,
-        tipoEstoqueNome,
-        dataFabricacao,
-        resolved: {
-          nomeEtiqueta: resolved.nomeEtiqueta,
-          diasValidade: resolved.diasValidade,
-          diasValidadeCongelado: resolved.diasValidadeCongelado,
-          congelado,
-          mostrarTextoCongelado,
-          lote: resolved.lote,
-        },
+        produtoId, produtoNome: produto.nome,
+        tipoEstoqueNome, dataFabricacao, resolved,
       });
-
-      const gerarRes = await fetch('/api/etiqueta/gerar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      await gerarCoordinator.gerar(body, mode === 'reimprimir' ? undefined : {
+        ordemProducaoId: mode === 'fila' ? ordemProducaoId : undefined,
+        produtoId, tipoEstoqueId, dataFabricacao,
+        modo: mode === 'manual' ? 'manual' : 'pedido',
       });
-      const gerarData = await gerarRes.json();
-
-      if (!gerarRes.ok) {
-        throw new Error(gerarData.error || 'Erro ao gerar etiqueta');
-      }
-
-      const blob = new Blob([gerarData.html], { type: 'text/html' });
-      window.open(URL.createObjectURL(blob), '_blank');
-
-      if (mode !== 'reimprimir') {
-        const registrarRes = await fetch('/api/etiquetas/registrar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ordemProducaoId: mode === 'fila' ? ordemProducaoId : undefined,
-            produtoId,
-            tipoEstoqueId,
-            dataFabricacao,
-            modo: mode === 'manual' ? 'manual' : 'pedido',
-          }),
-        });
-        const registrarData = await registrarRes.json();
-        if (!registrarRes.ok) {
-          throw new Error(registrarData.error || 'Erro ao registrar etiqueta');
-        }
-      }
-
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -359,7 +306,7 @@ export default function EtiquetaGerarModal({
             <>
               <Input
                 id="nome-etiqueta"
-                label="Nome na etiqueta"
+                label="Família na etiqueta"
                 type="text"
                 value={nomeEtiqueta}
                 onChange={(e) => setNomeEtiqueta(e.target.value)}
@@ -386,33 +333,6 @@ export default function EtiquetaGerarModal({
                 disabled={isBusy || !produto}
               />
 
-              <Input
-                id="dias-validade-cong"
-                label="Dias de validade (congelado)"
-                type="number"
-                min={1}
-                max={365}
-                value={diasValidadeCongelado}
-                onChange={(e) =>
-                  setDiasValidadeCongelado(parseInt(e.target.value, 10) || 90)
-                }
-                numeric
-                disabled={isBusy || !produto}
-              />
-
-              <EtiquetaModalToggleField
-                label="Validade congelado"
-                checked={congelado}
-                onChange={setCongelado}
-                disabled={isBusy || !produto}
-              />
-
-              <EtiquetaModalToggleField
-                label="Texto congelado na etiqueta"
-                checked={mostrarTextoCongelado}
-                onChange={setMostrarTextoCongelado}
-                disabled={isBusy || !produto}
-              />
             </>
           )}
 

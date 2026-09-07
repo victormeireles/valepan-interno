@@ -1,7 +1,9 @@
 import { loteFromDataFabricacaoEtiqueta } from '@/domain/embalagem/lote-from-data-fabricacao';
+import { EtiquetaTituloManager } from './etiqueta-titulo-manager';
 
 export type EtiquetaProdutoInput = {
   nome: string;
+  familiaNome?: string | null;
   nomeEtiqueta: string | null;
   diasValidadeAmbiente: number;
   diasValidadeCongelado: number;
@@ -30,9 +32,7 @@ export function resolveEtiquetaConfig(input: {
 }) {
   const lote = loteFromDataFabricacaoEtiqueta(input.dataFabricacao) ?? 0;
   return {
-    nomeEtiqueta: input.overrides?.nomeEtiqueta?.trim()
-      || input.produto.nomeEtiqueta?.trim()
-      || input.produto.nome,
+    nomeEtiqueta: new EtiquetaTituloManager().resolve(input.produto, input.overrides?.nomeEtiqueta),
     diasValidade: input.overrides?.diasValidade ?? input.produto.diasValidadeAmbiente,
     diasValidadeCongelado:
       input.overrides?.diasValidadeCongelado ?? input.produto.diasValidadeCongelado,

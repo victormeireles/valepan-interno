@@ -38,6 +38,7 @@ const TABLE_RULES: Readonly<Record<string, TableRule>> = {
     valueFields: ['id'],
     extraFields: [
       'nome_etiqueta',
+      'produto_familia_id',
       'dias_validade_ambiente',
       'dias_validade_congelado',
       'unit_barcode',

@@ -29,6 +29,7 @@ export function mapProdutoFromGenericOption(option: GenericOption): EtiquetaProd
   const meta = option.meta ?? {};
   return {
     nome: option.label,
+    familiaNome: (meta.familiaNome as string | null) ?? null,
     nomeEtiqueta: (meta.nome_etiqueta as string | null) ?? null,
     diasValidadeAmbiente: Number(meta.dias_validade_ambiente ?? 21),
     diasValidadeCongelado: Number(meta.dias_validade_congelado ?? 90),
@@ -53,6 +54,7 @@ export async function loadEtiquetaPrefillData(
 ): Promise<{ produto: EtiquetaProdutoInput; tipo: EtiquetaTipoInput }> {
   const [produtoOptions, tipoOptions] = await Promise.all([
     fetchEtiquetaGenericOptions('produtos', [
+      'produto_familia_id',
       'nome_etiqueta',
       'dias_validade_ambiente',
       'dias_validade_congelado',

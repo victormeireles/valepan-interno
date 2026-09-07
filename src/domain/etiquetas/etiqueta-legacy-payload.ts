@@ -1,4 +1,5 @@
 export type LegacyEtiquetaGerarBody = {
+  produtoId?: string;
   produto: string;
   nomeEtiqueta: string;
   dataFabricacao: string;
@@ -20,12 +21,14 @@ export type ResolvedEtiquetaConfig = {
 };
 
 export function buildLegacyEtiquetaGerarBody(input: {
+  produtoId?: string;
   produtoNome: string;
   tipoEstoqueNome: string;
   dataFabricacao: string;
   resolved: ResolvedEtiquetaConfig;
 }): LegacyEtiquetaGerarBody {
   return {
+    ...(input.produtoId ? { produtoId: input.produtoId } : {}),
     produto: input.produtoNome,
     nomeEtiqueta: input.resolved.nomeEtiqueta,
     dataFabricacao: input.dataFabricacao,

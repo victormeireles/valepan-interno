@@ -18,6 +18,14 @@ const tipo = {
 };
 
 describe('resolveEtiquetaConfig', () => {
+  it('prioriza a família e permite sobrescrever para esta impressão', () => {
+    const comFamilia = { ...produto, familiaNome: 'Brioche' };
+    expect(resolveEtiquetaConfig({ produto: comFamilia, tipo, dataFabricacao: '2026-09-03' }).nomeEtiqueta).toBe('Brioche');
+    expect(resolveEtiquetaConfig({
+      produto: comFamilia, tipo, dataFabricacao: '2026-09-03',
+      overrides: { nomeEtiqueta: 'Smash Brioche' },
+    }).nomeEtiqueta).toBe('Smash Brioche');
+  });
   it('usa nome_etiqueta do produto', () => {
     const result = resolveEtiquetaConfig({ produto, tipo, dataFabricacao: '2026-06-11' });
     expect(result.nomeEtiqueta).toBe('HB Smash Brioche 50g 10cm');

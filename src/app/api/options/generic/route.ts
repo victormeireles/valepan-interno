@@ -4,9 +4,11 @@ import { GenericOptionsAllowlist } from '@/lib/auth/generic-options-allowlist';
 import { sessionToAuthzSnapshot } from '@/lib/auth/session-authz-snapshot';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { NextResponse } from 'next/server';
+import { ProdutoFamiliaOptionsMapper } from '@/lib/options/ProdutoFamiliaOptionsMapper';
 
 const allowlist = new GenericOptionsAllowlist();
 const accessManager = new InternoAccessManager();
+const familiaMapper = new ProdutoFamiliaOptionsMapper();
 
 type GenericItem = {
   [key: string]: unknown;
@@ -23,6 +25,10 @@ function formatOption(
     acc[field] = item[field];
     return acc;
   }, {});
+
+  if (table === 'produtos') {
+    Object.assign(meta, familiaMapper.metadata(item, extraFields));
+  }
 
   if ((table === 'insumos' || table === 'produtos') && item.unidades) {
     const unidades = item.unidades as {
@@ -58,8 +64,10 @@ function buildSelectQuery(
     return `${baseFields}, unidades!insumos_unidade_id_fkey (nome_resumido, codigo)`;
   }
 
-  if (table === 'produtos' && extraFields.includes('unidade_padrao_id')) {
-    return `${baseFields}, unidades (nome_resumido, codigo)`;
+  if (table === 'produtos') {
+    const unidadeJoin = extraFields.includes('unidade_padrao_id')
+      ? ', unidades (nome_resumido, codigo)' : '';
+    return `${baseFields}${unidadeJoin}${familiaMapper.select(extraFields)}`;
   }
 
   return baseFields;

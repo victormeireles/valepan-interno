@@ -21,7 +21,7 @@ describe('GenericOptionsAllowlist', () => {
       table: 'produtos',
       labelField: 'nome',
       valueField: 'id',
-      extraFields: ['nome_etiqueta', 'unit_barcode', 'box_units'],
+      extraFields: ['nome_etiqueta', 'unit_barcode', 'box_units', 'produto_familia_id'],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -58,15 +58,18 @@ describe('GenericOptionsAllowlist', () => {
     });
   });
 
+  it('rejeita joins arbitrários enviados como campos', () => {
+    const result = allowlist.resolve({
+      table: 'produtos', labelField: 'nome', valueField: 'id',
+      extraFields: ['produto_familias(*)'],
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it('exige table', () => {
-    expect(
-      allowlist.resolve({
-        table: '',
-        labelField: 'nome',
-        valueField: 'id',
-        extraFields: [],
-      }).status,
-    ).toBe(400);
+    const result = allowlist.resolve({ table: '', labelField: 'nome', valueField: 'id', extraFields: [] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(400);
   });
 
   it('mapeia unidades para config ou insumos', () => {

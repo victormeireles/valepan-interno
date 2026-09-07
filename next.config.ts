@@ -4,6 +4,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ['googleapis', 'canvas', 'jsbarcode'],
   outputFileTracingRoot: path.join(__dirname),
+  outputFileTracingIncludes: {
+    '/api/etiqueta/gerar': ['./public/logo-full-light.svg', './public/fonts/etiquetas/*.ttf'],
+  },
   experimental: {
     // Aumentar limite de body para permitir upload de fotos até 10MB
     serverActions: {
