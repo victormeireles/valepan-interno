@@ -19,7 +19,8 @@ import PainelEtapaTvHeader from './PainelEtapaTvHeader';
 import { PainelEtapaTvFilaBuilder } from './painel-etapa-tv-fila-builder';
 import {
   PAINEL_ETAPA_TV_BODY_CLASS,
-  PAINEL_ETAPA_TV_SHELL_CLASS,
+  PAINEL_ETAPA_TV_CANVAS_CLASS,
+  PAINEL_ETAPA_TV_FRAME_CLASS,
 } from './painel-etapa-tv-layout';
 import { PainelEtapaTvProductMapper } from './painel-etapa-tv-product-mapper';
 
@@ -117,21 +118,23 @@ export default function PainelEtapaTvScreen({
   );
 
   return (
-    <div className={PAINEL_ETAPA_TV_SHELL_CLASS}>
-      <PainelEtapaTvHeader
-        config={config.realizado}
-        selectedDate={selectedDate}
-        onDateChange={onDateChange}
-        metrics={metrics}
-      />
-      <div className={PAINEL_ETAPA_TV_BODY_CLASS}>
-        {fluxo && scale ? (
-          <FluxoDisplayContext.Provider value={{ mode: config.mode, setMode: () => {}, scale }}>
-            {grid}
-          </FluxoDisplayContext.Provider>
-        ) : (
-          grid
-        )}
+    <div className={PAINEL_ETAPA_TV_FRAME_CLASS}>
+      <div className={PAINEL_ETAPA_TV_CANVAS_CLASS}>
+        <PainelEtapaTvHeader
+          config={config.realizado}
+          selectedDate={selectedDate}
+          onDateChange={onDateChange}
+          metrics={metrics}
+        />
+        <div className={PAINEL_ETAPA_TV_BODY_CLASS}>
+          {fluxo && scale ? (
+            <FluxoDisplayContext.Provider value={{ mode: config.mode, setMode: () => {}, scale }}>
+              {grid}
+            </FluxoDisplayContext.Provider>
+          ) : (
+            grid
+          )}
+        </div>
       </div>
     </div>
   );

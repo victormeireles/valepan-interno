@@ -1,20 +1,19 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-
-const KIOSK_MQ = '(min-width: 1024px)';
+import { PainelEtapaTvFit } from '@/domain/painel-etapa-tv/painel-etapa-tv-fit';
 
 function subscribe(onStoreChange: () => void): () => void {
-  const mq = window.matchMedia(KIOSK_MQ);
+  const mq = window.matchMedia(PainelEtapaTvFit.mediaQuery());
   mq.addEventListener('change', onStoreChange);
   return () => mq.removeEventListener('change', onStoreChange);
 }
 
 function kioskSnapshot(): boolean {
-  return window.matchMedia(KIOSK_MQ).matches;
+  return window.matchMedia(PainelEtapaTvFit.mediaQuery()).matches;
 }
 
-/** TV/kiosk em lg+; no SSR assume celular para o gráfico nascer com altura própria. */
+/** TV/kiosk em landscape ≥768×480; no SSR assume celular para o gráfico nascer com altura própria. */
 export function usePainelEtapaTvKiosk(): boolean {
   return useSyncExternalStore(subscribe, kioskSnapshot, () => false);
 }

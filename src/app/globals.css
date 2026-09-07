@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../components/PainelEtapaTv/painel-etapa-tv-kiosk.css";
 
 /* ===========================================================================
    Valepan Design System — tokens centralizados (Tailwind v4 @theme)

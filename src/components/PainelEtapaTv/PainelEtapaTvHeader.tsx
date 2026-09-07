@@ -17,7 +17,7 @@ import { formatAgoraLabel } from '@/domain/painel-producao/painel-producao-time'
 import { getBrazilHourMinuteNow } from '@/lib/utils/date-utils';
 
 const BAR_TRACK =
-  'h-1.5 w-full overflow-hidden rounded-full bg-stone-100 lg:w-[11rem] lg:shrink-0';
+  'painel-tv-bar-track h-1.5 w-full overflow-hidden rounded-full bg-stone-100';
 const BAR_FILL =
   'h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out';
 
@@ -38,7 +38,7 @@ function BrandBlock({ config }: { config: RealizadoEtapaConfig }) {
           alt="Valepan"
           width={148}
           height={36}
-          className="h-7 w-auto max-w-[7.5rem] lg:h-9 lg:max-w-none"
+          className="painel-tv-logo h-7 w-auto max-w-[7.5rem]"
           priority
         />
       </Link>
@@ -59,7 +59,7 @@ function BrandBlock({ config }: { config: RealizadoEtapaConfig }) {
         >
           {config.title}
         </div>
-        <h1 className="truncate text-lg font-semibold tracking-[-0.015em] text-text-strong lg:text-xl">
+        <h1 className="painel-tv-title truncate text-lg font-semibold tracking-[-0.015em] text-text-strong">
           {config.stageName}
         </h1>
       </div>
@@ -80,7 +80,7 @@ function MetricsBlock({
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-1.5 lg:flex-row lg:items-center lg:gap-2"
+      className="painel-tv-metrics flex min-w-0 flex-col gap-1.5"
       aria-label={`${config.toolbarMetricLabel} em ${config.unitName} em relação à meta`}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -129,18 +129,18 @@ export default function PainelEtapaTvHeader({
 
   return (
     <header
-      className="sticky top-0 z-20 min-w-0 shrink-0 border-b border-border-default pt-[env(safe-area-inset-top)] backdrop-blur-sm"
+      className="sticky top-0 z-20 min-w-0 shrink-0 border-b border-border-default pt-[env(safe-area-inset-top)] backdrop-blur-sm painel-tv-header"
       style={toolbarBg}
     >
       <div className={`h-[3px] ${accent.topBar}`} aria-hidden="true" />
       <div
         className={[
-          'flex w-full min-w-0 flex-col gap-2.5 py-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-3',
+          'painel-tv-header-inner flex w-full min-w-0 flex-col gap-2.5 py-2.5',
           pageShellPaddingX,
         ].join(' ')}
       >
         <BrandBlock config={config} />
-        <div className="flex min-w-0 flex-col gap-2 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
+        <div className="painel-tv-header-meta flex min-w-0 flex-col gap-2">
           <MetricsBlock config={config} metrics={metrics} />
           <div className="flex min-h-11 items-center justify-between gap-3">
             <span className="inline-flex items-center gap-1.5 font-mono text-sm tabular-nums text-text-muted">

@@ -34,13 +34,13 @@ export default function PainelEtapaTvGrafico({ fluxo, etapa }: PainelEtapaTvGraf
   return (
     <Card
       padding="md"
-      className="flex min-w-0 flex-col overflow-hidden lg:h-full lg:min-h-0"
+      className="painel-tv-grafico flex min-w-0 flex-col overflow-hidden"
     >
       <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-base font-bold text-text-strong">
           {FluxoJanelaGraficoCopy.TITULO}
         </span>
-        <span className="font-mono text-[11px] tabular-nums text-text-muted lg:ml-auto">
+        <span className="painel-tv-grafico-caption font-mono text-[11px] tabular-nums text-text-muted">
           {caption}
         </span>
       </div>

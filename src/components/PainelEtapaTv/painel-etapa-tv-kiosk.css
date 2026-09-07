@@ -1,0 +1,112 @@
+/* Kiosk do quadro — medidas em PainelEtapaTvFit (768×480 landscape, canvas 1920×1080). */
+@media (min-width: 768px) and (min-height: 480px) and (orientation: landscape) {
+  .painel-tv-frame {
+    overflow: hidden;
+  }
+
+  .painel-tv-canvas {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    width: 1920px;
+    height: 1080px;
+    margin-left: -960px;
+    margin-top: -540px;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-app);
+    transform: scale(min(calc(100vw / 1920px), calc(100vh / 1080px)));
+  }
+
+  .painel-tv-body {
+    min-height: 0;
+    flex: 1 1 0%;
+    overflow: hidden;
+    padding-bottom: 0.5rem;
+  }
+
+  .painel-tv-grid {
+    min-height: 0;
+    flex: 1 1 0%;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    grid-template-rows: auto minmax(12rem, 1fr);
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+
+  .painel-tv-top-cell {
+    height: 100%;
+  }
+
+  .painel-tv-chart-cell {
+    grid-column: 1 / span 3;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .painel-tv-list,
+  .painel-tv-section {
+    min-height: 0;
+    flex: 1 1 0%;
+    overflow: hidden;
+  }
+
+  .painel-tv-section {
+    min-height: min-content;
+  }
+
+  .painel-tv-header {
+    flex-shrink: 0;
+  }
+
+  .painel-tv-header-inner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .painel-tv-header-meta {
+    margin-left: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .painel-tv-metrics {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .painel-tv-bar-track {
+    width: 11rem;
+    flex-shrink: 0;
+  }
+
+  .painel-tv-logo {
+    height: 2.25rem;
+    max-width: none;
+  }
+
+  .painel-tv-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .painel-tv-grafico {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .painel-tv-grafico-caption {
+    margin-left: auto;
+  }
+
+  .painel-tv-cell-skeleton {
+    height: 100%;
+    min-height: 0;
+  }
+}
