@@ -43,9 +43,12 @@ body {
 .weight-bar {
   height: 38px; border: 2px solid #000; display: flex;
   align-items: center; justify-content: center;
-  font: 28px/1 'Bebas Neue', sans-serif; color: #b5b5b5; text-transform: uppercase;
+  font: 300 28px/1 'Manrope', sans-serif; color: #000; text-transform: uppercase;
 }
-.weight-option.selected .weight-bar { height: 70px; background: #000; color: #fff; font-size: 54px; }
+.weight-option.selected .weight-bar {
+  height: 70px; background: #000; color: #fff;
+  font: 54px/1 'Bebas Neue', sans-serif;
+}
 .weight-marker { height: 17px; padding-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
 .weight-missing { font-size: 12px; font-weight: 800; margin-top: 5px; }
 .footer { display: grid; grid-template-columns: 1.16fr .96fr 1fr; gap: 18px; align-items: end; min-width: 0; }
