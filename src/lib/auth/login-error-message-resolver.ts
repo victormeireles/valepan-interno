@@ -7,7 +7,7 @@ export class LoginErrorMessageResolver {
       return 'Sem permissão para o Sistema de Produção. Solicite acesso ao administrador.';
     }
     if (errorCode === 'UserNotFound') {
-      return 'Usuário não encontrado. Solicite acesso ao administrador.';
+      return 'Usuário não encontrado. Entre em contato para solicitar acesso.';
     }
     if (errorCode === 'UserInactive') {
       return 'Conta desativada. Entre em contato com o administrador.';

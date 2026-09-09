@@ -47,6 +47,16 @@ function anyModulo(
  */
 const ROUTE_RULES: RouteRule[] = [
   // —— Público (máquina / auth / páginas de entrada) ——
+  {
+    match: 'exact',
+    path: '/login/definir-senha',
+    requirement: { kind: 'app' },
+  },
+  {
+    match: 'prefix',
+    prefix: '/completar-email',
+    requirement: { kind: 'app' },
+  },
   { match: 'prefix', prefix: '/api/auth', requirement: { kind: 'public' } },
   { match: 'prefix', prefix: '/api/public', requirement: { kind: 'public' } },
   { match: 'prefix', prefix: '/api/cron', requirement: { kind: 'public' } },

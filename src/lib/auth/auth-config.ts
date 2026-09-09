@@ -4,7 +4,8 @@ import type { DatabaseComAuthz } from '@/types/database-authz';
 import { AuthSignInGate } from './auth-sign-in-gate';
 import { InternoAccessManager } from './interno-access-manager';
 import { JwtAuthzEnricher } from './jwt-authz-enricher';
-import { createMagicLinkProvider } from './magic-link-provider';
+import { createEmailOtpProvider } from './email-otp-provider';
+import { createPasswordProvider } from './password-provider';
 import { createQrProvider } from './qr-provider';
 import { UsuarioAuthzLoader } from './usuario-authz-loader';
 import { createWhatsAppProvider } from './whatsapp-provider';
@@ -19,7 +20,8 @@ function serviceClient() {
 
 export const authConfig: NextAuthConfig = {
   providers: [
-    createMagicLinkProvider(),
+    createEmailOtpProvider(),
+    createPasswordProvider(),
     createWhatsAppProvider(),
     createQrProvider(),
   ],
@@ -45,19 +47,19 @@ export const authConfig: NextAuthConfig = {
           ativo: boolean;
         } | null = null;
 
-        if (user.email) {
-          const { data, error } = await supabase
-            .from('usuarios')
-            .select('id, email, nome, ativo')
-            .eq('email', user.email)
-            .maybeSingle();
-          if (error) throw error;
-          row = data;
-        } else if (user.id) {
+        if (user.id) {
           const { data, error } = await supabase
             .from('usuarios')
             .select('id, email, nome, ativo')
             .eq('id', user.id)
+            .maybeSingle();
+          if (error) throw error;
+          row = data;
+        } else if (user.email) {
+          const { data, error } = await supabase
+            .from('usuarios')
+            .select('id, email, nome, ativo')
+            .eq('email', user.email)
             .maybeSingle();
           if (error) throw error;
           row = data;

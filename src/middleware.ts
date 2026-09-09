@@ -9,11 +9,13 @@ import { AuthDevBypass } from '@/lib/auth/dev-bypass';
 import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
 import { InternoMiddlewareGuard } from '@/lib/auth/interno-middleware-guard';
 import { InternoRouteAccessMap } from '@/lib/auth/interno-route-access-map';
+import { UsuarioSessionStatusLoader } from '@/lib/auth/usuario-session-status-loader';
 
 const guard = new InternoMiddlewareGuard(
   new InternoRouteAccessMap(),
   new InternoAccessManager(),
 );
+const sessionStatusLoader = new UsuarioSessionStatusLoader();
 
 const AUTH_COOKIE_NAMES = [
   'authjs.session-token',
@@ -43,20 +45,34 @@ export async function middleware(req: NextRequest) {
     salt: tokenCookieName,
     secureCookie,
   });
+
+  const usuarioStatus = token?.sub
+    ? await sessionStatusLoader.load(token.sub)
+    : undefined;
+
   const decision = guard.decide({
     pathname: req.nextUrl.pathname,
+    search: req.nextUrl.search,
     token,
     method: req.method,
+    usuarioStatus,
   });
 
   if (decision === 'allow') {
     return NextResponse.next();
   }
 
+  if ('json' in decision) {
+    return NextResponse.json(decision.json, { status: decision.status });
+  }
+
   const response = NextResponse.redirect(new URL(decision.redirect, req.url));
 
-  // Sem permissão de app: encerra sessão e manda para o login.
-  if (decision.redirect.includes('error=SemPermissao')) {
+  if (
+    decision.clearSession ||
+    decision.redirect.includes('error=SemPermissao') ||
+    decision.redirect.includes('error=UserInactive')
+  ) {
     clearAuthCookies(response);
   }
 

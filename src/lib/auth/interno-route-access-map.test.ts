@@ -61,6 +61,11 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
+  it('trata definir-senha e completar-email como autenticados', () => {
+    expect(map.resolve('/login/definir-senha').kind).toBe('app');
+    expect(map.resolve('/completar-email').kind).toBe('app');
+  });
+
   it('libera login e APIs máquina', () => {
     expect(map.resolve('/login').kind).toBe('public');
     expect(map.resolve('/api/public/saidas').kind).toBe('public');

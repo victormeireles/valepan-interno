@@ -98,22 +98,87 @@ type UsuariosComOwner = {
   usuarios: {
     Row: UsuariosTable['Row'] & {
       is_system_owner: boolean;
+      password_hash: string | null;
+      password_must_change: boolean;
+      password_updated_at: string | null;
     };
     Insert: UsuariosTable['Insert'] & {
       is_system_owner?: boolean;
+      password_hash?: string | null;
+      password_must_change?: boolean;
+      password_updated_at?: string | null;
     };
     Update: UsuariosTable['Update'] & {
       is_system_owner?: boolean;
+      password_hash?: string | null;
+      password_must_change?: boolean;
+      password_updated_at?: string | null;
     };
     Relationships: UsuariosTable['Relationships'];
   };
 };
 
-type AuthzTables = PerfisTables & UsuariosComOwner;
+type LoginEmailOtpsTable = {
+  login_email_otps: {
+    Row: {
+      id: string;
+      usuario_id: string;
+      code_hash: string;
+      purpose: string;
+      expires_at: string;
+      tentativas: number;
+      bloqueado_ate: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      usuario_id: string;
+      code_hash: string;
+      purpose: string;
+      expires_at: string;
+      tentativas?: number;
+      bloqueado_ate?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      usuario_id?: string;
+      code_hash?: string;
+      purpose?: string;
+      expires_at?: string;
+      tentativas?: number;
+      bloqueado_ate?: string | null;
+      created_at?: string;
+    };
+    Relationships: [
+      {
+        foreignKeyName: 'login_email_otps_usuario_id_fkey';
+        columns: ['usuario_id'];
+        isOneToOne: false;
+        referencedRelation: 'usuarios';
+        referencedColumns: ['id'];
+      },
+    ];
+  };
+};
+
+type CadastroEmailFunctions = {
+  solicitar_cadastro_email: {
+    Args: { p_usuario_id: string; p_email: string; p_code_hash: string };
+    Returns: string;
+  };
+  confirmar_cadastro_email: {
+    Args: { p_usuario_id: string; p_email: string; p_code_hash: string };
+    Returns: string;
+  };
+};
+
+type AuthzTables = PerfisTables & UsuariosComOwner & LoginEmailOtpsTable;
 
 export type DatabaseComAuthz = Database & {
   public: Database['public'] & {
     Tables: Database['public']['Tables'] & AuthzTables;
+    Functions: Database['public']['Functions'] & CadastroEmailFunctions;
   };
 };
 

@@ -10,7 +10,7 @@ import {
 import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
 import Navigation from './Navigation';
 
-const AUTH_PATH_PREFIXES = ['/login'];
+const AUTH_PATH_PREFIXES = ['/login', '/completar-email'];
 const TV_PATH_PREFIXES = [
   '/painel/fermentacao',
   '/painel/forno',

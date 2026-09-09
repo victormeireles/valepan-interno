@@ -320,4 +320,36 @@ describe('InternoMiddlewareGuard', () => {
       }),
     ).toEqual({ redirect: '/?erro=sem-permissao' });
   });
+
+  it('logado sem e-mail: GET redirect e escrita 409', () => {
+    const token = {
+      sub: 'user-sem-email',
+      isSystemOwner: true,
+      modulosEfetivos: {},
+    };
+    const usuarioStatus = {
+      kind: 'ok' as const,
+      ativo: true,
+      email: null,
+      passwordMustChange: false,
+    };
+    expect(
+      guard.decide({
+        pathname: '/ordens-producao',
+        token,
+        method: 'GET',
+        usuarioStatus,
+      }),
+    ).toEqual({
+      redirect: '/completar-email?returnTo=%2Fordens-producao',
+    });
+    expect(
+      guard.decide({
+        pathname: '/ordens-producao',
+        token,
+        method: 'POST',
+        usuarioStatus,
+      }),
+    ).toMatchObject({ status: 409, json: { error: 'EmailRequired' } });
+  });
 });

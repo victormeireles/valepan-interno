@@ -23,7 +23,7 @@ export default async function LoginPage({
           Sistema de Produção
         </h1>
         <p className="mt-2 text-sm text-text-muted">
-          Acesse com WhatsApp, e-mail ou QR
+          Acesse com WhatsApp, código no e-mail, senha ou QR
         </p>
       </div>
 
