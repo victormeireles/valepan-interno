@@ -2,7 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/clients/supabase-client-factory';
 import { UsuariosWhatsAppAuthManager } from '@/lib/auth/usuarios-whatsapp-auth-manager';
-import { zapiManager } from '@/lib/managers/zapi-manager';
+import { whatsappCloudClient } from '@/lib/whatsapp-cloud/whatsapp-cloud-client';
 import {
   formatPhoneNumber,
   generateVerificationCode,
@@ -61,8 +61,11 @@ export async function solicitarCodigoWhatsApp(
       }
     }
 
-    const isConnected = await zapiManager.isInstanceConnected();
-    if (!isConnected) {
+    const isConnected = await whatsappCloudClient.isConnected();
+    if (
+      !isConnected ||
+      !whatsappCloudClient.isAuthenticationTemplateConfigured()
+    ) {
       return {
         success: false,
         message:
@@ -74,7 +77,7 @@ export async function solicitarCodigoWhatsApp(
     await manager.createWhatsAppCode(user.id, code);
 
     try {
-      await zapiManager.sendVerificationCode(formattedPhone, code);
+      await whatsappCloudClient.sendAuthenticationCode(formattedPhone, code);
     } catch {
       return {
         success: false,
