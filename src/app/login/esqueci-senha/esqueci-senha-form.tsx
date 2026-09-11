@@ -13,6 +13,27 @@ const inputClass =
 
 type Step = 'email' | 'reset';
 
+function getResetDisabledReason(params: {
+  codigo: string;
+  novaSenha: string;
+  confirmaSenha: string;
+}): string | null {
+  if (params.codigo.length !== 6) {
+    return 'Informe o código de 6 dígitos enviado por e-mail.';
+  }
+  if (params.novaSenha.length < PASSWORD_MIN_LENGTH) {
+    const faltam = PASSWORD_MIN_LENGTH - params.novaSenha.length;
+    return `A nova senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres (faltam ${faltam}).`;
+  }
+  if (params.confirmaSenha.length < PASSWORD_MIN_LENGTH) {
+    return `Confirme a senha com pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (params.novaSenha !== params.confirmaSenha) {
+    return 'As senhas não coincidem.';
+  }
+  return null;
+}
+
 export function EsqueciSenhaForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -44,6 +65,17 @@ export function EsqueciSenhaForm() {
       setIsLoading(false);
     }
   }
+
+  const resetDisabledReason = getResetDisabledReason({
+    codigo,
+    novaSenha,
+    confirmaSenha,
+  });
+  const novaSenhaInvalida =
+    novaSenha.length > 0 && novaSenha.length < PASSWORD_MIN_LENGTH;
+  const confirmaSenhaInvalida =
+    confirmaSenha.length > 0 &&
+    (confirmaSenha.length < PASSWORD_MIN_LENGTH || confirmaSenha !== novaSenha);
 
   async function handleRedefinir(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,11 +197,18 @@ export function EsqueciSenhaForm() {
               autoComplete="new-password"
               value={novaSenha}
               onChange={(event) => setNovaSenha(event.target.value)}
-              className={inputClass}
+              className={`${inputClass}${novaSenhaInvalida ? ' border-danger-border' : ''}`}
               disabled={isLoading}
+              aria-invalid={novaSenhaInvalida}
+              aria-describedby="nova-senha-hint"
             />
-            <p className="text-xs text-text-muted">
-              Mínimo de {PASSWORD_MIN_LENGTH} caracteres.
+            <p
+              id="nova-senha-hint"
+              className={`text-xs ${novaSenhaInvalida ? 'text-danger-fg' : 'text-text-muted'}`}
+            >
+              {novaSenhaInvalida
+                ? `Faltam ${PASSWORD_MIN_LENGTH - novaSenha.length} caracteres (mínimo ${PASSWORD_MIN_LENGTH}).`
+                : `Mínimo de ${PASSWORD_MIN_LENGTH} caracteres.`}
             </p>
           </div>
           <div className="space-y-2">
@@ -184,17 +223,25 @@ export function EsqueciSenhaForm() {
               autoComplete="new-password"
               value={confirmaSenha}
               onChange={(event) => setConfirmaSenha(event.target.value)}
-              className={inputClass}
+              className={`${inputClass}${confirmaSenhaInvalida ? ' border-danger-border' : ''}`}
               disabled={isLoading}
+              aria-invalid={confirmaSenhaInvalida}
+              aria-describedby="confirma-senha-hint"
             />
+            {confirmaSenhaInvalida ? (
+              <p id="confirma-senha-hint" className="text-xs text-danger-fg">
+                {confirmaSenha.length < PASSWORD_MIN_LENGTH
+                  ? `Faltam ${PASSWORD_MIN_LENGTH - confirmaSenha.length} caracteres (mínimo ${PASSWORD_MIN_LENGTH}).`
+                  : 'As senhas não coincidem.'}
+              </p>
+            ) : null}
           </div>
+          {resetDisabledReason && !isLoading ? (
+            <p className="text-sm text-text-muted">{resetDisabledReason}</p>
+          ) : null}
           <button
             type="submit"
-            disabled={
-              isLoading ||
-              codigo.length !== 6 ||
-              novaSenha.length < PASSWORD_MIN_LENGTH
-            }
+            disabled={isLoading || resetDisabledReason !== null}
             className="inline-flex h-11 w-full items-center justify-center rounded-[var(--radius-control)] bg-accent px-4 text-sm font-semibold text-white shadow-[var(--shadow-accent)] transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isLoading ? 'Salvando…' : 'Redefinir senha'}
