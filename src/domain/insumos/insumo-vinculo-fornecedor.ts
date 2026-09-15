@@ -67,6 +67,9 @@ export function enrichIntegracaoInsumosComFornecedor(
       unidadeNf,
       nfsDistintas,
       pendenciaCount,
+      numerosNf: pendenciasDoProduto
+        .map((p) => p.numero_nf)
+        .filter((n): n is string => Boolean(n)),
     };
   });
 }

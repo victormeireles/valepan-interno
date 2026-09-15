@@ -26,6 +26,7 @@ function buildItem(overrides: Partial<IntegracaoInsumoListItem> = {}): Integraca
     unidadeNf: null,
     nfsDistintas: 0,
     pendenciaCount: 0,
+    numerosNf: [],
     ...overrides,
   };
 }
@@ -79,5 +80,10 @@ describe('filterIntegracaoInsumos', () => {
     expect(filterIntegracaoInsumos(items, 'açúcar')).toHaveLength(1);
     expect(filterIntegracaoInsumos(items, 'nova')).toHaveLength(1);
     expect(filterIntegracaoInsumos(items, 'norte')).toHaveLength(1);
+  });
+
+  it('filtra vínculo pelo número da NF incluindo zeros à esquerda', () => {
+    const items = [buildItem({ numerosNf: ['000059044'] }), buildItem({ id: '2', numerosNf: ['000055805'] })];
+    expect(filterIntegracaoInsumos(items, '59044')).toEqual([items[0]]);
   });
 });
