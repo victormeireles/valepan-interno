@@ -10,6 +10,10 @@ export function buildNfsTargetFromGrupo(
   return {
     empresaId: grupo.empresaId,
     omieIdProduto: grupo.omieIdProduto,
+    insumoId: null,
+    fatorConversao: null,
+    unidadeEstoque: null,
+    insumoNome: null,
     descricaoProduto: grupo.descricaoProduto,
     nfsDistintas: grupo.nfsDistintas,
     pendenciaCount: grupo.pendenciaCount,
@@ -23,6 +27,10 @@ export function buildNfsTargetFromVinculo(item: IntegracaoInsumoListItem): Insum
   return {
     empresaId: item.empresa_id,
     omieIdProduto: item.omie_id_produto,
+    insumoId: item.insumo_id,
+    fatorConversao: Number(item.fator_conversao),
+    unidadeEstoque: item.insumoUnidadeNome ?? item.insumoUnidadeCodigo,
+    insumoNome: item.insumoNome,
     descricaoProduto: item.descricao_omie,
     nfsDistintas: item.nfsDistintas,
     pendenciaCount: item.pendenciaCount,

@@ -18,6 +18,7 @@ import type { InsumoSaldoComDetalhes } from '@/domain/types/insumo-estoque';
 import type { InsumoPendenciaComEmpresa } from '@/domain/types/insumo-estoque-db';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
 import { enrichIntegracaoInsumosComFornecedor } from '@/domain/insumos/insumo-vinculo-fornecedor';
+import { enrichVinculosComEntradasNf } from '@/domain/insumos/insumo-vinculo-nf-enricher';
 import {
   groupPendenciasPorProduto,
   prepararGruposParaCliente,
@@ -28,6 +29,7 @@ import { insumoControleEstoqueFilter } from '@/domain/insumos/insumo-controle-es
 import { insumoEstoqueRepository } from '@/data/insumos/InsumoEstoqueRepository';
 import { insumoMapeamentoRepository } from '@/data/insumos/InsumoMapeamentoRepository';
 import { insumoPendenciaRepository } from '@/data/insumos/InsumoPendenciaRepository';
+import { insumoMovimentoNfConsultaRepository } from '@/data/insumos/InsumoMovimentoNfConsultaRepository';
 import { toInsumoHistoricoIsoRange, INSUMO_HISTORICO_LIMITE } from '@/domain/insumos/insumo-historico-periodo';
 import { insumoEstoqueService } from '@/lib/services/insumo-estoque-service';
 import { insumoEstoquePipelineLoader } from '@/lib/services/insumo-estoque-pipeline-loader';
@@ -75,16 +77,22 @@ export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
 
 export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
   await requireInternoModulo('interno_insumos', 'ler');
-  const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos] = await Promise.all([
-    insumoPendenciaRepository.listPendentes(),
-    insumoPendenciaRepository.listIgnoradas(),
-    insumoMapeamentoRepository.listAtivosComDetalhes(),
-    insumoPendenciaRepository.listComFornecedorParaVinculos(),
-  ]);
+  const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos, resumosEntradaNf] =
+    await Promise.all([
+      insumoPendenciaRepository.listPendentes(),
+      insumoPendenciaRepository.listIgnoradas(),
+      insumoMapeamentoRepository.listAtivosComDetalhes(),
+      insumoPendenciaRepository.listComFornecedorParaVinculos(),
+      insumoMovimentoNfConsultaRepository.listResumosEntradaNf(),
+    ]);
 
   const pendenciaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(pendencias));
   const ignoradaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(ignoradas));
-  const vinculos = enrichIntegracaoInsumosComFornecedor(vinculosBase, pendenciasParaVinculos);
+  const vinculosComFornecedor = enrichIntegracaoInsumosComFornecedor(
+    vinculosBase,
+    pendenciasParaVinculos,
+  );
+  const vinculos = enrichVinculosComEntradasNf(vinculosComFornecedor, resumosEntradaNf);
 
   return {
     pendenciaGrupos,

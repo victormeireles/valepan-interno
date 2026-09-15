@@ -4,6 +4,10 @@ import type { InsumoPendenciaGrupoContexto } from '@/domain/insumos/insumo-pende
 export type InsumoPendenciaNfsTarget = {
   empresaId: string;
   omieIdProduto: number;
+  insumoId: string | null;
+  fatorConversao: number | null;
+  unidadeEstoque: string | null;
+  insumoNome: string | null;
   descricaoProduto: string | null;
   nfsDistintas: number;
   pendenciaCount: number;
@@ -13,5 +17,5 @@ export type InsumoPendenciaNfsTarget = {
 };
 
 export function buildNfsTargetCacheKey(target: InsumoPendenciaNfsTarget): string {
-  return `${target.empresaId}:${target.omieIdProduto}:${target.statuses.join(',')}`;
+  return `${target.empresaId}:${target.omieIdProduto}:${target.insumoId ?? ''}:${target.statuses.join(',')}`;
 }
