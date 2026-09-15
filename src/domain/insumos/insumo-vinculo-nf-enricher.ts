@@ -1,4 +1,4 @@
-import type { InsumoEntradaNfResumo } from '@/data/insumos/InsumoMovimentoNfConsultaRepository';
+import type { InsumoEntradaNfNumeroResumo } from '@/data/insumos/InsumoMovimentoNfConsultaRepository';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
 
 function buildVinculoKey(empresaId: string, insumoId: string): string {
@@ -6,12 +6,11 @@ function buildVinculoKey(empresaId: string, insumoId: string): string {
 }
 
 function groupNumerosNfPorVinculo(
-  resumos: InsumoEntradaNfResumo[],
+  resumos: InsumoEntradaNfNumeroResumo[],
 ): Map<string, string[]> {
   const numerosPorVinculo = new Map<string, string[]>();
 
   for (const resumo of resumos) {
-    if (!resumo.numeroNf) continue;
     const chave = buildVinculoKey(resumo.empresaId, resumo.insumoId);
     const numeros = numerosPorVinculo.get(chave) ?? [];
     numeros.push(resumo.numeroNf);
@@ -23,7 +22,7 @@ function groupNumerosNfPorVinculo(
 
 export function enrichVinculosComEntradasNf(
   vinculos: IntegracaoInsumoListItem[],
-  resumos: InsumoEntradaNfResumo[],
+  resumos: InsumoEntradaNfNumeroResumo[],
 ): IntegracaoInsumoListItem[] {
   const numerosPorVinculo = groupNumerosNfPorVinculo(resumos);
 

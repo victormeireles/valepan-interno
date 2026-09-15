@@ -77,14 +77,16 @@ export async function getInsumoSaldosPageData(): Promise<InsumoSaldosPageData> {
 
 export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPageData> {
   await requireInternoModulo('interno_insumos', 'ler');
-  const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos, resumosEntradaNf] =
-    await Promise.all([
-      insumoPendenciaRepository.listPendentes(),
-      insumoPendenciaRepository.listIgnoradas(),
-      insumoMapeamentoRepository.listAtivosComDetalhes(),
-      insumoPendenciaRepository.listComFornecedorParaVinculos(),
-      insumoMovimentoNfConsultaRepository.listResumosEntradaNf(),
-    ]);
+  const [pendencias, ignoradas, vinculosBase, pendenciasParaVinculos] = await Promise.all([
+    insumoPendenciaRepository.listPendentes(),
+    insumoPendenciaRepository.listIgnoradas(),
+    insumoMapeamentoRepository.listAtivosComDetalhes(),
+    insumoPendenciaRepository.listComFornecedorParaVinculos(),
+  ]);
+
+  const numerosEntradaNf = await insumoMovimentoNfConsultaRepository.listNumerosNfPorInsumos(
+    vinculosBase.map((vinculo) => vinculo.insumo_id),
+  );
 
   const pendenciaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(pendencias));
   const ignoradaGrupos = prepararGruposParaCliente(groupPendenciasPorProduto(ignoradas));
@@ -92,7 +94,7 @@ export async function getInsumoMapeamentoPageData(): Promise<InsumoMapeamentoPag
     vinculosBase,
     pendenciasParaVinculos,
   );
-  const vinculos = enrichVinculosComEntradasNf(vinculosComFornecedor, resumosEntradaNf);
+  const vinculos = enrichVinculosComEntradasNf(vinculosComFornecedor, numerosEntradaNf);
 
   return {
     pendenciaGrupos,

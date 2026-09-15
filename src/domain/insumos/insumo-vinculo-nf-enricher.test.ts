@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InsumoEntradaNfResumo } from '@/data/insumos/InsumoMovimentoNfConsultaRepository';
+import type { InsumoEntradaNfNumeroResumo } from '@/data/insumos/InsumoMovimentoNfConsultaRepository';
 import { buildPendenciaGrupoContexto } from '@/domain/insumos/insumo-pendencia-grupo-contexto';
 import { enrichVinculosComEntradasNf } from '@/domain/insumos/insumo-vinculo-nf-enricher';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
@@ -33,18 +33,12 @@ function buildVinculo(
 }
 
 function buildResumo(
-  overrides: Partial<InsumoEntradaNfResumo> = {},
-): InsumoEntradaNfResumo {
+  overrides: Partial<InsumoEntradaNfNumeroResumo> = {},
+): InsumoEntradaNfNumeroResumo {
   return {
-    id: 'mov-1',
     empresaId: 'emp-1',
     insumoId: 'ins-1',
     numeroNf: '000059044',
-    omieNIdReceb: 1,
-    omieNIdItem: 1,
-    createdAt: '2026-09-15T12:00:00Z',
-    deltaQuantidade: 10,
-    custoUnitario: 5,
     ...overrides,
   };
 }
@@ -55,7 +49,7 @@ describe('enrichVinculosComEntradasNf', () => {
       [buildVinculo()],
       [
         buildResumo(),
-        buildResumo({ id: 'mov-2', insumoId: 'ins-2', numeroNf: '000060000' }),
+        buildResumo({ insumoId: 'ins-2', numeroNf: '000060000' }),
       ],
     );
 

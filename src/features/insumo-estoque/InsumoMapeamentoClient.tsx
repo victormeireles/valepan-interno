@@ -1,5 +1,27 @@
 'use client';
 
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { InsumoMapeamentoPageData } from '@/app/actions/insumo-estoque-actions';
+import {
+  excluirIntegracaoInsumoVinculo,
+  restaurarInsumoPendenciasEmLote,
+} from '@/app/actions/insumo-estoque-actions';
+import type { MapeamentoAbaId } from '@/domain/insumos/insumo-mapeamento-busca';
+import {
+  collectPendenciaIdsFromGrupos,
+  filterPendenciaGrupos,
+  type InsumoPendenciaProdutoGrupo,
+} from '@/domain/insumos/insumo-pendencia-grupo';
+import { filterIntegracaoInsumos } from '@/domain/insumos/insumo-vinculo-filter';
+import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
+import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Toast } from '@/components/ui/Toast';
+import InsumoIgnorarConfirmDialog from '@/features/insumo-estoque/components/InsumoIgnorarConfirmDialog';
+import InsumoMapeamentoLoadingBar from '@/features/insumo-estoque/components/InsumoMapeamentoLoadingBar';
+import InsumoMapeamentoPendenciaSection from '@/features/insumo-estoque/components/InsumoMapeamentoPendenciaSection';
 import InsumoMapeamentoTabHint from '@/features/insumo-estoque/components/InsumoMapeamentoTabHint';
 import InsumoMapeamentoToolbar from '@/features/insumo-estoque/components/InsumoMapeamentoToolbar';
 import InsumoMapeamentoVinculosPanel from '@/features/insumo-estoque/components/InsumoMapeamentoVinculosPanel';
@@ -9,27 +31,10 @@ import InsumoVinculoIaRevisaoModal from '@/features/insumo-estoque/components/In
 import { useInsumoIgnorarFlow } from '@/features/insumo-estoque/hooks/useInsumoIgnorarFlow';
 import { useInsumoMapeamentoBuscaViewModel } from '@/features/insumo-estoque/hooks/useInsumoMapeamentoBuscaViewModel';
 import { useInsumoPendenciaGrupoSelecao } from '@/features/insumo-estoque/hooks/useInsumoPendenciaGrupoSelecao';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
-import { Toast } from '@/components/ui/Toast';
-import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
-import InsumoIgnorarConfirmDialog from '@/features/insumo-estoque/components/InsumoIgnorarConfirmDialog';
-import InsumoMapeamentoPendenciaSection from '@/features/insumo-estoque/components/InsumoMapeamentoPendenciaSection';
-import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
-import { filterIntegracaoInsumos } from '@/domain/insumos/insumo-vinculo-filter';
 import {
-  collectPendenciaIdsFromGrupos,
-  filterPendenciaGrupos,
-  type InsumoPendenciaProdutoGrupo,
-} from '@/domain/insumos/insumo-pendencia-grupo';
-import type { MapeamentoAbaId } from '@/domain/insumos/insumo-mapeamento-busca';
-import type { InsumoMapeamentoPageData } from '@/app/actions/insumo-estoque-actions';
-import {
-  excluirIntegracaoInsumoVinculo,
-  restaurarInsumoPendenciasEmLote,
-} from '@/app/actions/insumo-estoque-actions';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+  buildMapeamentoTabHref,
+  parseMapeamentoAbaId,
+} from '@/features/insumo-estoque/utils/insumo-mapeamento-tab';
 
 type Props = {
   initialData: InsumoMapeamentoPageData;
@@ -38,6 +43,7 @@ type Props = {
 export default function InsumoMapeamentoClient({ initialData }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isNavigating, startTransition] = useTransition();
   const [pendenciaGrupos, setPendenciaGrupos] = useState(initialData.pendenciaGrupos);
   const [ignoradaGrupos, setIgnoradaGrupos] = useState(initialData.ignoradaGrupos);
   const [pendenciasCount, setPendenciasCount] = useState(initialData.pendenciasCount);
@@ -49,6 +55,8 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
   const [editarVinculo, setEditarVinculo] = useState<IntegracaoInsumoListItem | null>(null);
   const [iaRevisaoOpen, setIaRevisaoOpen] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
+  const tabFromUrl = parseMapeamentoAbaId(searchParams.get('tab'));
+  const [activeTab, setActiveTabState] = useState<MapeamentoAbaId>(tabFromUrl);
 
   useEffect(() => {
     setPendenciaGrupos(initialData.pendenciaGrupos);
@@ -58,16 +66,16 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     setVinculos(initialData.vinculos);
   }, [initialData]);
 
-  const tabParam = searchParams.get('tab');
-  const activeTab: MapeamentoAbaId =
-    tabParam === 'vinculos' ? 'vinculos' : tabParam === 'ignorados' ? 'ignorados' : 'pendencias';
+  useEffect(() => {
+    setActiveTabState(tabFromUrl);
+  }, [tabFromUrl]);
 
   const setActiveTab = (tab: MapeamentoAbaId) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'pendencias') params.delete('tab');
-    else params.set('tab', tab);
-    const query = params.toString();
-    router.replace(query ? `/mapeamento-insumos?${query}` : '/mapeamento-insumos');
+    setActiveTabState(tab);
+    const href = buildMapeamentoTabHref(searchParams.toString(), tab);
+    startTransition(() => {
+      router.replace(href, { scroll: false });
+    });
   };
 
   const filteredGrupos = useMemo(
@@ -114,7 +122,9 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
   }, [activeTab, clearSelection]);
 
   const handleRefresh = () => {
-    router.refresh();
+    startTransition(() => {
+      router.refresh();
+    });
     setTimeout(() => setToast(null), 4000);
   };
 
@@ -265,6 +275,8 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
+      <InsumoMapeamentoLoadingBar visible={isNavigating} label="Atualizando mapeamento…" />
+
       <ConfigPageHeader
         title="Mapeamento de insumos"
         icon="link"
@@ -284,7 +296,19 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
         onTabChange={setActiveTab}
       />
 
-      <Card padding="none" aria-label="Conteúdo do mapeamento de insumos" className="overflow-hidden">
+      {isNavigating ? (
+        <p className="text-sm text-stone-500" aria-live="polite">
+          Atualizando…
+        </p>
+      ) : null}
+
+      <Card
+        padding="none"
+        aria-label="Conteúdo do mapeamento de insumos"
+        className={`overflow-hidden transition-opacity duration-150 ${
+          isNavigating ? 'opacity-70' : 'opacity-100'
+        }`}
+      >
         <InsumoMapeamentoTabHint
           activeTab={activeTab}
           hasVinculos={vinculos.length > 0}
