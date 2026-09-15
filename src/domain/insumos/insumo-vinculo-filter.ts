@@ -17,6 +17,7 @@ export function filterIntegracaoInsumos(
       item.contexto.fornecedorTitulo,
       item.contexto.fornecedorSubtitulo,
       ...item.contexto.fornecedores.map((fornecedor) => fornecedor.label),
+      ...item.numerosNf,
     ]
       .filter(Boolean)
       .join(' ')

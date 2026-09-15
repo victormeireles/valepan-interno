@@ -179,14 +179,29 @@ export class InsumoPendenciaRepository {
     empresaId: string;
     omieIdProduto: number;
     statuses: InsumoPendenciaStatus[];
+    dataEmissaoDe?: string;
+    dataEmissaoAte?: string;
+    limit?: number;
   }): Promise<InsumoPendenciaComEmpresa[]> {
-    const { data, error } = await this.db
+    let query = this.db
       .from('insumo_entrada_pendencias')
       .select(INSUMO_PENDENCIA_MAPEAMENTO_SELECT)
       .eq('empresa_id', input.empresaId)
       .eq('omie_id_produto', input.omieIdProduto)
       .in('status', input.statuses)
       .order('data_emissao_nf', { ascending: false, nullsFirst: false });
+
+    if (input.dataEmissaoDe) {
+      query = query.gte('data_emissao_nf', input.dataEmissaoDe);
+    }
+    if (input.dataEmissaoAte) {
+      query = query.lte('data_emissao_nf', input.dataEmissaoAte);
+    }
+    if (input.limit != null && input.limit > 0) {
+      query = query.limit(input.limit);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`Erro ao listar notas do produto Omie: ${error.message}`);

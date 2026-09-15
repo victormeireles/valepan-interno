@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { InsumoMapeamentoPageData } from '@/app/actions/insumo-estoque-actions';
 import {
   excluirIntegracaoInsumoVinculo,
   restaurarInsumoPendenciasEmLote,
 } from '@/app/actions/insumo-estoque-actions';
+import type { MapeamentoAbaId } from '@/domain/insumos/insumo-mapeamento-busca';
 import {
   collectPendenciaIdsFromGrupos,
   filterPendenciaGrupos,
@@ -15,23 +16,25 @@ import {
 import { filterIntegracaoInsumos } from '@/domain/insumos/insumo-vinculo-filter';
 import type { IntegracaoInsumoListItem } from '@/domain/types/insumo-estoque-db';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Tabs } from '@/components/ui/Tabs';
 import { Toast } from '@/components/ui/Toast';
 import InsumoIgnorarConfirmDialog from '@/features/insumo-estoque/components/InsumoIgnorarConfirmDialog';
+import InsumoMapeamentoLoadingBar from '@/features/insumo-estoque/components/InsumoMapeamentoLoadingBar';
 import InsumoMapeamentoPendenciaSection from '@/features/insumo-estoque/components/InsumoMapeamentoPendenciaSection';
+import InsumoMapeamentoTabHint from '@/features/insumo-estoque/components/InsumoMapeamentoTabHint';
+import InsumoMapeamentoToolbar from '@/features/insumo-estoque/components/InsumoMapeamentoToolbar';
+import InsumoMapeamentoVinculosPanel from '@/features/insumo-estoque/components/InsumoMapeamentoVinculosPanel';
 import InsumoResolverPendenciaModal from '@/features/insumo-estoque/components/InsumoResolverPendenciaModal';
 import InsumoEditarVinculoModal from '@/features/insumo-estoque/components/InsumoEditarVinculoModal';
-import InsumoVinculoMobileList from '@/features/insumo-estoque/components/InsumoVinculoMobileList';
-import InsumoVinculoTable from '@/features/insumo-estoque/components/InsumoVinculoTable';
 import InsumoVinculoIaRevisaoModal from '@/features/insumo-estoque/components/InsumoVinculoIaRevisaoModal';
 import { useInsumoIgnorarFlow } from '@/features/insumo-estoque/hooks/useInsumoIgnorarFlow';
+import { useInsumoMapeamentoBuscaViewModel } from '@/features/insumo-estoque/hooks/useInsumoMapeamentoBuscaViewModel';
 import { useInsumoPendenciaGrupoSelecao } from '@/features/insumo-estoque/hooks/useInsumoPendenciaGrupoSelecao';
-
-type TabId = 'pendencias' | 'ignorados' | 'vinculos';
+import {
+  buildMapeamentoTabHref,
+  parseMapeamentoAbaId,
+} from '@/features/insumo-estoque/utils/insumo-mapeamento-tab';
 
 type Props = {
   initialData: InsumoMapeamentoPageData;
@@ -40,6 +43,7 @@ type Props = {
 export default function InsumoMapeamentoClient({ initialData }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isNavigating, startTransition] = useTransition();
   const [pendenciaGrupos, setPendenciaGrupos] = useState(initialData.pendenciaGrupos);
   const [ignoradaGrupos, setIgnoradaGrupos] = useState(initialData.ignoradaGrupos);
   const [pendenciasCount, setPendenciasCount] = useState(initialData.pendenciasCount);
@@ -51,6 +55,8 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
   const [editarVinculo, setEditarVinculo] = useState<IntegracaoInsumoListItem | null>(null);
   const [iaRevisaoOpen, setIaRevisaoOpen] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
+  const tabFromUrl = parseMapeamentoAbaId(searchParams.get('tab'));
+  const [activeTab, setActiveTabState] = useState<MapeamentoAbaId>(tabFromUrl);
 
   useEffect(() => {
     setPendenciaGrupos(initialData.pendenciaGrupos);
@@ -60,32 +66,41 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     setVinculos(initialData.vinculos);
   }, [initialData]);
 
-  const tabParam = searchParams.get('tab');
-  const activeTab: TabId =
-    tabParam === 'vinculos' ? 'vinculos' : tabParam === 'ignorados' ? 'ignorados' : 'pendencias';
+  useEffect(() => {
+    setActiveTabState(tabFromUrl);
+  }, [tabFromUrl]);
 
-  const setActiveTab = (tab: TabId) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'pendencias') params.delete('tab');
-    else params.set('tab', tab);
-    const query = params.toString();
-    router.replace(query ? `/mapeamento-insumos?${query}` : '/mapeamento-insumos');
+  const setActiveTab = (tab: MapeamentoAbaId) => {
+    setActiveTabState(tab);
+    const href = buildMapeamentoTabHref(searchParams.toString(), tab);
+    startTransition(() => {
+      router.replace(href, { scroll: false });
+    });
   };
 
   const filteredGrupos = useMemo(
     () => filterPendenciaGrupos(pendenciaGrupos, searchTerm),
     [pendenciaGrupos, searchTerm],
   );
-
   const filteredIgnoradaGrupos = useMemo(
     () => filterPendenciaGrupos(ignoradaGrupos, searchTerm),
     [ignoradaGrupos, searchTerm],
   );
-
   const filteredVinculos = useMemo(
     () => filterIntegracaoInsumos(vinculos, searchTerm),
     [vinculos, searchTerm],
   );
+
+  const { emptyModel, tabCounts, summaryLabel } = useInsumoMapeamentoBuscaViewModel({
+    activeTab,
+    searchTerm,
+    filteredGrupos,
+    filteredIgnoradaGrupos,
+    filteredVinculos,
+    pendenciasCount,
+    ignoradasCount,
+    vinculosCount: vinculos.length,
+  });
 
   const selectionGrupos =
     activeTab === 'ignorados' ? filteredIgnoradaGrupos : filteredGrupos;
@@ -107,7 +122,9 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
   }, [activeTab, clearSelection]);
 
   const handleRefresh = () => {
-    router.refresh();
+    startTransition(() => {
+      router.refresh();
+    });
     setTimeout(() => setToast(null), 4000);
   };
 
@@ -256,33 +273,10 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
     handleSaved('Vínculo excluído');
   };
 
-  const pendenciasLabel =
-    pendenciaGrupos.length === 1
-      ? `1 produto • ${pendenciasCount} pendências`
-      : `${pendenciaGrupos.length} produtos • ${pendenciasCount} pendências`;
-
-  const ignoradasLabel =
-    ignoradaGrupos.length === 1
-      ? `1 produto • ${ignoradasCount} ignoradas`
-      : `${ignoradaGrupos.length} produtos • ${ignoradasCount} ignoradas`;
-
-  const vinculosLabel =
-    vinculos.length === 1 ? '1 produto vinculado' : `${vinculos.length} produtos vinculados`;
-
-  const searchPlaceholder =
-    activeTab === 'vinculos'
-      ? 'Buscar produto Omie, insumo, fornecedor ou empresa...'
-      : 'Buscar NF, produto, fornecedor ou CFOP...';
-
-  const summaryLabel =
-    activeTab === 'vinculos'
-      ? vinculosLabel
-      : activeTab === 'ignorados'
-        ? ignoradasLabel
-        : pendenciasLabel;
-
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
+      <InsumoMapeamentoLoadingBar visible={isNavigating} label="Atualizando mapeamento…" />
+
       <ConfigPageHeader
         title="Mapeamento de insumos"
         icon="link"
@@ -295,49 +289,33 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
         </Toast>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs
-          tabs={[
-            { id: 'pendencias', label: 'Pendências', count: pendenciasCount },
-            { id: 'ignorados', label: 'Ignorados', count: ignoradasCount },
-            { id: 'vinculos', label: 'Vínculos', count: vinculos.length },
-          ]}
-          value={activeTab}
-          onChange={(id) => setActiveTab(id as TabId)}
-          ariaLabel="Abas do mapeamento de insumos"
-        />
-        <p className="text-sm text-stone-500 font-mono tabular-nums" aria-live="polite">
-          {summaryLabel}
+      <InsumoMapeamentoToolbar
+        activeTab={activeTab}
+        tabCounts={tabCounts}
+        summaryLabel={summaryLabel}
+        onTabChange={setActiveTab}
+      />
+
+      {isNavigating ? (
+        <p className="text-sm text-stone-500" aria-live="polite">
+          Atualizando…
         </p>
-      </div>
+      ) : null}
 
-      <Card padding="none" aria-label="Conteúdo do mapeamento de insumos" className="overflow-hidden">
-        {activeTab === 'vinculos' && vinculos.length > 0 ? (
-          <div className="border-b border-stone-100 px-4 py-3">
-            <p className="text-sm text-stone-600">
-              Um vínculo por produto Omie e empresa. Editar ou excluir afeta apenas próximos recebimentos.
-            </p>
-          </div>
-        ) : null}
-
-        {activeTab === 'pendencias' && pendenciaGrupos.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3">
-            <p className="text-sm text-stone-600">
-              Uma linha por produto Omie. Clique em NFs para ver detalhes de cada nota antes de vincular.
-            </p>
-            <Button variant="secondary" icon="auto_awesome" onClick={() => setIaRevisaoOpen(true)}>
-              Sugerir vínculos com IA
-            </Button>
-          </div>
-        ) : null}
-
-        {activeTab === 'ignorados' && ignoradaGrupos.length > 0 ? (
-          <div className="border-b border-stone-100 px-4 py-3">
-            <p className="text-sm text-stone-600">
-              Itens ignorados da fila. Restaure para pendências ou vincule diretamente a um insumo.
-            </p>
-          </div>
-        ) : null}
+      <Card
+        padding="none"
+        aria-label="Conteúdo do mapeamento de insumos"
+        className={`overflow-hidden transition-opacity duration-150 ${
+          isNavigating ? 'opacity-70' : 'opacity-100'
+        }`}
+      >
+        <InsumoMapeamentoTabHint
+          activeTab={activeTab}
+          hasVinculos={vinculos.length > 0}
+          hasPendencias={pendenciaGrupos.length > 0}
+          hasIgnorados={ignoradaGrupos.length > 0}
+          onSugerirIa={() => setIaRevisaoOpen(true)}
+        />
 
         <div className="border-b border-stone-100 p-4">
           <Input
@@ -346,50 +324,29 @@ export default function InsumoMapeamentoClient({ initialData }: Props) {
             icon="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder={searchPlaceholder}
+            placeholder="Buscar NF, produto, fornecedor ou empresa..."
             aria-label="Buscar"
           />
         </div>
 
         {activeTab === 'vinculos' ? (
-          filteredVinculos.length === 0 ? (
-            <EmptyState
-              icon="link"
-              title={searchTerm ? 'Nenhum vínculo encontrado' : 'Nenhum vínculo cadastrado'}
-              description={
-                searchTerm
-                  ? 'Tente ajustar a busca.'
-                  : 'Produtos Omie vinculados a insumos aparecerão aqui para revisão.'
-              }
-              action={
-                searchTerm ? (
-                  <Button variant="ghost" onClick={() => setSearchTerm('')}>
-                    Limpar busca
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <InsumoVinculoTable
-                items={filteredVinculos}
-                onEditar={setEditarVinculo}
-                onExcluir={handleExcluirVinculo}
-                embedded
-              />
-              <InsumoVinculoMobileList
-                items={filteredVinculos}
-                onEditar={setEditarVinculo}
-                onExcluir={handleExcluirVinculo}
-              />
-            </>
-          )
+          <InsumoMapeamentoVinculosPanel
+            items={filteredVinculos}
+            searchTerm={searchTerm}
+            buscaEmptyModel={emptyModel}
+            onClearSearch={() => setSearchTerm('')}
+            onGoToTab={setActiveTab}
+            onEditar={setEditarVinculo}
+            onExcluir={handleExcluirVinculo}
+          />
         ) : (
           <InsumoMapeamentoPendenciaSection
             variant={activeTab === 'ignorados' ? 'ignorado' : 'pendente'}
             filteredGrupos={activeTab === 'ignorados' ? filteredIgnoradaGrupos : filteredGrupos}
             searchTerm={searchTerm}
+            buscaEmptyModel={emptyModel}
             onClearSearch={() => setSearchTerm('')}
+            onGoToTab={setActiveTab}
             selectedKeys={selectedKeys}
             selectedGrupoCount={selectedGrupoCount}
             selectedPendenciaCount={selectedPendenciaCount}

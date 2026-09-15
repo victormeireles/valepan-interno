@@ -46,6 +46,10 @@ vi.mock('@/data/insumos/InsumoMapeamentoRepository', () => ({
   insumoMapeamentoRepository: {},
 }));
 
+vi.mock('@/data/insumos/InsumoMovimentoNfConsultaRepository', () => ({
+  insumoMovimentoNfConsultaRepository: {},
+}));
+
 vi.mock('@/lib/services/insumo-estoque-service', () => ({
   insumoEstoqueService: {},
 }));

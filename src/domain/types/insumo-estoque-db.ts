@@ -165,6 +165,7 @@ export type IntegracaoInsumoListItem = IntegracaoInsumoListItemBase & {
   unidadeNf: string | null;
   nfsDistintas: number;
   pendenciaCount: number;
+  numerosNf: string[];
 };
 
 export type InsumoFornecedorIgnoradoRow = {
