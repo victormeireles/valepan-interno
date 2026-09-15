@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type { InsumoPendenciaNfsTarget } from '@/domain/insumos/insumo-pendencia-nfs-target';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import InsumoPendenciaNfDetalheLista from '@/features/insumo-estoque/components/InsumoPendenciaNfDetalheLista';
-import { useInsumoPendenciaNfsQuery } from '@/features/insumo-estoque/hooks/useInsumoPendenciaNfsQuery';
+import InsumoNfDetalheLista from '@/features/insumo-estoque/components/InsumoNfDetalheLista';
+import { useInsumoNfConsultaQuery } from '@/features/insumo-estoque/hooks/useInsumoNfConsultaQuery';
 
 type Props = {
   isOpen: boolean;
@@ -16,7 +16,7 @@ type Props = {
 export default function InsumoPendenciaNfsModal({ isOpen, target, onClose }: Props) {
   const titleId = useId();
   const [animating, setAnimating] = useState(false);
-  const { pendencias, loading, error, load, reset } = useInsumoPendenciaNfsQuery();
+  const { detalhes, loading, error, load, reset } = useInsumoNfConsultaQuery();
 
   useEffect(() => {
     if (isOpen && target) {
@@ -34,10 +34,25 @@ export default function InsumoPendenciaNfsModal({ isOpen, target, onClose }: Pro
     }
   }, [isOpen, target, load, reset]);
 
+  const resumo = useMemo(() => {
+    const nfsDistintas = new Set(
+      detalhes.map((item) => item.numeroNf).filter((numero): numero is string => Boolean(numero)),
+    ).size;
+    return {
+      recebimentos: detalhes.length,
+      nfsDistintas,
+    };
+  }, [detalhes]);
+
   if ((!isOpen && !animating) || !target) return null;
 
   const mostrarFornecedor = target.contexto.fornecedoresDistintos !== 1;
   const titulo = target.descricaoProduto || `Produto ${target.omieIdProduto}`;
+  const recebimentosLabel =
+    resumo.recebimentos === 1
+      ? '1 recebimento'
+      : `${resumo.recebimentos} recebimentos`;
+  const nfsLabel = resumo.nfsDistintas === 1 ? '1 NF' : `${resumo.nfsDistintas} NFs`;
 
   return (
     <div
@@ -65,10 +80,11 @@ export default function InsumoPendenciaNfsModal({ isOpen, target, onClose }: Pro
               Notas fiscais
             </h2>
             <p className="mt-0.5 truncate text-sm text-stone-600">{titulo}</p>
-            <p className="mt-1 font-mono text-xs tabular-nums text-stone-500">
-              {target.pendenciaCount} recebimento{target.pendenciaCount === 1 ? '' : 's'} •{' '}
-              {target.nfsDistintas} NF{target.nfsDistintas === 1 ? '' : 's'}
-            </p>
+            {!loading && !error ? (
+              <p className="mt-1 font-mono text-xs tabular-nums text-stone-500">
+                {recebimentosLabel} • {nfsLabel}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -87,12 +103,11 @@ export default function InsumoPendenciaNfsModal({ isOpen, target, onClose }: Pro
             <p className="py-8 text-center text-sm text-stone-500">Carregando notas…</p>
           ) : error ? (
             <EmptyState icon="error_outline" title={error} />
-          ) : pendencias.length === 0 ? (
+          ) : detalhes.length === 0 ? (
             <EmptyState icon="receipt_long" title="Nenhuma nota encontrada" />
           ) : (
-            <InsumoPendenciaNfDetalheLista
-              pendencias={pendencias}
-              unidadeNf={target.unidadeNf}
+            <InsumoNfDetalheLista
+              detalhes={detalhes}
               mostrarFornecedor={mostrarFornecedor}
             />
           )}

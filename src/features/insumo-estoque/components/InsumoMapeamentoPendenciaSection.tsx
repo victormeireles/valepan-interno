@@ -1,8 +1,11 @@
 'use client';
 
+import type { MapeamentoAbaId } from '@/domain/insumos/insumo-mapeamento-busca';
+import type { MapeamentoBuscaEmptyModel } from '@/domain/insumos/insumo-mapeamento-busca';
 import type { InsumoPendenciaProdutoGrupo } from '@/domain/insumos/insumo-pendencia-grupo';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import InsumoMapeamentoBuscaEmptyState from '@/features/insumo-estoque/components/InsumoMapeamentoBuscaEmptyState';
 import InsumoPendenciaMobileList from '@/features/insumo-estoque/components/InsumoPendenciaMobileList';
 import InsumoPendenciaTable from '@/features/insumo-estoque/components/InsumoPendenciaTable';
 
@@ -10,7 +13,9 @@ type Props = {
   variant: 'pendente' | 'ignorado';
   filteredGrupos: InsumoPendenciaProdutoGrupo[];
   searchTerm: string;
+  buscaEmptyModel: MapeamentoBuscaEmptyModel | null;
   onClearSearch: () => void;
+  onGoToTab: (aba: MapeamentoAbaId) => void;
   selectedKeys: Set<string>;
   selectedGrupoCount: number;
   selectedPendenciaCount: number;
@@ -30,7 +35,9 @@ export default function InsumoMapeamentoPendenciaSection({
   variant,
   filteredGrupos,
   searchTerm,
+  buscaEmptyModel,
   onClearSearch,
+  onGoToTab,
   selectedKeys,
   selectedGrupoCount,
   selectedPendenciaCount,
@@ -48,6 +55,16 @@ export default function InsumoMapeamentoPendenciaSection({
   const isIgnorado = variant === 'ignorado';
 
   if (filteredGrupos.length === 0) {
+    if (buscaEmptyModel) {
+      return (
+        <InsumoMapeamentoBuscaEmptyState
+          model={buscaEmptyModel}
+          onGoToTab={onGoToTab}
+          onClearSearch={onClearSearch}
+        />
+      );
+    }
+
     return (
       <EmptyState
         icon={isIgnorado ? 'block' : 'link_off'}
