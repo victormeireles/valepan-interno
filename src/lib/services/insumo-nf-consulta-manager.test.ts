@@ -68,45 +68,52 @@ const contexto: InsumoNfConsultaContexto = {
 describe('InsumoNfConsultaManager', () => {
   const manager = new InsumoNfConsultaManager();
 
-  it('mantém a pendência resolvida quando existe movimento com a mesma chave', () => {
-    const resultado = manager.unir([buildPendencia()], [buildMovimento()], contexto);
+  it('mantém a qtd da NF da pendência e usa o delta real do movimento no estoque', () => {
+    const resultado = manager.unir(
+      [buildPendencia({ quantidade_nf: 120 })],
+      [buildMovimento({ deltaQuantidade: 3000, custoUnitario: 10.858 })],
+      { ...contexto, fatorConversao: 10 },
+    );
 
     expect(resultado).toEqual([
       expect.objectContaining({
         id: 'pend-1',
         status: 'resolvido',
-        quantidadeEstoque: 500,
+        quantidadeNf: 120,
+        unidadeNf: 'SC',
+        quantidadeEstoque: 3000,
         unidadeEstoque: 'KG',
+        valorItem: 32574,
         insumoNome: 'Farinha de trigo',
       }),
     ]);
   });
 
-  it('inclui movimento sem pendência como NF lançada', () => {
+  it('inclui movimento sem pendência sem inventar qtd da NF pelo fator', () => {
     const resultado = manager.unir(
       [],
       [
         buildMovimento({
           id: 'mov-59044',
           numeroNf: '000059044',
-          deltaQuantidade: 250,
-          custoUnitario: 2,
+          deltaQuantidade: 3000,
+          custoUnitario: 10.858,
           omieNIdReceb: 59044,
           omieNIdItem: 2,
         }),
       ],
-      contexto,
+      { ...contexto, fatorConversao: 10 },
     );
 
     expect(resultado[0]).toEqual({
       id: 'mov-59044',
       numeroNf: '000059044',
       data: '2026-09-10T12:00:00Z',
-      quantidadeNf: 5,
-      unidadeNf: 'SC',
-      quantidadeEstoque: 250,
+      quantidadeNf: null,
+      unidadeNf: null,
+      quantidadeEstoque: 3000,
       unidadeEstoque: 'KG',
-      valorItem: 500,
+      valorItem: 32574,
       fornecedor: null,
       cfop: null,
       ncm: null,

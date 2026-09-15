@@ -37,19 +37,14 @@ export default function InsumoNfDetalheItem({
     detalhe.unidadeEstoque,
     detalhe.unidadeEstoque,
   );
-  const conversaoEstoque =
-    detalhe.quantidadeNf != null &&
-    detalhe.quantidadeEstoque != null &&
-    detalhe.unidadeEstoque
-      ? formatInsumoQuantidade(detalhe.quantidadeEstoque, unidadeEstoqueLabel)
-      : null;
-
-  const quantidadePrincipal =
+  const qtdNf =
     detalhe.quantidadeNf != null
       ? formatInsumoQuantidade(detalhe.quantidadeNf, unidadeNfLabel)
-      : detalhe.quantidadeEstoque != null
-        ? formatInsumoQuantidade(detalhe.quantidadeEstoque, unidadeEstoqueLabel)
-        : null;
+      : null;
+  const qtdEstoque =
+    detalhe.quantidadeEstoque != null
+      ? formatInsumoQuantidade(detalhe.quantidadeEstoque, unidadeEstoqueLabel)
+      : null;
 
   return (
     <div className="text-sm">
@@ -63,17 +58,41 @@ export default function InsumoNfDetalheItem({
           </div>
           <p className="text-xs text-stone-500">{formatDate(detalhe.data)}</p>
         </div>
-        <div className="text-right">
-          {quantidadePrincipal ? (
-            <p className="font-mono tabular-nums text-stone-800">{quantidadePrincipal}</p>
+        {detalhe.valorItem != null ? (
+          <p className="font-mono text-xs tabular-nums text-stone-500">
+            {formatCurrency(Number(detalhe.valorItem))}
+          </p>
+        ) : null}
+      </div>
+
+      {qtdNf || qtdEstoque ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums">
+          {qtdNf ? (
+            <span className="rounded-lg bg-stone-100 px-2 py-1 text-stone-800" title="Quantidade na NF">
+              {qtdNf}
+              <span className="ml-1 font-sans text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                NF
+              </span>
+            </span>
           ) : null}
-          {detalhe.valorItem != null ? (
-            <p className="font-mono text-xs tabular-nums text-stone-500">
-              {formatCurrency(Number(detalhe.valorItem))}
-            </p>
+          {qtdNf && qtdEstoque ? (
+            <span className="material-icons text-sm text-amber-600" aria-hidden="true">
+              arrow_forward
+            </span>
+          ) : null}
+          {qtdEstoque ? (
+            <span
+              className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-900"
+              title="Quantidade no estoque após fator"
+            >
+              {qtdEstoque}
+              <span className="ml-1 font-sans text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                estoque
+              </span>
+            </span>
           ) : null}
         </div>
-      </div>
+      ) : null}
 
       {mostrarFornecedor && detalhe.fornecedor ? (
         <p className="mt-1.5 truncate text-xs text-stone-600" title={detalhe.fornecedor}>
@@ -100,12 +119,6 @@ export default function InsumoNfDetalheItem({
             </Badge>
           ) : null}
         </div>
-      ) : null}
-
-      {conversaoEstoque ? (
-        <p className="mt-1 font-mono text-xs tabular-nums text-amber-800">
-          → {conversaoEstoque}
-        </p>
       ) : null}
     </div>
   );

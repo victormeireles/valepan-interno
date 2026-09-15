@@ -79,13 +79,27 @@ export class InsumoMovimentoNfConsultaRepository {
   async listEntradasPorEmpresaInsumo(
     empresaId: string,
     insumoId: string,
+    periodo?: { createdAtDe: string; createdAtAte: string; limit?: number },
   ): Promise<InsumoNfMovimentoEntrada[]> {
-    const { data, error } = await this.db
+    let query = this.db
       .from('insumo_movimentos')
       .select(ENTRADA_NF_DETALHE_SELECT)
       .eq('empresa_id', empresaId)
       .eq('insumo_id', insumoId)
-      .eq('origem', 'entrada_nf');
+      .eq('origem', 'entrada_nf')
+      .order('created_at', { ascending: false });
+
+    if (periodo?.createdAtDe) {
+      query = query.gte('created_at', periodo.createdAtDe);
+    }
+    if (periodo?.createdAtAte) {
+      query = query.lte('created_at', periodo.createdAtAte);
+    }
+    if (periodo?.limit != null && periodo.limit > 0) {
+      query = query.limit(periodo.limit);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`Erro ao listar entradas NF do insumo: ${error.message}`);

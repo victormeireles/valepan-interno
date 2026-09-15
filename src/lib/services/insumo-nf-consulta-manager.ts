@@ -22,9 +22,12 @@ export class InsumoNfConsultaManager {
 
     for (const movimento of movimentos) {
       const chave = this.chaveMovimento(movimento);
-      if (!detalhesPorChave.has(chave)) {
-        detalhesPorChave.set(chave, this.mapearMovimento(movimento, contexto));
+      const existente = detalhesPorChave.get(chave);
+      if (existente) {
+        detalhesPorChave.set(chave, this.aplicarMovimentoSobrePendencia(existente, movimento));
+        continue;
       }
+      detalhesPorChave.set(chave, this.mapearMovimento(movimento, contexto));
     }
 
     return [...detalhesPorChave.values()].sort((a, b) => this.compararPorData(a, b));
@@ -58,20 +61,20 @@ export class InsumoNfConsultaManager {
     };
   }
 
+  /**
+   * Movimento de entrada_nf guarda só o delta já convertido.
+   * Sem pendência, não reinventamos a qtd da NF via fator atual (isso muda se o fator for corrigido).
+   */
   private mapearMovimento(
     movimento: InsumoNfMovimentoEntrada,
     contexto: InsumoNfConsultaContexto,
   ): InsumoNfDetalhe {
-    const conversaoValida = contexto.fatorConversao > 0;
-
     return {
       id: movimento.id,
       numeroNf: movimento.numeroNf,
       data: movimento.createdAt,
-      quantidadeNf: conversaoValida
-        ? movimento.deltaQuantidade / contexto.fatorConversao
-        : null,
-      unidadeNf: conversaoValida ? contexto.unidadeNfVinculo : null,
+      quantidadeNf: null,
+      unidadeNf: null,
       quantidadeEstoque: movimento.deltaQuantidade,
       unidadeEstoque: contexto.unidadeEstoque,
       valorItem: movimento.custoUnitario * movimento.deltaQuantidade,
@@ -84,6 +87,18 @@ export class InsumoNfConsultaManager {
       status: 'lancada',
       omieNIdReceb: movimento.omieNIdReceb,
       omieNIdItem: movimento.omieNIdItem,
+    };
+  }
+
+  private aplicarMovimentoSobrePendencia(
+    detalhe: InsumoNfDetalhe,
+    movimento: InsumoNfMovimentoEntrada,
+  ): InsumoNfDetalhe {
+    return {
+      ...detalhe,
+      quantidadeEstoque: movimento.deltaQuantidade,
+      valorItem: movimento.custoUnitario * movimento.deltaQuantidade,
+      status: detalhe.status === 'pendente' ? 'lancada' : detalhe.status,
     };
   }
 
