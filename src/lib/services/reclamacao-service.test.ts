@@ -44,6 +44,18 @@ function makeService(overrides: {
 }
 
 describe('ReclamacaoService', () => {
+  it('grava quantidade nula quando não foi informada', async () => {
+    const insert = vi.fn().mockResolvedValue({
+      id: 'r1',
+      fotos: [],
+    });
+    const service = makeService({ reclamacoes: { insert } });
+    await service.create({ ...validInput, quantidade: null, unidade: '' });
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ quantidade: null, unidade: null }),
+    );
+  });
+
   it('não insere se a validação falha', async () => {
     const insert = vi.fn();
     const service = makeService({ reclamacoes: { insert } });

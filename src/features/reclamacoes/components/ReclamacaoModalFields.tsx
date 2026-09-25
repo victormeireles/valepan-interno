@@ -18,9 +18,15 @@ export type ReclamacaoFormFieldsValue = {
   observacao: string;
   dataFabricacao: string;
   dataProblema: string;
-  quantidade: number;
+  quantidade: number | null;
   unidade: ReclamacaoUnidade;
 };
+
+function parseQuantidade(raw: string): number | null {
+  if (raw.trim() === '') return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 
 type Props = {
   value: ReclamacaoFormFieldsValue;
@@ -120,21 +126,21 @@ export default function ReclamacaoModalFields({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           label="Quantidade"
-          required
           numeric
           type="number"
           min={1}
           step={1}
           inputMode="numeric"
-          value={value.quantidade || ''}
+          placeholder="Não informada"
+          hint="Deixe em branco se não souber."
+          value={value.quantidade ?? ''}
           error={fieldErrors.quantidade}
-          onChange={(event) =>
-            patch({ quantidade: parseInt(event.target.value, 10) || 0 })
-          }
+          onChange={(event) => patch({ quantidade: parseQuantidade(event.target.value) })}
         />
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium tracking-[-0.004em] text-stone-700">
-            Unidade <span className="text-danger">*</span>
+            Unidade
+            {value.quantidade != null ? <span className="text-danger"> *</span> : null}
           </span>
           <div className="flex flex-wrap gap-2">
             <Chip

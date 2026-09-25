@@ -15,7 +15,7 @@ export type ReclamacaoSaveInput = {
   observacao: string | null | undefined;
   dataFabricacao: string;
   dataProblema: string;
-  quantidade: number;
+  quantidade: number | null;
   unidade: string;
   fotosCount: number;
 };

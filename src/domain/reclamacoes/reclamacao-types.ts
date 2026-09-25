@@ -49,8 +49,8 @@ export type ReclamacaoListItem = {
   observacao: string | null;
   dataFabricacao: string;
   dataProblema: string;
-  quantidade: number;
-  unidade: ReclamacaoUnidade;
+  quantidade: number | null;
+  unidade: ReclamacaoUnidade | null;
   fotos: ReclamacaoFotoRecord[];
   createdAt: string;
 } & OperacaoAutor;

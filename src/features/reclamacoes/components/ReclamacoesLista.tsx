@@ -67,7 +67,11 @@ export default function ReclamacoesLista({ itens, deletingId, onEdit, onDelete }
                   tabular: false,
                 },
                 {
-                  value: formatarReclamacaoQuantidade(item.quantidade, item.unidade),
+                  value: (
+                    <span title={item.quantidade == null ? 'Quantidade não informada' : undefined}>
+                      {formatarReclamacaoQuantidade(item.quantidade, item.unidade)}
+                    </span>
+                  ),
                   width: RECLAMACAO_COL_QUANTIDADE,
                   emphasize: true,
                 },

@@ -4633,8 +4633,8 @@ export type Database = {
           id: string
           observacao: string | null
           produto_id: string
-          quantidade: number
-          unidade: string
+          quantidade: number | null
+          unidade: string | null
           updated_at: string
         }
         Insert: {
@@ -4647,8 +4647,8 @@ export type Database = {
           id?: string
           observacao?: string | null
           produto_id: string
-          quantidade: number
-          unidade: string
+          quantidade?: number | null
+          unidade?: string | null
           updated_at?: string
         }
         Update: {
@@ -4661,8 +4661,8 @@ export type Database = {
           id?: string
           observacao?: string | null
           produto_id?: string
-          quantidade?: number
-          unidade?: string
+          quantidade?: number | null
+          unidade?: string | null
           updated_at?: string
         }
         Relationships: [

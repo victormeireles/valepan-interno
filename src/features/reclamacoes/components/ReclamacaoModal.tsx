@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { formatarDataIsoPtBr } from '@/domain/reclamacoes/reclamacao-data';
 import { validarReclamacaoSave } from '@/domain/reclamacoes/reclamacao-input';
+import { RECLAMACAO_QUANTIDADE_INVALIDA } from '@/domain/reclamacoes/reclamacao-unidade';
 import { ERRO_SALVAR_RECLAMACAO } from '@/domain/reclamacoes/reclamacao-mensagens';
 import type {
   ReclamacaoCategoriaRecord,
@@ -50,7 +51,7 @@ const EMPTY_FORM: ReclamacaoFormFieldsValue = {
   observacao: '',
   dataFabricacao: '',
   dataProblema: '',
-  quantidade: 0,
+  quantidade: null,
   unidade: 'pacotes',
 };
 
@@ -63,7 +64,7 @@ function formFromItem(item: ReclamacaoListItem): ReclamacaoFormFieldsValue {
     dataFabricacao: item.dataFabricacao.slice(0, 10),
     dataProblema: item.dataProblema.slice(0, 10),
     quantidade: item.quantidade,
-    unidade: item.unidade,
+    unidade: item.unidade ?? 'pacotes',
   };
 }
 
@@ -170,9 +171,14 @@ export default function ReclamacaoModal({
     event.preventDefault();
     const built = buildPayload();
     if ('error' in built) {
-      setFieldErrors(
-        built.error === 'Descreva o problema.' ? { observacao: built.error } : {},
-      );
+      const field =
+        built.error === 'Descreva o problema.'
+          ? 'observacao'
+          : built.error === RECLAMACAO_QUANTIDADE_INVALIDA ||
+              built.error === 'Informe pacotes ou caixas.'
+            ? 'quantidade'
+            : null;
+      setFieldErrors(field ? { [field]: built.error } : {});
       setError(built.error);
       return;
     }

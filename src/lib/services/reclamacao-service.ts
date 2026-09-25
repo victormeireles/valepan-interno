@@ -18,7 +18,7 @@ import type {
   ReclamacaoListFiltro,
   ReclamacaoListItem,
 } from '@/domain/reclamacoes/reclamacao-types';
-import type { ReclamacaoUnidade } from '@/domain/reclamacoes/reclamacao-unidade';
+import { quantidadeParaGravar } from '@/domain/reclamacoes/reclamacao-unidade';
 import { ReclamacaoFotoStorage } from '@/lib/services/reclamacao-foto-storage';
 
 export type ReclamacaoCreateInput = ReclamacaoWritePayload & {
@@ -162,8 +162,7 @@ export class ReclamacaoService {
       observacao: normalizarObservacao(input.observacao),
       dataFabricacao: input.dataFabricacao,
       dataProblema: input.dataProblema,
-      quantidade: input.quantidade,
-      unidade: input.unidade as ReclamacaoUnidade,
+      ...quantidadeParaGravar(input.quantidade, input.unidade),
       criadoPor,
     };
   }

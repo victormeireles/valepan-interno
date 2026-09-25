@@ -34,6 +34,10 @@ describe('validarReclamacaoSave', () => {
     expect(validarReclamacaoSave({ ...base, fotosCount: 11 })).toBe('No máximo 10 fotos.');
   });
 
+  it('aceita quantidade em branco', () => {
+    expect(validarReclamacaoSave({ ...base, quantidade: null, unidade: '' })).toBeNull();
+  });
+
   it('não exige problema ≥ fabricação', () => {
     expect(
       validarReclamacaoSave({

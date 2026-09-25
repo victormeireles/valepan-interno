@@ -49,8 +49,8 @@ type ReclamacaoListRow = {
   observacao: string | null;
   data_fabricacao: string;
   data_problema: string;
-  quantidade: number;
-  unidade: string;
+  quantidade: number | null;
+  unidade: string | null;
   criado_por: string | null;
   created_at: string;
   cliente: ClienteJoin;
@@ -67,8 +67,8 @@ export type ReclamacaoWriteInput = {
   observacao: string | null;
   dataFabricacao: string;
   dataProblema: string;
-  quantidade: number;
-  unidade: ReclamacaoUnidade;
+  quantidade: number | null;
+  unidade: ReclamacaoUnidade | null;
   criadoPor?: string | null;
 };
 
@@ -77,7 +77,8 @@ function unwrapOne<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-function mapUnidade(value: string): ReclamacaoUnidade {
+function mapUnidade(value: string | null): ReclamacaoUnidade | null {
+  if (value == null) return null;
   if (!isReclamacaoUnidade(value)) {
     throw new Error(`Unidade de reclamação inválida: ${value}`);
   }
