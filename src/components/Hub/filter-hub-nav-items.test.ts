@@ -16,6 +16,7 @@ describe('HUB_SECTIONS', () => {
       'planejamento',
       'paineis',
       'insumos',
+      'pessoas',
     ]);
   });
 
