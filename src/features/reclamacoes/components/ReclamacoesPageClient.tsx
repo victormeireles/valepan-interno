@@ -51,8 +51,8 @@ export default function ReclamacoesPageClient({ initialItens, opcoes }: Props) {
       !filtro.clienteId &&
       !filtro.produtoId &&
       !filtro.categoriaId &&
-      !filtro.dataProblemaDe &&
-      !filtro.dataProblemaAte;
+      !filtro.dataProblema &&
+      !filtro.dataFabricacao;
     if (vazio) {
       setItens(initialItens);
       return;
