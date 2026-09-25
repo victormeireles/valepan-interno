@@ -11,6 +11,15 @@ describe('HorarioDiaParser', () => {
     });
   });
 
+  it('parseia intervalo com ênfase markdown', () => {
+    expect(new HorarioDiaParser().parseCelula('**21:00–07:00**')).toEqual({
+      inicio: '21:00',
+      fim: '07:00',
+      terminaDiaSeguinte: false,
+      situacao: 'definido',
+    });
+  });
+
   it('marca não trabalha', () => {
     expect(new HorarioDiaParser().parseCelula('não trabalha').situacao).toBe('nao_trabalha');
   });
@@ -21,6 +30,15 @@ describe('HorarioDiaParser', () => {
       fim: null,
       terminaDiaSeguinte: false,
       situacao: 'a_confirmar',
+    });
+  });
+
+  it('marca texto não reconhecido como invalido', () => {
+    expect(new HorarioDiaParser().parseCelula('turno flexivel')).toEqual({
+      inicio: null,
+      fim: null,
+      terminaDiaSeguinte: false,
+      situacao: 'invalido',
     });
   });
 });

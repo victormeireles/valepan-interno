@@ -1,3 +1,4 @@
+import { CargaPessoasCampoInvalidoError } from './carga-pessoas-campo-invalido-error';
 import type { CargaColaborador, CargaSetor } from './carga-pessoas-tipos';
 import { CpfVerificador } from './cpf-verificador';
 import { NomeCapitalizador } from './nome-capitalizador';
@@ -32,20 +33,22 @@ export class CargaPessoasCsv {
   }
 
   private mapearSetor(row: CsvMapa): CargaSetor {
+    const codigo = row.setor_id?.trim() ?? '';
     return {
-      codigo: row.setor_id?.trim() ?? '',
+      codigo,
       nome: this.nomes.formatar(row.nome ?? ''),
-      tipo: this.mapearTipo(row.tipo ?? ''),
+      tipo: this.mapearTipo(row.tipo ?? '', codigo),
       agrupamentoProposto: this.ehSim(row.agrupamento_proposto),
     };
   }
 
   private mapearColaborador(row: CsvMapa): CargaColaboradorLinha {
+    const codigo = row.colaborador_id?.trim() ?? '';
     const cpf = this.normalizarCpf(row.cpf);
     return {
-      codigo: row.colaborador_id?.trim() ?? '',
+      codigo,
       nome: this.nomes.formatar(row.nome ?? ''),
-      situacao: this.mapearSituacao(row.situacao ?? ''),
+      situacao: this.mapearSituacao(row.situacao ?? '', codigo),
       cpf,
       cpfVerificado: cpf !== null && this.cpfs.verificar(cpf),
       setorCodigo: this.ouNulo(row.setor_id),
@@ -70,17 +73,19 @@ export class CargaPessoasCsv {
     return t === null ? null : this.nomes.formatar(t);
   }
 
-  private mapearTipo(tipo: string): CargaSetor['tipo'] {
+  private mapearTipo(tipo: string, codigo: string): CargaSetor['tipo'] {
     const t = tipo.trim().toLocaleLowerCase('pt-BR');
+    if (t === 'operacional') return 'operacional';
     if (t === 'apoio e gestão' || t === 'apoio e gestao') return 'apoio';
-    return 'operacional';
+    throw new CargaPessoasCampoInvalidoError(codigo, 'tipo desconhecido');
   }
 
-  private mapearSituacao(situacao: string): CargaColaborador['situacao'] {
+  private mapearSituacao(situacao: string, codigo: string): CargaColaborador['situacao'] {
     const s = situacao.trim().toLocaleLowerCase('pt-BR');
+    if (s === 'ativo') return 'ativo';
     if (s === 'admissão prevista' || s === 'admissao prevista') return 'admissao_prevista';
     if (s === 'desligado') return 'desligado';
-    return 'ativo';
+    throw new CargaPessoasCampoInvalidoError(codigo, 'situacao desconhecida');
   }
 
   private normalizarCpf(valor: string | undefined): string | null {

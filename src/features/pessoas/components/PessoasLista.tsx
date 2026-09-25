@@ -104,6 +104,10 @@ function PessoasListaCorpo({
     return <EmptyState icon="badge" title="Nenhum colaborador carregado." />;
   }
 
+  if (filtrados.length === 0) {
+    return <EmptyState icon="search_off" title="Nenhum colaborador encontrado." />;
+  }
+
   return (
     <Card padding="none">
       {filtrados.map((item, index) => (

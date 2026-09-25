@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { CargaPessoasCampoInvalidoError } from '../src/domain/pessoas/carga-pessoas-campo-invalido-error';
 import { CargaPessoasCsv, type CargaColaboradorLinha } from '../src/domain/pessoas/carga-pessoas-csv';
 import { CargaPessoasPreview } from '../src/domain/pessoas/carga-pessoas-preview';
 import type { CargaSetor, CargaTurno } from '../src/domain/pessoas/carga-pessoas-tipos';
@@ -44,18 +45,30 @@ class HorariosMdLeitor {
   private readonly parser = new HorarioDiaParser();
   private readonly nomes = new NomeCapitalizador();
 
-  ler(md: string, setores: CargaSetor[]): { turnos: CargaTurno[]; dias: CargaTurnoDia[] } {
+  ler(
+    md: string,
+    setores: CargaSetor[],
+  ): {
+    turnos: CargaTurno[];
+    dias: CargaTurnoDia[];
+    erros: { codigo: string; motivo: string }[];
+  } {
     const porNome = this.indiceSetores(setores);
     const turnos: CargaTurno[] = [];
     const dias: CargaTurnoDia[] = [];
+    const erros: { codigo: string; motivo: string }[] = [];
     for (const linha of md.split(/\r?\n/)) {
       if (!linha.startsWith('|') || linha.includes('---') || linha.includes('Setor')) continue;
       const lido = this.lerLinha(linha, porNome);
       if (!lido) continue;
+      if (lido.erros.length > 0) {
+        erros.push(...lido.erros);
+        continue;
+      }
       turnos.push(lido.turno);
       dias.push(...lido.dias);
     }
-    return { turnos, dias };
+    return { turnos, dias, erros };
   }
 
   private indiceSetores(setores: CargaSetor[]): Map<string, CargaSetor> {
@@ -75,7 +88,11 @@ class HorariosMdLeitor {
   private lerLinha(
     linha: string,
     porNome: Map<string, CargaSetor>,
-  ): { turno: CargaTurno; dias: CargaTurnoDia[] } | null {
+  ): {
+    turno: CargaTurno;
+    dias: CargaTurnoDia[];
+    erros: { codigo: string; motivo: string }[];
+  } | null {
     const cells = linha
       .split('|')
       .map((c) => c.trim())
@@ -92,12 +109,31 @@ class HorariosMdLeitor {
       nome: this.nomes.formatar(nomeTurno),
       operacional: setor.tipo === 'operacional',
     };
-    const dias = cells.slice(2, 8).map((celula, i) => ({
-      turnoCodigo: turno.codigo,
-      dia: i + 1,
-      ...this.parser.parseCelula(celula),
-    }));
-    return { turno, dias };
+    return this.montarDias(turno, cells.slice(2, 8));
+  }
+
+  private montarDias(
+    turno: CargaTurno,
+    celulas: string[],
+  ): {
+    turno: CargaTurno;
+    dias: CargaTurnoDia[];
+    erros: { codigo: string; motivo: string }[];
+  } {
+    const dias: CargaTurnoDia[] = [];
+    const erros: { codigo: string; motivo: string }[] = [];
+    for (let i = 0; i < celulas.length; i += 1) {
+      const parsed = this.parser.parseCelula(celulas[i]);
+      if (parsed.situacao === 'invalido') {
+        erros.push({ codigo: turno.codigo, motivo: 'horario invalido' });
+        continue;
+      }
+      dias.push({ turnoCodigo: turno.codigo, dia: i + 1, ...parsed });
+    }
+    if (erros.length > 0) {
+      return { turno, dias: [], erros };
+    }
+    return { turno, dias, erros };
   }
 }
 
@@ -268,13 +304,28 @@ class ImportPessoasEtapa1 {
 
   async executar(argv: string[]): Promise<void> {
     const paths = this.args.parse(argv);
-    const setores = this.csv.lerSetores(fs.readFileSync(paths.setores, 'utf8'));
-    const colaboradores = this.csv.lerColaboradores(fs.readFileSync(paths.colaboradores, 'utf8'));
-    const { turnos, dias } = this.horarios.ler(fs.readFileSync(paths.horarios, 'utf8'), setores);
+    let setores: CargaSetor[];
+    let colaboradores: CargaColaboradorLinha[];
+    try {
+      setores = this.csv.lerSetores(fs.readFileSync(paths.setores, 'utf8'));
+      colaboradores = this.csv.lerColaboradores(fs.readFileSync(paths.colaboradores, 'utf8'));
+    } catch (err) {
+      if (err instanceof CargaPessoasCampoInvalidoError) {
+        console.log(`inserir=0 atualizar=0 erros=1`);
+        console.error(`${err.codigo}: ${err.motivo}`);
+        return;
+      }
+      throw err;
+    }
+    const { turnos, dias, erros: errosHorario } = this.horarios.ler(
+      fs.readFileSync(paths.horarios, 'utf8'),
+      setores,
+    );
     const codigosJaGravados = await this.carregarCodigos(paths.dryRun);
     const previa = this.preview.prever({ setores, turnos, colaboradores, codigosJaGravados });
+    const erros = previa.erros.length + errosHorario.length;
     console.log(
-      `inserir=${previa.inserir.length} atualizar=${previa.atualizar.length} erros=${previa.erros.length}`,
+      `inserir=${previa.inserir.length} atualizar=${previa.atualizar.length} erros=${erros}`,
     );
     if (paths.dryRun) return;
     await this.gravar(setores, turnos, dias, colaboradores, previa);
