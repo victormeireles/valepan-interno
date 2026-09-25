@@ -165,6 +165,34 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
     icon: 'groups',
     moduloId: 'interno_pessoas',
   },
+  {
+    href: '/pessoas/quadro',
+    title: 'Quadro',
+    description: 'Vagas por setor e turno',
+    icon: 'groups',
+    moduloId: 'interno_pessoas',
+  },
+  {
+    href: '/pessoas/faltas',
+    title: 'Faltas',
+    description: 'Lançamento e classificação',
+    icon: 'event_busy',
+    moduloId: 'interno_pessoas',
+  },
+  {
+    href: '/pessoas/extras',
+    title: 'Extras',
+    description: 'Serviços e pagamento integral',
+    icon: 'schedule',
+    moduloId: 'interno_pessoas',
+  },
+  {
+    href: '/pessoas/painel',
+    title: 'Visão geral',
+    description: 'Contagens que abrem as listas',
+    icon: 'dashboard',
+    moduloId: 'interno_pessoas',
+  },
 ];
 
 export const HUB_SECTIONS: HubNavSection[] = [

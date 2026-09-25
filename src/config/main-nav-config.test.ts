@@ -36,7 +36,13 @@ describe('MAIN_NAV_ENTRIES', () => {
   });
 
   it('expõe colaboradores em pessoas com módulo interno_pessoas', () => {
-    expect(groupHrefs('pessoas')).toEqual(['/pessoas']);
+    expect(groupHrefs('pessoas')).toEqual([
+      '/pessoas',
+      '/pessoas/quadro',
+      '/pessoas/faltas',
+      '/pessoas/extras',
+      '/pessoas/painel',
+    ]);
     expect(groupById('pessoas').children[0]?.moduloId).toBe('interno_pessoas');
   });
 
