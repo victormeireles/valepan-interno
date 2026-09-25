@@ -25,16 +25,16 @@ export type ReclamacaoListFiltro = {
   clienteId: string | null;
   produtoId: string | null;
   categoriaId: string | null;
-  dataProblemaDe: string | null;
-  dataProblemaAte: string | null;
+  dataProblema: string | null;
+  dataFabricacao: string | null;
 };
 
 export const RECLAMACAO_FILTRO_VAZIO: ReclamacaoListFiltro = {
   clienteId: null,
   produtoId: null,
   categoriaId: null,
-  dataProblemaDe: null,
-  dataProblemaAte: null,
+  dataProblema: null,
+  dataFabricacao: null,
 };
 
 export type ReclamacaoListItem = {

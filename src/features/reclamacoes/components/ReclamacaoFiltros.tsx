@@ -76,19 +76,19 @@ export default function ReclamacaoFiltros({
         ]}
       />
       <Input
-        label="Problema de"
+        label="Problema"
         type="date"
-        value={filtro.dataProblemaDe ?? ''}
+        value={filtro.dataProblema ?? ''}
         onChange={(event) =>
-          onChange({ ...filtro, dataProblemaDe: emptyToNull(event.target.value) })
+          onChange({ ...filtro, dataProblema: emptyToNull(event.target.value) })
         }
       />
       <Input
-        label="Problema até"
+        label="Data de fabricação"
         type="date"
-        value={filtro.dataProblemaAte ?? ''}
+        value={filtro.dataFabricacao ?? ''}
         onChange={(event) =>
-          onChange({ ...filtro, dataProblemaAte: emptyToNull(event.target.value) })
+          onChange({ ...filtro, dataFabricacao: emptyToNull(event.target.value) })
         }
       />
     </div>

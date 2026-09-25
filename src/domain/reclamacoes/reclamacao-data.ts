@@ -1,13 +1,11 @@
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function reclamacaoNoPeriodo(
-  dataProblema: string,
-  de: string | null,
-  ate: string | null,
+export function dataCombinaFiltroExato(
+  data: string,
+  filtro: string | null,
 ): boolean {
-  if (de && dataProblema < de) return false;
-  if (ate && dataProblema > ate) return false;
-  return true;
+  if (!filtro) return true;
+  return data.slice(0, 10) === filtro.slice(0, 10);
 }
 
 export function formatarDataIsoPtBr(isoDate: string): string {

@@ -181,11 +181,11 @@ export class ReclamacaoRepository {
     if (filtro.clienteId) query = query.eq('cliente_id', filtro.clienteId);
     if (filtro.produtoId) query = query.eq('produto_id', filtro.produtoId);
     if (filtro.categoriaId) query = query.eq('categoria_id', filtro.categoriaId);
-    if (filtro.dataProblemaDe) {
-      query = query.gte('data_problema', filtro.dataProblemaDe);
+    if (filtro.dataProblema) {
+      query = query.eq('data_problema', filtro.dataProblema);
     }
-    if (filtro.dataProblemaAte) {
-      query = query.lte('data_problema', filtro.dataProblemaAte);
+    if (filtro.dataFabricacao) {
+      query = query.eq('data_fabricacao', filtro.dataFabricacao);
     }
 
     const { data, error } = await query;
