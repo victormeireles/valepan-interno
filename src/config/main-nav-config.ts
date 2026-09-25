@@ -240,6 +240,23 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     ],
   },
   {
+    type: 'group',
+    id: 'pessoas',
+    label: 'Pessoas',
+    icon: 'groups',
+    match: (pathname) => pathname.startsWith('/pessoas'),
+    children: [
+      {
+        type: 'link',
+        href: '/pessoas',
+        label: 'Colaboradores',
+        icon: 'groups',
+        moduloId: 'interno_pessoas',
+        match: (pathname) => pathname.startsWith('/pessoas'),
+      },
+    ],
+  },
+  {
     type: 'link',
     href: '/config',
     label: 'Configurações',

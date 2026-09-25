@@ -48,6 +48,19 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
+  it('protege Pessoas com leitura do módulo', () => {
+    expect(map.resolve('/pessoas')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_pessoas',
+      minimo: 'ler',
+    });
+    expect(map.resolve('/pessoas/colaboradores')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_pessoas',
+      minimo: 'ler',
+    });
+  });
+
   it('protege reclamações', () => {
     expect(map.resolve('/reclamacoes')).toEqual({
       kind: 'modulo',

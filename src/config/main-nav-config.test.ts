@@ -30,8 +30,14 @@ describe('MAIN_NAV_ENTRIES', () => {
       'planejamento',
       'paineis',
       'insumos',
+      'pessoas',
       '/config',
     ]);
+  });
+
+  it('expõe colaboradores em pessoas com módulo interno_pessoas', () => {
+    expect(groupHrefs('pessoas')).toEqual(['/pessoas']);
+    expect(groupById('pessoas').children[0]?.moduloId).toBe('interno_pessoas');
   });
 
   it('coloca etiquetas em produção, depois de saídas', () => {

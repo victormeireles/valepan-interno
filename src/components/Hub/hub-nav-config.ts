@@ -157,9 +157,20 @@ export const HUB_INSUMOS_ITEMS: HubNavItem[] = [
   },
 ];
 
+export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
+  {
+    href: '/pessoas',
+    title: 'Colaboradores',
+    description: 'Cadastro, setor e horário',
+    icon: 'groups',
+    moduloId: 'interno_pessoas',
+  },
+];
+
 export const HUB_SECTIONS: HubNavSection[] = [
   { id: 'producao', title: 'Produção', items: HUB_PRODUCAO_ITEMS },
   { id: 'planejamento', title: 'Planejamento', items: HUB_PLANEJAMENTO_ITEMS },
   { id: 'paineis', title: 'Painéis', items: HUB_PAINEIS_ITEMS },
   { id: 'insumos', title: 'Insumos', items: HUB_INSUMOS_ITEMS },
+  { id: 'pessoas', title: 'Pessoas', items: HUB_PESSOAS_ITEMS },
 ];
