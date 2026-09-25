@@ -30,6 +30,89 @@ type Props = {
   itens: ColaboradorListaItem[];
 };
 
+function situacaoRotulo(situacao: ColaboradorListaItem['situacao']): string {
+  return SITUACAO_ROTULO[situacao];
+}
+
+function SituacaoBadge({ situacao }: { situacao: ColaboradorListaItem['situacao'] }) {
+  return <Badge tone={SITUACAO_TOM[situacao]}>{situacaoRotulo(situacao)}</Badge>;
+}
+
+function ColaboradorListaRow({
+  item,
+  even,
+}: {
+  item: ColaboradorListaItem;
+  even: boolean;
+}) {
+  return (
+    <ListRow
+      even={even}
+      title={item.nome}
+      subtitle={item.codigo}
+      columns={[
+        {
+          value: <SituacaoBadge situacao={item.situacao} />,
+          width: '9rem',
+          align: 'left',
+          tabular: false,
+        },
+        {
+          value: item.setorNome ?? '—',
+          width: '10rem',
+          align: 'left',
+          tabular: false,
+        },
+        {
+          value: item.turnoNome ?? '—',
+          width: '8rem',
+          align: 'left',
+          tabular: false,
+        },
+      ]}
+    />
+  );
+}
+
+function PessoasListaBusca({
+  termo,
+  onTermoChange,
+}: {
+  termo: string;
+  onTermoChange: (valor: string) => void;
+}) {
+  return (
+    <Input
+      aria-label="Buscar colaborador"
+      placeholder="Buscar por nome ou código"
+      icon="search"
+      value={termo}
+      onChange={(event) => onTermoChange(event.target.value)}
+      className="min-w-[16rem]"
+    />
+  );
+}
+
+function PessoasListaCorpo({
+  itens,
+  filtrados,
+}: {
+  itens: ColaboradorListaItem[];
+  filtrados: ColaboradorListaItem[];
+}) {
+  if (itens.length === 0) {
+    return <EmptyState icon="badge" title="Nenhum colaborador carregado." />;
+  }
+
+  return (
+    <Card padding="none">
+      {filtrados.map((item, index) => (
+        <ColaboradorListaRow key={item.codigo} item={item} even={index % 2 === 1} />
+      ))}
+    </Card>
+  );
+}
+
 export default function PessoasLista({ itens }: Props) {
   const [termo, setTermo] = useState('');
   const filtrados = useMemo(() => filtro.aplicar(itens, termo), [itens, termo]);
@@ -41,58 +124,13 @@ export default function PessoasLista({ itens }: Props) {
         sticky={false}
         filters={
           itens.length > 0 ? (
-            <Input
-              aria-label="Buscar colaborador"
-              placeholder="Buscar por nome ou código"
-              icon="search"
-              value={termo}
-              onChange={(event) => setTermo(event.target.value)}
-              className="min-w-[16rem]"
-            />
+            <PessoasListaBusca termo={termo} onTermoChange={setTermo} />
           ) : undefined
         }
         resumo={itens.length > 0 ? `${filtrados.length} de ${itens.length}` : undefined}
       />
-
       <div className="mt-4 px-4 sm:px-6">
-        {itens.length === 0 ? (
-          <EmptyState icon="badge" title="Nenhum colaborador carregado." />
-        ) : (
-          <Card padding="none">
-            {filtrados.map((item, index) => (
-              <ListRow
-                key={item.codigo}
-                even={index % 2 === 1}
-                title={item.nome}
-                subtitle={item.codigo}
-                columns={[
-                  {
-                    value: (
-                      <Badge tone={SITUACAO_TOM[item.situacao]}>
-                        {SITUACAO_ROTULO[item.situacao]}
-                      </Badge>
-                    ),
-                    width: '9rem',
-                    align: 'left',
-                    tabular: false,
-                  },
-                  {
-                    value: item.setorNome ?? '—',
-                    width: '10rem',
-                    align: 'left',
-                    tabular: false,
-                  },
-                  {
-                    value: item.turnoNome ?? '—',
-                    width: '8rem',
-                    align: 'left',
-                    tabular: false,
-                  },
-                ]}
-              />
-            ))}
-          </Card>
-        )}
+        <PessoasListaCorpo itens={itens} filtrados={filtrados} />
       </div>
     </div>
   );
