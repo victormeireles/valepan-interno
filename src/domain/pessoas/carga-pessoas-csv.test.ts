@@ -35,6 +35,7 @@ describe('CargaPessoasCsv', () => {
       turnoCodigo: 'PRO-M',
       cpfVerificado: false,
       desligamentoDataDesconhecida: false,
+      noQuadro: false,
     });
   });
 

@@ -18,6 +18,7 @@ export type CargaColaboradorLinha = CargaColaborador & {
   dataAdmissao: string | null;
   dataDesligamento: string | null;
   observacoes: string | null;
+  noQuadro: boolean;
 };
 
 export class CargaPessoasCsv {
@@ -65,6 +66,7 @@ export class CargaPessoasCsv {
       dataAdmissao: this.ouNulo(row.data_admissao),
       dataDesligamento: this.ouNulo(row.data_desligamento),
       observacoes: this.ouNulo(row.observacoes),
+      noQuadro: this.ehSim(row.no_quadro_operacional),
     };
   }
 
