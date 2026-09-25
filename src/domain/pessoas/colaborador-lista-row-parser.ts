@@ -35,6 +35,9 @@ export class ColaboradorListaRowParser {
       situacao,
       setorNome: this.lerNomeRelacao(row.pessoas_setores),
       turnoNome: this.lerNomeRelacao(row.pessoas_turnos),
+      turnoCodigo: this.lerCodigoRelacao(row.pessoas_turnos),
+      liderSetor: row.lider_setor === true,
+      avisoAtivo: false,
     };
   }
 
@@ -56,6 +59,13 @@ export class ColaboradorListaRowParser {
       throw new Error('Erro ao listar colaboradores: nome de setor/turno inválido.');
     }
     return nome;
+  }
+
+  private lerCodigoRelacao(valor: unknown): string | null {
+    if (valor == null) return null;
+    const registro = Array.isArray(valor) ? valor[0] : valor;
+    if (!this.isRecord(registro)) return null;
+    return this.lerTexto(registro.codigo);
   }
 
   private lerTexto(valor: unknown): string | null {
