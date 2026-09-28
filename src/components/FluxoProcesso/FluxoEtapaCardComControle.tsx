@@ -8,6 +8,7 @@ import { fmtQtyExact } from './fluxo-display-scale';
 import FluxoEtapaMeter from './FluxoEtapaMeter';
 import { FluxoEtapaStatusChipResolver } from './fluxo-etapa-status-chip';
 import { FluxoJanelaGraficoCopy } from './fluxo-janela-grafico-copy';
+import FluxoEtapaOpResultado from './FluxoEtapaOpResultado';
 
 const statusChip = new FluxoEtapaStatusChipResolver();
 const displayQtys = new FluxoControleDisplayQtysBuilder();
@@ -43,6 +44,11 @@ export default function FluxoEtapaCardComControle({
   cor,
 }: FluxoEtapaCardComControleProps) {
   const { scale } = useFluxoDisplay();
+  const resultado = fluxo.opResultado?.[e.key];
+  if (resultado) {
+    return <FluxoEtapaOpResultado resultado={resultado} cor={cor} />;
+  }
+
   const outraOp = scale.opAnteriorTotal(e.key);
   const opLabel = FluxoJanelaGraficoCopy.cardOpLabel(
     fluxo.turnosResumo?.[e.key]?.outraOpData,

@@ -1,7 +1,5 @@
-import { embalagemLoteRepository } from '@/data/embalagem/EmbalagemLoteRepository';
-import { fermentacaoLoteRepository } from '@/data/producao-etapa/FermentacaoLoteRepository';
-import { fornoLoteRepository } from '@/data/producao-etapa/FornoLoteRepository';
 import type { FluxoRitmoLotesDia } from '@/lib/services/fluxo-processo-ritmo-attach';
+import { fluxoLoteLeitura } from '@/lib/services/fluxo-lote-leitura';
 import { addCalendarDaysISO } from '@/lib/utils/date-utils';
 
 const EMPTY_LOTES: FluxoRitmoLotesDia = { ferm: [], forno: [], emb: [] };
@@ -23,12 +21,7 @@ export class RitmoLotesDiaLoader {
   }
 
   async loadRange(startIso: string, endIso: string): Promise<FluxoRitmoLotesDia> {
-    const [ferm, forno, emb] = await Promise.all([
-      fermentacaoLoteRepository.listByProduzidoEmRange(startIso, endIso),
-      fornoLoteRepository.listByProduzidoEmRange(startIso, endIso),
-      embalagemLoteRepository.listByProduzidoEmRange(startIso, endIso),
-    ]);
-    return { ferm, forno, emb };
+    return fluxoLoteLeitura.loadRange(startIso, endIso);
   }
 
   async loadComparacao(

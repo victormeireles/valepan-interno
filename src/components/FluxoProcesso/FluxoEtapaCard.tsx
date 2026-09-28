@@ -6,12 +6,14 @@ import FluxoEtapaCardComControle from './FluxoEtapaCardComControle';
 import FluxoEtapaCardSemControle from './FluxoEtapaCardSemControle';
 import FluxoEtapaContinuidade from './FluxoEtapaContinuidade';
 import FluxoEtapaRitmoRow from './FluxoEtapaRitmoRow';
+import { FluxoEtapaNumerosSkeleton } from './FluxoNumerosCarregando';
 import { FLUXO_UI_ETAPA_COR, hhmm } from './fluxo-processo-format';
 
 type FluxoEtapaCardProps = {
   fluxo: VpFluxoPayload;
   etapa: FluxoEtapaResumo;
   ativa: boolean;
+  carregandoNumeros?: boolean;
   onSelect?: (key: FluxoEtapaResumo['key']) => void;
   selecionavel?: boolean;
 };
@@ -20,6 +22,7 @@ export default function FluxoEtapaCard({
   fluxo,
   etapa: e,
   ativa,
+  carregandoNumeros = false,
   onSelect,
   selecionavel = true,
 }: FluxoEtapaCardProps) {
@@ -27,6 +30,7 @@ export default function FluxoEtapaCard({
   const numeros =
     fluxo.controle?.disponivel === true ? fluxo.controle.etapas[e.key] : null;
   const destacado = selecionavel ? ativa : true;
+  const interativo = selecionavel && !carregandoNumeros;
 
   return (
     <Card
@@ -42,13 +46,14 @@ export default function FluxoEtapaCard({
       }
     >
       <div
-        role={selecionavel ? 'button' : undefined}
-        tabIndex={selecionavel ? 0 : undefined}
-        aria-pressed={selecionavel ? ativa : undefined}
-        className={selecionavel ? 'min-h-11 cursor-pointer' : 'min-w-0'}
-        onClick={selecionavel && onSelect ? () => onSelect(e.key) : undefined}
+        role={interativo ? 'button' : undefined}
+        tabIndex={interativo ? 0 : undefined}
+        aria-pressed={interativo ? ativa : undefined}
+        aria-busy={carregandoNumeros || undefined}
+        className={interativo ? 'min-h-11 cursor-pointer' : 'min-w-0'}
+        onClick={interativo && onSelect ? () => onSelect(e.key) : undefined}
         onKeyDown={
-          selecionavel && onSelect
+          interativo && onSelect
             ? (ev) => {
                 if (ev.key === 'Enter' || ev.key === ' ') {
                   ev.preventDefault();
@@ -67,25 +72,33 @@ export default function FluxoEtapaCard({
           <span className="min-w-0 text-[15px] font-bold tracking-tight text-text-strong">
             {e.nome}
           </span>
-          <span className="ml-auto font-mono text-[11px] tabular-nums text-text-muted">
-            {hhmm(e.ini)} → {hhmm(e.fim)}
-          </span>
+          {carregandoNumeros ? null : (
+            <span className="ml-auto font-mono text-[11px] tabular-nums text-text-muted">
+              {hhmm(e.ini)} → {hhmm(e.fim)}
+            </span>
+          )}
         </div>
 
-        {numeros ? (
-          <FluxoEtapaCardComControle
-            fluxo={fluxo}
-            etapa={e}
-            numeros={numeros}
-            cor={cor}
-          />
+        {carregandoNumeros ? (
+          <FluxoEtapaNumerosSkeleton />
         ) : (
-          <FluxoEtapaCardSemControle fluxo={fluxo} etapa={e} />
+          <>
+            {numeros ? (
+              <FluxoEtapaCardComControle
+                fluxo={fluxo}
+                etapa={e}
+                numeros={numeros}
+                cor={cor}
+              />
+            ) : (
+              <FluxoEtapaCardSemControle fluxo={fluxo} etapa={e} />
+            )}
+            <FluxoEtapaRitmoRow fluxo={fluxo} etapaKey={e.key} />
+          </>
         )}
-        <FluxoEtapaRitmoRow fluxo={fluxo} etapaKey={e.key} />
       </div>
 
-      <FluxoEtapaContinuidade etapa={e} />
+      {carregandoNumeros ? null : <FluxoEtapaContinuidade etapa={e} />}
     </Card>
   );
 }

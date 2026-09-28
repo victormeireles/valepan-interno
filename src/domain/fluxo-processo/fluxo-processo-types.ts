@@ -1,4 +1,5 @@
 import type { FluxoControleDia } from '@/domain/fluxo-processo/controle/fluxo-controle-types';
+import type { FluxoOpResultado } from '@/domain/fluxo-processo/op-resultado/fluxo-op-resultado';
 import type { FluxoFilasDia } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { FluxoEtapaRitmo } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
 import type { FluxoProdutividadeMeta } from '@/domain/fluxo-processo/fluxo-produtividade-capacidade';
@@ -159,6 +160,11 @@ export type VpFluxoPayload = {
   ritmoPorEtapa: Record<FluxoEtapaKey, FluxoEtapaRitmo> | null;
   /** Preenchido pelo service após o builder (realizado-only). */
   controle: FluxoControleDia | null;
+  /**
+   * Feito da OP em todos os dias / meta da tela de realizado.
+   * O gráfico por hora continua na janela operacional.
+   */
+  opResultado?: Record<FluxoEtapaKey, FluxoOpResultado | null>;
   /** Filas WIP (a produzir / fermentando / resfriando / embalado / perdas); null se não há OPs do dia. */
   filas: FluxoFilasDia | null;
   /** Janela T1 de cada etapa; preenchido pelo service após o builder. */

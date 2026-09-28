@@ -25,12 +25,14 @@ type FluxoProcessoHeaderProps = {
   diaLabel: string;
   selectedDate: string;
   onDateChange: (date: string) => void;
+  carregandoNumeros?: boolean;
 };
 
 export default function FluxoProcessoHeader({
   diaLabel,
   selectedDate,
   onDateChange,
+  carregandoNumeros = false,
 }: FluxoProcessoHeaderProps) {
   const accent = getEtapaAccentClasses('vinho');
   const { hour, minute } = getBrazilHourMinuteNow();
@@ -85,7 +87,7 @@ export default function FluxoProcessoHeader({
             <span className="material-icons text-base" aria-hidden="true">
               schedule
             </span>
-            {diaLabel} · agora {agora}
+            {carregandoNumeros ? 'carregando' : diaLabel} · agora {agora}
           </span>
 
           <div className="grid grid-cols-2 gap-2 sm:flex sm:contents">

@@ -4,15 +4,9 @@ import {
   type FluxoRitmoEntriesPorEtapa,
 } from '@/domain/fluxo-processo/fluxo-etapa-ritmo';
 import type { VpFluxoPayload } from '@/domain/fluxo-processo/fluxo-processo-types';
-import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
-import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
-import type { FornoLoteRecord } from '@/domain/types/forno-lote';
+import type { FluxoLotesDia } from '@/lib/services/fluxo-lote-leitura';
 
-export type FluxoRitmoLotesDia = {
-  ferm: FermentacaoLoteRecord[];
-  forno: FornoLoteRecord[];
-  emb: EmbalagemLoteRecord[];
-};
+export type FluxoRitmoLotesDia = FluxoLotesDia;
 
 export type FluxoProcessoRitmoAttachInput = {
   dateOntem: string | null;

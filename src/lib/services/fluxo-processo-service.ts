@@ -17,9 +17,6 @@ import type {
   FluxoOrdemFatorInput,
 } from '@/domain/fluxo-processo/fluxo-processo-types';
 import { FluxoEventosJanelaFilter } from '@/domain/fluxo-processo/fluxo-eventos-janela-filter';
-import type { EmbalagemLoteRecord } from '@/domain/types/embalagem-lote';
-import type { FermentacaoLoteRecord } from '@/domain/types/fermentacao-lote';
-import type { FornoLoteRecord } from '@/domain/types/forno-lote';
 import type { FluxoFilasOpInput } from '@/domain/fluxo-processo/filas/fluxo-filas-types';
 import type { OrdemProducaoRecord } from '@/domain/types/ordem-producao';
 import { ordemProducaoRepository } from '@/data/producao/OrdemProducaoRepository';
@@ -28,6 +25,9 @@ import { SupabaseProductService } from '@/lib/services/products/supabase-product
 import { configOperacaoService } from '@/lib/services/config-operacao-service';
 import { estimativaProducaoService } from '@/lib/services/estimativa-producao-service';
 import { FluxoFilasServiceAttach } from '@/lib/services/fluxo-filas-attach';
+import { FluxoOpResultadoAttach } from '@/lib/services/fluxo-op-resultado-attach';
+import { fluxoAssadeiraMetaLoader } from '@/lib/services/fluxo-assadeira-meta-loader';
+import { fluxoLoteLeitura } from '@/lib/services/fluxo-lote-leitura';
 import {
   FluxoControleServiceAttach,
   type FluxoControleAttachOrdem,
@@ -35,10 +35,8 @@ import {
 import {
   FluxoProcessoRitmoAttach,
 } from '@/lib/services/fluxo-processo-ritmo-attach';
-import { ritmoLotesDiaLoader } from '@/lib/services/ritmo-lotes-dia-loader';
 import { FluxoJanelaLotesLoader } from '@/lib/services/fluxo-janela-lotes-loader';
 import { FluxoProcessoTvAttach } from '@/lib/services/fluxo-processo-tv-attach';
-import { etapaPainelRecorteLoader } from '@/lib/services/etapa-painel-recorte-loader';
 import { resolveReferenceEndMs } from '@/domain/painel-producao/painel-producao-areas';
 import {
   addCalendarDaysISO,
@@ -57,73 +55,85 @@ export class FluxoProcessoService {
   private readonly controleAttach = new FluxoControleServiceAttach();
   private readonly filasAttach = new FluxoFilasServiceAttach();
   private readonly ritmoAttach = new FluxoProcessoRitmoAttach();
+  private readonly opResultadoAttach = new FluxoOpResultadoAttach();
   private readonly tvAttach = new FluxoProcessoTvAttach();
   private readonly janelaFilter = new FluxoEventosJanelaFilter();
 
   constructor(private readonly productService = new SupabaseProductService()) {}
 
-  async getCargaCompleta(date: string): Promise<CargaFluxoProcessoResponse> {
+  async getCargaCompleta(
+    date: string,
+    options?: { preferUltima?: boolean },
+  ): Promise<CargaFluxoProcessoResponse> {
+    const ultimaPromise = ordemProducaoRepository.findUltimaDataComPedidos(14);
+    const ultimaInicial = options?.preferUltima ? await ultimaPromise : null;
+    return this.loadForDate(ultimaInicial ?? date, ultimaPromise);
+  }
+
+  private async loadForDate(
+    date: string,
+    ultimaPromise: Promise<string | null>,
+  ): Promise<CargaFluxoProcessoResponse> {
     const dateSemana = addCalendarDaysISO(date, -7);
 
-    const [ultimaDataComDados, dateAnterior, ordensDia, config] = await Promise.all([
-      ordemProducaoRepository.findUltimaDataComPedidos(14),
-      ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
-      ordemProducaoRepository.listByDataProducao(date),
-      configOperacaoService.getConfig(),
-    ]);
+    const [ultimaDataComDados, dateAnterior, ordensDia, config, categoriasVisiveis, produtividade] =
+      await Promise.all([
+        ultimaPromise,
+        ordemProducaoRepository.findDataAnteriorComPedidos(date, 14),
+        ordemProducaoRepository.listByDataProducao(date),
+        configOperacaoService.getConfig(),
+        categoriaVisibilidadeManager.getIdsVisiveisEmbalagem(),
+        estimativaProducaoService.resolveProdutividadeForDate(date),
+      ]);
 
     const janelaLotes = new FluxoJanelaLotesLoader();
     const janelasPorEtapa = janelaLotes.janelasPorEtapa(date, config);
     const { startIso, endIso } = janelaLotes.isoRangeUniao(janelasPorEtapa);
-    const lotesHoje = await ritmoLotesDiaLoader.loadRange(startIso, endIso);
+    const ordemIdsDia = ordensDia.map((ordem) => ordem.id);
+    const [lotesHoje, lotesComparacao, opLotes, estimativas] = await Promise.all([
+      fluxoLoteLeitura.loadRange(startIso, endIso),
+      janelaLotes.loadComparacao(dateSemana, dateAnterior, config),
+      this.opResultadoAttach.loadLotes(ordemIdsDia),
+      estimativaProducaoService.listByOrdemIds(ordemIdsDia),
+    ]);
     const { ferm: fermLotes, forno: fornoLotes, emb: embLotes } = lotesHoje;
 
-    const ordemIds = collectOrdemIds(fermLotes, fornoLotes, embLotes, ordensDia);
-    const ordensExtra =
-      ordemIds.length > 0 ? await ordemProducaoRepository.findByIds(ordemIds) : [];
+    const conhecidas = new Set(ordemIdsDia);
+    const ordemIds = collectOrdemIds(
+      [...fermLotes, ...lotesComparacao.ontem.ferm, ...lotesComparacao.semana.ferm],
+      [...fornoLotes, ...lotesComparacao.ontem.forno, ...lotesComparacao.semana.forno],
+      [...embLotes, ...lotesComparacao.ontem.emb, ...lotesComparacao.semana.emb],
+      ordensDia,
+    ).filter((id) => !conhecidas.has(id));
+    const ordensExtra = ordemIds.length > 0 ? await ordemProducaoRepository.findByIds(ordemIds) : [];
     const ordemById = new Map<string, OrdemProducaoRecord>();
-    for (const o of [...ordensDia, ...ordensExtra]) ordemById.set(o.id, o);
+    for (const ordem of [...ordensDia, ...ordensExtra]) ordemById.set(ordem.id, ordem);
 
     const produtoIds = [
       ...new Set([
-        ...[...ordemById.values()].map((o) => o.produtoId),
-        ...embLotes.map((l) => l.produtoId),
+        ...[...ordemById.values()].map((ordem) => ordem.produtoId),
+        ...embLotes.map((lote) => lote.produtoId),
+        ...lotesComparacao.ontem.emb.map((lote) => lote.produtoId),
+        ...lotesComparacao.semana.emb.map((lote) => lote.produtoId),
       ]),
     ];
     const assadeiraIds = [
       ...new Set(
-        [...ordemById.values()].map((o) => o.assadeiraId).filter((id): id is string => Boolean(id)),
+        [...ordemById.values()].map((ordem) => ordem.assadeiraId).filter((id): id is string => Boolean(id)),
       ),
     ];
 
-    const [produtos, assadeiras, lotesComparacao, categoriasVisiveis] = await Promise.all([
+    const [produtos, assadeiras] = await Promise.all([
       produtoIds.length > 0 ? this.productService.findByIds(produtoIds) : [],
       this.loadAssadeiraNames(assadeiraIds),
-      janelaLotes.loadComparacao(dateSemana, dateAnterior, config),
-      categoriaVisibilidadeManager.getIdsVisiveisEmbalagem(),
     ]);
+    const assadeiraCtx = await fluxoAssadeiraMetaLoader.load(produtos);
 
-    const produtoNomeById = new Map(produtos.map((p) => [p.id, p.nome]));
-    const assadeiraNomeById = new Map(assadeiras.map((a) => [a.id, a.nome]));
-    const recorteResult = await etapaPainelRecorteLoader.resolve(
-      [...ordemById.values()],
-      [
-        ...fermLotes,
-        ...fornoLotes,
-        ...lotesComparacao.ontem.ferm,
-        ...lotesComparacao.ontem.forno,
-        ...lotesComparacao.semana.ferm,
-        ...lotesComparacao.semana.forno,
-      ],
-    );
-    for (const extra of recorteResult.extraOrdens) {
-      if (!ordemById.has(extra.id)) ordemById.set(extra.id, extra);
-    }
-    const recorte = new RecorteVisivelEmbalagem(
-      buildCategoriaPorProdutoMap(produtos),
-      categoriasVisiveis,
-    );
-    const visivelIds = recorteResult.visivelOrdemIds;
+    const produtoNomeById = new Map(produtos.map((produto) => [produto.id, produto.nome]));
+    const assadeiraNomeById = new Map(assadeiras.map((assadeira) => [assadeira.id, assadeira.nome]));
+    const categoriaPorProduto = buildCategoriaPorProdutoMap(produtos);
+    const recorte = new RecorteVisivelEmbalagem(categoriaPorProduto, categoriasVisiveis);
+    const visivelIds = recorte.ordemIdsVisiveis([...ordemById.values()]);
     const fermVisivel = recorte.lotesPorOrdem(fermLotes, visivelIds);
     const fornoVisivel = recorte.lotesPorOrdem(fornoLotes, visivelIds);
     const embVisivel = recorte.lotesPorProduto(embLotes);
@@ -230,11 +240,6 @@ export class FluxoProcessoService {
       forno,
       embalagem,
     });
-    await this.syncEstimativa(date);
-    const [estimativas, produtividade] = await Promise.all([
-      estimativaProducaoService.listByOrdemIds(ordensDia.map((o) => o.id)),
-      estimativaProducaoService.resolveProdutividadeForDate(date),
-    ]);
     fluxo.produtividade = produtividade
       ? {
           taxaAssadeirasHoraProducao: produtividade.taxaAssadeirasHoraProducao,
@@ -268,7 +273,7 @@ export class FluxoProcessoService {
     const filasAsOfMs = date === todayISO ? Date.now() : brazilDayEndUtcMs(date);
     const ordensFilas = filterPedidosEmbalagemPorCategoriaVisivel(
       ordensDia,
-      buildCategoriaPorProdutoMap(produtos),
+      categoriaPorProduto,
       categoriasVisiveis,
     );
     const filasOps = ordensFilas.map((o) => toFluxoFilasOpInput(o, resolveProduto, resolveAssadeira));
@@ -290,6 +295,18 @@ export class FluxoProcessoService {
       opIdsVisiveis: idsDia,
       produtoNomesVisiveis: nomesVisiveis,
     });
+    this.opResultadoAttach.attach(
+      fluxo,
+      {
+        dateISO: date,
+        ordens: ordensDia,
+        visivelOrdemIds: visivelIds,
+        categoriasVisiveis,
+        categoriaPorProduto,
+      },
+      opLotes,
+      assadeiraCtx,
+    );
     this.ritmoAttach.attach(fluxo, {
       dateOntem: dateAnterior,
       referenceEndMs: ritmoReferenceEndMs(date),
@@ -307,14 +324,6 @@ export class FluxoProcessoService {
     });
 
     return { date, ultimaDataComDados, fluxo };
-  }
-
-  private async syncEstimativa(date: string): Promise<void> {
-    try {
-      await estimativaProducaoService.recalcForDate(date);
-    } catch (error) {
-      console.warn('[FluxoProcessoService] Falha ao recalcular estimativa', error);
-    }
   }
 
   private async loadAssadeiraNames(ids: string[]): Promise<AssadeiraRow[]> {
@@ -358,9 +367,9 @@ function ritmoReferenceEndMs(dateISO: string): number | null {
 }
 
 function collectOrdemIds(
-  ferm: FermentacaoLoteRecord[],
-  forno: FornoLoteRecord[],
-  emb: EmbalagemLoteRecord[],
+  ferm: Array<{ ordemProducaoId: string }>,
+  forno: Array<{ ordemProducaoId: string }>,
+  emb: Array<{ pedidoEmbalagemId: string | null }>,
   ordensDia: OrdemProducaoRecord[],
 ): string[] {
   const ids = new Set<string>();

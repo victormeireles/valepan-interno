@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { FluxoProcessoPrimeiraCarga } from '@/components/FluxoProcesso/FluxoNumerosCarregando';
 import FluxoProcessoScreen from '@/components/FluxoProcesso/FluxoProcessoScreen';
 import {
   useFluxoProcessoCarga,
@@ -10,22 +11,38 @@ import { usePainelAutoRefresh } from '@/hooks/usePainelAutoRefresh';
 
 export default function FluxoProcessoPageClient() {
   const { selectedDate, setSelectedDate } = useFluxoProcessoDateState();
-  const { fluxo, loading, message, loadCarga } = useFluxoProcessoCarga();
+  const { fluxo, loading, message, loadCarga, markLoading } = useFluxoProcessoCarga();
+  const skipDateRef = useRef<string | null>(null);
+  const handleDateChange = useCallback(
+    (date: string) => {
+      markLoading();
+      setSelectedDate(date);
+    },
+    [markLoading, setSelectedDate],
+  );
 
   useEffect(() => {
-    void loadCarga(selectedDate, setSelectedDate, true);
+    if (skipDateRef.current === selectedDate) {
+      skipDateRef.current = null;
+      return;
+    }
+    let active = true;
+    void loadCarga(selectedDate, true).then((resolved) => {
+      if (!active || !resolved || resolved === selectedDate) return;
+      skipDateRef.current = resolved;
+      setSelectedDate(resolved);
+    });
+    return () => {
+      active = false;
+    };
   }, [loadCarga, selectedDate, setSelectedDate]);
 
   usePainelAutoRefresh(() => {
-    void loadCarga(selectedDate, setSelectedDate, false);
+    void loadCarga(selectedDate, false);
   });
 
   if (loading && !fluxo) {
-    return (
-      <div className="w-full py-16 text-center text-text-muted">
-        Carregando fluxo do processo…
-      </div>
-    );
+    return <FluxoProcessoPrimeiraCarga />;
   }
 
   if (!fluxo) {
@@ -46,7 +63,8 @@ export default function FluxoProcessoPageClient() {
       <FluxoProcessoScreen
         fluxo={fluxo}
         selectedDate={selectedDate}
-        onDateChange={setSelectedDate}
+        onDateChange={handleDateChange}
+        carregandoNumeros={loading}
       />
     </>
   );
