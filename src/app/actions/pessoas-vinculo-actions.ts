@@ -99,6 +99,7 @@ export async function listTurnosVinculo(): Promise<TurnoOpcao[]> {
   const { data, error } = await client
     .from('pessoas_turnos' as never)
     .select('codigo, nome, pessoas_setores(nome)')
+    .eq('ativo', true)
     .order('nome');
   if (error) throw new Error(error.message);
   return ((data ?? []) as TurnoRow[]).map((row) => ({
