@@ -12,6 +12,7 @@ import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
+import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { MenuPessoa } from './MenuPessoa';
 import { PainelAcao } from './PainelAcao';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
@@ -62,7 +63,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
                     ))}
                   </button>
                   {podeEditar ? (
-                    <IconButton icon="schedule" label={`Alterar horário de ${item.turnoNome}`} size="lg" onClick={() => setEdicao({ tipo: 'editar', setorNome: setor.setorNome, setorCodigo: setor.setorCodigo, turno: item, codigos, vinculados: item.contratados + item.reservas + setor.apoio.filter((pessoa) => pessoa.turnoCodigo === item.turnoCodigo).length })} />
+                    <IconButton icon="schedule" label={`Alterar horário de ${item.turnoNome}`} size="lg" onClick={() => setEdicao(edicaoDoTurno(setor, item, codigos))} />
                   ) : null}
                 </div>
                 <button type="button" className="w-full p-3 text-left" onClick={() => setTurnoCodigo(item.turnoCodigo)}>
@@ -90,7 +91,9 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
           setTurnoCodigo(null);
         }}
       >
-        {selecionado ? <TurnoDetalhe turno={selecionado.turno} lider={selecionado.lider} onAcao={abrir} /> : null}
+        {selecionado ? (
+          <TurnoDetalhe turno={selecionado.turno} lider={selecionado.lider} podeDefinirLider={podeEditar} onAcao={abrir} />
+        ) : null}
       </PainelAcao>
       <QuadroTurnoPainel
         edicao={edicao}
@@ -117,6 +120,19 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
       ) : null}
     </div>
   );
+}
+
+function edicaoDoTurno(setor: QuadroSetor, item: QuadroTurno, codigos: string[]): EdicaoTurno {
+  const remocao = new TurnoRemocao();
+  return {
+    tipo: 'editar',
+    setorNome: setor.setorNome,
+    setorCodigo: setor.setorCodigo,
+    turno: item,
+    codigos,
+    vinculados: remocao.ocupadas(item.contratados, item.reservas),
+    apoioNomes: remocao.nomesApoio(setor.apoio, item.turnoCodigo),
+  };
 }
 
 function localizarTurno(setores: QuadroSetor[], codigo: string | null) {
@@ -169,10 +185,12 @@ function Metrica({ rotulo, valor }: { rotulo: string; valor: number }) {
 function TurnoDetalhe({
   turno,
   lider,
+  podeDefinirLider,
   onAcao,
 }: {
   turno: QuadroTurno;
   lider: string | null;
+  podeDefinirLider: boolean;
   onAcao: (acao: AcaoPessoa, pessoa: QuadroPessoa, turnoNome: string) => void;
 }) {
   return (
@@ -194,7 +212,13 @@ function TurnoDetalhe({
               { value: pessoa.lider ? <Badge tone="accent">Líder</Badge> : <span />, width: '4.5rem', align: 'left', tabular: false },
               { value: rotuloPapel(pessoa.papel), width: '5.5rem', align: 'left', tabular: false },
             ]}
-            menu={<MenuPessoa item={paraColaborador(pessoa, turno.turnoNome)} onAcao={(proxima) => onAcao(proxima, pessoa, turno.turnoNome)} />}
+            menu={
+              <MenuPessoa
+                item={paraColaborador(pessoa, turno.turnoNome)}
+                definirLider={podeDefinirLider}
+                onAcao={(proxima) => onAcao(proxima, pessoa, turno.turnoNome)}
+              />
+            }
           />
         ))
       )}

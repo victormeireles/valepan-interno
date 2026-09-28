@@ -33,6 +33,23 @@ export async function transferirColaborador(
   return rpc('pessoas_transferir', { p_codigo: codigo, p_turno: turno, p_lider: lider });
 }
 
+export async function definirLiderColaborador(codigo: string, lider: boolean): Promise<VinculoResultado> {
+  await requireInternoModulo('interno_pessoas', 'editar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await client
+    .from('pessoas_colaboradores' as never)
+    .update({ lider_setor: lider, updated_at: new Date().toISOString() } as never)
+    .eq('codigo', codigo)
+    .neq('situacao', 'desligado')
+    .not('setor_id', 'is', null)
+    .select('codigo');
+  if (error) return { ok: false, mensagem: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { ok: false, mensagem: 'Não foi possível definir o líder.' };
+  }
+  return { ok: true, mensagem: lider ? 'Líder definido.' : 'Liderança removida.' };
+}
+
 export async function desligarColaborador(codigo: string, data: string, tipo: string): Promise<VinculoResultado> {
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
   let futuro = false;

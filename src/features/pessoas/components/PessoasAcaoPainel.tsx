@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   admitirColaborador,
   admitirNovo,
+  definirLiderColaborador,
   desistirAdmissao,
   desligarColaborador,
   transferirColaborador,
@@ -25,6 +26,7 @@ export type AcaoPessoa =
   | 'transferir'
   | 'desligar'
   | 'desistir'
+  | 'lider'
   | null;
 
 type Props = {
@@ -102,6 +104,7 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         {acao === 'desistir' ? (
           <p className="text-sm text-stone-700">Isso encerra a reserva e não registra demissão.</p>
         ) : null}
+        {acao === 'lider' ? <p className="text-sm text-stone-700">{textoLider(pessoa)}</p> : null}
         <Button type="submit" size="lg" variant={acao === 'desligar' ? 'danger' : 'primary'} disabled={pendente || (exigeTurno && !turnoCodigo)}>
           {pendente ? 'Registrando…' : 'Confirmar'}
         </Button>
@@ -121,7 +124,15 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'transferir') return 'Alterar setor e turno';
   if (acao === 'desligar') return 'Desligar';
   if (acao === 'desistir') return 'Desistir da admissão';
+  if (acao === 'lider') return pessoa?.liderSetor ? 'Remover liderança' : 'Definir líder';
   return '';
+}
+
+function textoLider(pessoa: ColaboradorListaItem | null): string {
+  if (!pessoa) return 'Selecione um colaborador.';
+  if (pessoa.liderSetor) return `Remove a liderança de ${pessoa.nome}.`;
+  const setor = pessoa.setorNome ? ` do setor ${pessoa.setorNome}` : '';
+  return `Define ${pessoa.nome} como líder${setor}.`;
 }
 
 async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, form: FormData) {
@@ -135,5 +146,6 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
   if (acao === 'contratar') return admitirColaborador(pessoa.codigo, data);
   if (acao === 'transferir') return transferirColaborador(pessoa.codigo, turno, form.get('lider') === '1');
   if (acao === 'desligar') return desligarColaborador(pessoa.codigo, data, String(form.get('tipo') ?? ''));
+  if (acao === 'lider') return definirLiderColaborador(pessoa.codigo, !pessoa.liderSetor);
   return desistirAdmissao(pessoa.codigo);
 }

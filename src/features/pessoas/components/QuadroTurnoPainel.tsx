@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/Input';
 import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { HorarioDiaQuadro, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
 import { TurnoCodigo } from '@/domain/pessoas/turno-codigo';
+import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { PainelAcao } from './PainelAcao';
 import { QuadroHorarioDia } from './QuadroHorarioDia';
 
 export type EdicaoTurno =
-  | { tipo: 'editar'; setorNome: string; setorCodigo: string; turno: QuadroTurno; codigos: string[]; vinculados: number }
+  | { tipo: 'editar'; setorNome: string; setorCodigo: string; turno: QuadroTurno; codigos: string[]; vinculados: number; apoioNomes: string[] }
   | { tipo: 'novo'; setorNome: string; setorCodigo: string; codigos: string[] };
 
 type Props = {
@@ -28,6 +29,7 @@ export function QuadroTurnoPainel({ edicao, onFechar, onConcluir }: Props) {
 function Formulario({ edicao, onFechar, onConcluir }: { edicao: EdicaoTurno; onFechar: () => void; onConcluir: Props['onConcluir'] }) {
   const novo = edicao.tipo === 'novo';
   const ocupadas = novo ? 0 : edicao.vinculados;
+  const avisoApoio = novo ? null : new TurnoRemocao().avisoApoio(edicao.apoioNomes);
   const [nome, setNome] = useState(novo ? '' : edicao.turno.turnoNome);
   const [vagas, setVagas] = useState(novo ? 1 : edicao.turno.aprovado);
   const [dias, setDias] = useState<HorarioDiaQuadro[]>(novo ? new HorarioSemana().padrao() : completar(edicao.turno.horario));
@@ -58,7 +60,7 @@ function Formulario({ edicao, onFechar, onConcluir }: { edicao: EdicaoTurno; onF
         <CamposTurno nome={nome} vagas={vagas} ocupadas={ocupadas} onNome={setNome} onVagas={setVagas} />
         <BarraSemana onRepetir={() => setDias(repetirSegunda(dias))} />
         <GradeDias dias={dias} onChange={setDias} />
-        <AcoesTurno editar={!novo} pendente={pendente} ocupadas={ocupadas} confirmar={confirmar} onSalvar={salvar} onRemover={() => (confirmar ? remover() : setConfirmar(true))} />
+        <AcoesTurno editar={!novo} pendente={pendente} ocupadas={ocupadas} avisoApoio={avisoApoio} confirmar={confirmar} onSalvar={salvar} onRemover={() => (confirmar ? remover() : setConfirmar(true))} />
       </div>
     </PainelAcao>
   );
@@ -111,24 +113,28 @@ function GradeDias({ dias, onChange }: { dias: HorarioDiaQuadro[]; onChange: (di
   );
 }
 
-function AcoesTurno({ editar, pendente, ocupadas, confirmar, onSalvar, onRemover }: {
+function AcoesTurno({ editar, pendente, ocupadas, avisoApoio, confirmar, onSalvar, onRemover }: {
   editar: boolean;
   pendente: boolean;
   ocupadas: number;
+  avisoApoio: string | null;
   confirmar: boolean;
   onSalvar: () => void;
   onRemover: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-4">
-      {editar ? (
-        <Button type="button" variant="danger" size="lg" disabled={pendente || ocupadas > 0} onClick={onRemover}>
-          {rotuloRemover(ocupadas, confirmar)}
+    <div className="flex flex-col gap-3 border-t border-stone-100 pt-4">
+      {avisoApoio ? <p className="text-sm text-stone-600">{avisoApoio}</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {editar ? (
+          <Button type="button" variant="danger" size="lg" disabled={pendente || ocupadas > 0} onClick={onRemover}>
+            {rotuloRemover(ocupadas, confirmar)}
+          </Button>
+        ) : <span />}
+        <Button type="button" variant="primary" size="lg" disabled={pendente} onClick={onSalvar}>
+          {pendente ? 'Salvando…' : 'Salvar turno'}
         </Button>
-      ) : <span />}
-      <Button type="button" variant="primary" size="lg" disabled={pendente} onClick={onSalvar}>
-        {pendente ? 'Salvando…' : 'Salvar turno'}
-      </Button>
+      </div>
     </div>
   );
 }
