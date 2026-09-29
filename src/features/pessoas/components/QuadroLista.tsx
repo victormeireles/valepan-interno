@@ -12,8 +12,10 @@ import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
+import { QuadroTotais } from '@/domain/pessoas/quadro-totais';
 import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { MenuPessoa } from './MenuPessoa';
+import { QuadroContagem } from './QuadroContagem';
 import { PainelAcao } from './PainelAcao';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
 import { QuadroTurnoPainel, type EdicaoTurno } from './QuadroTurnoPainel';
@@ -29,6 +31,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
   const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null);
   const codigos = turnos.map((turno) => turno.codigo);
   const selecionado = useMemo(() => localizarTurno(setores, turnoCodigo), [setores, turnoCodigo]);
+  const totais = useMemo(() => new QuadroTotais().geral(setores), [setores]);
 
   function abrir(proxima: AcaoPessoa, alvo: QuadroPessoa, turnoNome: string) {
     setPessoa(paraColaborador(alvo, turnoNome));
@@ -38,18 +41,22 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
       <Toolbar title="Quadro" resumo="Aprovadas, contratados, reservas e vagas livres" />
+      <QuadroContagem numeros={totais} densidade="geral" />
       {setores.map((setor) => (
         <section key={setor.setorNome} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-stone-900">{setor.setorNome}</h2>
               <p className="text-sm text-stone-600">{setor.liderNome ? `Líder: ${setor.liderNome}` : 'Sem líder cadastrado'}</p>
             </div>
-            {podeEditar ? (
-              <Button type="button" variant="secondary" size="lg" icon="add" onClick={() => setEdicao({ tipo: 'novo', setorNome: setor.setorNome, setorCodigo: setor.setorCodigo, codigos })}>
-                Novo turno
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <QuadroContagem numeros={new QuadroTotais().doSetor(setor)} densidade="setor" />
+              {podeEditar ? (
+                <Button type="button" variant="secondary" size="lg" icon="add" onClick={() => setEdicao({ tipo: 'novo', setorNome: setor.setorNome, setorCodigo: setor.setorCodigo, codigos })}>
+                  Novo turno
+                </Button>
+              ) : null}
+            </div>
           </header>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {setor.turnos.map((item) => (
