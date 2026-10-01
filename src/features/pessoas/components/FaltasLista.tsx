@@ -9,7 +9,6 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { ListColumnHeader } from '@/components/ui/ListColumnHeader';
 import { ListRow } from '@/components/ui/ListRow';
-import { Select } from '@/components/ui/Select';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
@@ -18,8 +17,8 @@ import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
 import { FaltasClassificacaoFiltro } from './FaltasClassificacaoFiltro';
 import { FaltasPessoaModal } from './FaltasPessoaModal';
 import { FaltasResumoCards } from './FaltasResumoCards';
-import { BuscaPessoa } from './BuscaPessoa';
 import { ColunaRotulo } from './ColunaRotulo';
+import { FaltaLancamentoForm } from './FaltaLancamentoForm';
 import { PainelAcao } from './PainelAcao';
 
 type Pessoa = { codigo: string; nome: string };
@@ -50,14 +49,9 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
   const abertas = filtrados.filter((item) => item.codigo === pessoaCodigo && !item.cancelada);
   const pessoaAberta = pessoasLista.find((pessoa) => pessoa.codigo === pessoaCodigo);
 
-  async function lancar(form: FormData) {
+  async function lancar(entrada: { datas: string[]; classificacao: string; justificativa: string }) {
     setPendente(true);
-    const resultado = await lancarFalta({
-      codigo: pessoaId,
-      data: String(form.get('data') ?? ''),
-      classificacao: String(form.get('classificacao') ?? 'pendente'),
-      justificativa: String(form.get('justificativa') ?? ''),
-    });
+    const resultado = await lancarFalta({ codigo: pessoaId, ...entrada });
     setPendente(false);
     setAviso({ texto: resultado.mensagem, ok: resultado.ok });
     if (resultado.ok) {
@@ -76,8 +70,8 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
         actions={<Button size="lg" icon="event_busy" onClick={() => setAberto(true)}>Lançar falta</Button>}
       />
       <div className="grid grid-cols-1 items-end gap-3 px-4 pt-4 sm:px-6 lg:grid-cols-[minmax(0,11rem)_minmax(0,11rem)_minmax(0,1fr)_auto]">
-        <Input key={inicio} label="De" type="date" defaultValue={inicio} onChange={(event) => aplicarPeriodo(router, event.target.value, fim)} />
-        <Input key={fim} label="Até" type="date" defaultValue={fim} onChange={(event) => aplicarPeriodo(router, inicio, event.target.value)} />
+        <Input key={`de-${inicio}`} label="De" type="date" defaultValue={inicio} onChange={(event) => aplicarPeriodo(router, event.target.value, fim)} />
+        <Input key={`ate-${fim}`} label="Até" type="date" defaultValue={fim} onChange={(event) => aplicarPeriodo(router, inicio, event.target.value)} />
         <Input label="Busca" aria-label="Buscar falta" placeholder="Nome" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
         <FaltasClassificacaoFiltro value={classificacao} onChange={(valor) => { setClassificacao(valor); setLimite(40); }} />
       </div>
@@ -111,13 +105,13 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
       {pessoasLista.length > limite ? <Button variant="secondary" size="lg" onClick={() => setLimite((atual) => atual + 40)}>Mostrar mais</Button> : null}
       </div>
       <PainelAcao aberto={aberto} titulo="Lançar falta" onFechar={() => setAberto(false)}>
-        <form className="flex flex-col gap-3" action={lancar}>
-          <BuscaPessoa label="Colaborador" opcoes={pessoas.map((pessoa) => ({ id: pessoa.codigo, nome: pessoa.nome, detalhe: pessoa.codigo }))} value={pessoaId} onChange={setPessoaId} />
-          <Input name="data" label="Data" type="date" required />
-          <Select name="classificacao" label="Classificação" options={CLASSIFICACOES} />
-          <Input name="justificativa" label="Justificativa" />
-          <Button type="submit" size="lg" disabled={pendente || !pessoaId}>{pendente ? 'Registrando…' : 'Lançar'}</Button>
-        </form>
+        <FaltaLancamentoForm
+          pessoas={pessoas}
+          pessoaId={pessoaId}
+          pendente={pendente}
+          onPessoa={setPessoaId}
+          onEnviar={lancar}
+        />
       </PainelAcao>
       {pessoaCodigo && pessoaAberta ? (
         <FaltasPessoaModal
@@ -133,12 +127,6 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
     </div>
   );
 }
-
-const CLASSIFICACOES = [
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'justificada', label: 'Justificada' },
-  { value: 'injustificada', label: 'Injustificada' },
-];
 
 function porClassificacao(itens: FaltaListaItem[], classificacao: string): FaltaListaItem[] {
   if (!classificacao) return itens;
