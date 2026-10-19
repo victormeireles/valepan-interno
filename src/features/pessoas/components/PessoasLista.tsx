@@ -17,8 +17,12 @@ import {
   ColaboradorListaFiltro,
   type ColaboradorListaItem,
 } from '@/domain/pessoas/colaborador-lista-filtro';
+import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import { CadastroPainel } from './CadastroPainel';
 import { ColunaRotulo } from './ColunaRotulo';
+import { ExamePrazoMarca } from './ExamePrazoMarca';
+import { ExamesPainel } from './ExamesPainel';
 import { MenuPessoa } from './MenuPessoa';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
 
@@ -41,12 +45,15 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
   const [termo, setTermo] = useState('');
   const [setor, setSetor] = useState('');
   const [turno, setTurno] = useState('');
-  const [situacao, setSituacao] = useState(filtrosIniciais.situacao ?? '');
+  const [situacao, setSituacao] = useState(filtrosIniciais.situacao ?? 'ativo');
   const [lider, setLider] = useState('');
   const [acao, setAcao] = useState<AcaoPessoa>(null);
   const [pessoa, setPessoa] = useState<ColaboradorListaItem | null>(null);
   const [cadastro, setCadastro] = useState<ColaboradorListaItem | null>(null);
+  const [exame, setExame] = useState<ColaboradorListaItem | null>(null);
   const [editandoCadastro, setEditandoCadastro] = useState(false);
+  const hoje = getTodayISOInBrazilTimezone();
+  const prazo = new ExamePrazo();
   const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null);
   const filtrados = useMemo(
     () =>
@@ -65,14 +72,22 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
 
   function abrir(proxima: AcaoPessoa, alvo: ColaboradorListaItem | null) {
     setCadastro(null);
+    setExame(null);
     setPessoa(alvo);
     setAcao(proxima);
   }
 
   function abrirCadastro(alvo: ColaboradorListaItem, editando: boolean) {
     setAcao(null);
+    setExame(null);
     setEditandoCadastro(editando);
     setCadastro(alvo);
+  }
+
+  function abrirExames(alvo: ColaboradorListaItem) {
+    setAcao(null);
+    setCadastro(null);
+    setExame(alvo);
   }
 
   return (
@@ -103,6 +118,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
                   { label: 'Setor', width: '10rem', align: 'left' },
                   { label: 'Turno', width: '8rem', align: 'left' },
                   { label: 'Líder', width: '6rem', align: 'left' },
+                  { label: 'Próximo exame', width: '10.5rem', align: 'left' },
                 ]}
                 menuWidth="2.75rem"
               />
@@ -119,8 +135,9 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
                   { value: <ColunaRotulo label="Setor">{item.setorNome ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Turno">{item.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
+                  { value: <ColunaRotulo label="Próximo exame"><button type="button" className="max-w-full cursor-pointer border-none bg-transparent p-0 text-left" aria-label={`Exames de ${item.nome}`} onClick={() => abrirExames(item)}><ExamePrazoMarca situacao={prazo.calcular(item.ultimoExame, hoje)} silenciar={item.situacao === 'desligado'} /></button></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
                 ]}
-                menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} />}
+                menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} onExames={abrirExames} />}
               />
             ))}
           </Card>
@@ -135,6 +152,15 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
         pessoa={cadastro}
         editandoInicial={editandoCadastro}
         onFechar={() => setCadastro(null)}
+        onConcluir={(texto, ok) => {
+          setAviso({ texto, ok });
+          if (ok) router.refresh();
+        }}
+      />
+      <ExamesPainel
+        key={exame?.codigo ?? 'fechado'}
+        pessoa={exame}
+        onFechar={() => setExame(null)}
         onConcluir={(texto, ok) => {
           setAviso({ texto, ok });
           if (ok) router.refresh();

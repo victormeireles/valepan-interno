@@ -7,6 +7,7 @@ export type ColaboradorListaItem = {
   turnoCodigo: string | null;
   liderSetor: boolean;
   avisoAtivo: boolean;
+  ultimoExame: string | null;
 };
 
 export type ColaboradorListaCriterio = {

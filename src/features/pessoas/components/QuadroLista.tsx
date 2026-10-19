@@ -161,6 +161,7 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
     turnoCodigo: alvo.turnoCodigo,
     liderSetor: alvo.lider,
     avisoAtivo: false,
+    ultimoExame: null,
   };
 }
 

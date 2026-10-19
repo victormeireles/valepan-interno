@@ -45,7 +45,14 @@ export class ColaboradorCadastroNormalizador {
   private readonly nomes = new NomeCapitalizador();
   private readonly cpfs = new CpfVerificador();
 
+  nomeColaborador(valor: string | undefined): string {
+    const texto = this.limite(valor, 200, 'Nome');
+    if (!texto || texto.length < 3) throw new Error('Informe o nome.');
+    return this.nomes.formatar(texto);
+  }
+
   normalizar(entrada: Record<string, string>): ColaboradorCadastro {
+    if (entrada.nome !== undefined) this.nomeColaborador(entrada.nome);
     return {
       telefone: this.telefone(entrada.telefone, 'Telefone'),
       email: this.email(entrada.email),

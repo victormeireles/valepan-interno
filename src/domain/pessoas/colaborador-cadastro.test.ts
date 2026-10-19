@@ -64,6 +64,12 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(true);
   });
 
+  it('capitaliza o nome do colaborador e rejeita nome curto', () => {
+    expect(normalizador.nomeColaborador('maria da silva')).toBe('Maria da Silva');
+    expect(() => normalizador.normalizar({ ...vazio, nome: 'An' })).toThrow('Informe o nome.');
+    expect(normalizador.normalizar(vazio).telefone).toBeNull();
+  });
+
   it('rejeita CPF, e-mail, telefone e camiseta inválidos', () => {
     expect(() => normalizador.normalizar({ ...vazio, cpf: '111' })).toThrow('CPF inválido.');
     expect(() => normalizador.normalizar({ ...vazio, email: 'ana' })).toThrow('E-mail inválido.');

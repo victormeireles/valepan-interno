@@ -2,6 +2,7 @@
 
 import { ColaboradorListaRowParser } from '@/domain/pessoas/colaborador-lista-row-parser';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
+import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
@@ -29,13 +30,26 @@ export async function listColaboradores(): Promise<ColaboradorListaItem[]> {
   if (avisos.error) throw new Error(avisos.error.message);
   const comAviso = new Set(
     ((avisos.data ?? []) as { pessoas_colaboradores: { codigo: string } | { codigo: string }[] | null }[])
-      .map((row) => {
-        const pessoa = Array.isArray(row.pessoas_colaboradores)
-          ? row.pessoas_colaboradores[0]
-          : row.pessoas_colaboradores;
-        return pessoa?.codigo ?? '';
-      })
+      .map((row) => codigoDe(row.pessoas_colaboradores))
       .filter(Boolean),
   );
-  return itens.map((item) => ({ ...item, avisoAtivo: comAviso.has(item.codigo) }));
+  const exames = await client
+    .from('pessoas_exames' as never)
+    .select('data, pessoas_colaboradores(codigo)');
+  if (exames.error) throw new Error(exames.error.message);
+  const ultimos = new ExamePrazo().ultimos(
+    ((exames.data ?? []) as { data: string; pessoas_colaboradores: { codigo: string } | { codigo: string }[] | null }[]).map(
+      (row) => ({ codigo: codigoDe(row.pessoas_colaboradores), data: String(row.data ?? '') }),
+    ),
+  );
+  return itens.map((item) => ({
+    ...item,
+    avisoAtivo: comAviso.has(item.codigo),
+    ultimoExame: ultimos.get(item.codigo) ?? null,
+  }));
+}
+
+function codigoDe(valor: { codigo: string } | { codigo: string }[] | null): string {
+  const pessoa = Array.isArray(valor) ? valor[0] : valor;
+  return pessoa?.codigo ?? '';
 }

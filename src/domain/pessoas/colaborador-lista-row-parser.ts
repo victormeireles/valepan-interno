@@ -38,6 +38,7 @@ export class ColaboradorListaRowParser {
       turnoCodigo: this.lerCodigoRelacao(row.pessoas_turnos),
       liderSetor: row.lider_setor === true,
       avisoAtivo: false,
+      ultimoExame: null,
     };
   }
 

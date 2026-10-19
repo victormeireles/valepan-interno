@@ -62,7 +62,7 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
       ) : null}
       {cadastro && editando ? (
         <form className="flex flex-col gap-5" action={salvar}>
-          <CadastroFormulario cadastro={cadastro} />
+          <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="submit" size="lg" disabled={pendente}>{pendente ? 'Salvando…' : 'Salvar'}</Button>
             <Button type="button" size="lg" variant="secondary" onClick={() => setEditando(false)}>Cancelar</Button>

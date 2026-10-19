@@ -6,9 +6,22 @@ import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { TAMANHOS_CAMISETA, type ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
 
-export function CadastroFormulario({ cadastro }: { cadastro: ColaboradorCadastro }) {
+export function CadastroFormulario({
+  cadastro,
+  nome,
+}: {
+  cadastro: ColaboradorCadastro;
+  nome?: string;
+}) {
   return (
     <>
+      {nome !== undefined ? (
+        <Grupo titulo="Identificação">
+          <div className="sm:col-span-2">
+            <Input name="nome" label="Nome" defaultValue={nome} required autoComplete="name" />
+          </div>
+        </Grupo>
+      ) : null}
       <Grupo titulo="Contato">
         <Input name="telefone" label="Telefone" defaultValue={cadastro.telefone ?? ''} inputMode="tel" />
         <Input name="email" label="E-mail" type="email" defaultValue={cadastro.email ?? ''} />

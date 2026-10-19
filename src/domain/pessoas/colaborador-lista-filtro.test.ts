@@ -13,6 +13,7 @@ describe('ColaboradorListaFiltro', () => {
         turnoCodigo: 'T1',
         liderSetor: true,
         avisoAtivo: false,
+        ultimoExame: null,
       },
       {
         codigo: 'VP-9002',
@@ -23,6 +24,7 @@ describe('ColaboradorListaFiltro', () => {
         turnoCodigo: null,
         liderSetor: false,
         avisoAtivo: false,
+        ultimoExame: null,
       },
     ];
     const filtro = new ColaboradorListaFiltro();

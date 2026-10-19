@@ -28,15 +28,17 @@ export async function atualizarCadastroColaborador(
   await requireInternoModulo('interno_pessoas', 'editar');
   const normalizador = new ColaboradorCadastroNormalizador();
   let cadastro: ColaboradorCadastro;
+  let nome: string | null = null;
   try {
     cadastro = normalizador.normalizar(campos);
+    if ('nome' in campos) nome = normalizador.nomeColaborador(campos.nome);
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
   }
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_colaboradores' as never)
-    .update(paraLinha(cadastro, normalizador) as never)
+    .update({ ...paraLinha(cadastro, normalizador), ...(nome ? { nome } : {}) } as never)
     .eq('codigo', codigo)
     .select('codigo');
   if (error) return { ok: false, mensagem: error.message };
