@@ -3,7 +3,7 @@ import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
 const ROTULOS = [
   { chave: 'aprovado', rotulo: 'Aprovadas' },
   { chave: 'contratados', rotulo: 'Contratados' },
-  { chave: 'reservas', rotulo: 'Reservas' },
+  { chave: 'reservas', rotulo: 'A entrar' },
   { chave: 'livres', rotulo: 'Livres' },
 ] as const;
 

@@ -40,7 +40,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
-      <Toolbar title="Quadro" resumo="Aprovadas, contratados, reservas e vagas livres" />
+      <Toolbar title="Quadro" resumo="Aprovadas, contratados, a entrar e vagas livres" />
       <QuadroContagem numeros={totais} densidade="geral" />
       {setores.map((setor) => (
         <section key={setor.setorNome} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
@@ -78,7 +78,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
                   <span className="mt-2 grid grid-cols-4 gap-2 text-center">
                     <Metrica rotulo="Aprovadas" valor={item.aprovado} />
                     <Metrica rotulo="Contratados" valor={item.contratados} />
-                    <Metrica rotulo="Reservas" valor={item.reservas} />
+                    <Metrica rotulo="A entrar" valor={item.reservas} />
                     <Metrica rotulo="Livres" valor={item.livres} />
                   </span>
                 </button>
@@ -176,7 +176,7 @@ function Barra({ turno }: { turno: QuadroTurno }) {
 }
 
 function rotuloPapel(papel: QuadroPessoa['papel']): string {
-  if (papel === 'reserva') return 'Reserva';
+  if (papel === 'reserva') return 'A entrar';
   if (papel === 'apoio') return 'Apoio';
   return 'Ocupação';
 }
@@ -218,7 +218,7 @@ function TurnoDetalhe({
             subtitle={pessoa.codigo}
             columns={[
               { value: pessoa.lider ? <Badge tone="accent">Líder</Badge> : <span />, width: '4.5rem', align: 'left', tabular: false },
-              { value: rotuloPapel(pessoa.papel), width: '5.5rem', align: 'left', tabular: false },
+              { value: rotuloPapel(pessoa.papel), width: '6.5rem', align: 'left', tabular: false },
             ]}
             menu={
               <MenuPessoa

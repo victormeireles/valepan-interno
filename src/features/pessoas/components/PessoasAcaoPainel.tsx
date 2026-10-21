@@ -63,7 +63,10 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
           <>
             <Input name="nome" label="Nome" required />
             <BuscaTurno name="turno" label="Setor e turno" turnos={turnos} onChange={setTurnoCodigo} />
-            <Input name="data" label="Data de admissão" type="date" required />
+            <Input name="data" label="Data de admissão" type="date" />
+            <p className="text-sm text-stone-700">
+              Em branco ou futura registra admissão prevista e conta em A entrar. Data de hoje ou anterior admite e conta em Contratados.
+            </p>
             <CadastroFormulario cadastro={CADASTRO_VAZIO} />
           </>
         ) : null}

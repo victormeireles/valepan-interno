@@ -33,6 +33,13 @@ export class VinculoRegras {
     return livre;
   }
 
+  classificarAdmissao(data: string, hoje: string): { data: string | null; prevista: boolean } {
+    const texto = data.trim();
+    if (!texto) return { data: null, prevista: true };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) throw new Error('Informe a data de admissão.');
+    return { data: texto, prevista: texto > hoje };
+  }
+
   desligar(data: string, hoje: string, tipo: string): { data: string; futuro: boolean; tipo: 'com_trabalho' | 'sem_trabalho' } {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error('Informe a data do desligamento.');
     if (tipo !== 'com_trabalho' && tipo !== 'sem_trabalho') {

@@ -30,6 +30,19 @@ describe('VinculoRegras', () => {
     ).toThrow(/vaga livre/);
   });
 
+  it('data em branco ou futura fica para entrar e data de hoje admite', () => {
+    expect(regras.classificarAdmissao('', '2026-10-21')).toEqual({ data: null, prevista: true });
+    expect(regras.classificarAdmissao('2026-11-02', '2026-10-21')).toEqual({
+      data: '2026-11-02',
+      prevista: true,
+    });
+    expect(regras.classificarAdmissao('2026-10-21', '2026-10-21')).toEqual({
+      data: '2026-10-21',
+      prevista: false,
+    });
+    expect(() => regras.classificarAdmissao('21/10/2026', '2026-10-21')).toThrow(/admissão/);
+  });
+
   it('data futura permanece em aviso e exige com ou sem trabalho', () => {
     expect(regras.desligar('2026-10-01', '2026-09-25', 'com_trabalho')).toEqual({
       data: '2026-10-01',

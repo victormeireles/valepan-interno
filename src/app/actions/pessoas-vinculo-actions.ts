@@ -73,8 +73,11 @@ export async function admitirNovo(
   campos: Record<string, string>,
 ): Promise<VinculoResultado> {
   await requireInternoModulo('interno_pessoas', 'editar');
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  let admissao: { data: string | null; prevista: boolean };
   try {
     new ColaboradorCadastroNormalizador().normalizar(campos);
+    admissao = new VinculoRegras().classificarAdmissao(data, hoje);
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível admitir.' };
   }
@@ -82,13 +85,13 @@ export async function admitirNovo(
   const { data: codigo, error } = await client.rpc('pessoas_admitir_novo' as never, {
     p_nome: new NomeCapitalizador().formatar(nome),
     p_turno: turno,
-    p_data: data,
+    p_data: admissao.data,
   } as never);
   if (error) return { ok: false, mensagem: error.message };
   if (typeof codigo !== 'string' || !codigo) return { ok: false, mensagem: 'Não foi possível gerar o código.' };
   const cadastro = await atualizarCadastroColaborador(codigo, campos);
   if (!cadastro.ok) return cadastro;
-  return { ok: true, mensagem: 'Colaborador admitido.' };
+  return { ok: true, mensagem: admissao.prevista ? 'Admissão prevista registrada.' : 'Colaborador admitido.' };
 }
 
 export type TurnoOpcao = { codigo: string; nome: string; setorNome: string };
