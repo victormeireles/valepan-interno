@@ -6,7 +6,9 @@ export interface ToolbarProps {
   actions?: ReactNode;
   filters?: ReactNode;
   sticky?: boolean;
+  flush?: boolean;
   style?: CSSProperties;
+  className?: string;
 }
 
 export function Toolbar({
@@ -15,27 +17,33 @@ export function Toolbar({
   actions,
   filters,
   sticky = true,
+  flush = false,
   style,
+  className = '',
 }: ToolbarProps) {
   return (
     <header
       style={style}
       className={[
-        'border-b border-border-default px-4 py-4 sm:px-6',
+        'border-b border-border-default py-4',
+        flush ? 'px-0' : 'px-4 sm:px-6',
         sticky ? 'sticky top-0 z-20' : 'static',
         'bg-app/95 backdrop-blur-sm',
-      ].join(' ')}
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-3">
           <h1 className="text-2xl font-semibold tracking-[-0.015em] text-text-strong">
             {title}
           </h1>
           {(filters || resumo) ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               {filters}
               {resumo ? (
-                <span className="font-mono text-sm tabular-nums tracking-[-0.004em] text-text-muted">
+                <span className="min-w-0 font-mono text-sm tabular-nums tracking-[-0.004em] text-text-muted">
                   {resumo}
                 </span>
               ) : null}
@@ -43,7 +51,9 @@ export function Toolbar({
           ) : null}
         </div>
         {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+            {actions}
+          </div>
         ) : null}
       </div>
     </header>

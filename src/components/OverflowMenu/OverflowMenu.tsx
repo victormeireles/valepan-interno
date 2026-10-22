@@ -72,7 +72,7 @@ export default function OverflowMenu({
               width: menuWidth,
               visibility: position ? 'visible' : 'hidden',
             }}
-            className={`fixed z-50 ${menuClassName}`}
+            className={`fixed z-[70] ${menuClassName}`}
             onClick={(event) => {
               if ((event.target as HTMLElement).closest('[role="menuitem"]')) {
                 closeMenu();

@@ -51,68 +51,82 @@ export function ListRow({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={[
-        'flex items-center gap-3 border-b border-stone-100 px-3 py-2',
+        'flex min-w-0 flex-col gap-2 border-b border-stone-100 px-3 py-2.5',
+        'md:flex-row md:items-center md:gap-3 md:py-2',
         'transition-[background,box-shadow] duration-[120ms]',
         rowBg,
       ].join(' ')}
     >
-      {draggable ? (
-        <span
-          className="material-icons shrink-0 cursor-grab text-xl text-stone-400"
-          aria-hidden="true"
-        >
-          drag_indicator
-        </span>
-      ) : null}
-
-      {index != null ? (
-        <span className="w-6 shrink-0 text-center font-mono text-xs font-semibold tabular-nums text-stone-400">
-          {index}
-        </span>
-      ) : null}
-
-      <button
-        type="button"
-        onClick={onClick}
-        className={[
-          'min-w-0 flex-1 border-none bg-transparent p-0 text-left',
-          onClick ? 'cursor-pointer' : 'cursor-default',
-        ].join(' ')}
-      >
-        <span className="block truncate text-sm font-semibold tracking-[-0.004em] text-text-strong">
-          {title}
-        </span>
-        {subtitle ? (
-          <span className="block truncate text-xs text-text-muted">{subtitle}</span>
-        ) : null}
-      </button>
-
-      {columns.map((c, i) => {
-        const empty = c.value == null || c.value === '';
-        const align = c.align === 'left' ? 'text-left' : 'text-right';
-        const typeface =
-          c.tabular === false ? 'font-sans text-sm' : 'font-mono text-sm tabular-nums';
-        return (
+      <div className="flex min-w-0 items-center gap-3 md:contents">
+        {draggable ? (
           <span
-            key={i}
-            style={{ width: c.width ?? '3.5rem' }}
-            className={[
-              'shrink-0',
-              align,
-              typeface,
-              empty
-                ? 'text-stone-400'
-                : c.emphasize
-                  ? 'font-semibold text-text-strong'
-                  : 'text-stone-700',
-            ].join(' ')}
+            className="material-icons shrink-0 cursor-grab text-xl text-stone-400"
+            aria-hidden="true"
           >
-            {empty ? '—' : c.value}
+            drag_indicator
           </span>
-        );
-      })}
+        ) : null}
 
-      {menu ? <div className="shrink-0">{menu}</div> : null}
+        {index != null ? (
+          <span className="w-6 shrink-0 text-center font-mono text-xs font-semibold tabular-nums text-stone-400">
+            {index}
+          </span>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onClick}
+          className={[
+            'min-h-11 min-w-0 flex-1 border-none bg-transparent py-1 text-left',
+            onClick ? 'cursor-pointer' : 'cursor-default',
+          ].join(' ')}
+        >
+          <span className="block truncate text-sm font-semibold tracking-[-0.004em] text-text-strong">
+            {title}
+          </span>
+          {subtitle ? (
+            <span className="block truncate text-xs text-text-muted">{subtitle}</span>
+          ) : null}
+        </button>
+
+        {menu ? <div className="shrink-0 md:hidden">{menu}</div> : null}
+      </div>
+
+      {columns.length > 0 ? (
+        <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-1.5 md:contents">
+          {columns.map((column, i) => (
+            <ListRowColumnCell key={i} column={column} />
+          ))}
+        </div>
+      ) : null}
+
+      {menu ? <div className="hidden shrink-0 md:block">{menu}</div> : null}
     </div>
+  );
+}
+
+function ListRowColumnCell({ column }: { column: ListRowColumn }) {
+  const empty = column.value == null || column.value === '';
+  const align = column.align === 'left' ? 'text-left' : 'text-right';
+  const typeface =
+    column.tabular === false ? 'font-sans text-sm' : 'font-mono text-sm tabular-nums';
+
+  return (
+    <span
+      style={{ width: column.width ?? '3.5rem' }}
+      className={[
+        'min-w-0 max-md:!w-auto',
+        'md:shrink-0',
+        align,
+        typeface,
+        empty
+          ? 'text-stone-400'
+          : column.emphasize
+            ? 'font-semibold text-text-strong'
+            : 'text-stone-700',
+      ].join(' ')}
+    >
+      {empty ? '—' : column.value}
+    </span>
   );
 }

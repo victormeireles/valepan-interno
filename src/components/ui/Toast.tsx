@@ -58,7 +58,7 @@ export function Toast({
           type="button"
           onClick={onClose}
           aria-label="Fechar"
-          className="inline-flex cursor-pointer border-none bg-transparent p-0 text-inherit"
+          className="inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent p-0 text-inherit"
         >
           <span className="material-icons text-lg" aria-hidden="true">
             close
