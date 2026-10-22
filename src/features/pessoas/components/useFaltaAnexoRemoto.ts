@@ -51,12 +51,15 @@ export function useFaltaAnexoRemoto({
       setErro(null);
       try {
         const comprimido = await compressImage(file, 4);
-        const ok = await postFaltaAnexo(faltaId, comprimido);
-        if (!ok) {
+        const resultado = await postFaltaAnexo(faltaId, comprimido);
+        if (!resultado.ok) {
           setErro('Erro ao enviar anexo.');
           return;
         }
         setExisteRemoto(true);
+        setSignedUrl(
+          resultado.signedUrl ?? (await fetchFaltaAnexoUrl(faltaId)),
+        );
         onEnviouRemoto?.();
       } finally {
         setOcupado(false);

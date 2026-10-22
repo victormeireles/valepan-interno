@@ -6,10 +6,23 @@ function isJsonResponseOk(response: Response): boolean {
   return response.ok && contentType.includes('application/json');
 }
 
+export type PostFaltaAnexoResultado = {
+  ok: boolean;
+  signedUrl: string | null;
+};
+
+const POST_FALHOU: PostFaltaAnexoResultado = { ok: false, signedUrl: null };
+
+function lerSignedUrl(body: { signedUrl?: unknown } | null): string | null {
+  return typeof body?.signedUrl === 'string' && body.signedUrl.length > 0
+    ? body.signedUrl
+    : null;
+}
+
 export async function postFaltaAnexo(
   faltaId: string,
   file: File,
-): Promise<boolean> {
+): Promise<PostFaltaAnexoResultado> {
   try {
     const form = new FormData();
     form.append('photo', file);
@@ -19,9 +32,13 @@ export async function postFaltaAnexo(
       body: form,
       redirect: 'manual',
     });
-    return isJsonResponseOk(response);
+    if (!isJsonResponseOk(response)) return POST_FALHOU;
+    const body = (await response.json().catch(() => null)) as {
+      signedUrl?: unknown;
+    } | null;
+    return { ok: true, signedUrl: lerSignedUrl(body) };
   } catch {
-    return false;
+    return POST_FALHOU;
   }
 }
 
@@ -48,10 +65,7 @@ export async function fetchFaltaAnexoUrl(
       { redirect: 'manual' },
     );
     if (!isJsonResponseOk(response)) return null;
-    const body = (await response.json()) as { signedUrl?: unknown };
-    return typeof body.signedUrl === 'string' && body.signedUrl.length > 0
-      ? body.signedUrl
-      : null;
+    return lerSignedUrl((await response.json()) as { signedUrl?: unknown });
   } catch {
     return null;
   }

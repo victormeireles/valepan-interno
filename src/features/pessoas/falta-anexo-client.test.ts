@@ -36,7 +36,10 @@ function mockFetchResponse(init: {
 describe('postFaltaAnexo', () => {
   it('não trata HTML 200 (login) como sucesso', async () => {
     mockFetchResponse({ ok: true, status: 200, contentType: 'text/html' });
-    expect(await postFaltaAnexo(FALTA_ID, file)).toBe(false);
+    expect(await postFaltaAnexo(FALTA_ID, file)).toEqual({
+      ok: false,
+      signedUrl: null,
+    });
   });
 
   it('não trata opaqueredirect como sucesso', async () => {
@@ -46,16 +49,20 @@ describe('postFaltaAnexo', () => {
       type: 'opaqueredirect',
       contentType: null,
     });
-    expect(await postFaltaAnexo(FALTA_ID, file)).toBe(false);
+    expect((await postFaltaAnexo(FALTA_ID, file)).ok).toBe(false);
   });
 
-  it('aceita JSON 200 e envia photo + faltaId', async () => {
+  it('retorna signedUrl do JSON e envia photo + faltaId', async () => {
     const fetchMock = mockFetchResponse({
       ok: true,
       status: 200,
       contentType: 'application/json',
+      body: { storagePath: 'p', signedUrl: 'https://x/novo.jpg' },
     });
-    expect(await postFaltaAnexo(FALTA_ID, file)).toBe(true);
+    expect(await postFaltaAnexo(FALTA_ID, file)).toEqual({
+      ok: true,
+      signedUrl: 'https://x/novo.jpg',
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/pessoas/faltas/anexo',
       expect.objectContaining({ method: 'POST', redirect: 'manual' }),
@@ -65,9 +72,25 @@ describe('postFaltaAnexo', () => {
     expect(form.get('photo')).toBeInstanceOf(File);
   });
 
-  it('retorna false quando a rede falha', async () => {
+  it('retorna signedUrl null quando JSON ok sem URL', async () => {
+    mockFetchResponse({
+      ok: true,
+      status: 200,
+      contentType: 'application/json',
+      body: { signedUrl: '' },
+    });
+    expect(await postFaltaAnexo(FALTA_ID, file)).toEqual({
+      ok: true,
+      signedUrl: null,
+    });
+  });
+
+  it('retorna ok=false quando a rede falha', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-    expect(await postFaltaAnexo(FALTA_ID, file)).toBe(false);
+    expect(await postFaltaAnexo(FALTA_ID, file)).toEqual({
+      ok: false,
+      signedUrl: null,
+    });
   });
 });
 

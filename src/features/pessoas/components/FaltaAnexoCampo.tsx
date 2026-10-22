@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { IconButton } from '@/components/ui/IconButton';
 import { ReclamacaoFotoLightbox } from '@/features/reclamacoes/components/ReclamacaoFotoLightbox';
 import { useFaltaAnexoRemoto } from './useFaltaAnexoRemoto';
@@ -65,15 +65,18 @@ export default function FaltaAnexoCampo({
     onEnviouRemoto,
   });
 
-  const localUrl = useMemo(
-    () => (arquivoLocal ? URL.createObjectURL(arquivoLocal) : null),
-    [arquivoLocal],
-  );
+  const [localUrl, setLocalUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (!arquivoLocal) {
+      setLocalUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(arquivoLocal);
+    setLocalUrl(url);
     return () => {
-      if (localUrl) URL.revokeObjectURL(localUrl);
+      URL.revokeObjectURL(url);
     };
-  }, [localUrl]);
+  }, [arquivoLocal]);
 
   const modoEdicao = Boolean(faltaId);
   const src = localUrl ?? (modoEdicao && remoto.existeRemoto ? remoto.signedUrl : null);
@@ -85,7 +88,7 @@ export default function FaltaAnexoCampo({
   };
 
   const handleRemover = () => {
-    if (localUrl) onArquivo(null);
+    if (arquivoLocal) onArquivo(null);
     else if (modoEdicao) void remoto.remover();
   };
 
