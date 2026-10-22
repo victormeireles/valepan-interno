@@ -14,6 +14,8 @@ import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
 import { FaltaAgrupamento, type FaltaPessoaLinha } from '@/domain/pessoas/falta-agrupamento';
 import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
+import { postFaltaAnexo } from '@/features/pessoas/falta-anexo-client';
+import { compressImage } from '@/utils/imageCompression';
 import { FaltasClassificacaoFiltro } from './FaltasClassificacaoFiltro';
 import { FaltasPessoaModal } from './FaltasPessoaModal';
 import { FaltasResumoCards } from './FaltasResumoCards';
@@ -49,11 +51,27 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
   const abertas = filtrados.filter((item) => item.codigo === pessoaCodigo && !item.cancelada);
   const pessoaAberta = pessoasLista.find((pessoa) => pessoa.codigo === pessoaCodigo);
 
-  async function lancar(entrada: { datas: string[]; classificacao: string; justificativa: string }) {
+  async function lancar(entrada: {
+    datas: string[];
+    classificacao: string;
+    justificativa: string;
+    medida: string;
+    arquivo: File | null;
+  }) {
     setPendente(true);
-    const resultado = await lancarFalta({ codigo: pessoaId, ...entrada });
+    const resultado = await lancarFalta({
+      codigo: pessoaId,
+      datas: entrada.datas,
+      classificacao: entrada.classificacao,
+      justificativa: entrada.justificativa,
+      medida: entrada.medida,
+    });
+    const anexoOk = resultado.ok && entrada.arquivo ? await enviarAnexos(entrada.arquivo, resultado.ids) : true;
     setPendente(false);
-    setAviso({ texto: resultado.mensagem, ok: resultado.ok });
+    setAviso({
+      texto: anexoOk ? resultado.mensagem : `${resultado.mensagem} Falha ao enviar o anexo.`,
+      ok: resultado.ok && anexoOk,
+    });
     if (resultado.ok) {
       setAberto(false);
       router.refresh();
@@ -126,6 +144,15 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
       {aviso ? <div className="fixed bottom-4 right-4 z-50 max-w-sm"><Toast tone={aviso.ok ? 'success' : 'error'} onClose={() => setAviso(null)}>{aviso.texto}</Toast></div> : null}
     </div>
   );
+}
+
+async function enviarAnexos(arquivo: File, ids: string[]): Promise<boolean> {
+  const comprimido = await compressImage(arquivo, 4);
+  let todosOk = true;
+  for (const id of ids) {
+    if (!(await postFaltaAnexo(id, comprimido))) todosOk = false;
+  }
+  return todosOk;
 }
 
 function porClassificacao(itens: FaltaListaItem[], classificacao: string): FaltaListaItem[] {

@@ -6,13 +6,19 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { FaltaCampos } from '@/domain/pessoas/falta-campos';
+import type { ClassificacaoFalta } from '@/domain/pessoas/falta-lancamento';
 import { formatISODateBr } from '@/lib/utils/date-utils';
+import FaltaAnexoCampo from './FaltaAnexoCampo';
+import { MEDIDAS } from './falta-opcoes';
 
 const CLASSIFICACOES = [
   { value: 'pendente', label: 'Pendente' },
   { value: 'justificada', label: 'Justificada' },
   { value: 'injustificada', label: 'Injustificada' },
 ];
+
+const campos = new FaltaCampos();
 
 type Props = {
   nome: string;
@@ -32,6 +38,7 @@ export function FaltasPessoaModal({ nome, codigo, faltas, onFechar, onAviso, onM
     const resultado = await editarFalta(id, {
       classificacao: String(form.get('classificacao') ?? ''),
       justificativa: String(form.get('justificativa') ?? ''),
+      medida: String(form.get('medida') ?? ''),
     });
     setPendente(false);
     onAviso(resultado.mensagem, resultado.ok);
@@ -69,7 +76,7 @@ export function FaltasPessoaModal({ nome, codigo, faltas, onFechar, onAviso, onM
         <div className="flex flex-col gap-3 overflow-y-auto px-5 py-4">
           {faltas.length === 0 ? <p className="text-sm text-stone-500">Nenhuma falta neste filtro.</p> : null}
           {faltas.map((falta) => (
-            <FaltaEditor key={`${falta.id}-${falta.classificacao}-${falta.justificativa ?? ''}`} falta={falta} pendente={pendente} cancelando={cancelarId === falta.id} onSalvar={(form) => salvar(falta.id, form)} onCancelar={cancelar} onPedirCancelamento={() => setCancelarId(falta.id)} onDesistir={() => setCancelarId(null)} />
+            <FaltaEditor key={`${falta.id}-${falta.classificacao}-${falta.justificativa ?? ''}-${falta.medida ?? ''}-${falta.temAnexo}`} falta={falta} onMudou={onMudou} pendente={pendente} cancelando={cancelarId === falta.id} onSalvar={(form) => salvar(falta.id, form)} onCancelar={cancelar} onPedirCancelamento={() => setCancelarId(falta.id)} onDesistir={() => setCancelarId(null)} />
           ))}
         </div>
       </section>
@@ -81,6 +88,7 @@ function FaltaEditor({
   falta,
   pendente,
   cancelando,
+  onMudou,
   onSalvar,
   onCancelar,
   onPedirCancelamento,
@@ -89,23 +97,51 @@ function FaltaEditor({
   falta: FaltaListaItem;
   pendente: boolean;
   cancelando: boolean;
+  onMudou: () => void;
   onSalvar: (form: FormData) => void;
   onCancelar: (form: FormData) => void;
   onPedirCancelamento: () => void;
   onDesistir: () => void;
 }) {
+  const [classificacao, setClassificacao] = useState(falta.classificacao);
+  const original = classificacao === falta.classificacao;
+
   return (
     <article className="rounded-xl border border-stone-200 p-3">
       <p className="mb-2 font-mono text-sm tabular-nums text-stone-700">{formatISODateBr(falta.data)}</p>
       <form className="flex flex-col gap-2" action={onSalvar}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-          <Select name="classificacao" label="Classificação" defaultValue={falta.classificacao} options={CLASSIFICACOES} />
+          <Select name="classificacao" label="Classificação" value={classificacao} onChange={(event) => setClassificacao(event.target.value)} options={CLASSIFICACOES} />
           <div className="flex items-end gap-2">
             <Button type="submit" size="lg" disabled={pendente}>Salvar</Button>
             <Button type="button" size="lg" variant="secondary" onClick={onPedirCancelamento}>Remover</Button>
           </div>
         </div>
-        <Input name="justificativa" label="Justificativa" defaultValue={falta.justificativa ?? ''} />
+        {campos.mostraJustificativa(classificacao as ClassificacaoFalta) ? (
+          <Input
+            key={`justificativa-${classificacao}`}
+            name="justificativa"
+            label="Justificativa"
+            defaultValue={original ? (falta.justificativa ?? '') : ''}
+          />
+        ) : null}
+        {campos.mostraMedida(classificacao as ClassificacaoFalta) ? (
+          <Select
+            key={`medida-${classificacao}`}
+            name="medida"
+            label="Medida"
+            defaultValue={original ? (falta.medida ?? '') : ''}
+            options={MEDIDAS}
+          />
+        ) : null}
+        <FaltaAnexoCampo
+          faltaId={falta.id}
+          temAnexo={falta.temAnexo}
+          arquivoLocal={null}
+          onArquivo={() => undefined}
+          onEnviouRemoto={onMudou}
+          onRemoveuRemoto={onMudou}
+        />
       </form>
       {cancelando ? (
         <form className="mt-3 flex flex-col gap-2" action={onCancelar}>
