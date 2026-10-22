@@ -91,21 +91,26 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
+    <div className="mx-auto w-full min-w-0 max-w-7xl overflow-x-hidden">
       <Toolbar
         title="Colaboradores"
         sticky={false}
+        flush
         resumo={`${filtrados.length.toLocaleString('pt-BR')} de ${itens.length.toLocaleString('pt-BR')}`}
-        actions={<Button size="lg" icon="person_add" onClick={() => abrir('admitir', null)}>Admitir</Button>}
+        actions={
+          <Button size="lg" icon="person_add" fullWidth className="sm:w-auto" onClick={() => abrir('admitir', null)}>
+            Admitir
+          </Button>
+        }
       />
-      <div className="grid grid-cols-1 gap-3 px-4 pt-4 sm:grid-cols-2 sm:px-6 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-5">
         <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome ou código" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
         <Select label="Setor" value={setor} onChange={(event) => setSetor(event.target.value)} options={[{ value: '', label: 'Todos' }, ...setores.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Turno" value={turno} onChange={(event) => setTurno(event.target.value)} options={[{ value: '', label: 'Todos' }, ...turnosNomes.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Situação" value={situacao} onChange={(event) => setSituacao(event.target.value)} options={[{ value: '', label: 'Todas' }, { value: 'ativo', label: 'Ativos' }, { value: 'admissao_prevista', label: 'Admissão prevista' }, { value: 'desligado', label: 'Desligados' }]} />
         <Select label="Líder" value={lider} onChange={(event) => setLider(event.target.value)} options={[{ value: '', label: 'Todos' }, { value: 'sim', label: 'Líderes' }, { value: 'nao', label: 'Não líderes' }]} />
       </div>
-      <div className="mt-4 px-4 sm:px-6">
+      <div className="mt-4 min-w-0">
         {filtrados.length === 0 ? (
           <EmptyState icon="search_off" title="Nenhum colaborador encontrado." />
         ) : (
@@ -135,7 +140,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
                   { value: <ColunaRotulo label="Setor">{item.setorNome ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Turno">{item.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
-                  { value: <ColunaRotulo label="Próximo exame"><button type="button" className="max-w-full cursor-pointer border-none bg-transparent p-0 text-left" aria-label={`Exames de ${item.nome}`} onClick={() => abrirExames(item)}><ExamePrazoMarca situacao={prazo.calcular(item.ultimoExame, hoje)} silenciar={item.situacao === 'desligado'} /></button></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
+                  { value: <ColunaRotulo label="Próximo exame"><button type="button" className="inline-flex min-h-11 max-w-full cursor-pointer items-center border-none bg-transparent p-0 text-left" aria-label={`Exames de ${item.nome}`} onClick={(event) => { event.stopPropagation(); abrirExames(item); }}><ExamePrazoMarca situacao={prazo.calcular(item.ultimoExame, hoje)} silenciar={item.situacao === 'desligado'} /></button></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
                 ]}
                 menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} onExames={abrirExames} />}
               />
@@ -144,7 +149,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
         )}
       </div>
       {aviso ? (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-[60] sm:left-auto sm:right-4 sm:max-w-sm">
           <Toast tone={aviso.ok ? 'success' : 'error'} onClose={() => setAviso(null)}>{aviso.texto}</Toast>
         </div>
       ) : null}

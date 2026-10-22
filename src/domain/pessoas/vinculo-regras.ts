@@ -24,7 +24,6 @@ export class VinculoRegras {
   }
 
   transferir(alocacao: AlocacaoAberta | null, vagas: VagaLivre[], turnoCodigo: string): VagaLivre | null {
-    if (!alocacao) throw new Error('A pessoa não tem alocação aberta.');
     const doTurno = vagas.filter((v) => v.turnoCodigo === turnoCodigo);
     const operacional = doTurno.some((v) => v.operacional) || doTurno.length === 0;
     if (!operacional) return null;

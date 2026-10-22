@@ -95,7 +95,9 @@ export function ExamesPainel({ pessoa, onFechar, onConcluir }: Props) {
       <form className="flex flex-col gap-3" action={registrar}>
         <Input name="data" label="Data do exame realizado" type="date" required max={hoje} value={data} onChange={(event) => setData(event.target.value)} />
         <p className="text-sm text-stone-600">O próximo exame vence um ano depois do último realizado.</p>
-        <Button type="submit" size="lg" disabled={pendente || !data}>{pendente ? 'Registrando…' : 'Registrar exame'}</Button>
+        <Button type="submit" size="lg" fullWidth disabled={pendente || !data}>
+          {pendente ? 'Registrando…' : 'Registrar exame'}
+        </Button>
       </form>
       <div className="mt-6">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Realizados</h3>
@@ -103,9 +105,9 @@ export function ExamesPainel({ pessoa, onFechar, onConcluir }: Props) {
         {!carregando && !erro && exames.length === 0 ? <p className="mt-2 text-sm text-stone-500">Nenhum exame registrado.</p> : null}
         <ul className="mt-2 flex flex-col divide-y divide-stone-100">
           {exames.map((exame) => (
-            <li key={exame.id} className="flex items-center justify-between gap-3 py-2">
-              <span className="text-sm text-stone-900">{prazo.exibir(exame.data)}</span>
-              <Button type="button" size="sm" variant="ghost" disabled={removendo === exame.id} onClick={() => remover(exame.id)}>
+            <li key={exame.id} className="flex min-h-11 items-center justify-between gap-3 py-1">
+              <span className="min-w-0 truncate text-sm text-stone-900">{prazo.exibir(exame.data)}</span>
+              <Button type="button" size="lg" variant="ghost" disabled={removendo === exame.id} onClick={() => remover(exame.id)}>
                 {removendo === exame.id ? 'Removendo…' : 'Remover'}
               </Button>
             </li>

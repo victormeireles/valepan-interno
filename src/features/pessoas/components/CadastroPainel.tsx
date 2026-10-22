@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { atualizarCadastroColaborador, obterCadastroColaborador } from '@/app/actions/pessoas-cadastro-actions';
 import { Button } from '@/components/ui/Button';
 import type { ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
@@ -17,6 +17,7 @@ type Props = {
 };
 
 export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }: Props) {
+  const formId = useId();
   const [editando, setEditando] = useState(editandoInicial);
   const [cadastro, setCadastro] = useState<ColaboradorCadastro | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -50,23 +51,39 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
     if (resultado.ok) onFechar();
   }
 
+  const rodapeLeitura =
+    cadastro && !editando ? (
+      <Button type="button" size="lg" fullWidth icon="edit" onClick={() => setEditando(true)}>
+        Editar
+      </Button>
+    ) : null;
+
+  const rodapeEdicao =
+    cadastro && editando ? (
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" form={formId} size="lg" fullWidth disabled={pendente}>
+          {pendente ? 'Salvando…' : 'Salvar'}
+        </Button>
+        <Button type="button" size="lg" fullWidth variant="secondary" onClick={() => setEditando(false)}>
+          Cancelar
+        </Button>
+      </div>
+    ) : null;
+
   return (
-    <PainelAcao aberto={pessoa !== null} titulo={pessoa?.nome ?? 'Cadastro'} onFechar={onFechar} largo>
+    <PainelAcao
+      aberto={pessoa !== null}
+      titulo={pessoa?.nome ?? 'Cadastro'}
+      onFechar={onFechar}
+      largo
+      rodape={rodapeLeitura ?? rodapeEdicao}
+    >
       {erro ? <p className="text-sm text-red-700">{erro}</p> : null}
       {!cadastro && !erro ? <p className="text-sm text-stone-500">Carregando cadastro…</p> : null}
-      {cadastro && !editando ? (
-        <div className="flex flex-col gap-5">
-          <CadastroLeitura cadastro={cadastro} />
-          <Button type="button" size="lg" icon="edit" onClick={() => setEditando(true)}>Editar</Button>
-        </div>
-      ) : null}
+      {cadastro && !editando ? <CadastroLeitura cadastro={cadastro} /> : null}
       {cadastro && editando ? (
-        <form className="flex flex-col gap-5" action={salvar}>
+        <form id={formId} className="flex flex-col gap-5" action={salvar}>
           <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button type="submit" size="lg" disabled={pendente}>{pendente ? 'Salvando…' : 'Salvar'}</Button>
-            <Button type="button" size="lg" variant="secondary" onClick={() => setEditando(false)}>Cancelar</Button>
-          </div>
         </form>
       ) : null}
     </PainelAcao>

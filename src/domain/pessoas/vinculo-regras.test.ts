@@ -25,6 +25,7 @@ describe('VinculoRegras', () => {
     expect(
       regras.transferir({ papel: 'ocupacao', posicaoCodigo: 'PRO-M-01', turnoCodigo: 'PRO-M' }, [livre], 'LAT-T'),
     ).toEqual(livre);
+    expect(regras.transferir(null, [livre], 'LAT-T')).toEqual(livre);
     expect(() =>
       regras.transferir({ papel: 'ocupacao', posicaoCodigo: 'PRO-M-01', turnoCodigo: 'PRO-M' }, [], 'LAT-T'),
     ).toThrow(/vaga livre/);

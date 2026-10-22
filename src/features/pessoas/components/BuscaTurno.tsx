@@ -36,7 +36,7 @@ export function BuscaTurno({ name, label, turnos, atual, atualCodigo, valorInici
           {atual}
         </p>
       ) : null}
-      <div className="relative">
+      <div className="relative z-10">
         <input type="hidden" name={name} value={codigo} />
         <Input
           label={label}
@@ -71,7 +71,7 @@ function ListaTurnos({
   onEscolher: (codigo: string) => void;
 }) {
   return (
-    <ul className="mt-2 max-h-64 overflow-auto rounded-xl border border-stone-200 bg-white">
+    <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto overscroll-contain rounded-xl border border-stone-200 bg-white shadow-md sm:max-h-64">
       {lista.length === 0 ? <li className="px-3 py-3 text-sm text-stone-500">Nenhum turno encontrado.</li> : null}
       {lista.map((turno) => (
         <li key={turno.codigo}>
@@ -84,8 +84,8 @@ function ListaTurnos({
               codigo === turno.codigo ? 'bg-amber-100 text-amber-900' : 'text-stone-800 hover:bg-amber-50',
             ].join(' ')}
           >
-            <span>{turno.setorNome} — {turno.nome}</span>
-            {atualCodigo === turno.codigo ? <span className="text-xs text-stone-500">Atual</span> : null}
+            <span className="min-w-0 truncate">{turno.setorNome} — {turno.nome}</span>
+            {atualCodigo === turno.codigo ? <span className="shrink-0 text-xs text-stone-500">Atual</span> : null}
           </button>
         </li>
       ))}

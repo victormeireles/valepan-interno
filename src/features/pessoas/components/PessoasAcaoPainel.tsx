@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   admitirColaborador,
   admitirNovo,
@@ -38,27 +38,52 @@ type Props = {
 };
 
 export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }: Props) {
+  const formId = useId();
   const [pendente, setPendente] = useState(false);
   const [turnoCodigo, setTurnoCodigo] = useState('');
   const [lider, setLider] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const exigeTurno = acao === 'admitir' || acao === 'transferir';
 
   useEffect(() => {
     setTurnoCodigo(acao === 'transferir' ? pessoa?.turnoCodigo ?? '' : '');
     setLider(acao === 'transferir' && pessoa?.liderSetor === true);
+    setErro(null);
   }, [acao, pessoa]);
 
   async function enviar(form: FormData) {
     setPendente(true);
+    setErro(null);
     const resultado = await executar(acao, pessoa, form);
     setPendente(false);
-    onConcluir(resultado.mensagem, resultado.ok);
-    if (resultado.ok) onFechar();
+    if (!resultado.ok) {
+      setErro(resultado.mensagem);
+      return;
+    }
+    onConcluir(resultado.mensagem, true);
+    onFechar();
   }
 
   return (
-    <PainelAcao aberto={acao !== null} titulo={titulo(acao, pessoa)} onFechar={onFechar} largo={acao === 'admitir'}>
-      <form className="flex flex-col gap-5" action={enviar}>
+    <PainelAcao
+      aberto={acao !== null}
+      titulo={titulo(acao, pessoa)}
+      onFechar={onFechar}
+      largo={acao === 'admitir'}
+      rodape={
+        <Button
+          type="submit"
+          form={formId}
+          size="lg"
+          fullWidth
+          variant={acao === 'desligar' ? 'danger' : 'primary'}
+          disabled={pendente || (exigeTurno && !turnoCodigo)}
+        >
+          {pendente ? 'Registrando…' : 'Confirmar'}
+        </Button>
+      }
+    >
+      <form id={formId} className="flex flex-col gap-5" action={enviar}>
         {acao === 'admitir' ? (
           <>
             <Input name="nome" label="Nome" required />
@@ -108,9 +133,7 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
           <p className="text-sm text-stone-700">Isso encerra a reserva e não registra demissão.</p>
         ) : null}
         {acao === 'lider' ? <p className="text-sm text-stone-700">{textoLider(pessoa)}</p> : null}
-        <Button type="submit" size="lg" variant={acao === 'desligar' ? 'danger' : 'primary'} disabled={pendente || (exigeTurno && !turnoCodigo)}>
-          {pendente ? 'Registrando…' : 'Confirmar'}
-        </Button>
+        {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
       </form>
     </PainelAcao>
   );
