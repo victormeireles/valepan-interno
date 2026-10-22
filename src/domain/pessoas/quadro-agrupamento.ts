@@ -19,6 +19,7 @@ export type HorarioDiaQuadro = {
 
 export type QuadroTurno = QuadroLinha & {
   pessoas: QuadroPessoa[];
+  apoio: QuadroPessoa[];
   liderNome: string | null;
   horario: HorarioDiaQuadro[];
 };
@@ -26,6 +27,7 @@ export type QuadroTurno = QuadroLinha & {
 export type QuadroSetor = {
   setorNome: string;
   setorCodigo: string;
+  ordem: number;
   turnos: QuadroTurno[];
   apoio: QuadroPessoa[];
   liderNome: string | null;
@@ -46,14 +48,23 @@ export class QuadroAgrupamento {
     const doTurno = pessoas.filter(
       (pessoa) => pessoa.turnoCodigo === linha.turnoCodigo && pessoa.papel !== 'apoio',
     );
-    setor.turnos.push({ ...linha, pessoas: doTurno, liderNome: this.lider(doTurno), horario: [] });
+    const apoio = pessoas.filter(
+      (pessoa) => pessoa.turnoCodigo === linha.turnoCodigo && pessoa.papel === 'apoio',
+    );
+    setor.turnos.push({
+      ...linha,
+      pessoas: doTurno,
+      apoio,
+      liderNome: this.lider([...doTurno, ...apoio]),
+      horario: [],
+    });
     setor.liderNome = setor.liderNome ?? this.lider(pessoas.filter((p) => p.setorNome === linha.setorNome));
   }
 
   private setor(setores: Map<string, QuadroSetor>, nome: string): QuadroSetor {
     const atual = setores.get(nome);
     if (atual) return atual;
-    const novo: QuadroSetor = { setorNome: nome, setorCodigo: '', turnos: [], apoio: [], liderNome: null };
+    const novo: QuadroSetor = { setorNome: nome, setorCodigo: '', ordem: 0, turnos: [], apoio: [], liderNome: null };
     setores.set(nome, novo);
     return novo;
   }

@@ -34,8 +34,39 @@ describe('QuadroAgrupamento', () => {
         },
       ],
     );
+    expect(setores[0]?.ordem).toBe(0);
     expect(setores[0]?.turnos[0]?.pessoas.map((p) => p.codigo)).toEqual(['VP-9001']);
+    expect(setores[0]?.turnos[0]?.apoio).toEqual([]);
     expect(setores[0]?.apoio.map((p) => p.codigo)).toEqual(['VP-9002']);
     expect(setores[0]?.liderNome).toBe('Ana');
+  });
+
+  it('prende apoio no turno correspondente', () => {
+    const setores = new QuadroAgrupamento().agrupar(
+      [
+        {
+          setorNome: 'Comercial',
+          turnoNome: '09:00–18:00',
+          turnoCodigo: 'AP-COM',
+          aprovado: 0,
+          contratados: 0,
+          reservas: 0,
+          livres: 0,
+        },
+      ],
+      [
+        {
+          codigo: 'VP-0017',
+          nome: 'Elizabeth',
+          papel: 'apoio',
+          lider: false,
+          setorNome: 'Comercial',
+          turnoCodigo: 'AP-COM',
+        },
+      ],
+    );
+    expect(setores[0]?.turnos[0]?.apoio.map((p) => p.codigo)).toEqual(['VP-0017']);
+    expect(setores[0]?.turnos[0]?.pessoas).toEqual([]);
+    expect(setores[0]?.apoio.map((p) => p.codigo)).toEqual(['VP-0017']);
   });
 });

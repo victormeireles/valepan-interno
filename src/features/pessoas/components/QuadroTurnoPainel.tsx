@@ -92,9 +92,11 @@ function CamposTurno({ nome, vagas, ocupadas, onNome, onVagas }: {
 
 function BarraSemana({ onRepetir }: { onRepetir: () => void }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <p className="text-sm text-stone-600">Segunda a sábado. Se o fim for antes do início, o turno segue no dia seguinte.</p>
-      <Button type="button" variant="secondary" size="lg" onClick={onRepetir}>Repetir segunda até sexta</Button>
+      <Button type="button" variant="secondary" size="lg" fullWidth className="sm:w-auto" onClick={onRepetir}>
+        Repetir segunda até sexta
+      </Button>
     </div>
   );
 }
@@ -125,13 +127,23 @@ function AcoesTurno({ editar, pendente, ocupadas, avisoApoio, confirmar, onSalva
   return (
     <div className="flex flex-col gap-3 border-t border-stone-100 pt-4">
       {avisoApoio ? <p className="text-sm text-stone-600">{avisoApoio}</p> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         {editar ? (
-          <Button type="button" variant="danger" size="lg" disabled={pendente || ocupadas > 0} onClick={onRemover}>
+          <Button
+            type="button"
+            variant="danger"
+            size="lg"
+            fullWidth
+            className="sm:w-auto"
+            disabled={pendente || ocupadas > 0}
+            onClick={onRemover}
+          >
             {rotuloRemover(ocupadas, confirmar)}
           </Button>
-        ) : <span />}
-        <Button type="button" variant="primary" size="lg" disabled={pendente} onClick={onSalvar}>
+        ) : (
+          <span className="hidden sm:block" />
+        )}
+        <Button type="button" variant="primary" size="lg" fullWidth className="sm:w-auto" disabled={pendente} onClick={onSalvar}>
           {pendente ? 'Salvando…' : 'Salvar turno'}
         </Button>
       </div>

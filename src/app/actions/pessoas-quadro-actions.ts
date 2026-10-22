@@ -2,6 +2,7 @@
 
 import { QuadroAgrupamento, type HorarioDiaQuadro, type QuadroPessoa, type QuadroSetor } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroHorarioAnexo, type HorarioTurnoCarga } from '@/domain/pessoas/quadro-horario-anexo';
+import { QuadroSetorCatalogo, type SetorCatalogoItem } from '@/domain/pessoas/quadro-setor-catalogo';
 import { QuadroVisao } from '@/domain/pessoas/quadro-visao';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -9,16 +10,24 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 export async function listQuadro(): Promise<QuadroSetor[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
   const client = supabaseClientFactory.createServiceRoleClient();
-  const posicoes = await client
-    .from('pessoas_posicoes' as never)
-    .select('codigo, pessoas_setores(nome, codigo), pessoas_turnos(nome, codigo)')
-    .eq('ativa', true);
-  const alocacoes = await client
-    .from('pessoas_alocacoes' as never)
-    .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor)')
-    .is('fim', null);
+  const [posicoes, alocacoes, catalogo] = await Promise.all([
+    client
+      .from('pessoas_posicoes' as never)
+      .select('codigo, pessoas_setores(nome, codigo), pessoas_turnos(nome, codigo)')
+      .eq('ativa', true),
+    client
+      .from('pessoas_alocacoes' as never)
+      .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor)')
+      .is('fim', null),
+    client
+      .from('pessoas_setores' as never)
+      .select('codigo, nome, ordem')
+      .eq('ativo', true)
+      .order('ordem'),
+  ]);
   if (posicoes.error) throw new Error(posicoes.error.message);
   if (alocacoes.error) throw new Error(alocacoes.error.message);
+  if (catalogo.error) throw new Error(catalogo.error.message);
   const pessoas = ((alocacoes.data ?? []) as AlocacaoRow[]).map(paraPessoa);
   const linhas = new QuadroVisao().montar(
     ((posicoes.data ?? []) as PosicaoRow[]).map((row) => ({
@@ -34,9 +43,10 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
     })),
   );
   const anexo = new QuadroHorarioAnexo();
-  const cargas = await horarios(client);
-  const setores = new QuadroAgrupamento().agrupar(anexo.completar(linhas, cargas), pessoas);
-  return anexo.aplicar(setores, cargas);
+  const dados = await horarios(client);
+  const agrupados = new QuadroAgrupamento().agrupar(anexo.completar(linhas, dados), pessoas);
+  const comHorario = anexo.aplicar(agrupados, dados);
+  return new QuadroSetorCatalogo().completar(comHorario, (catalogo.data ?? []) as SetorCatalogoItem[]);
 }
 
 async function horarios(

@@ -2,22 +2,23 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { IconButton } from '@/components/ui/IconButton';
 import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
-import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
-import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
-import { QuadroTotais } from '@/domain/pessoas/quadro-totais';
+import { QuadroTotais, type QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
 import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { MenuPessoa } from './MenuPessoa';
 import { QuadroContagem } from './QuadroContagem';
 import { PainelAcao } from './PainelAcao';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
+import { QuadroSetorCartao } from './QuadroSetorCartao';
+import { QuadroSetorOrdemPainel } from './QuadroSetorOrdemPainel';
+import { QuadroSetorPainel } from './QuadroSetorPainel';
 import { QuadroTurnoPainel, type EdicaoTurno } from './QuadroTurnoPainel';
 
 type Props = { setores: QuadroSetor[]; turnos: TurnoOpcao[]; podeEditar: boolean };
@@ -28,67 +29,54 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
   const [acao, setAcao] = useState<AcaoPessoa>(null);
   const [pessoa, setPessoa] = useState<ColaboradorListaItem | null>(null);
   const [edicao, setEdicao] = useState<EdicaoTurno | null>(null);
+  const [novoSetor, setNovoSetor] = useState(false);
+  const [reordenar, setReordenar] = useState(false);
+  const [modoTotais, setModoTotais] = useState<QuadroTotaisModo>('total');
   const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null);
   const codigos = turnos.map((turno) => turno.codigo);
   const selecionado = useMemo(() => localizarTurno(setores, turnoCodigo), [setores, turnoCodigo]);
-  const totais = useMemo(() => new QuadroTotais().geral(setores), [setores]);
+  const totais = useMemo(() => new QuadroTotais().geral(setores, modoTotais), [setores, modoTotais]);
 
   function abrir(proxima: AcaoPessoa, alvo: QuadroPessoa, turnoNome: string) {
     setPessoa(paraColaborador(alvo, turnoNome));
     setAcao(proxima);
   }
 
+  function concluir(texto: string, ok: boolean) {
+    setAviso({ texto, ok });
+    if (ok) router.refresh();
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
-      <Toolbar title="Quadro" resumo="Aprovadas, contratados, a entrar e vagas livres" />
-      <QuadroContagem numeros={totais} densidade="geral" />
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4">
+      <Toolbar
+        title="Quadro"
+        sticky={false}
+        flush
+        resumo="Aprovadas, contratados, a entrar e vagas livres"
+        actions={
+          podeEditar ? (
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
+              <Button type="button" variant="secondary" size="lg" icon="swap_vert" fullWidth className="sm:w-auto" onClick={() => setReordenar(true)}>
+                Reordenar
+              </Button>
+              <Button type="button" variant="primary" size="lg" icon="add" fullWidth className="sm:w-auto" onClick={() => setNovoSetor(true)}>
+                Novo setor
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+      <QuadroContagem numeros={totais} densidade="geral" modo={modoTotais} onModo={setModoTotais} />
       {setores.map((setor) => (
-        <section key={setor.setorNome} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-stone-900">{setor.setorNome}</h2>
-              <p className="text-sm text-stone-600">{setor.liderNome ? `Líder: ${setor.liderNome}` : 'Sem líder cadastrado'}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <QuadroContagem numeros={new QuadroTotais().doSetor(setor)} densidade="setor" />
-              {podeEditar ? (
-                <Button type="button" variant="secondary" size="lg" icon="add" onClick={() => setEdicao({ tipo: 'novo', setorNome: setor.setorNome, setorCodigo: setor.setorCodigo, codigos })}>
-                  Novo turno
-                </Button>
-              ) : null}
-            </div>
-          </header>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {setor.turnos.map((item) => (
-              <article key={item.turnoCodigo} className="rounded-xl border border-stone-200 transition hover:border-amber-300 hover:bg-amber-50">
-                <div className="flex items-start justify-between gap-2 p-3 pb-0">
-                  <button type="button" className="min-h-11 flex-1 text-left" onClick={() => setTurnoCodigo(item.turnoCodigo)}>
-                    <span className="block text-sm font-medium text-stone-900">{item.turnoNome}</span>
-                    {item.liderNome ? <span className="mt-1 block text-xs font-medium text-amber-800">Líder: {item.liderNome}</span> : null}
-                    {new HorarioSemana().resumir(item.horario).map((linha) => (
-                      <span key={linha} className="mt-0.5 block font-mono text-xs tabular-nums text-stone-600">{linha}</span>
-                    ))}
-                  </button>
-                  {podeEditar ? (
-                    <IconButton icon="schedule" label={`Alterar horário de ${item.turnoNome}`} size="lg" onClick={() => setEdicao(edicaoDoTurno(setor, item, codigos))} />
-                  ) : null}
-                </div>
-                <button type="button" className="w-full p-3 text-left" onClick={() => setTurnoCodigo(item.turnoCodigo)}>
-                  <Barra turno={item} />
-                  <span className="mt-2 grid grid-cols-4 gap-2 text-center">
-                    <Metrica rotulo="Aprovadas" valor={item.aprovado} />
-                    <Metrica rotulo="Contratados" valor={item.contratados} />
-                    <Metrica rotulo="A entrar" valor={item.reservas} />
-                    <Metrica rotulo="Livres" valor={item.livres} />
-                  </span>
-                </button>
-              </article>
-            ))}
-          </div>
-          {setor.apoio.length > 0 ? (
-            <p className="mt-3 text-sm text-stone-600">Apoio: {setor.apoio.map((pessoaApoio) => pessoaApoio.nome).join(', ')}</p>
-          ) : null}
-        </section>
+        <QuadroSetorCartao
+          key={setor.setorCodigo || setor.setorNome}
+          setor={setor}
+          podeEditar={podeEditar}
+          onNovoTurno={() => setEdicao({ tipo: 'novo', setorNome: setor.setorNome, setorCodigo: setor.setorCodigo, codigos })}
+          onEditarTurno={(item) => setEdicao(edicaoDoTurno(setor, item, codigos))}
+          onAbrirTurno={setTurnoCodigo}
+        />
       ))}
       <PainelAcao
         aberto={selecionado !== null}
@@ -102,26 +90,23 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
           <TurnoDetalhe turno={selecionado.turno} lider={selecionado.lider} podeDefinirLider={podeEditar} onAcao={abrir} />
         ) : null}
       </PainelAcao>
-      <QuadroTurnoPainel
-        edicao={edicao}
-        onFechar={() => setEdicao(null)}
-        onConcluir={(texto, ok) => {
-          setAviso({ texto, ok });
-          if (ok) router.refresh();
-        }}
+      <QuadroSetorPainel aberto={novoSetor} onFechar={() => setNovoSetor(false)} onConcluir={concluir} />
+      <QuadroSetorOrdemPainel
+        aberto={reordenar}
+        setores={setores}
+        onFechar={() => setReordenar(false)}
+        onConcluir={concluir}
       />
+      <QuadroTurnoPainel edicao={edicao} onFechar={() => setEdicao(null)} onConcluir={concluir} />
       <PessoasAcaoPainel
         acao={acao}
         pessoa={pessoa}
         turnos={turnos}
         onFechar={() => setAcao(null)}
-        onConcluir={(texto, ok) => {
-          setAviso({ texto, ok });
-          if (ok) router.refresh();
-        }}
+        onConcluir={concluir}
       />
       {aviso ? (
-        <div className="fixed bottom-4 right-4 z-[60] max-w-sm">
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-[60] sm:left-auto sm:right-4 sm:max-w-sm">
           <Toast tone={aviso.ok ? 'success' : 'error'} onClose={() => setAviso(null)}>{aviso.texto}</Toast>
         </div>
       ) : null}
@@ -165,29 +150,10 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
   };
 }
 
-function Barra({ turno }: { turno: QuadroTurno }) {
-  const total = Math.max(turno.aprovado, 1);
-  return (
-    <span className="mt-3 flex h-2 overflow-hidden rounded-full bg-stone-100" aria-hidden>
-      <span className="bg-amber-600" style={{ width: `${(turno.contratados / total) * 100}%` }} />
-      <span className="bg-amber-300" style={{ width: `${(turno.reservas / total) * 100}%` }} />
-    </span>
-  );
-}
-
 function rotuloPapel(papel: QuadroPessoa['papel']): string {
   if (papel === 'reserva') return 'A entrar';
   if (papel === 'apoio') return 'Apoio';
   return 'Ocupação';
-}
-
-function Metrica({ rotulo, valor }: { rotulo: string; valor: number }) {
-  return (
-    <span className="flex flex-col">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{rotulo}</span>
-      <span className="font-mono text-lg tabular-nums text-stone-900">{valor.toLocaleString('pt-BR')}</span>
-    </span>
-  );
 }
 
 function TurnoDetalhe({
@@ -201,34 +167,42 @@ function TurnoDetalhe({
   podeDefinirLider: boolean;
   onAcao: (acao: AcaoPessoa, pessoa: QuadroPessoa, turnoNome: string) => void;
 }) {
+  const pessoas = [...turno.pessoas, ...turno.apoio];
+  const numeros = new QuadroTotais().doTurno(turno, 'total');
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-stone-700">{lider ? `Líder do setor: ${lider}` : 'Sem líder cadastrado'}</p>
       <p className="font-mono text-sm tabular-nums text-stone-600">
-        {turno.livres.toLocaleString('pt-BR')} {turno.livres === 1 ? 'vaga livre' : 'vagas livres'}
+        {numeros.livres.toLocaleString('pt-BR')} {numeros.livres === 1 ? 'vaga livre' : 'vagas livres'}
+        {' · '}
+        {numeros.contratados.toLocaleString('pt-BR')} {numeros.contratados === 1 ? 'contratado' : 'contratados'}
       </p>
-      {turno.pessoas.length === 0 ? (
+      {pessoas.length === 0 ? (
         <p className="text-sm text-stone-600">Nenhuma pessoa neste turno.</p>
       ) : (
-        turno.pessoas.map((pessoa, index) => (
-          <ListRow
-            key={pessoa.codigo}
-            even={index % 2 === 1}
-            title={pessoa.nome}
-            subtitle={pessoa.codigo}
-            columns={[
-              { value: pessoa.lider ? <Badge tone="accent">Líder</Badge> : <span />, width: '4.5rem', align: 'left', tabular: false },
-              { value: rotuloPapel(pessoa.papel), width: '6.5rem', align: 'left', tabular: false },
-            ]}
-            menu={
-              <MenuPessoa
-                item={paraColaborador(pessoa, turno.turnoNome)}
-                definirLider={podeDefinirLider}
-                onAcao={(proxima) => onAcao(proxima, pessoa, turno.turnoNome)}
+        <ul className="-mx-1 flex flex-col">
+          {pessoas.map((pessoa, index) => (
+            <li key={pessoa.codigo} className="min-w-0">
+              <ListRow
+                even={index % 2 === 1}
+                title={pessoa.nome}
+                subtitle={`${pessoa.codigo} · ${rotuloPapel(pessoa.papel)}`}
+                columns={
+                  pessoa.lider
+                    ? [{ value: <Badge tone="accent">Líder</Badge>, width: '4.5rem', align: 'left', tabular: false }]
+                    : []
+                }
+                menu={
+                  <MenuPessoa
+                    item={paraColaborador(pessoa, turno.turnoNome)}
+                    definirLider={podeDefinirLider}
+                    onAcao={(proxima) => onAcao(proxima, pessoa, turno.turnoNome)}
+                  />
+                }
               />
-            }
-          />
-        ))
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
