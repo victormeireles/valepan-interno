@@ -7,9 +7,16 @@ import {
   configSortButtonClass,
   configTableBodyCellClass,
   configTableHeadCellClass,
-  configTableRowClass,
+  configTableZebraRowClass,
   formatNumericZero,
 } from '@/components/Config/config-table-styles';
+import ReceitaConfigOverflowMenu, {
+  type ReceitaConfigMenuAction,
+} from '@/components/Receitas/ReceitaConfigOverflowMenu';
+import {
+  countProdutosVinculadosReceita,
+  podeRemoverReceita,
+} from '@/domain/receitas/receita-delete-eligibility';
 
 export type ReceitaSortKey = 'nome' | 'tipo' | 'ativo';
 
@@ -27,7 +34,7 @@ type Props = {
   sortKey: ReceitaSortKey;
   sortDir: 'asc' | 'desc';
   onSort: (key: ReceitaSortKey) => void;
-  onRowClick: (item: ReceitaWithRelations) => void;
+  onMenuSelect: (item: ReceitaWithRelations, action: ReceitaConfigMenuAction) => void;
   embedded?: boolean;
 };
 
@@ -39,7 +46,7 @@ function countIngredientes(receita: ReceitaWithRelations) {
   return receita.receita_ingredientes?.length ?? 0;
 }
 
-function countProdutos(receita: ReceitaWithRelations) {
+function countProdutosAtivos(receita: ReceitaWithRelations) {
   return (receita.produto_receitas ?? []).filter((link) => link.ativo).length;
 }
 
@@ -48,7 +55,7 @@ export default function ReceitasConfigTable({
   sortKey,
   sortDir,
   onSort,
-  onRowClick,
+  onMenuSelect,
   embedded = false,
 }: Props) {
   const sortAriaValue = (key: ReceitaSortKey) => {
@@ -70,6 +77,7 @@ export default function ReceitasConfigTable({
     { key: null, label: 'Ingredientes', align: 'right' },
     { key: null, label: 'Produtos', align: 'right' },
     { key: 'ativo', label: 'Status' },
+    { key: null, label: 'Ações', align: 'right' },
   ];
 
   return (
@@ -105,40 +113,47 @@ export default function ReceitasConfigTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100">
-          {items.map((item, index) => (
-            <tr
-              key={item.id}
-              tabIndex={0}
-              onClick={() => onRowClick(item)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onRowClick(item);
-                }
-              }}
-              className={configTableRowClass(index, !isAtiva(item))}
-            >
-              <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
-                {item.nome}
-              </td>
-              <td className={`${configTableBodyCellClass} text-stone-600`}>
-                {TIPO_LABELS[item.tipo]}
-              </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
-                {formatNumericZero(countIngredientes(item))}
-              </td>
-              <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
-                {formatNumericZero(countProdutos(item))}
-              </td>
-              <td className={configTableBodyCellClass}>
-                <ConfigAtivoBadge
-                  ativo={isAtiva(item)}
-                  ativoLabel="Ativa"
-                  inativoLabel="Inativa"
-                />
-              </td>
-            </tr>
-          ))}
+          {items.map((item, index) => {
+            const produtosVinculados = countProdutosVinculadosReceita(item.produto_receitas);
+            const inactive = !isAtiva(item);
+
+            return (
+              <tr
+                key={item.id}
+                className={`${configTableZebraRowClass(index)}${inactive ? ' opacity-60' : ''}`}
+              >
+                <td className={`${configTableBodyCellClass} font-medium text-stone-900`}>
+                  {item.nome}
+                </td>
+                <td className={`${configTableBodyCellClass} text-stone-600`}>
+                  {TIPO_LABELS[item.tipo]}
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                  {formatNumericZero(countIngredientes(item))}
+                </td>
+                <td className={`${configTableBodyCellClass} text-right font-mono tabular-nums text-stone-700`}>
+                  {formatNumericZero(countProdutosAtivos(item))}
+                </td>
+                <td className={configTableBodyCellClass}>
+                  <ConfigAtivoBadge
+                    ativo={isAtiva(item)}
+                    ativoLabel="Ativa"
+                    inativoLabel="Inativa"
+                  />
+                </td>
+                <td className={`${configTableBodyCellClass} w-10 py-1`}>
+                  <div className="flex justify-end">
+                    <ReceitaConfigOverflowMenu
+                      compact
+                      receitaNome={item.nome}
+                      podeRemover={podeRemoverReceita(produtosVinculados)}
+                      onSelect={(action) => onMenuSelect(item, action)}
+                    />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

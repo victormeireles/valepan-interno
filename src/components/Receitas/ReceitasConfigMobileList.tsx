@@ -3,6 +3,13 @@
 import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
 import ConfigAtivoBadge from '@/components/Config/ConfigAtivoBadge';
 import { configMobileRowClass } from '@/components/Config/config-table-styles';
+import ReceitaConfigOverflowMenu, {
+  type ReceitaConfigMenuAction,
+} from '@/components/Receitas/ReceitaConfigOverflowMenu';
+import {
+  countProdutosVinculadosReceita,
+  podeRemoverReceita,
+} from '@/domain/receitas/receita-delete-eligibility';
 
 const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
   massa: 'Massa',
@@ -15,10 +22,10 @@ const TIPO_LABELS: Record<ReceitaWithRelations['tipo'], string> = {
 
 type Props = {
   items: ReceitaWithRelations[];
-  onRowClick: (item: ReceitaWithRelations) => void;
+  onMenuSelect: (item: ReceitaWithRelations, action: ReceitaConfigMenuAction) => void;
 };
 
-export default function ReceitasConfigMobileList({ items, onRowClick }: Props) {
+export default function ReceitasConfigMobileList({ items, onMenuSelect }: Props) {
   if (items.length === 0) return null;
 
   return (
@@ -26,12 +33,11 @@ export default function ReceitasConfigMobileList({ items, onRowClick }: Props) {
       {items.map((item, index) => {
         const ativa = item.ativo !== false;
         const ingredientes = item.receita_ingredientes?.length ?? 0;
+        const produtosVinculados = countProdutosVinculadosReceita(item.produto_receitas);
 
         return (
-          <button
+          <article
             key={item.id}
-            type="button"
-            onClick={() => onRowClick(item)}
             className={`${configMobileRowClass(index)} ${!ativa ? 'opacity-60' : ''}`}
           >
             <div className="min-w-0">
@@ -58,11 +64,13 @@ export default function ReceitasConfigMobileList({ items, onRowClick }: Props) {
                 ativoLabel="Ativa"
                 inativoLabel="Inativa"
               />
-              <span className="material-icons text-stone-400" aria-hidden="true">
-                chevron_right
-              </span>
+              <ReceitaConfigOverflowMenu
+                receitaNome={item.nome}
+                podeRemover={podeRemoverReceita(produtosVinculados)}
+                onSelect={(action) => onMenuSelect(item, action)}
+              />
             </div>
-          </button>
+          </article>
         );
       })}
     </div>

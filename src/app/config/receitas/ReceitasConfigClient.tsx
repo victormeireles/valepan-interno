@@ -2,8 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ReceitaWithRelations } from '@/app/actions/receitas-actions';
+import {
+  deleteReceita,
+  type ReceitaWithRelations,
+} from '@/app/actions/receitas-actions';
 import ConfigPageHeader from '@/components/Config/ConfigPageHeader';
+import type { ReceitaConfigMenuAction } from '@/components/Receitas/ReceitaConfigOverflowMenu';
 import ReceitaModal from '@/components/Receitas/ReceitaModal';
 import ReceitasConfigMobileList from '@/components/Receitas/ReceitasConfigMobileList';
 import ReceitasConfigTable, { type ReceitaSortKey } from '@/components/Receitas/ReceitasConfigTable';
@@ -14,12 +18,23 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Toast } from '@/components/ui/Toast';
+import {
+  countProdutosVinculadosReceita,
+  motivoBloqueioRemocaoReceita,
+  podeRemoverReceita,
+} from '@/domain/receitas/receita-delete-eligibility';
+import {
+  receitaDuplicataDraftBuilder,
+  type ReceitaFormDraft,
+} from '@/domain/receitas/receita-duplicata-draft';
 
 type StatusFilter = 'todos' | 'ativos' | 'inativos';
 
 type Props = {
   initialReceitas: ReceitaWithRelations[];
 };
+
+type ToastState = { tone: 'success' | 'error'; text: string } | null;
 
 const tipoOptions: Array<{ value: ReceitaWithRelations['tipo']; label: string }> = [
   { value: 'massa', label: 'Massa' },
@@ -59,7 +74,9 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ReceitaWithRelations | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ReceitaFormDraft | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const statusParam = searchParams.get('status');
   const statusFilter: StatusFilter =
@@ -98,14 +115,79 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
     }
   };
 
+  const showToast = (tone: 'success' | 'error', text: string) => {
+    setToast({ tone, text });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditing(null);
+    setDraft(null);
+  };
+
   const openCreate = () => {
     setEditing(null);
+    setDraft(null);
     setModalOpen(true);
   };
 
   const openEdit = (item: ReceitaWithRelations) => {
+    setDraft(null);
     setEditing(item);
     setModalOpen(true);
+  };
+
+  const openDuplicate = (item: ReceitaWithRelations) => {
+    setEditing(null);
+    setDraft(receitaDuplicataDraftBuilder.build(item));
+    setModalOpen(true);
+  };
+
+  const handleRemove = async (item: ReceitaWithRelations) => {
+    const vinculados = countProdutosVinculadosReceita(item.produto_receitas);
+    if (!podeRemoverReceita(vinculados)) {
+      showToast('error', motivoBloqueioRemocaoReceita(vinculados));
+      return;
+    }
+
+    if (!confirm(`Remover a receita "${item.nome}"? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    setDeletingId(item.id);
+    try {
+      const result = await deleteReceita(item.id);
+      if (!result.success) {
+        showToast('error', result.error);
+        return;
+      }
+      showToast('success', 'Receita removida.');
+      router.refresh();
+    } catch (error: unknown) {
+      showToast(
+        'error',
+        error instanceof Error ? error.message : 'Erro ao remover receita',
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleMenuSelect = (
+    item: ReceitaWithRelations,
+    action: ReceitaConfigMenuAction,
+  ) => {
+    if (action === 'editar') {
+      openEdit(item);
+      return;
+    }
+    if (action === 'duplicar') {
+      openDuplicate(item);
+      return;
+    }
+    if (deletingId === item.id) return;
+    void handleRemove(item);
   };
 
   const handleSaved = (info?: {
@@ -134,11 +216,9 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
       message += ` ${info.backfillMessage}`;
     }
 
-    setToast(message);
-    setModalOpen(false);
-    setEditing(null);
+    showToast('success', message);
+    closeModal();
     router.refresh();
-    setTimeout(() => setToast(null), 4000);
   };
 
   const statusOptions: { value: StatusFilter; label: string }[] = [
@@ -167,8 +247,8 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
       />
 
       {toast ? (
-        <Toast tone="success" onClose={() => setToast(null)}>
-          {toast}
+        <Toast tone={toast.tone} onClose={() => setToast(null)}>
+          {toast.text}
         </Toast>
       ) : null}
 
@@ -264,21 +344,19 @@ export default function ReceitasConfigClient({ initialReceitas }: Props) {
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
-              onRowClick={openEdit}
+              onMenuSelect={handleMenuSelect}
               embedded
             />
-            <ReceitasConfigMobileList items={filtered} onRowClick={openEdit} />
+            <ReceitasConfigMobileList items={filtered} onMenuSelect={handleMenuSelect} />
           </>
         )}
       </Card>
 
       <ReceitaModal
         isOpen={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
+        onClose={closeModal}
         receita={editing}
+        draft={draft}
         onSaved={handleSaved}
       />
     </div>

@@ -327,18 +327,44 @@ export async function deleteReceita(id: string) {
   const supabase = supabaseClientFactory.createServiceRoleClient();
 
   try {
-    const { error } = await supabase
-      .from('receitas')
-      .update({ ativo: false })
-      .eq('id', id);
+    const { count, error: countError } = await supabase
+      .from('produto_receitas')
+      .select('id', { count: 'exact', head: true })
+      .eq('receita_id', id);
+
+    if (countError) throw countError;
+
+    if ((count ?? 0) > 0) {
+      return {
+        success: false as const,
+        error:
+          count === 1
+            ? 'Receita vinculada a 1 produto. Remova o vínculo antes de excluir.'
+            : `Receita vinculada a ${count} produtos. Remova os vínculos antes de excluir.`,
+      };
+    }
+
+    const { error } = await supabase.from('receitas').delete().eq('id', id);
 
     if (error) throw error;
 
     revalidatePath(RECEITAS_PATH);
-    return { success: true };
+    return { success: true as const };
   } catch (error) {
     console.error('Erro ao deletar receita:', error);
-    return { success: false, error: 'Erro ao deletar receita' };
+    const rawMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof (error as { message: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : '';
+    const message = /foreign key|violates foreign key|23503/i.test(rawMessage)
+      ? 'Não é possível excluir: a receita ainda é referenciada em outros registros.'
+      : 'Erro ao deletar receita';
+    return { success: false as const, error: message };
   }
 }
 

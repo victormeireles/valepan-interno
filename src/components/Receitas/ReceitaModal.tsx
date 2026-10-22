@@ -7,6 +7,7 @@ import type {
   ReceitaInput,
 } from '@/app/actions/receitas-actions';
 import { createReceita, updateReceita } from '@/app/actions/receitas-actions';
+import type { ReceitaFormDraft } from '@/domain/receitas/receita-duplicata-draft';
 import type { ReceitaGramaturaVinculoSyncResult } from '@/domain/receitas/receita-gramatura-vinculos-sync-manager';
 import type { ReceitaMassaVinculoSyncResult } from '@/domain/receitas/receita-massa-vinculos-sync-manager';
 import TextInput from '@/components/FormControls/TextInput';
@@ -33,6 +34,7 @@ interface ReceitaModalProps {
     backfillMessage?: string;
   }) => void;
   receita?: ReceitaWithRelations | null;
+  draft?: ReceitaFormDraft | null;
 }
 
 type IngredienteForm = ReceitaIngredienteFormItem;
@@ -80,7 +82,13 @@ const generateTempId = () => {
   return Math.random().toString(36).slice(2);
 };
 
-export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: ReceitaModalProps) {
+export default function ReceitaModal({
+  isOpen,
+  onClose,
+  onSaved,
+  receita,
+  draft = null,
+}: ReceitaModalProps) {
   const [nome, setNome] = useState('');
   const [tipo, setTipo] = useState<TipoReceita>('massa');
   const [ativo, setAtivo] = useState(true);
@@ -146,6 +154,27 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
             quantidade: Number(item.quantidade_padrao),
           })),
         );
+      } else if (draft) {
+        setNome(draft.nome);
+        setTipo(draft.tipo);
+        setAtivo(draft.ativo);
+        setIngredientes(
+          draft.ingredientes.map((item) => ({
+            tempId: generateTempId(),
+            insumoId: item.insumoId,
+            insumoNome: item.insumoNome,
+            unidadeDescricao: item.unidadeDescricao,
+            custoUnitario: item.custoUnitario,
+            quantidade: item.quantidade,
+          })),
+        );
+        setGramaturas(
+          draft.gramaturas.map((item) => ({
+            tempId: generateTempId(),
+            pesoG: item.pesoG,
+            quantidade: item.quantidade,
+          })),
+        );
       } else {
         setNome('');
         setTipo('massa');
@@ -161,7 +190,7 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
       setError(null);
       resetImport();
     }
-  }, [isOpen, receita, resetImport]);
+  }, [isOpen, receita, draft, resetImport]);
 
   const tipoHelper = useMemo(
     () => tipoOptions.find((option) => option.value === tipo)?.helper ?? '',
@@ -351,10 +380,14 @@ export default function ReceitaModal({ isOpen, onClose, onSaved, receita }: Rece
         <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100 flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
-              {receita ? 'Editar Receita' : 'Nova Receita'}
+              {receita ? 'Editar Receita' : draft ? 'Duplicar Receita' : 'Nova Receita'}
             </h2>
             <p className="text-sm text-gray-500">
-              {receita ? 'Atualize os dados da receita.' : 'Preencha os dados para cadastrar.'}
+              {receita
+                ? 'Atualize os dados da receita.'
+                : draft
+                  ? 'Revise a cópia e salve para criar a nova receita.'
+                  : 'Preencha os dados para cadastrar.'}
             </p>
           </div>
           <button
