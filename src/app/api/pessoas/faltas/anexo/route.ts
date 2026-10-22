@@ -1,21 +1,11 @@
 import { NextResponse } from 'next/server';
 import { validarFaltaAnexoRequest } from '@/domain/pessoas/falta-anexo-request';
-import {
-  FaltaAnexoNaoEncontradaError,
-  faltaAnexoService,
-} from '@/lib/services/falta-anexo-service';
+import { faltaAnexoService } from '@/lib/services/falta-anexo-service';
 import { requirePessoasAnexoAuth } from './anexo-auth';
+import { respostaErroAnexo } from './anexo-erro';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function tratarErro(error: unknown, fallback: string): NextResponse {
-  if (error instanceof FaltaAnexoNaoEncontradaError) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-  const message = error instanceof Error ? error.message : fallback;
-  return NextResponse.json({ error: message }, { status: 500 });
-}
 
 export async function POST(request: Request) {
   try {
@@ -35,7 +25,7 @@ export async function POST(request: Request) {
     const resultado = await faltaAnexoService.anexar(parsed.faltaId, bytes);
     return NextResponse.json(resultado);
   } catch (error) {
-    return tratarErro(error, 'Erro ao anexar arquivo.');
+    return respostaErroAnexo(error, 'Erro ao anexar arquivo.');
   }
 }
 
@@ -55,6 +45,6 @@ export async function DELETE(request: Request) {
     await faltaAnexoService.remover(faltaId);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return tratarErro(error, 'Erro ao remover anexo.');
+    return respostaErroAnexo(error, 'Erro ao remover anexo.');
   }
 }

@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import {
-  FaltaAnexoNaoEncontradaError,
-  faltaAnexoService,
-} from '@/lib/services/falta-anexo-service';
+import { faltaAnexoService } from '@/lib/services/falta-anexo-service';
 import { requirePessoasAnexoAuth } from '../anexo-auth';
+import { respostaErroAnexo } from '../anexo-erro';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,11 +22,6 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ signedUrl });
   } catch (error) {
-    if (error instanceof FaltaAnexoNaoEncontradaError) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
-    }
-    const message =
-      error instanceof Error ? error.message : 'Erro ao obter anexo.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return respostaErroAnexo(error, 'Erro ao obter anexo.');
   }
 }
