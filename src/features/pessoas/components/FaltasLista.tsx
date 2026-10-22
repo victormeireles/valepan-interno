@@ -12,16 +12,20 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
+import { FaltaAnexoIndicacao } from '@/domain/pessoas/falta-anexo-indicacao';
 import { FaltaAgrupamento, type FaltaPessoaLinha } from '@/domain/pessoas/falta-agrupamento';
 import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
 import { postFaltaAnexo } from '@/features/pessoas/falta-anexo-client';
 import { compressImage } from '@/utils/imageCompression';
+import { FaltaAnexoIndicador } from './FaltaAnexoIndicador';
 import { FaltasClassificacaoFiltro } from './FaltasClassificacaoFiltro';
 import { FaltasPessoaModal } from './FaltasPessoaModal';
 import { FaltasResumoCards } from './FaltasResumoCards';
 import { ColunaRotulo } from './ColunaRotulo';
 import { FaltaLancamentoForm } from './FaltaLancamentoForm';
 import { PainelAcao } from './PainelAcao';
+
+const anexoIndicacao = new FaltaAnexoIndicacao();
 
 type Pessoa = { codigo: string; nome: string };
 
@@ -113,7 +117,12 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
             <ListRow
               key={pessoa.codigo}
               even={index % 2 === 1}
-              title={pessoa.nome}
+              title={
+                <>
+                  {pessoa.nome}
+                  {anexoIndicacao.existeParaPessoa(filtrados, pessoa.codigo) ? <FaltaAnexoIndicador /> : null}
+                </>
+              }
               subtitle={pessoa.codigo}
               onClick={() => setPessoaCodigo(pessoa.codigo)}
               columns={[
