@@ -42,4 +42,38 @@ describe('FaltaCampos', () => {
       medida: null,
     });
   });
+
+  it('patchEdicao omite medida quando o campo não veio', () => {
+    expect(
+      campos.patchEdicao({ classificacao: 'injustificada', justificativa: 'atestado' }),
+    ).toEqual({ classificacao: 'injustificada', justificativa: null });
+  });
+
+  it('patchEdicao grava medida quando ela veio', () => {
+    expect(
+      campos.patchEdicao({
+        classificacao: 'injustificada',
+        justificativa: '',
+        medida: 'advertencia',
+      }),
+    ).toEqual({
+      classificacao: 'injustificada',
+      justificativa: null,
+      medida: 'advertencia',
+    });
+  });
+
+  it('patchEdicao limpa medida quando veio vazia', () => {
+    expect(
+      campos.patchEdicao({
+        classificacao: 'injustificada',
+        justificativa: '',
+        medida: '',
+      }),
+    ).toEqual({
+      classificacao: 'injustificada',
+      justificativa: null,
+      medida: null,
+    });
+  });
 });

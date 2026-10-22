@@ -7,6 +7,12 @@ export type FaltaPayloadCampos = {
   medida: MedidaFalta | null;
 };
 
+export type FaltaEdicaoPatch = {
+  classificacao: ClassificacaoFalta;
+  justificativa: string | null;
+  medida?: MedidaFalta | null;
+};
+
 export class FaltaCampos {
   mostraJustificativa(classificacao: ClassificacaoFalta): boolean {
     return classificacao !== 'injustificada';
@@ -28,6 +34,18 @@ export class FaltaCampos {
     }
     const justificativa = input.justificativa.trim() || null;
     return { classificacao, justificativa, medida: null };
+  }
+
+  patchEdicao(input: {
+    classificacao: string;
+    justificativa: string;
+    medida?: string;
+  }): FaltaEdicaoPatch {
+    const valores = this.normalizar({ ...input, medida: input.medida ?? '' });
+    if (input.medida === undefined) {
+      return { classificacao: valores.classificacao, justificativa: valores.justificativa };
+    }
+    return valores;
   }
 
   private classificacao(valor: string): ClassificacaoFalta {

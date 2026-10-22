@@ -1,6 +1,6 @@
 'use server';
 
-import { FaltaCampos, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
+import { FaltaCampos, type FaltaEdicaoPatch, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
 import { FaltaLancamento } from '@/domain/pessoas/falta-lancamento';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -65,16 +65,12 @@ export async function editarFalta(
   input: { classificacao: string; justificativa: string; medida?: string },
 ): Promise<{ ok: boolean; mensagem: string }> {
   await requireInternoModulo('interno_pessoas', 'editar');
-  const campos = normalizarCampos(input);
-  if ('erro' in campos) return { ok: false, mensagem: campos.erro };
+  const patch = montarPatchEdicao(input);
+  if ('erro' in patch) return { ok: false, mensagem: patch.erro };
   const client = supabaseClientFactory.createServiceRoleClient();
   const { error } = await client
     .from('pessoas_faltas' as never)
-    .update({
-      classificacao: campos.valores.classificacao,
-      justificativa: campos.valores.justificativa,
-      medida: campos.valores.medida,
-    } as never)
+    .update(patch.valores as never)
     .eq('id', id)
     .is('cancelada_em', null);
   if (error) return { ok: false, mensagem: error.message };
@@ -222,6 +218,18 @@ function normalizarCampos(input: {
 }): { valores: FaltaPayloadCampos } | { erro: string } {
   try {
     return { valores: new FaltaCampos().normalizar({ ...input, medida: input.medida ?? '' }) };
+  } catch (error) {
+    return { erro: error instanceof Error ? error.message : 'Dados da falta inválidos.' };
+  }
+}
+
+function montarPatchEdicao(input: {
+  classificacao: string;
+  justificativa: string;
+  medida?: string;
+}): { valores: FaltaEdicaoPatch } | { erro: string } {
+  try {
+    return { valores: new FaltaCampos().patchEdicao(input) };
   } catch (error) {
     return { erro: error instanceof Error ? error.message : 'Dados da falta inválidos.' };
   }
