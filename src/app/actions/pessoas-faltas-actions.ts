@@ -1,5 +1,6 @@
 'use server';
 
+import { FaltaCampos, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
 import { FaltaLancamento } from '@/domain/pessoas/falta-lancamento';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -20,14 +21,18 @@ export type FaltaListaItem = {
   turnoNome: string | null;
   situacao: 'ativo' | 'admissao_prevista' | 'desligado';
   avisoAtivo: boolean;
+  medida: string | null;
+  temAnexo: boolean;
 };
+
+export type LancarFaltaResultado = { ok: boolean; mensagem: string; ids: string[] };
 
 export async function listFaltas(inicio: string, fim: string): Promise<FaltaListaItem[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_faltas' as never)
-    .select('id, data, classificacao, justificativa, cancelada_em, pessoas_colaboradores(codigo, nome, situacao), pessoas_setores(nome), pessoas_turnos(nome)')
+    .select('id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao), pessoas_setores(nome), pessoas_turnos(nome)')
     .gte('data', inicio)
     .lte('data', fim)
     .order('data', { ascending: false });
@@ -41,28 +46,35 @@ export async function lancarFalta(input: {
   datas: string[];
   classificacao: string;
   justificativa: string;
-}): Promise<{ ok: boolean; mensagem: string }> {
+  medida?: string;
+}): Promise<LancarFaltaResultado> {
   await requireInternoModulo('interno_pessoas', 'editar');
   const client = supabaseClientFactory.createServiceRoleClient();
   const pessoa = await colaboradorPorCodigo(client, input.codigo);
-  if (!pessoa) return { ok: false, mensagem: 'Colaborador não encontrado.' };
+  if (!pessoa) return { ok: false, mensagem: 'Colaborador não encontrado.', ids: [] };
   try {
     return await inserirFaltas(client, pessoa, input);
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : 'Não foi possível lançar a falta.';
-    return { ok: false, mensagem };
+    return { ok: false, mensagem, ids: [] };
   }
 }
 
 export async function editarFalta(
   id: string,
-  input: { classificacao: string; justificativa: string },
+  input: { classificacao: string; justificativa: string; medida?: string },
 ): Promise<{ ok: boolean; mensagem: string }> {
   await requireInternoModulo('interno_pessoas', 'editar');
+  const campos = normalizarCampos(input);
+  if ('erro' in campos) return { ok: false, mensagem: campos.erro };
   const client = supabaseClientFactory.createServiceRoleClient();
   const { error } = await client
     .from('pessoas_faltas' as never)
-    .update({ classificacao: input.classificacao, justificativa: input.justificativa.trim() || null } as never)
+    .update({
+      classificacao: campos.valores.classificacao,
+      justificativa: campos.valores.justificativa,
+      medida: campos.valores.medida,
+    } as never)
     .eq('id', id)
     .is('cancelada_em', null);
   if (error) return { ok: false, mensagem: error.message };
@@ -85,6 +97,8 @@ type FaltaRow = {
   data: string;
   classificacao: string;
   justificativa: string | null;
+  medida: string | null;
+  anexo_storage_path: string | null;
   cancelada_em: string | null;
   pessoas_colaboradores: PessoaFalta | PessoaFalta[] | null;
   pessoas_setores: { nome: string } | { nome: string }[] | null;
@@ -110,6 +124,8 @@ function paraItem(row: FaltaRow, comAviso: Set<string>): FaltaListaItem {
     turnoNome: nomeDe(row.pessoas_turnos),
     situacao: pessoa?.situacao ?? 'ativo',
     avisoAtivo: comAviso.has(codigo),
+    medida: row.medida,
+    temAnexo: Boolean(row.anexo_storage_path),
   };
 }
 
@@ -148,17 +164,28 @@ async function colaboradorPorCodigo(client: ServiceClient, codigo: string): Prom
 async function inserirFaltas(
   client: ServiceClient,
   pessoa: ColaboradorFalta,
-  input: { datas: string[]; classificacao: string; justificativa: string },
-): Promise<{ ok: boolean; mensagem: string }> {
+  input: { datas: string[]; classificacao: string; justificativa: string; medida?: string },
+): Promise<LancarFaltaResultado> {
+  const campos = normalizarCampos(input);
+  if ('erro' in campos) return { ok: false, mensagem: campos.erro, ids: [] };
   const lancamento = new FaltaLancamento();
   const pedidas = lancamento.normalizar(input.datas);
   const ocupadas = await datasComFalta(client, pessoa.id, pedidas);
   const { livres, repetidas } = lancamento.separar(pedidas, ocupadas);
-  if (livres.length === 0) return { ok: false, mensagem: lancamento.mensagem(0, repetidas) };
-  const gravacao = await client.from('pessoas_faltas' as never).insert(linhasFalta(pessoa, livres, input) as never);
-  if (gravacao.error?.code === '23505') return { ok: false, mensagem: 'Já existe falta ativa em alguma dessas datas.' };
-  if (gravacao.error) return { ok: false, mensagem: gravacao.error.message };
-  return { ok: true, mensagem: lancamento.mensagem(livres.length, repetidas) };
+  if (livres.length === 0) return { ok: false, mensagem: lancamento.mensagem(0, repetidas), ids: [] };
+  const gravacao = await client
+    .from('pessoas_faltas' as never)
+    .insert(linhasFalta(pessoa, livres, campos.valores) as never)
+    .select('id');
+  if (gravacao.error?.code === '23505') {
+    return { ok: false, mensagem: 'Já existe falta ativa em alguma dessas datas.', ids: [] };
+  }
+  if (gravacao.error) return { ok: false, mensagem: gravacao.error.message, ids: [] };
+  return {
+    ok: true,
+    mensagem: lancamento.mensagem(livres.length, repetidas),
+    ids: ((gravacao.data ?? []) as { id: string }[]).map((linha) => linha.id),
+  };
 }
 
 async function datasComFalta(client: ServiceClient, colaboradorId: string, datas: string[]): Promise<string[]> {
@@ -175,15 +202,27 @@ async function datasComFalta(client: ServiceClient, colaboradorId: string, datas
 function linhasFalta(
   pessoa: ColaboradorFalta,
   datas: string[],
-  input: { classificacao: string; justificativa: string },
+  campos: FaltaPayloadCampos,
 ) {
-  const justificativa = input.justificativa.trim() || null;
   return datas.map((data) => ({
     colaborador_id: pessoa.id,
     data,
-    classificacao: input.classificacao,
-    justificativa,
+    classificacao: campos.classificacao,
+    justificativa: campos.justificativa,
+    medida: campos.medida,
     setor_id: pessoa.setor_id,
     turno_id: pessoa.turno_id,
   }));
+}
+
+function normalizarCampos(input: {
+  classificacao: string;
+  justificativa: string;
+  medida?: string;
+}): { valores: FaltaPayloadCampos } | { erro: string } {
+  try {
+    return { valores: new FaltaCampos().normalizar({ ...input, medida: input.medida ?? '' }) };
+  } catch (error) {
+    return { erro: error instanceof Error ? error.message : 'Dados da falta inválidos.' };
+  }
 }
