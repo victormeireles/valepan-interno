@@ -51,8 +51,6 @@ export function FaltaLancamentoForm({ pessoas, pessoaId, pendente, onPessoa, onE
       medida: String(form.get('medida') ?? ''),
       arquivo,
     });
-    setArquivo(null);
-    setClassificacao('pendente');
   }
 
   return (

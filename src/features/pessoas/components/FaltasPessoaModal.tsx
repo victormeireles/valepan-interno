@@ -76,7 +76,7 @@ export function FaltasPessoaModal({ nome, codigo, faltas, onFechar, onAviso, onM
         <div className="flex flex-col gap-3 overflow-y-auto px-5 py-4">
           {faltas.length === 0 ? <p className="text-sm text-stone-500">Nenhuma falta neste filtro.</p> : null}
           {faltas.map((falta) => (
-            <FaltaEditor key={`${falta.id}-${falta.classificacao}-${falta.justificativa ?? ''}-${falta.medida ?? ''}-${falta.temAnexo}`} falta={falta} onMudou={onMudou} pendente={pendente} cancelando={cancelarId === falta.id} onSalvar={(form) => salvar(falta.id, form)} onCancelar={cancelar} onPedirCancelamento={() => setCancelarId(falta.id)} onDesistir={() => setCancelarId(null)} />
+            <FaltaEditor key={`${falta.id}-${falta.classificacao}-${falta.justificativa ?? ''}`} falta={falta} onMudou={onMudou} pendente={pendente} cancelando={cancelarId === falta.id} onSalvar={(form) => salvar(falta.id, form)} onCancelar={cancelar} onPedirCancelamento={() => setCancelarId(falta.id)} onDesistir={() => setCancelarId(null)} />
           ))}
         </div>
       </section>

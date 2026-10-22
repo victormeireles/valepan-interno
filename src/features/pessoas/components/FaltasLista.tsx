@@ -66,7 +66,14 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
       justificativa: entrada.justificativa,
       medida: entrada.medida,
     });
-    const anexoOk = resultado.ok && entrada.arquivo ? await enviarAnexos(entrada.arquivo, resultado.ids) : true;
+    let anexoOk = true;
+    if (resultado.ok && entrada.arquivo) {
+      try {
+        anexoOk = await enviarAnexos(entrada.arquivo, resultado.ids);
+      } catch {
+        anexoOk = false;
+      }
+    }
     setPendente(false);
     setAviso({
       texto: anexoOk ? resultado.mensagem : `${resultado.mensagem} Falha ao enviar o anexo.`,
@@ -124,6 +131,7 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
       </div>
       <PainelAcao aberto={aberto} titulo="Lançar falta" onFechar={() => setAberto(false)}>
         <FaltaLancamentoForm
+          key={aberto ? 'aberto' : 'fechado'}
           pessoas={pessoas}
           pessoaId={pessoaId}
           pendente={pendente}
