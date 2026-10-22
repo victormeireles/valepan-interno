@@ -19,8 +19,8 @@ export function FaltaDiasMarca({ dias, marcados, onToggle, onMarcarTodos }: Prop
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex min-h-11 items-center justify-between gap-2">
-        <p id="falta-dias-rotulo" aria-live="polite" className="font-mono text-sm font-medium tabular-nums text-stone-700">
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-2">
+        <p id="falta-dias-rotulo" aria-live="polite" className="min-w-0 font-mono text-sm font-medium tabular-nums text-stone-700">
           {legenda}
         </p>
         {escolhidos < total ? (

@@ -6,6 +6,7 @@ import { lancarFalta, type FaltaListaItem } from '@/app/actions/pessoas-faltas-a
 import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { ListColumnHeader } from '@/components/ui/ListColumnHeader';
 import { ListRow } from '@/components/ui/ListRow';
@@ -90,53 +91,139 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col">
+    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col overflow-x-hidden">
       <Toolbar
         title="Faltas"
+        sticky={false}
+        flush
         resumo={legenda(classificacao)
           ? `${resumo.faltas.toLocaleString('pt-BR')} ${legenda(classificacao)} no período`
           : `${resumo.faltas.toLocaleString('pt-BR')} no período`}
-        actions={<Button size="lg" icon="event_busy" onClick={() => setAberto(true)}>Lançar falta</Button>}
+        actions={
+          <Button
+            size="lg"
+            icon="event_busy"
+            fullWidth
+            className="sm:w-auto"
+            onClick={() => setAberto(true)}
+          >
+            Lançar falta
+          </Button>
+        }
       />
-      <div className="grid grid-cols-1 items-end gap-3 px-4 pt-4 sm:px-6 lg:grid-cols-[minmax(0,11rem)_minmax(0,11rem)_minmax(0,1fr)_auto]">
-        <Input key={`de-${inicio}`} label="De" type="date" defaultValue={inicio} onChange={(event) => aplicarPeriodo(router, event.target.value, fim)} />
-        <Input key={`ate-${fim}`} label="Até" type="date" defaultValue={fim} onChange={(event) => aplicarPeriodo(router, inicio, event.target.value)} />
-        <Input label="Busca" aria-label="Buscar falta" placeholder="Nome" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
-        <FaltasClassificacaoFiltro value={classificacao} onChange={(valor) => { setClassificacao(valor); setLimite(40); }} />
+      <div className="grid grid-cols-1 items-end gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,11rem)_minmax(0,11rem)_minmax(0,1fr)_auto]">
+        <Input
+          key={`de-${inicio}`}
+          label="De"
+          type="date"
+          defaultValue={inicio}
+          onChange={(event) => aplicarPeriodo(router, event.target.value, fim)}
+        />
+        <Input
+          key={`ate-${fim}`}
+          label="Até"
+          type="date"
+          defaultValue={fim}
+          onChange={(event) => aplicarPeriodo(router, inicio, event.target.value)}
+        />
+        <Input
+          label="Busca"
+          aria-label="Buscar falta"
+          placeholder="Nome"
+          icon="search"
+          value={termo}
+          onChange={(event) => setTermo(event.target.value)}
+        />
+        <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+          <FaltasClassificacaoFiltro
+            value={classificacao}
+            onChange={(valor) => {
+              setClassificacao(valor);
+              setLimite(40);
+            }}
+          />
+        </div>
       </div>
       <FaltasResumoCards resumo={resumo} />
-      <div className="mt-4 px-4 sm:px-6">
-      {pessoasLista.length === 0 ? (
-        <EmptyState icon="event_busy" title="Nenhuma falta no filtro." />
-      ) : (
-        <Card padding="none">
-          <div className="hidden md:block">
-            <ListColumnHeader leading="Colaborador" columns={[{ label: 'Faltas', width: '5rem', align: 'right' }, { label: 'Situação', width: '9rem', align: 'left' }, { label: 'Setor', width: '9rem', align: 'left' }, { label: 'Turno', width: '8rem', align: 'left' }]} />
+      <div className="mt-4 min-w-0">
+        {pessoasLista.length === 0 ? (
+          <EmptyState icon="event_busy" title="Nenhuma falta no filtro." />
+        ) : (
+          <Card padding="none">
+            <div className="hidden md:block">
+              <ListColumnHeader
+                leading="Colaborador"
+                columns={[
+                  { label: 'Faltas', width: '5rem', align: 'right' },
+                  { label: 'Situação', width: '9rem', align: 'left' },
+                  { label: 'Setor', width: '9rem', align: 'left' },
+                  { label: 'Turno', width: '8rem', align: 'left' },
+                ]}
+                menuWidth="2.75rem"
+              />
+            </div>
+            {pessoasLista.slice(0, limite).map((pessoa, index) => (
+              <ListRow
+                key={pessoa.codigo}
+                even={index % 2 === 1}
+                title={
+                  <>
+                    {pessoa.nome}
+                    {anexoIndicacao.existeParaPessoa(filtrados, pessoa.codigo) ? <FaltaAnexoIndicador /> : null}
+                  </>
+                }
+                subtitle={pessoa.codigo}
+                onClick={() => setPessoaCodigo(pessoa.codigo)}
+                columns={[
+                  {
+                    value: <ColunaRotulo label="Faltas">{pessoa.faltas.toLocaleString('pt-BR')}</ColunaRotulo>,
+                    width: '5rem',
+                    align: 'right',
+                    tabular: true,
+                  },
+                  {
+                    value: (
+                      <ColunaRotulo label="Situação">
+                        <Badge tone={tomSituacao(pessoa)}>{rotuloSituacao(pessoa)}</Badge>
+                      </ColunaRotulo>
+                    ),
+                    width: '9rem',
+                    align: 'left',
+                    tabular: false,
+                  },
+                  {
+                    value: <ColunaRotulo label="Setor">{pessoa.setorNome ?? '—'}</ColunaRotulo>,
+                    width: '9rem',
+                    align: 'left',
+                    tabular: false,
+                  },
+                  {
+                    value: <ColunaRotulo label="Turno">{pessoa.turnoNome ?? '—'}</ColunaRotulo>,
+                    width: '8rem',
+                    align: 'left',
+                    tabular: false,
+                  },
+                ]}
+                menu={
+                  <IconButton
+                    icon="visibility"
+                    label={`Ver faltas de ${pessoa.nome}`}
+                    size="lg"
+                    variant="surface"
+                    onClick={() => setPessoaCodigo(pessoa.codigo)}
+                  />
+                }
+              />
+            ))}
+          </Card>
+        )}
+        {pessoasLista.length > limite ? (
+          <div className="mt-3">
+            <Button variant="secondary" size="lg" fullWidth className="sm:w-auto" onClick={() => setLimite((atual) => atual + 40)}>
+              Mostrar mais
+            </Button>
           </div>
-          {pessoasLista.slice(0, limite).map((pessoa, index) => (
-            <ListRow
-              key={pessoa.codigo}
-              even={index % 2 === 1}
-              title={
-                <>
-                  {pessoa.nome}
-                  {anexoIndicacao.existeParaPessoa(filtrados, pessoa.codigo) ? <FaltaAnexoIndicador /> : null}
-                </>
-              }
-              subtitle={pessoa.codigo}
-              onClick={() => setPessoaCodigo(pessoa.codigo)}
-              columns={[
-                { value: <ColunaRotulo label="Faltas">{pessoa.faltas.toLocaleString('pt-BR')}</ColunaRotulo>, width: '5rem', align: 'right', tabular: true },
-                { value: <ColunaRotulo label="Situação"><Badge tone={tomSituacao(pessoa)}>{rotuloSituacao(pessoa)}</Badge></ColunaRotulo>, width: '9rem', align: 'left', tabular: false },
-                { value: <ColunaRotulo label="Setor">{pessoa.setorNome ?? '—'}</ColunaRotulo>, width: '9rem', align: 'left', tabular: false },
-                { value: <ColunaRotulo label="Turno">{pessoa.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
-              ]}
-              menu={<Button size="lg" variant="secondary" onClick={() => setPessoaCodigo(pessoa.codigo)}>Ver faltas</Button>}
-            />
-          ))}
-        </Card>
-      )}
-      {pessoasLista.length > limite ? <Button variant="secondary" size="lg" onClick={() => setLimite((atual) => atual + 40)}>Mostrar mais</Button> : null}
+        ) : null}
       </div>
       <PainelAcao aberto={aberto} titulo="Lançar falta" onFechar={() => setAberto(false)}>
         <FaltaLancamentoForm
@@ -158,7 +245,13 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
           onMudou={() => router.refresh()}
         />
       ) : null}
-      {aviso ? <div className="fixed bottom-4 right-4 z-50 max-w-sm"><Toast tone={aviso.ok ? 'success' : 'error'} onClose={() => setAviso(null)}>{aviso.texto}</Toast></div> : null}
+      {aviso ? (
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-[60] sm:left-auto sm:right-4 sm:max-w-sm">
+          <Toast tone={aviso.ok ? 'success' : 'error'} onClose={() => setAviso(null)}>
+            {aviso.texto}
+          </Toast>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -180,7 +273,9 @@ function porClassificacao(itens: FaltaListaItem[], classificacao: string): Falta
 function porNome(itens: FaltaListaItem[], termo: string): FaltaListaItem[] {
   const busca = termo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
   if (!busca) return itens;
-  return itens.filter((item) => item.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').includes(busca));
+  return itens.filter((item) =>
+    item.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').includes(busca),
+  );
 }
 
 function legenda(classificacao: string): string {
