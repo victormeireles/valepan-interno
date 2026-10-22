@@ -1,0 +1,152 @@
+# Faltas: anexo fotográfico e medida disciplinar
+
+Data: 2026-10-22  
+Status: aguardando revisão do stakeholder
+
+## Objetivo
+
+No formulário de faltas (`/pessoas/faltas`), permitir anexar uma foto opcional (comprovante, advertência ou suspensão), esconder justificativa quando a falta for injustificada, e registrar a medida tomada em faltas injustificadas.
+
+### Sucesso
+
+- Criar e editar falta com anexo opcional (1 foto)
+- No mobile: galeria ou câmera (`capture="environment"`)
+- Ver a foto anexada (lightbox)
+- Justificativa oculta em `injustificada`
+- Em `injustificada`: campo Medida — vazio / advertência / suspensão / justa causa
+- Pendente e justificada: justificativa visível; sem campo medida
+
+## Contexto
+
+Hoje `pessoas_faltas` tem `classificacao` (`pendente` | `justificada` | `injustificada`) e `justificativa` texto livre, sempre visível no form. Não há mídia nem medida.
+
+Referências no app:
+
+- Embalagem: `PhotoUploader` / Drive — captura câmera+galeria madura, storage fora do módulo pessoas
+- Reclamações: bucket Supabase `reclamacoes` + signed URL + lightbox — padrão escolhido para faltas
+
+Campos legados `atestado` e `observacao` na tabela **não** entram neste escopo.
+
+## Decisões fechadas
+
+| Tema | Decisão |
+|------|---------|
+| Pendente | Como hoje: justificativa visível; sem medida |
+| Anexo por classificação | Sempre opcional (pendente, justificada, injustificada) |
+| Quantidade de fotos | Uma por falta (substitui ao trocar) |
+| Storage | Bucket Supabase privado (não Drive) |
+| Persistência | Colunas em `pessoas_faltas` (não tabela filha) |
+| Troca de classificação | Limpa o campo que some; anexo permanece |
+| Injustificada | `justificativa` grava `null`; `medida` opcional |
+| Fora de injustificada | `medida` grava `null` |
+| CSV import | Sem anexo e sem medida neste ciclo |
+| Legado `atestado` | Intocado |
+
+## Abordagem
+
+**Colunas na própria `pessoas_faltas` + bucket `pessoas-faltas`** (aprovado).
+
+Descartado: tabela filha estilo `reclamacao_fotos` (overkill para 1 foto).  
+Descartado: Google Drive (fora do RLS de pessoas; stakeholder pediu Supabase).
+
+## Schema
+
+### Colunas novas em `pessoas_faltas`
+
+- `medida text NULL`  
+  `CHECK (medida IS NULL OR medida IN ('advertencia', 'suspensao', 'justa_causa'))`
+- `anexo_storage_path text NULL`
+
+### Bucket `pessoas-faltas`
+
+- Privado (`public = false`)
+- `file_size_limit` ~4MB
+- `allowed_mime_types`: `image/jpeg` (após compressão no client)
+- Path: `{falta_id}/{uuid}.jpg`
+- Políticas de storage alinhadas a `auth_tem_modulo('interno_pessoas', 'ler'|'editar')` (mesmo espírito de reclamações)
+- Signed URL com TTL ~3600s para visualização
+
+RLS da tabela já existente (`interno_pessoas`) permanece; migration só adiciona colunas + bucket + policies de storage.
+
+## Regras de formulário
+
+| Classificação | Justificativa | Medida | Anexo |
+|---------------|---------------|--------|-------|
+| `pendente` | visível | oculto | opcional |
+| `justificada` | visível | oculto | opcional |
+| `injustificada` | oculto | visível | opcional |
+
+Opções de **Medida** (Select):
+
+- `—` (valor vazio / `null`) — nenhuma
+- Advertência → `advertencia`
+- Suspensão → `suspensao`
+- Justa causa → `justa_causa`
+
+Domain puro (ex.: `FaltaCamposVisiveis` / normalização na gravação):
+
+- Se `injustificada`: força `justificativa = null`; aceita `medida` válida ou `null`
+- Senão: força `medida = null`; mantém justificativa como hoje
+- Anexo independente da classificação
+
+## UI
+
+### Formulário (criar: `FaltaLancamentoForm`; editar: `FaltasPessoaModal`)
+
+- Select classificação (inalterado)
+- Justificativa condicional
+- Medida condicional (só injustificada)
+- Bloco **Anexo** sempre:
+  - Sem foto: ações “Tirar foto” e “Galeria” (padrão reclamações / captura mobile)
+  - Com foto: miniatura + Ver + Remover
+- Compressão de imagem no client antes do upload (mesmo limite ~4MB)
+
+### Visualização
+
+- Lightbox fullscreen (reuso/adaptação do padrão `ReclamacaoFotoLightbox`, simplificado para 1 foto)
+- Na lista: indicador discreto quando há anexo; toque abre lightbox
+
+### Upload / remoção
+
+1. Persistir falta (classificação, justificativa/medida, datas no create)
+2. Se houver arquivo novo: `POST` API de anexo → storage → atualiza `anexo_storage_path`
+3. Remover: apaga objeto no storage e zera `anexo_storage_path`
+4. Ver: gera signed URL e abre lightbox
+#### Lançamento em período (vários dias)
+
+Se o usuário anexar foto no lançamento de N dias: a mesma imagem é enviada **uma vez por falta criada** (cada linha com seu path `{id}/{uuid}.jpg`). Se o lançamento parcial falhar em algumas datas, só as criadas recebem anexo.
+
+## Arquitetura
+
+| Camada | Responsabilidade |
+|--------|------------------|
+| Domain | `MedidaFalta`, visibilidade/limpeza de campos, validação |
+| Actions | `lancarFalta` / `editarFalta` aceitam `medida`; retornam path/assinatura quando útil |
+| Storage service | Upload, remove, signed URL (espelho enxuto de `reclamacao-foto-storage`) |
+| API | `/api/pessoas/faltas/anexo` — upload/remover (gate `interno_pessoas` editar); GET signed URL (ler) |
+| UI | `FaltaAnexoCampo` + lightbox; forms condicionais |
+
+App grava com o padrão atual do módulo (service role após gate de permissão), igual reclamações/pessoas.
+
+## Testes
+
+- Domain: campos visíveis por classificação; limpeza ao trocar; medida rejeitada fora de injustificada; valores de medida
+- API anexo: sem permissão → 403; path inválido / sem falta → erro claro
+- (Opcional) smoke UI não automatizado neste ciclo
+
+## Fora de escopo
+
+- Várias fotos por falta
+- CSV com medida/anexo
+- Reuso do campo legado `atestado`
+- Drive / PhotoUploader de embalagem
+- Notificações ou fluxo trabalhista além do registro
+
+## Critérios de aceite
+
+1. Em injustificada, justificativa não aparece; medida aparece com as 4 opções (incluindo vazio)
+2. Em pendente/justificada, medida não aparece; justificativa aparece
+3. Anexo opcional em create e edit; mobile permite galeria e câmera
+4. É possível ver e remover o anexo
+5. Trocar classificação limpa só o campo ocultado; anexo permanece
+6. Bucket privado; visualização via signed URL
