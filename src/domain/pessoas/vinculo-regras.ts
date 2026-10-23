@@ -46,4 +46,9 @@ export class VinculoRegras {
     }
     return { data, futuro: data > hoje, tipo };
   }
+
+  cancelarAviso(avisoAtivo: boolean): { cancela: true } {
+    if (!avisoAtivo) throw new Error('Não há aviso ativo para cancelar.');
+    return { cancela: true };
+  }
 }

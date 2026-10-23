@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import {
   admitirColaborador,
   admitirNovo,
+  cancelarAvisoColaborador,
   definirLiderColaborador,
   desistirAdmissao,
   desligarColaborador,
@@ -25,6 +26,7 @@ export type AcaoPessoa =
   | 'contratar'
   | 'transferir'
   | 'desligar'
+  | 'cancelar_aviso'
   | 'desistir'
   | 'lider'
   | null;
@@ -132,6 +134,11 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         {acao === 'desistir' ? (
           <p className="text-sm text-stone-700">Isso encerra a reserva e não registra demissão.</p>
         ) : null}
+        {acao === 'cancelar_aviso' ? (
+          <p className="text-sm text-stone-700">
+            O aviso será cancelado e {pessoa?.nome ?? 'a pessoa'} volta ao quadro como ativa.
+          </p>
+        ) : null}
         {acao === 'lider' ? <p className="text-sm text-stone-700">{textoLider(pessoa)}</p> : null}
         {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
       </form>
@@ -149,6 +156,7 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'contratar') return `Contratar ${pessoa?.nome ?? ''}`;
   if (acao === 'transferir') return 'Alterar setor e turno';
   if (acao === 'desligar') return 'Desligar';
+  if (acao === 'cancelar_aviso') return 'Cancelar aviso';
   if (acao === 'desistir') return 'Desistir da admissão';
   if (acao === 'lider') return pessoa?.liderSetor ? 'Remover liderança' : 'Definir líder';
   return '';
@@ -172,6 +180,7 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
   if (acao === 'contratar') return admitirColaborador(pessoa.codigo, data);
   if (acao === 'transferir') return transferirColaborador(pessoa.codigo, turno, form.get('lider') === '1');
   if (acao === 'desligar') return desligarColaborador(pessoa.codigo, data, String(form.get('tipo') ?? ''));
+  if (acao === 'cancelar_aviso') return cancelarAvisoColaborador(pessoa.codigo, pessoa.avisoAtivo);
   if (acao === 'lider') return definirLiderColaborador(pessoa.codigo, !pessoa.liderSetor);
   return desistirAdmissao(pessoa.codigo);
 }

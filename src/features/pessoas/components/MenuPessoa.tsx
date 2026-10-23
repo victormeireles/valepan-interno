@@ -30,6 +30,7 @@ export function MenuPessoa({
         />
       ) : null}
       {item.situacao === 'admissao_prevista' ? <OverflowMenuItem icon="undo" label="Desistir da admissão" onClick={() => onAcao('desistir')} /> : null}
+      {item.avisoAtivo ? <OverflowMenuItem icon="undo" label="Cancelar aviso" onClick={() => onAcao('cancelar_aviso')} /> : null}
       {item.situacao !== 'desligado' ? <OverflowMenuItem icon="person_off" label="Desligar" tone="danger" onClick={() => onAcao('desligar')} /> : null}
     </OverflowMenu>
   );

@@ -53,4 +53,9 @@ describe('VinculoRegras', () => {
     expect(regras.desligar('2026-09-25', '2026-09-25', 'sem_trabalho').futuro).toBe(false);
     expect(() => regras.desligar('2026-10-01', '2026-09-25', '')).toThrow(/trabalho/);
   });
+
+  it('cancela só com aviso ativo', () => {
+    expect(regras.cancelarAviso(true)).toEqual({ cancela: true });
+    expect(() => regras.cancelarAviso(false)).toThrow(/aviso ativo/);
+  });
 });

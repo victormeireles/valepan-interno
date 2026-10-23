@@ -66,6 +66,17 @@ export async function desligarColaborador(codigo: string, data: string, tipo: st
   };
 }
 
+export async function cancelarAvisoColaborador(codigo: string, avisoAtivo: boolean): Promise<VinculoResultado> {
+  try {
+    new VinculoRegras().cancelarAviso(avisoAtivo);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível cancelar o aviso.' };
+  }
+  const resultado = await rpc('pessoas_cancelar_aviso', { p_codigo: codigo });
+  if (!resultado.ok) return resultado;
+  return { ok: true, mensagem: 'Aviso cancelado.' };
+}
+
 export async function admitirNovo(
   nome: string,
   turno: string,
