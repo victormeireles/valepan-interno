@@ -1,10 +1,11 @@
 'use server';
 
 import { FaltaCampos, type FaltaEdicaoPatch, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
+import { FaltaJanelaResumo, type FaltaJanelaContagem, type FaltaJanelaEntrada } from '@/domain/pessoas/falta-janela-resumo';
 import { FaltaLancamento } from '@/domain/pessoas/falta-lancamento';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
-import { extractCalendarDate } from '@/lib/utils/date-utils';
+import { extractCalendarDate, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 type ServiceClient = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 type ColaboradorFalta = { id: string; setor_id: string | null; turno_id: string | null };
@@ -26,6 +27,14 @@ export type FaltaListaItem = {
 };
 
 export type LancarFaltaResultado = { ok: boolean; mensagem: string; ids: string[] };
+
+export async function resumoFaltasRecentes(codigo: string): Promise<FaltaJanelaContagem | null> {
+  await requireInternoModulo('interno_pessoas', 'ler');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const pessoa = await colaboradorPorCodigo(client, codigo);
+  if (!pessoa) return null;
+  return new FaltaJanelaResumo().contar(await faltasDaJanela(client, pessoa.id));
+}
 
 export async function listFaltas(inicio: string, fim: string): Promise<FaltaListaItem[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -102,6 +111,12 @@ type FaltaRow = {
 };
 
 type PessoaFalta = { codigo: string; nome: string; situacao: FaltaListaItem['situacao'] };
+
+type FaltaJanelaRow = {
+  classificacao: string;
+  medida: string | null;
+  cancelada_em: string | null;
+};
 
 function paraItem(row: FaltaRow, comAviso: Set<string>): FaltaListaItem {
   const pessoa = Array.isArray(row.pessoas_colaboradores)
@@ -181,6 +196,26 @@ async function inserirFaltas(
     ok: true,
     mensagem: lancamento.mensagem(livres.length, repetidas),
     ids: ((gravacao.data ?? []) as { id: string }[]).map((linha) => linha.id),
+  };
+}
+
+async function faltasDaJanela(client: ServiceClient, colaboradorId: string): Promise<FaltaJanelaEntrada[]> {
+  const { inicio, fim } = new FaltaJanelaResumo().periodo(getTodayISOInBrazilTimezone());
+  const consulta = await client
+    .from('pessoas_faltas' as never)
+    .select('classificacao, medida, cancelada_em')
+    .eq('colaborador_id', colaboradorId)
+    .gte('data', inicio)
+    .lte('data', fim);
+  if (consulta.error) throw new Error(consulta.error.message);
+  return ((consulta.data ?? []) as FaltaJanelaRow[]).map(paraJanela);
+}
+
+function paraJanela(row: FaltaJanelaRow): FaltaJanelaEntrada {
+  return {
+    classificacao: row.classificacao,
+    medida: row.medida,
+    cancelada: Boolean(row.cancelada_em),
   };
 }
 

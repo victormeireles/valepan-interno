@@ -9,6 +9,7 @@ import type { ClassificacaoFalta } from '@/domain/pessoas/falta-lancamento';
 import { BuscaPessoa } from './BuscaPessoa';
 import FaltaAnexoCampo from './FaltaAnexoCampo';
 import { FaltaDataCampo } from './FaltaDataCampo';
+import { FaltaJanelaResumoPainel } from './FaltaJanelaResumoPainel';
 import { MEDIDAS } from './falta-opcoes';
 
 type Pessoa = { codigo: string; nome: string };
@@ -61,6 +62,7 @@ export function FaltaLancamentoForm({ pessoas, pessoaId, pendente, onPessoa, onE
         value={pessoaId}
         onChange={onPessoa}
       />
+      {pessoaId ? <FaltaJanelaResumoPainel codigo={pessoaId} /> : null}
       <FaltaDataCampo onDatas={setDatas} />
       <Select
         name="classificacao"
