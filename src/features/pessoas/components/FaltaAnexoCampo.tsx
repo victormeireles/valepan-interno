@@ -18,6 +18,13 @@ type Props = {
 const BOTAO_CLASSE =
   'inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[9px] border border-border-default bg-surface px-3.5 text-sm font-medium text-stone-700 shadow-control focus-within:ring-2 focus-within:ring-amber-500 aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
 
+function legendaAnexo(ocupado: boolean, temMiniatura: boolean, src: string | null): string {
+  if (ocupado) return 'Enviando…';
+  if (temMiniatura && !src) return 'Carregando anexo…';
+  if (temMiniatura) return 'Imagem anexada. Toque para ampliar.';
+  return 'Opcional. Uma imagem por falta.';
+}
+
 type EscolhaProps = {
   icone: string;
   rotulo: string;
@@ -25,6 +32,48 @@ type EscolhaProps = {
   desabilitado: boolean;
   onFile: (file: File) => void;
 };
+
+function MiniaturaAnexo({
+  src,
+  ocupado,
+  onAbrir,
+  onRemover,
+}: {
+  src: string | null;
+  ocupado: boolean;
+  onAbrir: () => void;
+  onRemover: () => void;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
+      <button
+        type="button"
+        className="flex min-h-24 w-full cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        onClick={() => src && onAbrir()}
+        aria-label="Ver anexo"
+      >
+        {src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt="" className="max-h-56 w-full object-contain" />
+        ) : (
+          <span className="material-icons text-3xl text-stone-300" aria-hidden="true">
+            photo
+          </span>
+        )}
+      </button>
+      <div className="absolute right-2 top-2">
+        <IconButton
+          icon="close"
+          label="Remover anexo"
+          size="lg"
+          variant="solid"
+          disabled={ocupado}
+          onClick={onRemover}
+        />
+      </div>
+    </div>
+  );
+}
 
 function EscolhaArquivo({ icone, rotulo, capture, desabilitado, onFile }: EscolhaProps) {
   return (
@@ -110,43 +159,19 @@ export default function FaltaAnexoCampo({
           onFile={handleFile}
         />
       </div>
-      <p className="text-xs text-text-muted">
-        {remoto.ocupado ? 'Enviando…' : 'Opcional. Uma imagem por falta.'}
-      </p>
+      {temMiniatura ? (
+        <MiniaturaAnexo
+          src={src}
+          ocupado={remoto.ocupado}
+          onAbrir={() => setAmpliada(true)}
+          onRemover={handleRemover}
+        />
+      ) : null}
+      <p className="text-xs text-text-muted">{legendaAnexo(remoto.ocupado, temMiniatura, src)}</p>
       {remoto.erro ? (
         <p role="alert" className="text-xs font-medium text-red-700">
           {remoto.erro}
         </p>
-      ) : null}
-
-      {temMiniatura ? (
-        <div className="relative inline-block">
-          <button
-            type="button"
-            className="block h-20 w-20 cursor-pointer overflow-hidden rounded-xl border border-stone-200 bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            onClick={() => src && setAmpliada(true)}
-            aria-label="Ver anexo"
-          >
-            {src ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={src} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="material-icons text-3xl text-stone-300" aria-hidden="true">
-                photo
-              </span>
-            )}
-          </button>
-          <div className="absolute -right-1 -top-1">
-            <IconButton
-              icon="close"
-              label="Remover anexo"
-              size="lg"
-              variant="solid"
-              disabled={remoto.ocupado}
-              onClick={handleRemover}
-            />
-          </div>
-        </div>
       ) : null}
 
       {ampliada && src ? (
