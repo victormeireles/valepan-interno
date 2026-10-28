@@ -6,6 +6,7 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 export type PainelPessoas = {
   ativos: number;
+  afastados: number;
   admissoes: number;
   avisos: number;
   livres: number;
@@ -15,18 +16,20 @@ export type PainelPessoas = {
 export async function painelPessoas(inicio: string, fim: string): Promise<PainelPessoas> {
   await requireInternoModulo('interno_pessoas', 'ler');
   const client = supabaseClientFactory.createServiceRoleClient();
-  const [ativos, admissoes, avisos, posicoes, ocupadas, faltas] = await Promise.all([
+  const [ativos, afastados, admissoes, avisos, posicoes, ocupadas, faltas] = await Promise.all([
     client.from('pessoas_colaboradores' as never).select('id', { count: 'exact', head: true }).eq('situacao', 'ativo'),
+    client.from('pessoas_colaboradores' as never).select('id', { count: 'exact', head: true }).eq('situacao', 'afastado'),
     client.from('pessoas_colaboradores' as never).select('id', { count: 'exact', head: true }).eq('situacao', 'admissao_prevista').is('previsao_encerrada_em', null),
     client.from('pessoas_avisos' as never).select('id', { count: 'exact', head: true }).eq('situacao', 'ativo'),
     client.from('pessoas_posicoes' as never).select('id', { count: 'exact', head: true }).eq('ativa', true),
     client.from('pessoas_alocacoes' as never).select('id', { count: 'exact', head: true }).is('fim', null).not('posicao_id', 'is', null),
     client.from('pessoas_faltas' as never).select('id', { count: 'exact', head: true }).gte('data', inicio).lte('data', fim).is('cancelada_em', null),
   ]);
-  const erro = [ativos, admissoes, avisos, posicoes, ocupadas, faltas].find((item) => item.error);
+  const erro = [ativos, afastados, admissoes, avisos, posicoes, ocupadas, faltas].find((item) => item.error);
   if (erro?.error) throw new Error(erro.error.message);
   return {
     ativos: ativos.count ?? 0,
+    afastados: afastados.count ?? 0,
     admissoes: admissoes.count ?? 0,
     avisos: avisos.count ?? 0,
     livres: (posicoes.count ?? 0) - (ocupadas.count ?? 0),

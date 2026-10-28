@@ -21,6 +21,7 @@ export class QuadroHorarioAnexo {
         aprovado: 0,
         contratados: 0,
         reservas: 0,
+        afastados: 0,
         livres: 0,
       }));
     return [...linhas, ...extras];

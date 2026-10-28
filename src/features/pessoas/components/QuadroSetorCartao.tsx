@@ -5,7 +5,8 @@ import { IconButton } from '@/components/ui/IconButton';
 import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroTotais } from '@/domain/pessoas/quadro-totais';
-import { QuadroContagem } from './QuadroContagem';
+import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
+import { BarraOcupacao, NotaAfastados, QuadroContagem } from './QuadroContagem';
 
 type Props = {
   setor: QuadroSetor;
@@ -68,7 +69,7 @@ function TurnoCartao({
   onEditar,
 }: {
   item: QuadroTurno;
-  numeros: { aprovado: number; contratados: number; reservas: number; livres: number };
+  numeros: QuadroNumeros;
   podeEditar: boolean;
   onAbrir: () => void;
   onEditar: () => void;
@@ -92,7 +93,7 @@ function TurnoCartao({
         ) : null}
       </div>
       <button type="button" className="w-full p-3 text-left" onClick={onAbrir}>
-        <Barra numeros={numeros} />
+        <BarraOcupacao numeros={numeros} altura="h-2" />
         <span className="mt-2 grid grid-cols-4 gap-1 text-center sm:gap-2">
           <Metrica rotulo="Aprovadas" curto="Aprov." valor={numeros.aprovado} />
           <Metrica rotulo="Contratados" curto="Contr." valor={numeros.contratados} />
@@ -100,17 +101,12 @@ function TurnoCartao({
           <Metrica rotulo="Livres" curto="Livres" valor={numeros.livres} />
         </span>
       </button>
+      {numeros.afastados > 0 ? (
+        <div className="px-3 pb-3">
+          <NotaAfastados numeros={numeros} />
+        </div>
+      ) : null}
     </article>
-  );
-}
-
-function Barra({ numeros }: { numeros: { aprovado: number; contratados: number; reservas: number } }) {
-  const total = Math.max(numeros.aprovado, 1);
-  return (
-    <span className="mt-3 flex h-2 overflow-hidden rounded-full bg-stone-100" aria-hidden>
-      <span className="bg-amber-600" style={{ width: `${(numeros.contratados / total) * 100}%` }} />
-      <span className="bg-amber-300" style={{ width: `${(numeros.reservas / total) * 100}%` }} />
-    </span>
   );
 }
 

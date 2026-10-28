@@ -58,4 +58,13 @@ describe('VinculoRegras', () => {
     expect(regras.cancelarAviso(true)).toEqual({ cancela: true });
     expect(() => regras.cancelarAviso(false)).toThrow(/aviso ativo/);
   });
+
+  it('afasta ativo com motivo e retoma só afastado', () => {
+    expect(regras.afastar('ativo', 'inss')).toEqual({ motivo: 'inss' });
+    expect(regras.afastar('ativo', 'abandono')).toEqual({ motivo: 'abandono' });
+    expect(() => regras.afastar('desligado', 'inss')).toThrow(/ativo/);
+    expect(() => regras.afastar('ativo', 'ferias')).toThrow(/motivo/);
+    expect(regras.retomar('afastado')).toEqual({ retoma: true });
+    expect(() => regras.retomar('ativo')).toThrow(/afastado/);
+  });
 });

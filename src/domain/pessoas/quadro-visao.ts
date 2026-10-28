@@ -2,7 +2,7 @@ export type QuadroLinhaEntrada = {
   setorNome: string;
   turnoNome: string;
   turnoCodigo: string;
-  papel: 'ocupacao' | 'reserva' | 'apoio' | null;
+  papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado' | null;
 };
 
 export type QuadroLinha = {
@@ -12,6 +12,7 @@ export type QuadroLinha = {
   aprovado: number;
   contratados: number;
   reservas: number;
+  afastados: number;
   livres: number;
 };
 
@@ -27,6 +28,10 @@ export class QuadroVisao {
       if (alocacao.papel === 'apoio' || alocacao.papel === null) continue;
       const linha = linhas.get(alocacao.turnoCodigo);
       if (!linha) continue;
+      if (alocacao.papel === 'afastado') {
+        linha.afastados += 1;
+        continue;
+      }
       if (alocacao.papel === 'ocupacao') linha.contratados += 1;
       if (alocacao.papel === 'reserva') linha.reservas += 1;
       linha.livres -= 1;
@@ -47,6 +52,7 @@ export class QuadroVisao {
       aprovado: 0,
       contratados: 0,
       reservas: 0,
+      afastados: 0,
       livres: 0,
     };
     linhas.set(posicao.turnoCodigo, nova);

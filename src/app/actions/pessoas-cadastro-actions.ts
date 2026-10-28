@@ -6,7 +6,7 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const SELECT_CADASTRO =
-  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix';
+  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao';
 
 export async function obterCadastroColaborador(codigo: string): Promise<ColaboradorCadastro> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -29,16 +29,22 @@ export async function atualizarCadastroColaborador(
   const normalizador = new ColaboradorCadastroNormalizador();
   let cadastro: ColaboradorCadastro;
   let nome: string | null = null;
+  let dataAdmissao: string | null | undefined;
   try {
     cadastro = normalizador.normalizar(campos);
     if ('nome' in campos) nome = normalizador.nomeColaborador(campos.nome);
+    if ('dataAdmissao' in campos) dataAdmissao = cadastro.dataAdmissao;
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
   }
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_colaboradores' as never)
-    .update({ ...paraLinha(cadastro, normalizador), ...(nome ? { nome } : {}) } as never)
+    .update({
+      ...paraLinha(cadastro, normalizador),
+      ...(nome ? { nome } : {}),
+      ...(dataAdmissao !== undefined ? { data_admissao: dataAdmissao } : {}),
+    } as never)
     .eq('codigo', codigo)
     .select('codigo');
   if (error) return { ok: false, mensagem: error.message };

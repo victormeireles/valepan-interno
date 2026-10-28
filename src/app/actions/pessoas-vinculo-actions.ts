@@ -18,7 +18,18 @@ async function rpc(nome: string, args: Record<string, string | boolean | null>):
 }
 
 export async function admitirColaborador(codigo: string, data: string): Promise<VinculoResultado> {
-  return rpc('pessoas_admitir', { p_codigo: codigo, p_data: data });
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  let admissao: { data: string | null; prevista: boolean };
+  try {
+    admissao = new VinculoRegras().classificarAdmissao(data, hoje);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível contratar.' };
+  }
+  if (!admissao.data) return { ok: false, mensagem: 'Informe a data de admissão.' };
+  const resultado = await rpc('pessoas_admitir', { p_codigo: codigo, p_data: admissao.data });
+  if (!resultado.ok) return resultado;
+  if (admissao.prevista) return { ok: true, mensagem: 'A data ainda não chegou. A pessoa continua a entrar.' };
+  return { ok: true, mensagem: 'Colaborador contratado.' };
 }
 
 export async function desistirAdmissao(codigo: string): Promise<VinculoResultado> {
@@ -75,6 +86,29 @@ export async function cancelarAvisoColaborador(codigo: string, avisoAtivo: boole
   const resultado = await rpc('pessoas_cancelar_aviso', { p_codigo: codigo });
   if (!resultado.ok) return resultado;
   return { ok: true, mensagem: 'Aviso cancelado.' };
+}
+
+export async function afastarColaborador(codigo: string, situacao: string, motivo: string): Promise<VinculoResultado> {
+  let afastamento: { motivo: string };
+  try {
+    afastamento = new VinculoRegras().afastar(situacao, motivo);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível afastar.' };
+  }
+  const resultado = await rpc('pessoas_afastar', { p_codigo: codigo, p_motivo: afastamento.motivo });
+  if (!resultado.ok) return resultado;
+  return { ok: true, mensagem: 'Afastamento registrado. A pessoa permanece no quadro e a vaga fica livre.' };
+}
+
+export async function retomarColaborador(codigo: string, situacao: string): Promise<VinculoResultado> {
+  try {
+    new VinculoRegras().retomar(situacao);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível retomar.' };
+  }
+  const resultado = await rpc('pessoas_retomar', { p_codigo: codigo });
+  if (!resultado.ok) return resultado;
+  return { ok: true, mensagem: 'Pessoa de volta ao posto.' };
 }
 
 export async function admitirNovo(

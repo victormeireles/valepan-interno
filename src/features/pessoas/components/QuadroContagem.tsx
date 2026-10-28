@@ -56,6 +56,7 @@ function FaixaGeral({
           />
         ))}
       </dl>
+      <NotaAfastados numeros={numeros} modo={modo} />
       <BarraOcupacao numeros={numeros} />
     </section>
   );
@@ -63,18 +64,21 @@ function FaixaGeral({
 
 function FaixaSetor({ numeros }: { numeros: QuadroNumeros }) {
   return (
-    <dl aria-label="Totais do setor" className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-4">
-      {ROTULOS.map((item) => (
-        <Celula
-          key={item.chave}
-          rotulo={item.rotulo}
-          curto={item.curto}
-          valor={numeros[item.chave]}
-          destaque={item.chave === 'livres'}
-          tamanho="setor"
-        />
-      ))}
-    </dl>
+    <div>
+      <dl aria-label="Totais do setor" className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-4">
+        {ROTULOS.map((item) => (
+          <Celula
+            key={item.chave}
+            rotulo={item.rotulo}
+            curto={item.curto}
+            valor={numeros[item.chave]}
+            destaque={item.chave === 'livres'}
+            tamanho="setor"
+          />
+        ))}
+      </dl>
+      <NotaAfastados numeros={numeros} />
+    </div>
   );
 }
 
@@ -104,14 +108,26 @@ function Celula({
   );
 }
 
-function BarraOcupacao({ numeros }: { numeros: QuadroNumeros }) {
-  const base = Math.max(numeros.aprovado, 1);
-  const contratados = Math.max(numeros.contratados, 0) / base;
-  const reservas = Math.max(numeros.reservas, 0) / base;
+export function NotaAfastados({ numeros, modo = 'total' }: { numeros: QuadroNumeros; modo?: QuadroTotaisModo }) {
+  if (numeros.afastados <= 0) return null;
+  const quantidade = numeros.afastados.toLocaleString('pt-BR');
+  const pessoa = numeros.afastados === 1 ? 'afastado' : 'afastados';
+  const texto =
+    modo === 'total'
+      ? `Inclui ${quantidade} ${pessoa} no quadro. A vaga continua livre.`
+      : `${quantidade} ${pessoa} fora do operacional. A vaga continua livre.`;
+  return <p className="mt-2 text-xs text-stone-600">{texto}</p>;
+}
+
+export function BarraOcupacao({ numeros, altura = 'h-1.5' }: { numeros: QuadroNumeros; altura?: string }) {
+  const reservas = Math.max(numeros.reservas, 0);
+  const livres = Math.max(numeros.livres, 0);
+  const noPosto = Math.max(numeros.aprovado - reservas - livres, 0);
   return (
-    <span className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-stone-100" aria-hidden>
-      <span className="bg-amber-600" style={{ width: `${contratados * 100}%` }} />
-      <span className="bg-amber-300" style={{ width: `${reservas * 100}%` }} />
+    <span className={`mt-3 flex overflow-hidden rounded-full bg-stone-200 ${altura}`} aria-hidden>
+      {noPosto > 0 ? <span className="bg-amber-600" style={{ flex: `${noPosto} 1 0%` }} /> : null}
+      {reservas > 0 ? <span className="bg-[#C6A848]" style={{ flex: `${reservas} 1 0%` }} /> : null}
+      {livres > 0 ? <span style={{ flex: `${livres} 1 0%` }} /> : null}
     </span>
   );
 }

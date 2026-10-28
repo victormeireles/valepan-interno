@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Badge, type BadgeTone } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -18,6 +18,7 @@ import {
   type ColaboradorListaItem,
 } from '@/domain/pessoas/colaborador-lista-filtro';
 import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
+import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import { CadastroPainel } from './CadastroPainel';
 import { ColunaRotulo } from './ColunaRotulo';
@@ -26,13 +27,8 @@ import { ExamesPainel } from './ExamesPainel';
 import { MenuPessoa } from './MenuPessoa';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
 
-const SITUACAO: Record<ColaboradorListaItem['situacao'], { rotulo: string; tom: BadgeTone }> = {
-  ativo: { rotulo: 'Ativo', tom: 'success' },
-  admissao_prevista: { rotulo: 'Admissão prevista', tom: 'warning' },
-  desligado: { rotulo: 'Desligado', tom: 'neutral' },
-};
-
 const filtro = new ColaboradorListaFiltro();
+const situacaoRotulo = new SituacaoColaboradorRotulo();
 
 type Props = {
   itens: ColaboradorListaItem[];
@@ -107,7 +103,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
         <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome ou código" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
         <Select label="Setor" value={setor} onChange={(event) => setSetor(event.target.value)} options={[{ value: '', label: 'Todos' }, ...setores.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Turno" value={turno} onChange={(event) => setTurno(event.target.value)} options={[{ value: '', label: 'Todos' }, ...turnosNomes.map((nome) => ({ value: nome, label: nome }))]} />
-        <Select label="Situação" value={situacao} onChange={(event) => setSituacao(event.target.value)} options={[{ value: '', label: 'Todas' }, { value: 'ativo', label: 'Ativos' }, { value: 'admissao_prevista', label: 'Admissão prevista' }, { value: 'desligado', label: 'Desligados' }]} />
+        <Select label="Situação" value={situacao} onChange={(event) => setSituacao(event.target.value)} options={[{ value: '', label: 'Todas' }, { value: 'ativo', label: 'Ativos' }, { value: 'afastado', label: 'Afastados' }, { value: 'admissao_prevista', label: 'Admissão prevista' }, { value: 'desligado', label: 'Desligados' }]} />
         <Select label="Líder" value={lider} onChange={(event) => setLider(event.target.value)} options={[{ value: '', label: 'Todos' }, { value: 'sim', label: 'Líderes' }, { value: 'nao', label: 'Não líderes' }]} />
       </div>
       <div className="mt-4 min-w-0">
@@ -136,7 +132,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
                 subtitle={item.codigo}
                 onClick={() => abrirCadastro(item, false)}
                 columns={[
-                  { value: <ColunaRotulo label="Situação"><Badge tone={item.avisoAtivo ? 'warning' : SITUACAO[item.situacao].tom}>{item.avisoAtivo ? 'Em aviso' : SITUACAO[item.situacao].rotulo}</Badge></ColunaRotulo>, width: '9rem', align: 'left', tabular: false },
+                  { value: <ColunaRotulo label="Situação"><BadgeSituacao item={item} /></ColunaRotulo>, width: '9rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Setor">{item.setorNome ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Turno">{item.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
@@ -183,6 +179,11 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
       />
     </div>
   );
+}
+
+function BadgeSituacao({ item }: { item: ColaboradorListaItem }) {
+  const marca = situacaoRotulo.exibir(item.situacao, item.avisoAtivo, item.afastamento);
+  return <Badge tone={marca.tom}>{marca.texto}</Badge>;
 }
 
 function unicos(valores: (string | null)[]): string[] {

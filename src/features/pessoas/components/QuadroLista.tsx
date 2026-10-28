@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
+import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroTotais, type QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
@@ -140,7 +141,8 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
   return {
     codigo: alvo.codigo,
     nome: alvo.nome,
-    situacao: alvo.papel === 'reserva' ? 'admissao_prevista' : 'ativo',
+    situacao: situacaoDoPapel(alvo.papel),
+    afastamento: alvo.afastamento ?? null,
     setorNome: alvo.setorNome,
     turnoNome,
     turnoCodigo: alvo.turnoCodigo,
@@ -150,9 +152,16 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
   };
 }
 
-function rotuloPapel(papel: QuadroPessoa['papel']): string {
-  if (papel === 'reserva') return 'A entrar';
-  if (papel === 'apoio') return 'Apoio';
+function situacaoDoPapel(papel: QuadroPessoa['papel']): ColaboradorListaItem['situacao'] {
+  if (papel === 'reserva') return 'admissao_prevista';
+  if (papel === 'afastado') return 'afastado';
+  return 'ativo';
+}
+
+function rotuloPapel(pessoa: QuadroPessoa): string {
+  if (pessoa.papel === 'reserva') return 'A entrar';
+  if (pessoa.papel === 'apoio') return 'Apoio';
+  if (pessoa.papel === 'afastado') return `Afastado · ${new AfastamentoRotulo().exibir(pessoa.afastamento)}`;
   return 'Ocupação';
 }
 
@@ -186,7 +195,7 @@ function TurnoDetalhe({
               <ListRow
                 even={index % 2 === 1}
                 title={pessoa.nome}
-                subtitle={`${pessoa.codigo} · ${rotuloPapel(pessoa.papel)}`}
+                subtitle={`${pessoa.codigo} · ${rotuloPapel(pessoa)}`}
                 columns={
                   pessoa.lider
                     ? [{ value: <Badge tone="accent">Líder</Badge>, width: '4.5rem', align: 'left', tabular: false }]

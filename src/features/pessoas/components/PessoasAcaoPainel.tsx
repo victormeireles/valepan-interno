@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import {
   admitirColaborador,
   admitirNovo,
+  afastarColaborador,
   cancelarAvisoColaborador,
   definirLiderColaborador,
   desistirAdmissao,
   desligarColaborador,
+  retomarColaborador,
   transferirColaborador,
   type TurnoOpcao,
 } from '@/app/actions/pessoas-vinculo-actions';
@@ -15,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
+import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import { CADASTRO_VAZIO } from '@/domain/pessoas/colaborador-cadastro';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import { BuscaTurno } from './BuscaTurno';
@@ -26,6 +29,8 @@ export type AcaoPessoa =
   | 'contratar'
   | 'transferir'
   | 'desligar'
+  | 'afastar'
+  | 'retomar'
   | 'cancelar_aviso'
   | 'desistir'
   | 'lider'
@@ -53,7 +58,9 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
     setErro(null);
   }, [acao, pessoa]);
 
-  async function enviar(form: FormData) {
+  async function enviar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
     setPendente(true);
     setErro(null);
     const resultado = await executar(acao, pessoa, form);
@@ -73,19 +80,22 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
       onFechar={onFechar}
       largo={acao === 'admitir'}
       rodape={
-        <Button
-          type="submit"
-          form={formId}
-          size="lg"
-          fullWidth
-          variant={acao === 'desligar' ? 'danger' : 'primary'}
-          disabled={pendente || (exigeTurno && !turnoCodigo)}
-        >
-          {pendente ? 'Registrando…' : 'Confirmar'}
-        </Button>
+        <div className="flex flex-col gap-2">
+          {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
+          <Button
+            type="submit"
+            form={formId}
+            size="lg"
+            fullWidth
+            variant={acao === 'desligar' ? 'danger' : 'primary'}
+            disabled={pendente || (exigeTurno && !turnoCodigo)}
+          >
+            {pendente ? 'Registrando…' : 'Confirmar'}
+          </Button>
+        </div>
       }
     >
-      <form id={formId} className="flex flex-col gap-5" action={enviar}>
+      <form id={formId} className="flex flex-col gap-5" onSubmit={enviar}>
         {acao === 'admitir' ? (
           <>
             <Input name="nome" label="Nome" required />
@@ -97,7 +107,14 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
             <CadastroFormulario cadastro={CADASTRO_VAZIO} />
           </>
         ) : null}
-        {acao === 'contratar' ? <Input name="data" label="Data" type="date" required /> : null}
+        {acao === 'contratar' ? (
+          <>
+            <Input name="data" label="Data de admissão" type="date" required />
+            <p className="text-sm text-stone-700">
+              Data de hoje ou anterior contrata e conta em Contratados. Data futura mantém a pessoa em A entrar.
+            </p>
+          </>
+        ) : null}
         {acao === 'desligar' ? (
           <>
             <Input name="data" label="Data de desligamento" type="date" required />
@@ -131,6 +148,19 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
             <Switch label="Líder do setor" checked={lider} onChange={setLider} />
           </>
         ) : null}
+        {acao === 'afastar' ? (
+          <>
+            <Select name="motivo" label="Motivo" options={new AfastamentoRotulo().opcoes()} />
+            <p className="text-sm text-stone-700">
+              A pessoa continua no quadro, com este status, e a vaga fica livre.
+            </p>
+          </>
+        ) : null}
+        {acao === 'retomar' ? (
+          <p className="text-sm text-stone-700">
+            {pessoa?.nome ?? 'A pessoa'} volta a ocupar uma vaga livre neste turno. Sem vaga livre, o retorno não é feito.
+          </p>
+        ) : null}
         {acao === 'desistir' ? (
           <p className="text-sm text-stone-700">Isso encerra a reserva e não registra demissão.</p>
         ) : null}
@@ -140,7 +170,6 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
           </p>
         ) : null}
         {acao === 'lider' ? <p className="text-sm text-stone-700">{textoLider(pessoa)}</p> : null}
-        {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
       </form>
     </PainelAcao>
   );
@@ -156,6 +185,8 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'contratar') return `Contratar ${pessoa?.nome ?? ''}`;
   if (acao === 'transferir') return 'Alterar setor e turno';
   if (acao === 'desligar') return 'Desligar';
+  if (acao === 'afastar') return 'Afastar';
+  if (acao === 'retomar') return 'Voltar ao posto';
   if (acao === 'cancelar_aviso') return 'Cancelar aviso';
   if (acao === 'desistir') return 'Desistir da admissão';
   if (acao === 'lider') return pessoa?.liderSetor ? 'Remover liderança' : 'Definir líder';
@@ -180,6 +211,8 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
   if (acao === 'contratar') return admitirColaborador(pessoa.codigo, data);
   if (acao === 'transferir') return transferirColaborador(pessoa.codigo, turno, form.get('lider') === '1');
   if (acao === 'desligar') return desligarColaborador(pessoa.codigo, data, String(form.get('tipo') ?? ''));
+  if (acao === 'afastar') return afastarColaborador(pessoa.codigo, pessoa.situacao, String(form.get('motivo') ?? ''));
+  if (acao === 'retomar') return retomarColaborador(pessoa.codigo, pessoa.situacao);
   if (acao === 'cancelar_aviso') return cancelarAvisoColaborador(pessoa.codigo, pessoa.avisoAtivo);
   if (acao === 'lider') return definirLiderColaborador(pessoa.codigo, !pessoa.liderSetor);
   return desistirAdmissao(pessoa.codigo);

@@ -20,6 +20,7 @@ describe('QuadroTotais', () => {
       aprovado: 2,
       contratados: 2,
       reservas: 0,
+      afastados: 0,
       livres: 0,
     });
   });
@@ -29,12 +30,14 @@ describe('QuadroTotais', () => {
       aprovado: 0,
       contratados: 0,
       reservas: 0,
+      afastados: 0,
       livres: 0,
     });
     expect(new QuadroTotais().doTurno(expedicao.turnos[0]!, 'operacional')).toEqual({
       aprovado: 6,
       contratados: 3,
       reservas: 1,
+      afastados: 0,
       livres: 2,
     });
   });
@@ -44,12 +47,14 @@ describe('QuadroTotais', () => {
       aprovado: 21,
       contratados: 15,
       reservas: 2,
+      afastados: 0,
       livres: 4,
     });
     expect(new QuadroTotais().geral([producao, expedicao], 'operacional')).toEqual({
       aprovado: 20,
       contratados: 14,
       reservas: 2,
+      afastados: 0,
       livres: 4,
     });
   });
@@ -59,7 +64,26 @@ describe('QuadroTotais', () => {
       aprovado: 0,
       contratados: 0,
       reservas: 0,
+      afastados: 0,
       livres: 0,
+    });
+  });
+
+  it('soma afastados no quadro total e mantém a vaga livre', () => {
+    const turno = { aprovado: 10, contratados: 8, reservas: 0, livres: 2, afastados: 2, apoio: [] };
+    expect(new QuadroTotais().doTurno(turno, 'total')).toEqual({
+      aprovado: 10,
+      contratados: 10,
+      reservas: 0,
+      afastados: 2,
+      livres: 2,
+    });
+    expect(new QuadroTotais().doTurno(turno, 'operacional')).toEqual({
+      aprovado: 10,
+      contratados: 8,
+      reservas: 0,
+      afastados: 2,
+      livres: 2,
     });
   });
 });

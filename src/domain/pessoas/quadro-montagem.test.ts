@@ -36,6 +36,7 @@ describe('QuadroMontagem', () => {
       aprovado: 3,
       contratados: 1,
       reservas: 1,
+      afastados: 0,
       livres: 1,
     });
   });
@@ -69,8 +70,25 @@ describe('QuadroMontagem', () => {
       aprovado: 93,
       contratados: 64,
       reservas: 1,
+      afastados: 0,
       livres: 28,
     });
     expect(resultado.alocacoes.filter((a) => a.papel === 'apoio')).toHaveLength(11);
+  });
+
+  it('afastado permanece no quadro sem ocupar vaga', () => {
+    const resultado = montagem.montar(
+      [{ setorCodigo: 'PRO', turnoCodigo: 'PRO-M', quantidade: 2 }],
+      [pessoa({ codigo: 'VP-9001' }), pessoa({ codigo: 'VP-9002', situacao: 'afastado' })],
+    );
+    expect(resultado.erros).toEqual([]);
+    expect(resultado.alocacoes.find((item) => item.pessoaCodigo === 'VP-9002')?.posicaoCodigo).toBeNull();
+    expect(contagem.contar(resultado)).toEqual({
+      aprovado: 2,
+      contratados: 1,
+      reservas: 0,
+      afastados: 1,
+      livres: 1,
+    });
   });
 });

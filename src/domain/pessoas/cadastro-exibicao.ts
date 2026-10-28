@@ -16,6 +16,12 @@ export class CadastroExibicao {
     return valor?.trim() || '—';
   }
 
+  data(valor: string | null): string {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor ?? '');
+    if (!match) return '—';
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+
   poupanca(valor: boolean): string {
     return valor ? 'Poupança' : 'Conta corrente';
   }

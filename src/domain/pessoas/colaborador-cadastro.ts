@@ -20,6 +20,7 @@ export const CADASTRO_VAZIO: ColaboradorCadastro = {
   contaCorrente: null,
   contaPoupanca: false,
   chavePix: null,
+  dataAdmissao: null,
 };
 
 export type ColaboradorCadastro = {
@@ -39,6 +40,7 @@ export type ColaboradorCadastro = {
   contaCorrente: string | null;
   contaPoupanca: boolean;
   chavePix: string | null;
+  dataAdmissao: string | null;
 };
 
 export class ColaboradorCadastroNormalizador {
@@ -70,7 +72,15 @@ export class ColaboradorCadastroNormalizador {
       contaCorrente: this.limite(entrada.contaCorrente, 20, 'Conta'),
       contaPoupanca: entrada.contaPoupanca === '1',
       chavePix: this.limite(entrada.chavePix, 140, 'Chave Pix'),
+      dataAdmissao: this.dataAdmissao(entrada.dataAdmissao),
     };
+  }
+
+  dataAdmissao(valor: string | undefined): string | null {
+    const texto = (valor ?? '').trim();
+    if (!texto) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) throw new Error('Informe a data de admissão.');
+    return texto;
   }
 
   cpfConferido(cpf: string | null): boolean {

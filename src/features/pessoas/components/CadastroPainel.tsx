@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { atualizarCadastroColaborador, obterCadastroColaborador } from '@/app/actions/pessoas-cadastro-actions';
 import { Button } from '@/components/ui/Button';
 import type { ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
@@ -41,14 +41,21 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
     };
   }, [pessoa, editandoInicial]);
 
-  async function salvar(form: FormData) {
+  async function salvar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!pessoa) return;
-    setPendente(true);
+    const form = new FormData(event.currentTarget);
     const campos = Object.fromEntries([...form.entries()].map(([chave, valor]) => [chave, String(valor)]));
+    setPendente(true);
+    setErro(null);
     const resultado = await atualizarCadastroColaborador(pessoa.codigo, campos);
     setPendente(false);
-    onConcluir(resultado.mensagem, resultado.ok);
-    if (resultado.ok) onFechar();
+    if (!resultado.ok) {
+      setErro(resultado.mensagem);
+      return;
+    }
+    onConcluir(resultado.mensagem, true);
+    onFechar();
   }
 
   const rodapeLeitura =
@@ -60,13 +67,16 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
 
   const rodapeEdicao =
     cadastro && editando ? (
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button type="submit" form={formId} size="lg" fullWidth disabled={pendente}>
-          {pendente ? 'Salvando…' : 'Salvar'}
-        </Button>
-        <Button type="button" size="lg" fullWidth variant="secondary" onClick={() => setEditando(false)}>
-          Cancelar
-        </Button>
+      <div className="flex flex-col gap-2">
+        {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="submit" form={formId} size="lg" fullWidth disabled={pendente}>
+            {pendente ? 'Salvando…' : 'Salvar'}
+          </Button>
+          <Button type="button" size="lg" fullWidth variant="secondary" onClick={() => setEditando(false)}>
+            Cancelar
+          </Button>
+        </div>
       </div>
     ) : null;
 
@@ -78,11 +88,11 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
       largo
       rodape={rodapeLeitura ?? rodapeEdicao}
     >
-      {erro ? <p className="text-sm text-red-700">{erro}</p> : null}
+      {(!cadastro || !editando) && erro ? <p className="text-sm text-red-700">{erro}</p> : null}
       {!cadastro && !erro ? <p className="text-sm text-stone-500">Carregando cadastro…</p> : null}
       {cadastro && !editando ? <CadastroLeitura cadastro={cadastro} /> : null}
       {cadastro && editando ? (
-        <form id={formId} className="flex flex-col gap-5" action={salvar}>
+        <form id={formId} className="flex flex-col gap-5" onSubmit={salvar}>
           <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
         </form>
       ) : null}

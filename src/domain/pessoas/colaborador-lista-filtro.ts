@@ -1,7 +1,11 @@
+import type { MotivoAfastamento } from './afastamento';
+import type { SituacaoColaborador } from './situacao-colaborador';
+
 export type ColaboradorListaItem = {
   codigo: string;
   nome: string;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado';
+  situacao: SituacaoColaborador;
+  afastamento?: MotivoAfastamento | null;
   setorNome: string | null;
   turnoNome: string | null;
   turnoCodigo: string | null;

@@ -20,6 +20,12 @@ export function CadastroFormulario({
           <div className="sm:col-span-2">
             <Input name="nome" label="Nome" defaultValue={nome} required autoComplete="name" />
           </div>
+          <Input
+            name="dataAdmissao"
+            label="Data de admissão"
+            type="date"
+            defaultValue={cadastro.dataAdmissao ?? ''}
+          />
         </Grupo>
       ) : null}
       <Grupo titulo="Contato">

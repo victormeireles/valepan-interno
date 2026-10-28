@@ -15,6 +15,7 @@ import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
 import { FaltaAnexoIndicacao } from '@/domain/pessoas/falta-anexo-indicacao';
 import { FaltaAgrupamento, type FaltaPessoaLinha } from '@/domain/pessoas/falta-agrupamento';
+import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
 import { postFaltaAnexo } from '@/features/pessoas/falta-anexo-client';
 import { compressImage } from '@/utils/imageCompression';
@@ -284,20 +285,12 @@ function legenda(classificacao: string): string {
   return '';
 }
 
-const SITUACAO: Record<FaltaPessoaLinha['situacao'], { rotulo: string; tom: BadgeTone }> = {
-  ativo: { rotulo: 'Ativo', tom: 'success' },
-  admissao_prevista: { rotulo: 'Admissão prevista', tom: 'warning' },
-  desligado: { rotulo: 'Desligado', tom: 'neutral' },
-};
-
 function rotuloSituacao(pessoa: FaltaPessoaLinha): string {
-  if (pessoa.avisoAtivo && pessoa.situacao === 'ativo') return 'Em aviso';
-  return SITUACAO[pessoa.situacao].rotulo;
+  return new SituacaoColaboradorRotulo().exibir(pessoa.situacao, pessoa.avisoAtivo).texto;
 }
 
 function tomSituacao(pessoa: FaltaPessoaLinha): BadgeTone {
-  if (pessoa.avisoAtivo && pessoa.situacao === 'ativo') return 'warning';
-  return SITUACAO[pessoa.situacao].tom;
+  return new SituacaoColaboradorRotulo().exibir(pessoa.situacao, pessoa.avisoAtivo).tom;
 }
 
 function aplicarPeriodo(router: { push: (href: string) => void }, inicio: string, fim: string): void {

@@ -20,7 +20,7 @@ export type FaltaListaItem = {
   cancelada: boolean;
   setorNome: string | null;
   turnoNome: string | null;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado';
+  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
   avisoAtivo: boolean;
   medida: string | null;
   temAnexo: boolean;

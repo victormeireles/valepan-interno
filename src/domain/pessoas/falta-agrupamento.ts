@@ -4,7 +4,7 @@ export type FaltaAgrupavel = {
   cancelada: boolean;
   setorNome: string | null;
   turnoNome: string | null;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado';
+  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
   avisoAtivo: boolean;
 };
 
@@ -14,7 +14,7 @@ export type FaltaPessoaLinha = {
   faltas: number;
   setorNome: string | null;
   turnoNome: string | null;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado';
+  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
   avisoAtivo: boolean;
 };
 

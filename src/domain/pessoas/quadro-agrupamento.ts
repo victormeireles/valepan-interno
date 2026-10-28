@@ -1,9 +1,11 @@
+import type { MotivoAfastamento } from './afastamento';
 import type { QuadroLinha } from './quadro-visao';
 
 export type QuadroPessoa = {
   codigo: string;
   nome: string;
-  papel: 'ocupacao' | 'reserva' | 'apoio';
+  papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
+  afastamento?: MotivoAfastamento | null;
   lider: boolean;
   setorNome: string;
   turnoCodigo: string;

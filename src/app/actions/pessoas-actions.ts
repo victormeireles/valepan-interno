@@ -7,7 +7,7 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const COLABORADORES_SELECT =
-  'codigo, nome, situacao, lider_setor, pessoas_setores(nome), pessoas_turnos(nome, codigo)';
+  'codigo, nome, situacao, afastamento, lider_setor, pessoas_setores(nome), pessoas_turnos(nome, codigo)';
 
 export async function listColaboradores(): Promise<ColaboradorListaItem[]> {
   await requireInternoModulo('interno_pessoas', 'ler');

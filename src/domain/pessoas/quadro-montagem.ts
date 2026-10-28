@@ -1,4 +1,4 @@
-export type SituacaoPessoa = 'ativo' | 'admissao_prevista' | 'desligado';
+export type SituacaoPessoa = 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
 
 export type PessoaQuadro = {
   codigo: string;
@@ -24,7 +24,7 @@ export type AlocacaoPlanejada = {
   pessoaCodigo: string;
   setorCodigo: string;
   turnoCodigo: string;
-  papel: 'ocupacao' | 'reserva' | 'apoio';
+  papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
   posicaoCodigo: string | null;
 };
 
@@ -38,6 +38,7 @@ export type QuadroNumeros = {
   aprovado: number;
   contratados: number;
   reservas: number;
+  afastados: number;
   livres: number;
 };
 
@@ -88,9 +89,8 @@ export class QuadroMontagem {
   ): AlocacaoPlanejada | null {
     if (pessoa.situacao === 'desligado') return null;
     if (!pessoa.setorCodigo || !pessoa.turnoCodigo) return null;
-    if (!pessoa.noQuadro) {
-      return this.apoio(pessoa);
-    }
+    if (pessoa.situacao === 'afastado') return this.marcar(pessoa, 'afastado');
+    if (!pessoa.noQuadro) return this.marcar(pessoa, 'apoio');
     const codigo = livres.get(this.chave(pessoa.setorCodigo, pessoa.turnoCodigo))?.shift();
     if (!codigo) {
       erros.push({ codigo: pessoa.codigo, motivo: 'sem vaga livre' });
@@ -105,12 +105,12 @@ export class QuadroMontagem {
     };
   }
 
-  private apoio(pessoa: PessoaQuadro): AlocacaoPlanejada {
+  private marcar(pessoa: PessoaQuadro, papel: 'apoio' | 'afastado'): AlocacaoPlanejada {
     return {
       pessoaCodigo: pessoa.codigo,
       setorCodigo: pessoa.setorCodigo ?? '',
       turnoCodigo: pessoa.turnoCodigo ?? '',
-      papel: 'apoio',
+      papel,
       posicaoCodigo: null,
     };
   }
@@ -133,6 +133,7 @@ export class QuadroContagem {
       aprovado,
       contratados,
       reservas,
+      afastados: this.papel(resultado, 'afastado'),
       livres: aprovado - contratados - reservas,
     };
   }

@@ -1,9 +1,11 @@
+import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 
 const SITUACOES = new Set<ColaboradorListaItem['situacao']>([
   'ativo',
   'admissao_prevista',
   'desligado',
+  'afastado',
 ]);
 
 export class ColaboradorListaRowParser {
@@ -33,6 +35,7 @@ export class ColaboradorListaRowParser {
       codigo,
       nome,
       situacao,
+      afastamento: new AfastamentoRotulo().ler(row.afastamento),
       setorNome: this.lerNomeRelacao(row.pessoas_setores),
       turnoNome: this.lerNomeRelacao(row.pessoas_turnos),
       turnoCodigo: this.lerCodigoRelacao(row.pessoas_turnos),

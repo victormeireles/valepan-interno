@@ -28,6 +28,7 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.cpf).toBeNull();
     expect(cadastro.valeTransporte).toBeNull();
     expect(cadastro.contaPoupanca).toBe(false);
+    expect(cadastro.dataAdmissao).toBeNull();
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(false);
   });
 
@@ -76,5 +77,11 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(() => normalizador.normalizar({ ...vazio, telefone: '123' })).toThrow('Telefone incompleto.');
     expect(() => normalizador.normalizar({ ...vazio, tamanhoCamiseta: 'XXX' })).toThrow('Tamanho de camiseta inválido.');
     expect(normalizador.normalizar({ ...vazio, valeTransporte: 'nao' }).valeTransporte).toBe(false);
+  });
+
+  it('grava a data de admissão em ISO e aceita o campo vazio', () => {
+    expect(normalizador.normalizar({ ...vazio, dataAdmissao: '2026-11-04' }).dataAdmissao).toBe('2026-11-04');
+    expect(normalizador.dataAdmissao('')).toBeNull();
+    expect(() => normalizador.dataAdmissao('04/11/2026')).toThrow('Informe a data de admissão.');
   });
 });

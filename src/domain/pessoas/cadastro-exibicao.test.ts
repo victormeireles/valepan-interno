@@ -13,5 +13,7 @@ describe('CadastroExibicao', () => {
     expect(exibir.vale(true)).toBe('Precisa');
     expect(exibir.vale(false)).toBe('Não precisa');
     expect(exibir.texto(null)).toBe('—');
+    expect(exibir.data('2026-11-04')).toBe('04/11/2026');
+    expect(exibir.data(null)).toBe('—');
   });
 });

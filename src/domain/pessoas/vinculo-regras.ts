@@ -1,4 +1,6 @@
-export type PapelAlocacao = 'ocupacao' | 'reserva' | 'apoio';
+import { AfastamentoRotulo, type MotivoAfastamento } from './afastamento';
+
+export type PapelAlocacao = 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
 
 export type AlocacaoAberta = {
   papel: PapelAlocacao;
@@ -50,5 +52,17 @@ export class VinculoRegras {
   cancelarAviso(avisoAtivo: boolean): { cancela: true } {
     if (!avisoAtivo) throw new Error('Não há aviso ativo para cancelar.');
     return { cancela: true };
+  }
+
+  afastar(situacao: string, motivo: string): { motivo: MotivoAfastamento } {
+    if (situacao !== 'ativo') throw new Error('Só um colaborador ativo pode ser afastado.');
+    const lido = new AfastamentoRotulo().ler(motivo);
+    if (!lido) throw new Error('Informe o motivo do afastamento.');
+    return { motivo: lido };
+  }
+
+  retomar(situacao: string): { retoma: true } {
+    if (situacao !== 'afastado') throw new Error('Só um afastado pode voltar ao posto.');
+    return { retoma: true };
   }
 }

@@ -1,5 +1,6 @@
 'use server';
 
+import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import { QuadroAgrupamento, type HorarioDiaQuadro, type QuadroPessoa, type QuadroSetor } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroHorarioAnexo, type HorarioTurnoCarga } from '@/domain/pessoas/quadro-horario-anexo';
 import { QuadroSetorCatalogo, type SetorCatalogoItem } from '@/domain/pessoas/quadro-setor-catalogo';
@@ -17,7 +18,7 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
       .eq('ativa', true),
     client
       .from('pessoas_alocacoes' as never)
-      .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor)')
+      .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor, afastamento)')
       .is('fim', null),
     client
       .from('pessoas_setores' as never)
@@ -84,7 +85,10 @@ type AlocacaoRow = {
   papel: QuadroPessoa['papel'];
   pessoas_setores: { nome: string } | { nome: string }[] | null;
   pessoas_turnos: { nome: string; codigo: string } | { nome: string; codigo: string }[] | null;
-  pessoas_colaboradores: { codigo: string; nome: string; lider_setor: boolean } | { codigo: string; nome: string; lider_setor: boolean }[] | null;
+  pessoas_colaboradores:
+    | { codigo: string; nome: string; lider_setor: boolean; afastamento: string | null }
+    | { codigo: string; nome: string; lider_setor: boolean; afastamento: string | null }[]
+    | null;
 };
 
 function paraPessoa(row: AlocacaoRow): QuadroPessoa {
@@ -93,6 +97,7 @@ function paraPessoa(row: AlocacaoRow): QuadroPessoa {
     codigo: pessoa?.codigo ?? '',
     nome: pessoa?.nome ?? '',
     papel: row.papel,
+    afastamento: new AfastamentoRotulo().ler(pessoa?.afastamento),
     lider: pessoa?.lider_setor === true,
     setorNome: nomeDe(row.pessoas_setores),
     turnoCodigo: codigoDe(row.pessoas_turnos),

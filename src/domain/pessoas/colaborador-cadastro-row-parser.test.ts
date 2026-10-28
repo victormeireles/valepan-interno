@@ -20,11 +20,13 @@ describe('ColaboradorCadastroRowParser', () => {
       conta_corrente: '56789-0',
       conta_poupanca: true,
       chave_pix: 'ana@valepan.com',
+      data_admissao: '2026-11-04',
     });
     expect(cadastro.nomeMae).toBe('Maria da Silva');
     expect(cadastro.valeTransporte).toBe(false);
     expect(cadastro.contaCorrente).toBe('56789-0');
     expect(cadastro.contaPoupanca).toBe(true);
     expect(cadastro.telefoneEmergencia).toBeNull();
+    expect(cadastro.dataAdmissao).toBe('2026-11-04');
   });
 });

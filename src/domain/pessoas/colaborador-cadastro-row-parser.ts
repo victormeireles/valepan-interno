@@ -20,7 +20,14 @@ export class ColaboradorCadastroRowParser {
       contaCorrente: this.texto(row.conta_corrente),
       contaPoupanca: row.conta_poupanca === true,
       chavePix: this.texto(row.chave_pix),
+      dataAdmissao: this.data(row.data_admissao),
     };
+  }
+
+  private data(valor: unknown): string | null {
+    if (typeof valor !== 'string') return null;
+    const texto = valor.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(texto) ? texto : null;
   }
 
   private texto(valor: unknown): string | null {
