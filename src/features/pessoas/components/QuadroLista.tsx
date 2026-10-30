@@ -161,7 +161,7 @@ function situacaoDoPapel(papel: QuadroPessoa['papel']): ColaboradorListaItem['si
 function rotuloPapel(pessoa: QuadroPessoa): string {
   if (pessoa.papel === 'reserva') return 'A entrar';
   if (pessoa.papel === 'apoio') return 'Apoio';
-  if (pessoa.papel === 'afastado') return `Afastado · ${new AfastamentoRotulo().exibir(pessoa.afastamento)}`;
+  if (pessoa.papel === 'afastado') return new AfastamentoRotulo().exibir(pessoa.afastamento);
   return 'Ocupação';
 }
 

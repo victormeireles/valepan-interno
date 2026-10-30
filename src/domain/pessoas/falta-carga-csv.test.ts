@@ -6,6 +6,7 @@ describe('FaltaCargaCsv', () => {
     const csv = [
       'colaborador_id,colaborador,nome,data,tipo,setor,observacao',
       'VP-9001,Pessoa,Pessoa,2026-06-09,Injustificada,,',
+      'VP-9003,Pessoa,Pessoa,2026-06-11,Suspensão,,',
       'VP-9002,Pessoa,Pessoa,2026-06-10,Outro,,',
     ].join('\n');
     const resultado = new FaltaCargaCsv().ler(csv);
@@ -14,6 +15,12 @@ describe('FaltaCargaCsv', () => {
         colaboradorCodigo: 'VP-9001',
         data: '2026-06-09',
         classificacao: 'injustificada',
+        observacao: '',
+      },
+      {
+        colaboradorCodigo: 'VP-9003',
+        data: '2026-06-11',
+        classificacao: 'suspensao',
         observacao: '',
       },
     ]);

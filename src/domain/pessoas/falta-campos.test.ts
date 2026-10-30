@@ -4,15 +4,17 @@ import { FaltaCampos } from './falta-campos';
 const campos = new FaltaCampos();
 
 describe('FaltaCampos', () => {
-  it('esconde justificativa só em injustificada', () => {
+  it('esconde justificativa em injustificada e suspensão', () => {
     expect(campos.mostraJustificativa('pendente')).toBe(true);
     expect(campos.mostraJustificativa('justificada')).toBe(true);
     expect(campos.mostraJustificativa('injustificada')).toBe(false);
+    expect(campos.mostraJustificativa('suspensao')).toBe(false);
   });
 
   it('mostra medida só em injustificada', () => {
     expect(campos.mostraMedida('injustificada')).toBe(true);
     expect(campos.mostraMedida('pendente')).toBe(false);
+    expect(campos.mostraMedida('suspensao')).toBe(false);
   });
 
   it('normaliza injustificada limpando justificativa', () => {
@@ -26,6 +28,20 @@ describe('FaltaCampos', () => {
       classificacao: 'injustificada',
       justificativa: null,
       medida: 'advertencia',
+    });
+  });
+
+  it('normaliza suspensão sem justificativa nem medida', () => {
+    expect(
+      campos.normalizar({
+        classificacao: 'suspensao',
+        justificativa: 'atestado',
+        medida: 'advertencia',
+      }),
+    ).toEqual({
+      classificacao: 'suspensao',
+      justificativa: null,
+      medida: null,
     });
   });
 

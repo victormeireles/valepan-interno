@@ -10,7 +10,7 @@ import { BuscaPessoa } from './BuscaPessoa';
 import FaltaAnexoCampo from './FaltaAnexoCampo';
 import { FaltaDataCampo } from './FaltaDataCampo';
 import { FaltaJanelaResumoPainel } from './FaltaJanelaResumoPainel';
-import { MEDIDAS } from './falta-opcoes';
+import { CLASSIFICACOES, MEDIDAS } from './falta-opcoes';
 
 type Pessoa = { codigo: string; nome: string };
 
@@ -29,12 +29,6 @@ type Props = {
   onPessoa: (id: string) => void;
   onEnviar: (entrada: Entrada) => void | Promise<void>;
 };
-
-const CLASSIFICACOES = [
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'justificada', label: 'Justificada' },
-  { value: 'injustificada', label: 'Injustificada' },
-];
 
 const campos = new FaltaCampos();
 

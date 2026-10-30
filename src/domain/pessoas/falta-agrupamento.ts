@@ -1,10 +1,14 @@
+import type { MotivoAfastamento } from './afastamento';
+import type { SituacaoColaborador } from './situacao-colaborador';
+
 export type FaltaAgrupavel = {
   codigo: string;
   nome: string;
   cancelada: boolean;
   setorNome: string | null;
   turnoNome: string | null;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
+  situacao: SituacaoColaborador;
+  afastamento: MotivoAfastamento | null;
   avisoAtivo: boolean;
 };
 
@@ -14,7 +18,8 @@ export type FaltaPessoaLinha = {
   faltas: number;
   setorNome: string | null;
   turnoNome: string | null;
-  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
+  situacao: SituacaoColaborador;
+  afastamento: MotivoAfastamento | null;
   avisoAtivo: boolean;
 };
 
@@ -35,6 +40,7 @@ export class FaltaAgrupamento {
         setorNome: item.setorNome,
         turnoNome: item.turnoNome,
         situacao: item.situacao,
+        afastamento: item.afastamento,
         avisoAtivo: item.avisoAtivo,
       });
     }

@@ -1,5 +1,6 @@
 'use server';
 
+import { AfastamentoRotulo, type MotivoAfastamento } from '@/domain/pessoas/afastamento';
 import { FaltaCampos, type FaltaEdicaoPatch, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
 import { FaltaJanelaResumo, type FaltaJanelaContagem, type FaltaJanelaEntrada } from '@/domain/pessoas/falta-janela-resumo';
 import { FaltaLancamento } from '@/domain/pessoas/falta-lancamento';
@@ -21,6 +22,7 @@ export type FaltaListaItem = {
   setorNome: string | null;
   turnoNome: string | null;
   situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
+  afastamento: MotivoAfastamento | null;
   avisoAtivo: boolean;
   medida: string | null;
   temAnexo: boolean;
@@ -41,7 +43,7 @@ export async function listFaltas(inicio: string, fim: string): Promise<FaltaList
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_faltas' as never)
-    .select('id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao), pessoas_setores(nome), pessoas_turnos(nome)')
+    .select('id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao, afastamento), pessoas_setores(nome), pessoas_turnos(nome)')
     .gte('data', inicio)
     .lte('data', fim)
     .order('data', { ascending: false });
@@ -110,7 +112,12 @@ type FaltaRow = {
   pessoas_turnos: { nome: string } | { nome: string }[] | null;
 };
 
-type PessoaFalta = { codigo: string; nome: string; situacao: FaltaListaItem['situacao'] };
+type PessoaFalta = {
+  codigo: string;
+  nome: string;
+  situacao: FaltaListaItem['situacao'];
+  afastamento: string | null;
+};
 
 type FaltaJanelaRow = {
   classificacao: string;
@@ -134,6 +141,7 @@ function paraItem(row: FaltaRow, comAviso: Set<string>): FaltaListaItem {
     setorNome: nomeDe(row.pessoas_setores),
     turnoNome: nomeDe(row.pessoas_turnos),
     situacao: pessoa?.situacao ?? 'ativo',
+    afastamento: new AfastamentoRotulo().ler(pessoa?.afastamento),
     avisoAtivo: comAviso.has(codigo),
     medida: row.medida,
     temAnexo: Boolean(row.anexo_storage_path),

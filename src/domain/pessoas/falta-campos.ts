@@ -15,7 +15,7 @@ export type FaltaEdicaoPatch = {
 
 export class FaltaCampos {
   mostraJustificativa(classificacao: ClassificacaoFalta): boolean {
-    return classificacao !== 'injustificada';
+    return classificacao === 'pendente' || classificacao === 'justificada';
   }
 
   mostraMedida(classificacao: ClassificacaoFalta): boolean {
@@ -31,6 +31,9 @@ export class FaltaCampos {
     const medida = parseMedidaFalta(input.medida);
     if (classificacao === 'injustificada') {
       return { classificacao, justificativa: null, medida };
+    }
+    if (classificacao === 'suspensao') {
+      return { classificacao, justificativa: null, medida: null };
     }
     const justificativa = input.justificativa.trim() || null;
     return { classificacao, justificativa, medida: null };
@@ -49,7 +52,7 @@ export class FaltaCampos {
   }
 
   private classificacao(valor: string): ClassificacaoFalta {
-    if (valor === 'pendente' || valor === 'justificada' || valor === 'injustificada') {
+    if (valor === 'pendente' || valor === 'justificada' || valor === 'injustificada' || valor === 'suspensao') {
       return valor;
     }
     throw new Error('Classificação inválida.');

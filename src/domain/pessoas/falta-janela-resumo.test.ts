@@ -8,7 +8,7 @@ describe('FaltaJanelaResumo', () => {
     expect(resumo.periodo('2026-10-26')).toEqual({ inicio: '2026-07-28', fim: '2026-10-26' });
   });
 
-  it('separa total, injustificadas, advertência e suspensão', () => {
+  it('separa total, injustificadas, medidas e dias de suspensão', () => {
     const contagem = resumo.contar([
       { classificacao: 'injustificada', medida: 'advertencia', cancelada: false },
       { classificacao: 'injustificada', medida: 'suspensao', cancelada: false },
@@ -17,13 +17,16 @@ describe('FaltaJanelaResumo', () => {
       { classificacao: 'pendente', medida: null, cancelada: false },
       { classificacao: 'injustificada', medida: 'justa_causa', cancelada: false },
       { classificacao: 'injustificada', medida: 'suspensao', cancelada: true },
+      { classificacao: 'suspensao', medida: null, cancelada: false },
+      { classificacao: 'suspensao', medida: null, cancelada: true },
     ]);
 
     expect(contagem).toEqual({
-      total: 6,
+      total: 7,
       injustificadas: 4,
       advertencia: 1,
       suspensao: 1,
+      diasSuspensao: 1,
     });
   });
 });

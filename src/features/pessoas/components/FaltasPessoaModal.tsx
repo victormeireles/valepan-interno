@@ -10,13 +10,7 @@ import { FaltaCampos } from '@/domain/pessoas/falta-campos';
 import type { ClassificacaoFalta } from '@/domain/pessoas/falta-lancamento';
 import { formatISODateBr } from '@/lib/utils/date-utils';
 import FaltaAnexoCampo from './FaltaAnexoCampo';
-import { MEDIDAS } from './falta-opcoes';
-
-const CLASSIFICACOES = [
-  { value: 'pendente', label: 'Pendente' },
-  { value: 'justificada', label: 'Justificada' },
-  { value: 'injustificada', label: 'Injustificada' },
-];
+import { CLASSIFICACOES, MEDIDAS } from './falta-opcoes';
 
 const campos = new FaltaCampos();
 

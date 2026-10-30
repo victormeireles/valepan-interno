@@ -282,15 +282,20 @@ function porNome(itens: FaltaListaItem[], termo: string): FaltaListaItem[] {
 function legenda(classificacao: string): string {
   if (classificacao === 'injustificada') return 'injustificadas';
   if (classificacao === 'justificada') return 'justificadas';
+  if (classificacao === 'suspensao') return 'suspensões';
   return '';
 }
 
 function rotuloSituacao(pessoa: FaltaPessoaLinha): string {
-  return new SituacaoColaboradorRotulo().exibir(pessoa.situacao, pessoa.avisoAtivo).texto;
+  return marcaSituacao(pessoa).texto;
 }
 
 function tomSituacao(pessoa: FaltaPessoaLinha): BadgeTone {
-  return new SituacaoColaboradorRotulo().exibir(pessoa.situacao, pessoa.avisoAtivo).tom;
+  return marcaSituacao(pessoa).tom;
+}
+
+function marcaSituacao(pessoa: FaltaPessoaLinha) {
+  return new SituacaoColaboradorRotulo().exibir(pessoa.situacao, pessoa.avisoAtivo, pessoa.afastamento);
 }
 
 function aplicarPeriodo(router: { push: (href: string) => void }, inicio: string, fim: string): void {

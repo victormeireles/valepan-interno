@@ -5,7 +5,7 @@ export type MotivoAfastamento = (typeof MOTIVOS_AFASTAMENTO)[number];
 const ROTULOS: Record<MotivoAfastamento, string> = {
   abandono: 'Abandono',
   inss: 'INSS',
-  outro: 'Outro',
+  outro: 'Afastado',
 };
 
 export class AfastamentoRotulo {

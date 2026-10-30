@@ -8,7 +8,7 @@ import type { PainelPessoas } from '@/app/actions/pessoas-painel-actions';
 
 const CARDS = [
   { chave: 'ativos', titulo: 'Ativos', href: '/pessoas?situacao=ativo' },
-  { chave: 'afastados', titulo: 'Afastados', href: '/pessoas?situacao=afastado' },
+  { chave: 'afastados', titulo: 'Fora do posto', href: '/pessoas?situacao=afastado' },
   { chave: 'admissoes', titulo: 'Admissões previstas', href: '/pessoas?situacao=admissao_prevista' },
   { chave: 'avisos', titulo: 'Avisos', href: '/pessoas?aviso=1' },
   { chave: 'livres', titulo: 'Vagas livres', href: '/pessoas/quadro' },

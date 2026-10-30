@@ -111,11 +111,11 @@ function Celula({
 export function NotaAfastados({ numeros, modo = 'total' }: { numeros: QuadroNumeros; modo?: QuadroTotaisModo }) {
   if (numeros.afastados <= 0) return null;
   const quantidade = numeros.afastados.toLocaleString('pt-BR');
-  const pessoa = numeros.afastados === 1 ? 'afastado' : 'afastados';
+  const pessoa = numeros.afastados === 1 ? 'pessoa fora do posto' : 'pessoas fora do posto';
   const texto =
     modo === 'total'
       ? `Inclui ${quantidade} ${pessoa} no quadro. A vaga continua livre.`
-      : `${quantidade} ${pessoa} fora do operacional. A vaga continua livre.`;
+      : `${quantidade} ${pessoa}. A vaga continua livre.`;
   return <p className="mt-2 text-xs text-stone-600">{texto}</p>;
 }
 

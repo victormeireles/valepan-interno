@@ -1,6 +1,6 @@
 import { addCalendarDaysISO, formatISODateBr } from '@/lib/utils/date-utils';
 
-export type ClassificacaoFalta = 'pendente' | 'justificada' | 'injustificada';
+export type ClassificacaoFalta = 'pendente' | 'justificada' | 'injustificada' | 'suspensao';
 
 export type FaltaLinha = {
   colaboradorCodigo: string;

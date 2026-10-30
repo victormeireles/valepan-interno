@@ -59,6 +59,7 @@ function FaltaJanelaQuadro({ resumo }: { resumo: FaltaJanelaContagem }) {
       <dl className="flex flex-col gap-1.5">
         <Linha rotulo="Total" valor={resumo.total} tom="neutro" />
         <Linha rotulo="Injustificadas" valor={resumo.injustificadas} tom={tomAtivo(resumo.injustificadas, 'amber')} />
+        <Linha rotulo="Suspensões" valor={resumo.diasSuspensao} tom={tomAtivo(resumo.diasSuspensao, 'amber')} />
         <Linha rotulo="Com advertência" valor={resumo.advertencia} tom={tomAtivo(resumo.advertencia, 'amber')} />
         <Linha rotulo="Com suspensão" valor={resumo.suspensao} tom={tomAtivo(resumo.suspensao, 'vermelho')} />
       </dl>

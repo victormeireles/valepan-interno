@@ -11,6 +11,7 @@ export type FaltaJanelaContagem = {
   injustificadas: number;
   advertencia: number;
   suspensao: number;
+  diasSuspensao: number;
 };
 
 export class FaltaJanelaResumo {
@@ -27,6 +28,7 @@ export class FaltaJanelaResumo {
       injustificadas: this.com(ativas, (falta) => falta.classificacao === 'injustificada'),
       advertencia: this.com(ativas, (falta) => falta.medida === 'advertencia'),
       suspensao: this.com(ativas, (falta) => falta.medida === 'suspensao'),
+      diasSuspensao: this.com(ativas, (falta) => falta.classificacao === 'suspensao'),
     };
   }
 

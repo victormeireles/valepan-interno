@@ -1,4 +1,4 @@
-export type ClassificacaoCarga = 'justificada' | 'injustificada';
+export type ClassificacaoCarga = 'justificada' | 'injustificada' | 'suspensao';
 
 export type FaltaCargaLinha = {
   colaboradorCodigo: string;
@@ -32,6 +32,7 @@ export class FaltaCargaCsv {
   private classificar(tipo: string): ClassificacaoCarga | null {
     if (tipo === 'Justificada') return 'justificada';
     if (tipo === 'Injustificada') return 'injustificada';
+    if (tipo === 'Suspensão' || tipo === 'Suspensao') return 'suspensao';
     return null;
   }
 }
