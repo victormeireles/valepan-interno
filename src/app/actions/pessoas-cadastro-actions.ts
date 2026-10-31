@@ -2,11 +2,13 @@
 
 import { ColaboradorCadastroNormalizador, type ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
 import { ColaboradorCadastroRowParser } from '@/domain/pessoas/colaborador-cadastro-row-parser';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
+import { RegimeTroca } from '@/domain/pessoas/regime-troca';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const SELECT_CADASTRO =
-  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao';
+  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, regime, cnpj, razao_social';
 
 export async function obterCadastroColaborador(codigo: string): Promise<ColaboradorCadastro> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -38,6 +40,11 @@ export async function atualizarCadastroColaborador(
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
   }
   const client = supabaseClientFactory.createServiceRoleClient();
+  try {
+    await validarTrocaDeRegime(client, codigo, cadastro.regime);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
+  }
   const { data, error } = await client
     .from('pessoas_colaboradores' as never)
     .update({
@@ -50,6 +57,27 @@ export async function atualizarCadastroColaborador(
   if (error) return { ok: false, mensagem: error.message };
   if (!data || (data as unknown[]).length === 0) return { ok: false, mensagem: 'Colaborador não encontrado.' };
   return { ok: true, mensagem: 'Cadastro atualizado.' };
+}
+
+type ClienteServico = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
+
+async function validarTrocaDeRegime(client: ClienteServico, codigo: string, destino: Regime): Promise<void> {
+  const { data, error } = await client
+    .from('pessoas_colaboradores' as never)
+    .select('id, regime, situacao, data_desligamento')
+    .eq('codigo', codigo)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Colaborador não encontrado.');
+  const atual = data as { id: string; regime: Regime | null; situacao: string; data_desligamento: string | null };
+  if ((atual.regime ?? 'clt') === destino) return;
+  const avisos = await client
+    .from('pessoas_avisos' as never)
+    .select('id', { count: 'exact', head: true })
+    .eq('colaborador_id', atual.id)
+    .eq('situacao', 'ativo');
+  if (avisos.error) throw new Error(avisos.error.message);
+  new RegimeTroca().avaliar(destino, (avisos.count ?? 0) > 0, atual.situacao, atual.data_desligamento);
 }
 
 function paraLinha(cadastro: ColaboradorCadastro, normalizador: ColaboradorCadastroNormalizador) {
@@ -71,6 +99,9 @@ function paraLinha(cadastro: ColaboradorCadastro, normalizador: ColaboradorCadas
     conta_corrente: cadastro.contaCorrente,
     conta_poupanca: cadastro.contaPoupanca,
     chave_pix: cadastro.chavePix,
+    regime: cadastro.regime,
+    cnpj: cadastro.cnpj,
+    razao_social: cadastro.razaoSocial,
     updated_at: new Date().toISOString(),
   };
 }

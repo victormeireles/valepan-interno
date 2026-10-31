@@ -16,4 +16,11 @@ describe('CadastroExibicao', () => {
     expect(exibir.data('2026-11-04')).toBe('04/11/2026');
     expect(exibir.data(null)).toBe('—');
   });
+
+  it('formata CNPJ e regime', () => {
+    expect(exibir.cnpj('11444777000161')).toBe('11.444.777/0001-61');
+    expect(exibir.cnpj(null)).toBe('—');
+    expect(exibir.regime('pj')).toBe('PJ');
+    expect(exibir.regime('clt')).toBe('CLT');
+  });
 });

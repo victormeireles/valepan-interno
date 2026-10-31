@@ -28,5 +28,25 @@ describe('ColaboradorCadastroRowParser', () => {
     expect(cadastro.contaPoupanca).toBe(true);
     expect(cadastro.telefoneEmergencia).toBeNull();
     expect(cadastro.dataAdmissao).toBe('2026-11-04');
+    expect(cadastro.regime).toBe('clt');
+    expect(cadastro.cnpj).toBeNull();
+    expect(cadastro.razaoSocial).toBeNull();
+  });
+
+  it('lê regime PJ com CNPJ e razão social', () => {
+    const cadastro = new ColaboradorCadastroRowParser().parse({
+      regime: 'pj',
+      cnpj: '11444777000161',
+      razao_social: 'Pao LTDA',
+    });
+    expect(cadastro.regime).toBe('pj');
+    expect(cadastro.cnpj).toBe('11444777000161');
+    expect(cadastro.razaoSocial).toBe('Pao LTDA');
+  });
+
+  it('recusa regime desconhecido', () => {
+    expect(() => new ColaboradorCadastroRowParser().parse({ regime: 'mei' })).toThrow(
+      'Cadastro do colaborador inválido.',
+    );
   });
 });

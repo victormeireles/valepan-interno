@@ -1,8 +1,20 @@
+import type { Regime } from './regime-cadastro';
+
 export class CadastroExibicao {
   cpf(valor: string | null): string {
     const digitos = (valor ?? '').replace(/\D/g, '');
     if (digitos.length !== 11) return valor?.trim() || '—';
     return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`;
+  }
+
+  cnpj(valor: string | null): string {
+    const digitos = (valor ?? '').replace(/\D/g, '');
+    if (digitos.length !== 14) return valor?.trim() || '—';
+    return `${digitos.slice(0, 2)}.${digitos.slice(2, 5)}.${digitos.slice(5, 8)}/${digitos.slice(8, 12)}-${digitos.slice(12)}`;
+  }
+
+  regime(valor: Regime): string {
+    return valor === 'pj' ? 'PJ' : 'CLT';
   }
 
   telefone(valor: string | null): string {

@@ -1,4 +1,5 @@
 import type { ColaboradorCadastro } from './colaborador-cadastro';
+import type { Regime } from './regime-cadastro';
 
 export class ColaboradorCadastroRowParser {
   parse(row: unknown): ColaboradorCadastro {
@@ -21,7 +22,16 @@ export class ColaboradorCadastroRowParser {
       contaPoupanca: row.conta_poupanca === true,
       chavePix: this.texto(row.chave_pix),
       dataAdmissao: this.data(row.data_admissao),
+      regime: this.regime(row.regime),
+      cnpj: this.texto(row.cnpj),
+      razaoSocial: this.texto(row.razao_social),
     };
+  }
+
+  private regime(valor: unknown): Regime {
+    if (valor === undefined || valor === null || valor === 'clt') return 'clt';
+    if (valor === 'pj') return 'pj';
+    throw new Error('Cadastro do colaborador inválido.');
   }
 
   private data(valor: unknown): string | null {

@@ -14,6 +14,13 @@ export function CadastroLeitura({ cadastro }: { cadastro: ColaboradorCadastro })
         <Campo rotulo="E-mail" valor={exibir.texto(cadastro.email)} />
       </Grupo>
       <Grupo titulo="Documentos">
+        <Campo rotulo="Regime" valor={exibir.regime(cadastro.regime)} />
+        {cadastro.regime === 'pj' ? (
+          <>
+            <Campo rotulo="CNPJ" valor={exibir.cnpj(cadastro.cnpj)} />
+            <Campo rotulo="Razão social" valor={exibir.texto(cadastro.razaoSocial)} largo />
+          </>
+        ) : null}
         <Campo rotulo="CPF" valor={exibir.cpf(cadastro.cpf)} />
         <Campo rotulo="Nome da mãe" valor={exibir.texto(cadastro.nomeMae)} />
         <Campo rotulo="Endereço" valor={exibir.texto(cadastro.endereco)} largo />

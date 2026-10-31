@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { TAMANHOS_CAMISETA, type ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
+import { CadastroRegimeCampos } from './CadastroRegimeCampos';
 
 export function CadastroFormulario({
   cadastro,
@@ -33,6 +34,7 @@ export function CadastroFormulario({
         <Input name="email" label="E-mail" type="email" defaultValue={cadastro.email ?? ''} />
       </Grupo>
       <Grupo titulo="Documentos">
+        <CadastroRegimeCampos regimeInicial={cadastro.regime} cnpj={cadastro.cnpj} razaoSocial={cadastro.razaoSocial} />
         <Input name="cpf" label="CPF" defaultValue={cadastro.cpf ?? ''} inputMode="numeric" />
         <Input name="nomeMae" label="Nome da mãe" defaultValue={cadastro.nomeMae ?? ''} />
         <div className="sm:col-span-2">
