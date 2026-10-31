@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { CargaColaboradorUpsert } from '../src/domain/pessoas/carga-colaborador-upsert';
 import { CargaPessoasCampoInvalidoError } from '../src/domain/pessoas/carga-pessoas-campo-invalido-error';
 import { CargaPessoasCsv, type CargaColaboradorLinha } from '../src/domain/pessoas/carga-pessoas-csv';
 import { CargaPessoasPreview } from '../src/domain/pessoas/carga-pessoas-preview';
@@ -166,6 +167,8 @@ class ImportPessoasCodigosGravados {
 }
 
 class ImportPessoasUpsert {
+  private readonly colaboradorUpsert = new CargaColaboradorUpsert();
+
   constructor(private readonly client: SupabaseClient) {}
 
   async gravar(
@@ -262,28 +265,12 @@ class ImportPessoasUpsert {
     setorIds: Map<string, string>,
     turnoIds: Map<string, string>,
   ) {
-    return {
-      codigo: c.codigo,
-      nome: c.nome,
-      apelido: c.apelido,
-      nascimento: c.nascimento,
-      nome_mae: c.nomeMae,
-      cpf: c.cpf,
-      cpf_verificado: c.cpfVerificado,
-      endereco: c.endereco,
-      telefone: c.telefone,
-      email: c.email,
-      cargo: c.cargo,
-      situacao: c.situacao,
-      cadastro_incompleto: c.cadastroIncompleto,
-      setor_id: c.setorCodigo ? setorIds.get(c.setorCodigo) ?? null : null,
-      turno_id: c.turnoCodigo ? turnoIds.get(c.turnoCodigo) ?? null : null,
-      data_admissao: c.dataAdmissao,
-      data_desligamento: c.dataDesligamento,
-      desligamento_data_desconhecida: c.desligamentoDataDesconhecida,
-      observacoes: c.observacoes,
-      updated_at: new Date().toISOString(),
-    };
+    return this.colaboradorUpsert.montar(
+      c,
+      c.setorCodigo ? setorIds.get(c.setorCodigo) ?? null : null,
+      c.turnoCodigo ? turnoIds.get(c.turnoCodigo) ?? null : null,
+      new Date().toISOString(),
+    );
   }
 
   private mapaIds(data: unknown): Map<string, string> {

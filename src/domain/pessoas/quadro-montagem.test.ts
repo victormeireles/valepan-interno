@@ -76,6 +76,15 @@ describe('QuadroMontagem', () => {
     expect(resultado.alocacoes.filter((a) => a.papel === 'apoio')).toHaveLength(11);
   });
 
+  it('conta pessoa ativa no quadro como contratada', () => {
+    const resultado = montagem.montar(
+      [{ setorCodigo: 'PRO', turnoCodigo: 'PRO-M', quantidade: 1 }],
+      [pessoa({ codigo: 'VP-1' })],
+    );
+    expect(contagem.contar(resultado).contratados).toBe(1);
+    expect(resultado.alocacoes[0]?.papel).toBe('ocupacao');
+  });
+
   it('afastado permanece no quadro sem ocupar vaga', () => {
     const resultado = montagem.montar(
       [{ setorCodigo: 'PRO', turnoCodigo: 'PRO-M', quantidade: 2 }],
