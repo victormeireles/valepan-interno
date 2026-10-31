@@ -1,5 +1,6 @@
 import { CpfVerificador } from './cpf-verificador';
 import { NomeCapitalizador } from './nome-capitalizador';
+import { RegimeCadastroNormalizador, type Regime } from './regime-cadastro';
 
 export const TAMANHOS_CAMISETA = ['PP', 'P', 'M', 'G', 'GG', 'XG'] as const;
 
@@ -21,6 +22,9 @@ export const CADASTRO_VAZIO: ColaboradorCadastro = {
   contaPoupanca: false,
   chavePix: null,
   dataAdmissao: null,
+  regime: 'clt',
+  cnpj: null,
+  razaoSocial: null,
 };
 
 export type ColaboradorCadastro = {
@@ -41,11 +45,15 @@ export type ColaboradorCadastro = {
   contaPoupanca: boolean;
   chavePix: string | null;
   dataAdmissao: string | null;
+  regime: Regime;
+  cnpj: string | null;
+  razaoSocial: string | null;
 };
 
 export class ColaboradorCadastroNormalizador {
   private readonly nomes = new NomeCapitalizador();
   private readonly cpfs = new CpfVerificador();
+  private readonly regimes = new RegimeCadastroNormalizador();
 
   nomeColaborador(valor: string | undefined): string {
     const texto = this.limite(valor, 200, 'Nome');
@@ -73,6 +81,7 @@ export class ColaboradorCadastroNormalizador {
       contaPoupanca: entrada.contaPoupanca === '1',
       chavePix: this.limite(entrada.chavePix, 140, 'Chave Pix'),
       dataAdmissao: this.dataAdmissao(entrada.dataAdmissao),
+      ...this.regimes.normalizar(entrada),
     };
   }
 

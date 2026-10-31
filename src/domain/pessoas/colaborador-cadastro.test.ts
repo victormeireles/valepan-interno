@@ -29,6 +29,9 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.valeTransporte).toBeNull();
     expect(cadastro.contaPoupanca).toBe(false);
     expect(cadastro.dataAdmissao).toBeNull();
+    expect(cadastro.regime).toBe('clt');
+    expect(cadastro.cnpj).toBeNull();
+    expect(cadastro.razaoSocial).toBeNull();
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(false);
   });
 
