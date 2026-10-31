@@ -149,6 +149,10 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
     liderSetor: alvo.lider,
     avisoAtivo: false,
     ultimoExame: null,
+    regime: alvo.regime ?? 'clt',
+    cnpj: null,
+    razaoSocial: null,
+    dataDesligamento: alvo.dataDesligamento ?? null,
   };
 }
 

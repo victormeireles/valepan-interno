@@ -5,6 +5,7 @@ import { QuadroAgrupamento, type HorarioDiaQuadro, type QuadroPessoa, type Quadr
 import { QuadroHorarioAnexo, type HorarioTurnoCarga } from '@/domain/pessoas/quadro-horario-anexo';
 import { QuadroSetorCatalogo, type SetorCatalogoItem } from '@/domain/pessoas/quadro-setor-catalogo';
 import { QuadroVisao } from '@/domain/pessoas/quadro-visao';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
@@ -18,7 +19,7 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
       .eq('ativa', true),
     client
       .from('pessoas_alocacoes' as never)
-      .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor, afastamento)')
+      .select('papel, pessoas_setores(nome), pessoas_turnos(nome, codigo), pessoas_colaboradores(codigo, nome, lider_setor, afastamento, regime, data_desligamento)')
       .is('fim', null),
     client
       .from('pessoas_setores' as never)
@@ -85,10 +86,16 @@ type AlocacaoRow = {
   papel: QuadroPessoa['papel'];
   pessoas_setores: { nome: string } | { nome: string }[] | null;
   pessoas_turnos: { nome: string; codigo: string } | { nome: string; codigo: string }[] | null;
-  pessoas_colaboradores:
-    | { codigo: string; nome: string; lider_setor: boolean; afastamento: string | null }
-    | { codigo: string; nome: string; lider_setor: boolean; afastamento: string | null }[]
-    | null;
+  pessoas_colaboradores: ColaboradorAlocadoRow | ColaboradorAlocadoRow[] | null;
+};
+
+type ColaboradorAlocadoRow = {
+  codigo: string;
+  nome: string;
+  lider_setor: boolean;
+  afastamento: string | null;
+  regime: Regime | null;
+  data_desligamento: string | null;
 };
 
 function paraPessoa(row: AlocacaoRow): QuadroPessoa {
@@ -99,6 +106,8 @@ function paraPessoa(row: AlocacaoRow): QuadroPessoa {
     papel: row.papel,
     afastamento: new AfastamentoRotulo().ler(pessoa?.afastamento),
     lider: pessoa?.lider_setor === true,
+    regime: pessoa?.regime ?? 'clt',
+    dataDesligamento: pessoa?.data_desligamento ?? null,
     setorNome: nomeDe(row.pessoas_setores),
     turnoCodigo: codigoDe(row.pessoas_turnos),
   };

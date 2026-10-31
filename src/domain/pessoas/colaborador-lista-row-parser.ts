@@ -1,5 +1,6 @@
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
 
 const SITUACOES = new Set<ColaboradorListaItem['situacao']>([
   'ativo',
@@ -42,7 +43,17 @@ export class ColaboradorListaRowParser {
       liderSetor: row.lider_setor === true,
       avisoAtivo: false,
       ultimoExame: null,
+      regime: this.lerRegime(row.regime, index),
+      cnpj: this.lerTexto(row.cnpj),
+      razaoSocial: this.lerTexto(row.razao_social),
+      dataDesligamento: this.lerTexto(row.data_desligamento),
     };
+  }
+
+  private lerRegime(valor: unknown, index: number): Regime {
+    if (valor == null || valor === '') return 'clt';
+    if (valor === 'clt' || valor === 'pj') return valor;
+    throw new Error(`Erro ao listar colaboradores: linha ${index} com regime inválido.`);
   }
 
   private lerSituacao(valor: unknown): ColaboradorListaItem['situacao'] | null {

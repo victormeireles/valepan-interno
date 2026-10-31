@@ -1,4 +1,5 @@
 import type { MotivoAfastamento } from './afastamento';
+import type { Regime } from './regime-cadastro';
 import type { SituacaoColaborador } from './situacao-colaborador';
 
 export type ColaboradorListaItem = {
@@ -12,6 +13,10 @@ export type ColaboradorListaItem = {
   liderSetor: boolean;
   avisoAtivo: boolean;
   ultimoExame: string | null;
+  regime: Regime;
+  cnpj: string | null;
+  razaoSocial: string | null;
+  dataDesligamento: string | null;
 };
 
 export type ColaboradorListaCriterio = {
@@ -21,6 +26,7 @@ export type ColaboradorListaCriterio = {
   situacao?: string;
   aviso?: boolean;
   lider?: string;
+  regime?: '' | Regime;
 };
 
 export class ColaboradorListaFiltro {
@@ -36,12 +42,25 @@ export class ColaboradorListaFiltro {
     if (criterio.setor && item.setorNome !== criterio.setor) return false;
     if (criterio.turno && item.turnoNome !== criterio.turno) return false;
     if (criterio.situacao && item.situacao !== criterio.situacao) return false;
+    if (criterio.regime && item.regime !== criterio.regime) return false;
     if (criterio.aviso && !item.avisoAtivo) return false;
     if (criterio.lider === 'sim' && !item.liderSetor) return false;
     if (criterio.lider === 'nao' && item.liderSetor) return false;
-    const termo = this.normalizar(criterio.termo ?? '');
+    const termoBruto = criterio.termo ?? '';
+    const termo = this.normalizar(termoBruto);
     if (!termo) return true;
-    return this.normalizar(item.nome).includes(termo) || this.normalizar(item.codigo).includes(termo);
+    return this.textoBate(item, termo) || this.cnpjBate(item, termoBruto);
+  }
+
+  private textoBate(item: ColaboradorListaItem, termo: string): boolean {
+    return [item.nome, item.codigo, item.razaoSocial ?? ''].some((texto) =>
+      this.normalizar(texto).includes(termo),
+    );
+  }
+
+  private cnpjBate(item: ColaboradorListaItem, termoBruto: string): boolean {
+    const digitos = termoBruto.replace(/\D/g, '');
+    return digitos.length > 0 && !!item.cnpj && item.cnpj.includes(digitos);
   }
 
   private normalizar(texto: string): string {

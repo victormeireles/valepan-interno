@@ -1,4 +1,5 @@
 import type { MotivoAfastamento } from './afastamento';
+import type { Regime } from './regime-cadastro';
 import type { QuadroLinha } from './quadro-visao';
 
 export type QuadroPessoa = {
@@ -7,6 +8,8 @@ export type QuadroPessoa = {
   papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
   afastamento?: MotivoAfastamento | null;
   lider: boolean;
+  regime?: Regime;
+  dataDesligamento?: string | null;
   setorNome: string;
   turnoCodigo: string;
 };

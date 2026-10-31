@@ -1,6 +1,7 @@
 'use server';
 
-import { CsvFormulaSeguro } from '@/domain/pessoas/csv-formula-seguro';
+import { ColaboradorCsv } from '@/domain/pessoas/colaborador-csv';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
@@ -42,12 +43,27 @@ export async function exportarColaboradoresCsv(): Promise<string> {
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_colaboradores' as never)
-    .select('codigo, nome, cpf, situacao')
+    .select('codigo, nome, cpf, situacao, regime, cnpj, razao_social')
     .order('nome');
   if (error) throw new Error(error.message);
-  const csv = new CsvFormulaSeguro();
-  const linhas = ((data ?? []) as { codigo: string; nome: string; cpf: string | null; situacao: string }[]).map(
-    (row) => csv.linha([row.codigo, row.nome, row.cpf ?? '', row.situacao]),
-  );
-  return ['codigo;nome;cpf;situacao', ...linhas].join('\n');
+  const linhas = ((data ?? []) as LinhaExportacao[]).map((row) => ({
+    codigo: row.codigo,
+    nome: row.nome,
+    cpf: row.cpf,
+    situacao: row.situacao,
+    regime: row.regime ?? 'clt',
+    cnpj: row.cnpj,
+    razaoSocial: row.razao_social,
+  }));
+  return new ColaboradorCsv().gerar(linhas);
 }
+
+type LinhaExportacao = {
+  codigo: string;
+  nome: string;
+  cpf: string | null;
+  situacao: string;
+  regime: Regime | null;
+  cnpj: string | null;
+  razao_social: string | null;
+};

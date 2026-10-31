@@ -18,6 +18,7 @@ import {
   type ColaboradorListaItem,
 } from '@/domain/pessoas/colaborador-lista-filtro';
 import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import { CadastroPainel } from './CadastroPainel';
@@ -43,6 +44,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
   const [turno, setTurno] = useState('');
   const [situacao, setSituacao] = useState(filtrosIniciais.situacao ?? 'ativo');
   const [lider, setLider] = useState('');
+  const [regime, setRegime] = useState<'' | Regime>('');
   const [acao, setAcao] = useState<AcaoPessoa>(null);
   const [pessoa, setPessoa] = useState<ColaboradorListaItem | null>(null);
   const [cadastro, setCadastro] = useState<ColaboradorListaItem | null>(null);
@@ -59,9 +61,10 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
         turno,
         situacao,
         lider,
+        regime,
         aviso: filtrosIniciais.aviso === '1',
       }),
-    [itens, termo, setor, turno, situacao, lider, filtrosIniciais.aviso],
+    [itens, termo, setor, turno, situacao, lider, regime, filtrosIniciais.aviso],
   );
   const setores = unicos(itens.map((item) => item.setorNome));
   const turnosNomes = unicos(itens.map((item) => item.turnoNome));
@@ -99,12 +102,13 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
           </Button>
         }
       />
-      <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome ou código" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
+      <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-6">
+        <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome, código ou CNPJ" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
         <Select label="Setor" value={setor} onChange={(event) => setSetor(event.target.value)} options={[{ value: '', label: 'Todos' }, ...setores.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Turno" value={turno} onChange={(event) => setTurno(event.target.value)} options={[{ value: '', label: 'Todos' }, ...turnosNomes.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Situação" value={situacao} onChange={(event) => setSituacao(event.target.value)} options={[{ value: '', label: 'Todas' }, { value: 'ativo', label: 'Ativos' }, { value: 'afastado', label: 'Fora do posto' }, { value: 'admissao_prevista', label: 'Admissão prevista' }, { value: 'desligado', label: 'Desligados' }]} />
         <Select label="Líder" value={lider} onChange={(event) => setLider(event.target.value)} options={[{ value: '', label: 'Todos' }, { value: 'sim', label: 'Líderes' }, { value: 'nao', label: 'Não líderes' }]} />
+        <Select label="Regime" value={regime} onChange={(event) => setRegime(event.target.value as '' | Regime)} options={[{ value: '', label: 'Todos' }, { value: 'clt', label: 'CLT' }, { value: 'pj', label: 'PJ' }]} />
       </div>
       <div className="mt-4 min-w-0">
         {filtrados.length === 0 ? (
@@ -128,7 +132,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
               <ListRow
                 key={item.codigo}
                 even={index % 2 === 1}
-                title={item.nome}
+                title={<TituloPessoa item={item} />}
                 subtitle={item.codigo}
                 onClick={() => abrirCadastro(item, false)}
                 columns={[
@@ -136,9 +140,9 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
                   { value: <ColunaRotulo label="Setor">{item.setorNome ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Turno">{item.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
-                  { value: <ColunaRotulo label="Próximo exame"><button type="button" className="inline-flex min-h-11 max-w-full cursor-pointer items-center border-none bg-transparent p-0 text-left" aria-label={`Exames de ${item.nome}`} onClick={(event) => { event.stopPropagation(); abrirExames(item); }}><ExamePrazoMarca situacao={prazo.calcular(item.ultimoExame, hoje)} silenciar={item.situacao === 'desligado'} /></button></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
+                  { value: <ColunaRotulo label="Próximo exame"><ProximoExame item={item} situacao={prazo.calcular(item.ultimoExame, hoje)} onAbrir={abrirExames} /></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
                 ]}
-                menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} onExames={abrirExames} />}
+                menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} onExames={item.regime === 'clt' ? abrirExames : undefined} />}
               />
             ))}
           </Card>
@@ -178,6 +182,41 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
         }}
       />
     </div>
+  );
+}
+
+function TituloPessoa({ item }: { item: ColaboradorListaItem }) {
+  if (item.regime !== 'pj') return <>{item.nome}</>;
+  return (
+    <span className="inline-flex max-w-full items-center gap-2">
+      <span className="truncate">{item.nome}</span>
+      <Badge tone="outline">PJ</Badge>
+    </span>
+  );
+}
+
+function ProximoExame({
+  item,
+  situacao,
+  onAbrir,
+}: {
+  item: ColaboradorListaItem;
+  situacao: ReturnType<ExamePrazo['calcular']>;
+  onAbrir: (alvo: ColaboradorListaItem) => void;
+}) {
+  if (item.regime === 'pj') return <span>—</span>;
+  return (
+    <button
+      type="button"
+      className="inline-flex min-h-11 max-w-full cursor-pointer items-center border-none bg-transparent p-0 text-left"
+      aria-label={`Exames de ${item.nome}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onAbrir(item);
+      }}
+    >
+      <ExamePrazoMarca situacao={situacao} silenciar={item.situacao === 'desligado'} />
+    </button>
   );
 }
 
