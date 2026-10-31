@@ -54,6 +54,17 @@ describe('VinculoRegras', () => {
     expect(() => regras.desligar('2026-10-01', '2026-09-25', '')).toThrow(/trabalho/);
   });
 
+  it('desliga PJ sem tipo de aviso e recusa INSS', () => {
+    expect(regras.desligar('2026-11-02', '2026-10-31', '', 'pj')).toEqual({
+      data: '2026-11-02',
+      futuro: true,
+      tipo: null,
+    });
+    expect(regras.desligar('2026-10-31', '2026-10-31', '', 'pj').futuro).toBe(false);
+    expect(() => regras.afastar('ativo', 'inss', 'pj')).toThrow('INSS vale só para CLT.');
+    expect(regras.afastar('ativo', 'abandono', 'pj')).toEqual({ motivo: 'abandono' });
+  });
+
   it('cancela só com aviso ativo', () => {
     expect(regras.cancelarAviso(true)).toEqual({ cancela: true });
     expect(() => regras.cancelarAviso(false)).toThrow(/aviso ativo/);

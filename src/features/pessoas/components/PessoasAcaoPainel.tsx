@@ -6,6 +6,7 @@ import {
   admitirNovo,
   afastarColaborador,
   cancelarAvisoColaborador,
+  cancelarSaidaColaborador,
   definirLiderColaborador,
   desistirAdmissao,
   desligarColaborador,
@@ -32,6 +33,7 @@ export type AcaoPessoa =
   | 'afastar'
   | 'retomar'
   | 'cancelar_aviso'
+  | 'cancelar_saida'
   | 'desistir'
   | 'lider'
   | null;
@@ -118,16 +120,20 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         {acao === 'desligar' ? (
           <>
             <Input name="data" label="Data de desligamento" type="date" required />
-            <Select
-              name="tipo"
-              label="Aviso"
-              options={[
-                { value: 'com_trabalho', label: 'Com trabalho' },
-                { value: 'sem_trabalho', label: 'Sem trabalho' },
-              ]}
-            />
+            {pessoa?.regime === 'pj' ? null : (
+              <Select
+                name="tipo"
+                label="Aviso"
+                options={[
+                  { value: 'com_trabalho', label: 'Com trabalho' },
+                  { value: 'sem_trabalho', label: 'Sem trabalho' },
+                ]}
+              />
+            )}
             <p className="text-sm text-stone-700">
-              Data depois de hoje registra o aviso e mantém a pessoa no quadro. Data de hoje ou anterior desliga e libera a vaga.
+              {pessoa?.regime === 'pj'
+                ? 'Data depois de hoje marca a saída e mantém a pessoa no quadro. Data de hoje ou anterior desliga e libera a vaga.'
+                : 'Data depois de hoje registra o aviso e mantém a pessoa no quadro. Data de hoje ou anterior desliga e libera a vaga.'}
             </p>
           </>
         ) : null}
@@ -150,7 +156,7 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         ) : null}
         {acao === 'afastar' ? (
           <>
-            <Select name="motivo" label="Motivo" options={new AfastamentoRotulo().opcoes()} />
+            <Select name="motivo" label="Motivo" options={opcoesAfastamento(pessoa)} />
             <p className="text-sm text-stone-700">
               A pessoa continua no quadro, com este status, e a vaga fica livre.
             </p>
@@ -163,6 +169,11 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         ) : null}
         {acao === 'desistir' ? (
           <p className="text-sm text-stone-700">Isso encerra a reserva e não registra demissão.</p>
+        ) : null}
+        {acao === 'cancelar_saida' ? (
+          <p className="text-sm text-stone-700">
+            A saída prevista será cancelada e {pessoa?.nome ?? 'a pessoa'} segue no quadro sem data de saída.
+          </p>
         ) : null}
         {acao === 'cancelar_aviso' ? (
           <p className="text-sm text-stone-700">
@@ -187,10 +198,16 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'desligar') return 'Desligar';
   if (acao === 'afastar') return 'Afastar';
   if (acao === 'retomar') return 'Voltar ao posto';
+  if (acao === 'cancelar_saida') return 'Cancelar saída';
   if (acao === 'cancelar_aviso') return 'Cancelar aviso';
   if (acao === 'desistir') return 'Desistir da admissão';
   if (acao === 'lider') return pessoa?.liderSetor ? 'Remover liderança' : 'Definir líder';
   return '';
+}
+
+function opcoesAfastamento(pessoa: ColaboradorListaItem | null) {
+  const opcoes = new AfastamentoRotulo().opcoes();
+  return pessoa?.regime === 'pj' ? opcoes.filter((opcao) => opcao.value !== 'inss') : opcoes;
 }
 
 function textoLider(pessoa: ColaboradorListaItem | null): string {
@@ -210,7 +227,10 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
   if (!pessoa) return { ok: false, mensagem: 'Selecione um colaborador.' };
   if (acao === 'contratar') return admitirColaborador(pessoa.codigo, data);
   if (acao === 'transferir') return transferirColaborador(pessoa.codigo, turno, form.get('lider') === '1');
-  if (acao === 'desligar') return desligarColaborador(pessoa.codigo, data, String(form.get('tipo') ?? ''));
+  if (acao === 'cancelar_saida') return cancelarSaidaColaborador(pessoa.codigo);
+  if (acao === 'desligar') {
+    return desligarColaborador(pessoa.codigo, data, pessoa.regime === 'pj' ? '' : String(form.get('tipo') ?? ''));
+  }
   if (acao === 'afastar') return afastarColaborador(pessoa.codigo, pessoa.situacao, String(form.get('motivo') ?? ''));
   if (acao === 'retomar') return retomarColaborador(pessoa.codigo, pessoa.situacao);
   if (acao === 'cancelar_aviso') return cancelarAvisoColaborador(pessoa.codigo, pessoa.avisoAtivo);

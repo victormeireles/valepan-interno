@@ -3,6 +3,7 @@
 import { atualizarCadastroColaborador } from '@/app/actions/pessoas-cadastro-actions';
 import { ColaboradorCadastroNormalizador } from '@/domain/pessoas/colaborador-cadastro';
 import { NomeCapitalizador } from '@/domain/pessoas/nome-capitalizador';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { VinculoRegras } from '@/domain/pessoas/vinculo-regras';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -61,20 +62,47 @@ export async function definirLiderColaborador(codigo: string, lider: boolean): P
   return { ok: true, mensagem: lider ? 'Líder definido.' : 'Liderança removida.' };
 }
 
+async function lerRegimeColaborador(codigo: string): Promise<Regime> {
+  await requireInternoModulo('interno_pessoas', 'editar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const { data, error } = await client
+    .from('pessoas_colaboradores' as never)
+    .select('regime')
+    .eq('codigo', codigo)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as { regime: Regime | null } | null)?.regime === 'pj' ? 'pj' : 'clt';
+}
+
+function mensagemDesligamento(regime: Regime, futuro: boolean): string {
+  if (!futuro) return 'Colaborador desligado.';
+  if (regime === 'pj') return 'Saída prevista registrada. A pessoa permanece no quadro até a data.';
+  return 'Aviso registrado. A pessoa permanece no quadro até a data.';
+}
+
 export async function desligarColaborador(codigo: string, data: string, tipo: string): Promise<VinculoResultado> {
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  let regime: Regime;
   let futuro = false;
   try {
-    futuro = new VinculoRegras().desligar(data, hoje, tipo).futuro;
+    regime = await lerRegimeColaborador(codigo);
+    futuro = new VinculoRegras().desligar(data, hoje, tipo, regime).futuro;
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível desligar.' };
   }
-  const resultado = await rpc('pessoas_desligar', { p_codigo: codigo, p_data: data, p_tipo: tipo });
+  const resultado = await rpc('pessoas_desligar', {
+    p_codigo: codigo,
+    p_data: data,
+    p_tipo: regime === 'pj' ? '' : tipo,
+  });
   if (!resultado.ok) return resultado;
-  return {
-    ok: true,
-    mensagem: futuro ? 'Aviso registrado. A pessoa permanece no quadro até a data.' : 'Colaborador desligado.',
-  };
+  return { ok: true, mensagem: mensagemDesligamento(regime, futuro) };
+}
+
+export async function cancelarSaidaColaborador(codigo: string): Promise<VinculoResultado> {
+  const resultado = await rpc('pessoas_cancelar_saida', { p_codigo: codigo });
+  if (!resultado.ok) return resultado;
+  return { ok: true, mensagem: 'Saída prevista cancelada.' };
 }
 
 export async function cancelarAvisoColaborador(codigo: string, avisoAtivo: boolean): Promise<VinculoResultado> {
@@ -91,7 +119,7 @@ export async function cancelarAvisoColaborador(codigo: string, avisoAtivo: boole
 export async function afastarColaborador(codigo: string, situacao: string, motivo: string): Promise<VinculoResultado> {
   let afastamento: { motivo: string };
   try {
-    afastamento = new VinculoRegras().afastar(situacao, motivo);
+    afastamento = new VinculoRegras().afastar(situacao, motivo, await lerRegimeColaborador(codigo));
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível afastar.' };
   }

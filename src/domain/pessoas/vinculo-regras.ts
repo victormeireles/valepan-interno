@@ -1,4 +1,5 @@
 import { AfastamentoRotulo, type MotivoAfastamento } from './afastamento';
+import type { Regime } from './regime-cadastro';
 
 export type PapelAlocacao = 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
 
@@ -41,8 +42,14 @@ export class VinculoRegras {
     return { data: texto, prevista: texto > hoje };
   }
 
-  desligar(data: string, hoje: string, tipo: string): { data: string; futuro: boolean; tipo: 'com_trabalho' | 'sem_trabalho' } {
+  desligar(
+    data: string,
+    hoje: string,
+    tipo: string,
+    regime: Regime = 'clt',
+  ): { data: string; futuro: boolean; tipo: 'com_trabalho' | 'sem_trabalho' | null } {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error('Informe a data do desligamento.');
+    if (regime === 'pj') return { data, futuro: data > hoje, tipo: null };
     if (tipo !== 'com_trabalho' && tipo !== 'sem_trabalho') {
       throw new Error('Informe se o aviso é com ou sem trabalho.');
     }
@@ -54,10 +61,11 @@ export class VinculoRegras {
     return { cancela: true };
   }
 
-  afastar(situacao: string, motivo: string): { motivo: MotivoAfastamento } {
+  afastar(situacao: string, motivo: string, regime: Regime = 'clt'): { motivo: MotivoAfastamento } {
     if (situacao !== 'ativo') throw new Error('Só um colaborador ativo pode ser afastado.');
     const lido = new AfastamentoRotulo().ler(motivo);
     if (!lido) throw new Error('Informe o motivo do afastamento.');
+    if (regime === 'pj' && lido === 'inss') throw new Error('INSS vale só para CLT.');
     return { motivo: lido };
   }
 
