@@ -16,6 +16,11 @@ describe('RegimeTroca', () => {
     expect(() => troca.avaliar('pj', false, 'ativo', null)).not.toThrow();
   });
 
+  it('recusa exame ocupacional de PJ', () => {
+    expect(() => troca.recusarExame('pj')).toThrow('Exame ocupacional vale só para CLT.');
+    expect(() => troca.recusarExame('clt')).not.toThrow();
+  });
+
   it('reconhece saída prevista só no PJ ainda ligado', () => {
     expect(troca.saidaPrevista('pj', 'ativo', '2026-11-02')).toBe(true);
     expect(troca.saidaPrevista('pj', 'desligado', '2026-11-02')).toBe(false);

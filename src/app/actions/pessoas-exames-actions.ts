@@ -1,6 +1,8 @@
 'use server';
 
 import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
+import type { Regime } from '@/domain/pessoas/regime-cadastro';
+import { RegimeTroca } from '@/domain/pessoas/regime-troca';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
@@ -38,11 +40,16 @@ export async function registrarExameColaborador(
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível registrar o exame.' };
   }
   const client = supabaseClientFactory.createServiceRoleClient();
-  const colaboradorId = await colaboradorIdPorCodigo(client, codigo);
-  if (!colaboradorId) return { ok: false, mensagem: 'Colaborador não encontrado.' };
+  const colaborador = await colaboradorPorCodigo(client, codigo);
+  if (!colaborador) return { ok: false, mensagem: 'Colaborador não encontrado.' };
+  try {
+    new RegimeTroca().recusarExame(colaborador.regime);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível registrar o exame.' };
+  }
   const { error } = await client
     .from('pessoas_exames' as never)
-    .insert({ colaborador_id: colaboradorId, data: iso } as never);
+    .insert({ colaborador_id: colaborador.id, data: iso } as never);
   if (error?.code === '23505') return { ok: false, mensagem: 'Esse exame já está registrado.' };
   if (error) return { ok: false, mensagem: error.message };
   return { ok: true, mensagem: 'Exame registrado.' };
@@ -59,6 +66,21 @@ export async function removerExameColaborador(id: string): Promise<{ ok: boolean
   if (error) return { ok: false, mensagem: error.message };
   if (!data || (data as unknown[]).length === 0) return { ok: false, mensagem: 'Exame não encontrado.' };
   return { ok: true, mensagem: 'Exame removido.' };
+}
+
+async function colaboradorPorCodigo(
+  client: ServiceClient,
+  codigo: string,
+): Promise<{ id: string; regime: Regime } | null> {
+  const { data, error } = await client
+    .from('pessoas_colaboradores' as never)
+    .select('id, regime')
+    .eq('codigo', codigo)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as { id?: string; regime?: Regime | null } | null;
+  if (typeof row?.id !== 'string') return null;
+  return { id: row.id, regime: row.regime === 'pj' ? 'pj' : 'clt' };
 }
 
 async function colaboradorIdPorCodigo(client: ServiceClient, codigo: string): Promise<string | null> {

@@ -10,6 +10,10 @@ export class RegimeTroca {
     }
   }
 
+  recusarExame(regime: Regime): void {
+    if (regime === 'pj') throw new Error('Exame ocupacional vale só para CLT.');
+  }
+
   saidaPrevista(regime: Regime, situacao: string, dataDesligamento: string | null): boolean {
     return regime === 'pj' && situacao !== 'desligado' && dataDesligamento !== null;
   }
