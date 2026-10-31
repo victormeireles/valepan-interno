@@ -59,8 +59,9 @@ export class ColaboradorListaFiltro {
   }
 
   private cnpjBate(item: ColaboradorListaItem, termoBruto: string): boolean {
+    if (!item.cnpj || !/^\s*[\d\s./-]+\s*$/.test(termoBruto)) return false;
     const digitos = termoBruto.replace(/\D/g, '');
-    return digitos.length > 0 && !!item.cnpj && item.cnpj.includes(digitos);
+    return digitos.length >= 5 && item.cnpj.includes(digitos);
   }
 
   private normalizar(texto: string): string {

@@ -45,18 +45,16 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.pessoas_cancelar_saida(p_codigo text)
 RETURNS void LANGUAGE plpgsql AS $$
-DECLARE
-  v_col uuid;
-  v_regime text;
-  v_situacao text;
-  v_data date;
 BEGIN
-  SELECT id, regime, situacao, data_desligamento
-  INTO v_col, v_regime, v_situacao, v_data
-  FROM public.pessoas_colaboradores WHERE codigo = p_codigo;
-  IF v_col IS NULL THEN RAISE EXCEPTION 'Colaborador não encontrado.'; END IF;
-  IF v_regime IS DISTINCT FROM 'pj' OR v_situacao = 'desligado' OR v_data IS NULL THEN
-    RAISE EXCEPTION 'Não há saída prevista para cancelar.';
+  UPDATE public.pessoas_colaboradores
+  SET data_desligamento = NULL, updated_at = now()
+  WHERE codigo = p_codigo
+    AND regime = 'pj'
+    AND situacao <> 'desligado'
+    AND data_desligamento IS NOT NULL;
+  IF FOUND THEN RETURN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.pessoas_colaboradores WHERE codigo = p_codigo) THEN
+    RAISE EXCEPTION 'Colaborador não encontrado.';
   END IF;
-  UPDATE public.pessoas_colaboradores SET data_desligamento = NULL, updated_at = now() WHERE id = v_col;
+  RAISE EXCEPTION 'Não há saída prevista para cancelar.';
 END $$;

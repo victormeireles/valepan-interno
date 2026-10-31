@@ -62,6 +62,11 @@ describe('ColaboradorListaFiltro', () => {
     expect(filtro.aplicar(itens, '11.444.777/0001-61').map((i) => i.codigo)).toEqual(['VP-9003']);
   });
 
+  it('não confunde dígito de código com CNPJ', () => {
+    expect(filtro.aplicar(itens, 'VP-1').map((i) => i.codigo)).toEqual([]);
+    expect(filtro.aplicar(itens, 'VP-9001').map((i) => i.codigo)).toEqual(['VP-9001']);
+  });
+
   it('combina regime com os demais filtros', () => {
     expect(filtro.aplicar(itens, { regime: 'pj', situacao: 'desligado' })).toEqual([]);
   });
