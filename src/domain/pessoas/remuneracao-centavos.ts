@@ -29,7 +29,7 @@ export class RemuneracaoCentavos {
 
   private centavos(texto: string, alto: string): number {
     const [reais, frac = ''] = texto.replace(/\./g, '').split(',');
-    const total = BigInt(reais) * 100n + BigInt((frac + '00').slice(0, 2));
+    const total = BigInt(reais) * BigInt(100) + BigInt((frac + '00').slice(0, 2));
     if (total > BigInt(REMUNERACAO_CENTAVOS_MAXIMO)) throw new Error(alto);
     return Number(total);
   }
