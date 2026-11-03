@@ -8,17 +8,15 @@ import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-fi
 import { CadastroFormulario } from './CadastroFormulario';
 import { CadastroLeitura } from './CadastroLeitura';
 import { PainelAcao } from './PainelAcao';
-import { RemuneracaoSecao } from './RemuneracaoSecao';
 
 type Props = {
   pessoa: ColaboradorListaItem | null;
   editandoInicial: boolean;
-  podeAdministrar: boolean;
   onFechar: () => void;
   onConcluir: (mensagem: string, ok: boolean) => void;
 };
 
-export function CadastroPainel({ pessoa, editandoInicial, podeAdministrar, onFechar, onConcluir }: Props) {
+export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }: Props) {
   const formId = useId();
   const [editando, setEditando] = useState(editandoInicial);
   const [cadastro, setCadastro] = useState<ColaboradorCadastro | null>(null);
@@ -98,7 +96,6 @@ export function CadastroPainel({ pessoa, editandoInicial, podeAdministrar, onFec
           <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
         </form>
       ) : null}
-      {pessoa && podeAdministrar ? <RemuneracaoSecao key={pessoa.codigo} codigo={pessoa.codigo} onConcluir={onConcluir} /> : null}
     </PainelAcao>
   );
 }

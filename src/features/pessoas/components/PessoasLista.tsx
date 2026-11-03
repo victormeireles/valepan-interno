@@ -26,6 +26,7 @@ import { ColunaRotulo } from './ColunaRotulo';
 import { ExamePrazoMarca } from './ExamePrazoMarca';
 import { ExamesPainel } from './ExamesPainel';
 import { MenuPessoa } from './MenuPessoa';
+import { RemuneracaoPainel } from './RemuneracaoPainel';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
 
 const filtro = new ColaboradorListaFiltro();
@@ -50,6 +51,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
   const [pessoa, setPessoa] = useState<ColaboradorListaItem | null>(null);
   const [cadastro, setCadastro] = useState<ColaboradorListaItem | null>(null);
   const [exame, setExame] = useState<ColaboradorListaItem | null>(null);
+  const [remuneracao, setRemuneracao] = useState<ColaboradorListaItem | null>(null);
   const [editandoCadastro, setEditandoCadastro] = useState(false);
   const hoje = getTodayISOInBrazilTimezone();
   const prazo = new ExamePrazo();
@@ -73,6 +75,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
   function abrir(proxima: AcaoPessoa, alvo: ColaboradorListaItem | null) {
     setCadastro(null);
     setExame(null);
+    setRemuneracao(null);
     setPessoa(alvo);
     setAcao(proxima);
   }
@@ -80,6 +83,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
   function abrirCadastro(alvo: ColaboradorListaItem, editando: boolean) {
     setAcao(null);
     setExame(null);
+    setRemuneracao(null);
     setEditandoCadastro(editando);
     setCadastro(alvo);
   }
@@ -87,7 +91,15 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
   function abrirExames(alvo: ColaboradorListaItem) {
     setAcao(null);
     setCadastro(null);
+    setRemuneracao(null);
     setExame(alvo);
+  }
+
+  function abrirRemuneracao(alvo: ColaboradorListaItem) {
+    setAcao(null);
+    setCadastro(null);
+    setExame(null);
+    setRemuneracao(alvo);
   }
 
   return (
@@ -143,7 +155,15 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Próximo exame"><ProximoExame item={item} situacao={prazo.calcular(item.ultimoExame, hoje)} onAbrir={abrirExames} /></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
                 ]}
-                menu={<MenuPessoa item={item} onAcao={(proxima) => abrir(proxima, item)} onCadastro={(alvo) => abrirCadastro(alvo, true)} onExames={item.regime === 'clt' ? abrirExames : undefined} />}
+                menu={
+                  <MenuPessoa
+                    item={item}
+                    onAcao={(proxima) => abrir(proxima, item)}
+                    onCadastro={(alvo) => abrirCadastro(alvo, true)}
+                    onRemuneracao={podeAdministrar ? abrirRemuneracao : undefined}
+                    onExames={item.regime === 'clt' ? abrirExames : undefined}
+                  />
+                }
               />
             ))}
           </Card>
@@ -157,12 +177,16 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
       <CadastroPainel
         pessoa={cadastro}
         editandoInicial={editandoCadastro}
-        podeAdministrar={podeAdministrar}
         onFechar={() => setCadastro(null)}
         onConcluir={(texto, ok) => {
           setAviso({ texto, ok });
           if (ok) router.refresh();
         }}
+      />
+      <RemuneracaoPainel
+        pessoa={remuneracao}
+        onFechar={() => setRemuneracao(null)}
+        onConcluir={(texto, ok) => setAviso({ texto, ok })}
       />
       <ExamesPainel
         key={exame?.codigo ?? 'fechado'}

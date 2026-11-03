@@ -90,7 +90,7 @@ export function RemuneracaoSecao({
   }
 
   return (
-    <section className="mt-5 flex flex-col gap-3 border-t border-stone-200 pt-5">
+    <section className="flex flex-col gap-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Remuneração</h3>
       {erroCarga ? <p className="text-sm text-red-700">{erroCarga}</p> : null}
       {!vigencias && !erroCarga ? <p className="text-sm text-stone-500">Carregando remuneração…</p> : null}
