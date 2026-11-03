@@ -35,9 +35,10 @@ type Props = {
   itens: ColaboradorListaItem[];
   turnos: TurnoOpcao[];
   filtrosIniciais: { situacao?: string; aviso?: string };
+  podeAdministrar: boolean;
 };
 
-export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) {
+export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdministrar }: Props) {
   const router = useRouter();
   const [termo, setTermo] = useState('');
   const [setor, setSetor] = useState('');
@@ -156,6 +157,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais }: Props) 
       <CadastroPainel
         pessoa={cadastro}
         editandoInicial={editandoCadastro}
+        podeAdministrar={podeAdministrar}
         onFechar={() => setCadastro(null)}
         onConcluir={(texto, ok) => {
           setAviso({ texto, ok });

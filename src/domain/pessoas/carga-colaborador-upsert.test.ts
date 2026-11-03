@@ -50,6 +50,10 @@ describe('CargaColaboradorUpsert', () => {
       'turno_id',
       'updated_at',
     ]);
+    expect(row).not.toHaveProperty('salario_centavos');
+    expect(row).not.toHaveProperty('vale_transporte_centavos');
+    expect(row).not.toHaveProperty('vale_alimentacao_centavos');
+    expect(row).not.toHaveProperty('plano_saude');
     expect(row.setor_id).toBe('setor');
     expect(row.turno_id).toBe('turno');
     expect(row.updated_at).toBe('2026-10-31T00:00:00.000Z');

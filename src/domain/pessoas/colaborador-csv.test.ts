@@ -15,6 +15,7 @@ describe('ColaboradorCsv', () => {
       },
     ]);
     expect(csv.split('\n')[0]).toBe('codigo;nome;cpf;situacao;regime;cnpj;razao_social');
+    expect(csv.split('\n')[0]).not.toMatch(/salario|vale_alimentacao|plano_saude/);
     expect(csv).toContain('"11444777000161"');
     expect(csv).toContain(`"'=Pao"`);
   });
