@@ -4,18 +4,18 @@ import { QuadroTotais } from './quadro-totais';
 describe('QuadroTotais', () => {
   const producao = {
     turnos: [
-      { aprovado: 10, contratados: 7, reservas: 1, livres: 2, apoio: [] },
-      { aprovado: 4, contratados: 4, reservas: 0, livres: 0, apoio: [] },
+      { aprovado: 10, contratados: 7, reservas: 1, livres: 2, operacional: true },
+      { aprovado: 4, contratados: 4, reservas: 0, livres: 0, operacional: true },
     ],
   };
   const comercial = {
-    turnos: [{ aprovado: 0, contratados: 0, reservas: 0, livres: 0, apoio: [{}, {}] }],
+    turnos: [{ aprovado: 2, contratados: 2, reservas: 0, livres: 0, operacional: false }],
   };
   const expedicao = {
-    turnos: [{ aprovado: 6, contratados: 3, reservas: 1, livres: 2, apoio: [{}] }],
+    turnos: [{ aprovado: 6, contratados: 3, reservas: 1, livres: 2, operacional: true }],
   };
 
-  it('soma os turnos do setor incluindo apoio no total', () => {
+  it('soma as vagas do setor sem inflar com apoio', () => {
     expect(new QuadroTotais().doSetor(comercial, 'total')).toEqual({
       aprovado: 2,
       contratados: 2,
@@ -25,7 +25,7 @@ describe('QuadroTotais', () => {
     });
   });
 
-  it('ignora apoio no modo operacional', () => {
+  it('ignora turnos não operacionais no modo operacional', () => {
     expect(new QuadroTotais().doSetor(comercial, 'operacional')).toEqual({
       aprovado: 0,
       contratados: 0,
@@ -43,14 +43,14 @@ describe('QuadroTotais', () => {
   });
 
   it('soma o quadro inteiro a partir dos setores', () => {
-    expect(new QuadroTotais().geral([producao, expedicao], 'total')).toEqual({
-      aprovado: 21,
-      contratados: 15,
+    expect(new QuadroTotais().geral([producao, expedicao, comercial], 'total')).toEqual({
+      aprovado: 22,
+      contratados: 16,
       reservas: 2,
       afastados: 0,
       livres: 4,
     });
-    expect(new QuadroTotais().geral([producao, expedicao], 'operacional')).toEqual({
+    expect(new QuadroTotais().geral([producao, expedicao, comercial], 'operacional')).toEqual({
       aprovado: 20,
       contratados: 14,
       reservas: 2,
@@ -70,7 +70,7 @@ describe('QuadroTotais', () => {
   });
 
   it('soma afastados no quadro total e mantém a vaga livre', () => {
-    const turno = { aprovado: 10, contratados: 8, reservas: 0, livres: 2, afastados: 2, apoio: [] };
+    const turno = { aprovado: 10, contratados: 8, reservas: 0, livres: 2, afastados: 2, operacional: true };
     expect(new QuadroTotais().doTurno(turno, 'total')).toEqual({
       aprovado: 10,
       contratados: 10,

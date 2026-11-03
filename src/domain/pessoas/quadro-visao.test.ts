@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { QuadroVisao } from './quadro-visao';
 
 describe('QuadroVisao', () => {
-  it('calcula livres sem contar apoio', () => {
+  it('calcula livres sem contar apoio legado sem vaga', () => {
     const visao = new QuadroVisao().montar(
       [
-        { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M' },
-        { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M' },
+        { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M', operacional: true },
+        { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M', operacional: true },
       ],
       [
         { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M', papel: 'ocupacao' },
@@ -18,6 +18,7 @@ describe('QuadroVisao', () => {
         setorNome: 'Produção',
         turnoNome: 'Manhã',
         turnoCodigo: 'PRO-M',
+        operacional: true,
         aprovado: 2,
         contratados: 1,
         reservas: 0,
@@ -29,7 +30,12 @@ describe('QuadroVisao', () => {
 
   it('conta admissão prevista em a entrar e tira a vaga de livres', () => {
     const visao = new QuadroVisao().montar(
-      Array.from({ length: 8 }, () => ({ setorNome: 'Embalagem', turnoNome: 'Noite', turnoCodigo: 'EMB-N' })),
+      Array.from({ length: 8 }, () => ({
+        setorNome: 'Embalagem',
+        turnoNome: 'Noite',
+        turnoCodigo: 'EMB-N',
+        operacional: true,
+      })),
       [
         ...Array.from({ length: 7 }, () => ({
           setorNome: 'Embalagem',
@@ -45,7 +51,12 @@ describe('QuadroVisao', () => {
 
   it('conta afastado no quadro e mantém a vaga livre', () => {
     const visao = new QuadroVisao().montar(
-      Array.from({ length: 3 }, () => ({ setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M' })),
+      Array.from({ length: 3 }, () => ({
+        setorNome: 'Produção',
+        turnoNome: 'Manhã',
+        turnoCodigo: 'PRO-M',
+        operacional: true,
+      })),
       [
         { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M', papel: 'ocupacao' },
         { setorNome: 'Produção', turnoNome: 'Manhã', turnoCodigo: 'PRO-M', papel: 'ocupacao' },

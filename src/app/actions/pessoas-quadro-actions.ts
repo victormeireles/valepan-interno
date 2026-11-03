@@ -15,7 +15,7 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
   const [posicoes, alocacoes, catalogo] = await Promise.all([
     client
       .from('pessoas_posicoes' as never)
-      .select('codigo, pessoas_setores(nome, codigo), pessoas_turnos(nome, codigo)')
+      .select('codigo, pessoas_setores(nome, codigo), pessoas_turnos(nome, codigo, operacional)')
       .eq('ativa', true),
     client
       .from('pessoas_alocacoes' as never)
@@ -36,6 +36,7 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
       setorNome: nomeDe(row.pessoas_setores),
       turnoNome: nomeDe(row.pessoas_turnos),
       turnoCodigo: codigoDe(row.pessoas_turnos),
+      operacional: operacionalDe(row.pessoas_turnos),
     })),
     pessoas.map((pessoa) => ({
       setorNome: pessoa.setorNome,
@@ -56,20 +57,23 @@ async function horarios(
 ): Promise<HorarioTurnoCarga[]> {
   const { data, error } = await client
     .from('pessoas_turnos' as never)
-    .select('codigo, nome, pessoas_setores(nome, codigo), pessoas_turno_dias(dia, inicio, fim, termina_dia_seguinte, situacao)')
+    .select('codigo, nome, operacional, pessoas_setores(nome, codigo), pessoas_turno_dias(dia, inicio, fim, termina_dia_seguinte, situacao)')
     .eq('ativo', true);
   if (error) throw new Error(error.message);
   return ((data ?? []) as TurnoDiaRow[]).map(paraHorario);
 }
 
+type TurnoRef = { nome: string; codigo: string; operacional?: boolean };
+
 type PosicaoRow = {
   pessoas_setores: { nome: string; codigo?: string } | { nome: string; codigo?: string }[] | null;
-  pessoas_turnos: { nome: string; codigo: string } | { nome: string; codigo: string }[] | null;
+  pessoas_turnos: TurnoRef | TurnoRef[] | null;
 };
 
 type TurnoDiaRow = {
   codigo: string;
   nome: string;
+  operacional: boolean | null;
   pessoas_setores: { nome: string; codigo: string } | { nome: string; codigo: string }[] | null;
   pessoas_turno_dias: DiaRow[] | DiaRow | null;
 };
@@ -121,6 +125,7 @@ function paraHorario(row: TurnoDiaRow): HorarioTurnoCarga {
     turnoNome: row.nome,
     setorNome: setor?.nome ?? '',
     setorCodigo: setor?.codigo ?? '',
+    operacional: row.operacional !== false,
     dias: [...dias]
       .sort((a, b) => a.dia - b.dia)
       .map((dia) => ({
@@ -141,4 +146,10 @@ function nomeDe(valor: { nome: string } | { nome: string }[] | null): string {
 function codigoDe(valor: { codigo: string } | { codigo: string }[] | null): string {
   if (!valor) return '';
   return Array.isArray(valor) ? valor[0]?.codigo ?? '' : valor.codigo;
+}
+
+function operacionalDe(valor: TurnoRef | TurnoRef[] | null): boolean {
+  if (!valor) return true;
+  const turno = Array.isArray(valor) ? valor[0] : valor;
+  return turno?.operacional !== false;
 }

@@ -9,10 +9,12 @@ describe('QuadroHorarioAnexo', () => {
         turnoNome: '09:00–18:00',
         setorNome: 'Comercial',
         setorCodigo: 'COM',
+        operacional: false,
         dias: [],
       },
     ]);
     expect(linhas[0]?.turnoCodigo).toBe('AP-COM');
     expect(linhas[0]?.aprovado).toBe(0);
+    expect(linhas[0]?.operacional).toBe(false);
   });
 });

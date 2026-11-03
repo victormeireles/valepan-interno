@@ -6,6 +6,7 @@ export type HorarioTurnoCarga = {
   turnoNome: string;
   setorNome: string;
   setorCodigo: string;
+  operacional: boolean;
   dias: HorarioDiaQuadro[];
 };
 
@@ -18,6 +19,7 @@ export class QuadroHorarioAnexo {
         setorNome: item.setorNome,
         turnoNome: item.turnoNome,
         turnoCodigo: item.turnoCodigo,
+        operacional: item.operacional,
         aprovado: 0,
         contratados: 0,
         reservas: 0,
@@ -36,6 +38,7 @@ export class QuadroHorarioAnexo {
       turnos: setor.turnos.map((turno) => ({
         ...turno,
         horario: porTurno.get(turno.turnoCodigo)?.dias ?? turno.horario,
+        operacional: porTurno.get(turno.turnoCodigo)?.operacional ?? turno.operacional,
       })),
     }));
   }

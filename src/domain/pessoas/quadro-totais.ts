@@ -4,7 +4,7 @@ export type QuadroTotaisModo = 'total' | 'operacional';
 
 type TurnoContavel = Pick<QuadroNumeros, 'aprovado' | 'contratados' | 'reservas' | 'livres'> & {
   afastados?: number;
-  apoio?: readonly unknown[];
+  operacional?: boolean;
 };
 
 type SetorContavel = {
@@ -46,12 +46,12 @@ export class QuadroTotais {
   }
 
   private ajustar(turno: TurnoContavel, modo: QuadroTotaisModo): QuadroNumeros {
-    const apoio = modo === 'total' ? (turno.apoio?.length ?? 0) : 0;
+    if (modo === 'operacional' && turno.operacional === false) return { ...VAZIO };
     const afastados = turno.afastados ?? 0;
     const noQuadro = modo === 'total' ? afastados : 0;
     return {
-      aprovado: turno.aprovado + apoio,
-      contratados: turno.contratados + apoio + noQuadro,
+      aprovado: turno.aprovado,
+      contratados: turno.contratados + noQuadro,
       reservas: turno.reservas,
       afastados,
       livres: turno.livres,

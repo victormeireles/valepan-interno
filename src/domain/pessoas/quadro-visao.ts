@@ -5,10 +5,18 @@ export type QuadroLinhaEntrada = {
   papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado' | null;
 };
 
+export type QuadroPosicaoEntrada = {
+  setorNome: string;
+  turnoNome: string;
+  turnoCodigo: string;
+  operacional?: boolean;
+};
+
 export type QuadroLinha = {
   setorNome: string;
   turnoNome: string;
   turnoCodigo: string;
+  operacional: boolean;
   aprovado: number;
   contratados: number;
   reservas: number;
@@ -17,7 +25,7 @@ export type QuadroLinha = {
 };
 
 export class QuadroVisao {
-  montar(posicoes: { setorNome: string; turnoNome: string; turnoCodigo: string }[], alocacoes: QuadroLinhaEntrada[]): QuadroLinha[] {
+  montar(posicoes: QuadroPosicaoEntrada[], alocacoes: QuadroLinhaEntrada[]): QuadroLinha[] {
     const linhas = new Map<string, QuadroLinha>();
     for (const posicao of posicoes) {
       const linha = this.garantir(linhas, posicao);
@@ -39,16 +47,14 @@ export class QuadroVisao {
     return [...linhas.values()];
   }
 
-  private garantir(
-    linhas: Map<string, QuadroLinha>,
-    posicao: { setorNome: string; turnoNome: string; turnoCodigo: string },
-  ): QuadroLinha {
+  private garantir(linhas: Map<string, QuadroLinha>, posicao: QuadroPosicaoEntrada): QuadroLinha {
     const atual = linhas.get(posicao.turnoCodigo);
     if (atual) return atual;
     const nova: QuadroLinha = {
       setorNome: posicao.setorNome,
       turnoNome: posicao.turnoNome,
       turnoCodigo: posicao.turnoCodigo,
+      operacional: posicao.operacional !== false,
       aprovado: 0,
       contratados: 0,
       reservas: 0,
