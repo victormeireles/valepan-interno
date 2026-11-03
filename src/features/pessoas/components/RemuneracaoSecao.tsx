@@ -52,28 +52,41 @@ export function RemuneracaoSecao({
   async function salvar(campos: Record<string, string>) {
     setPendente(true);
     setErro(null);
-    const resultado = await gravarRemuneracaoColaborador(codigo, campos);
-    setPendente(false);
-    if (!resultado.ok) {
-      setErro(resultado.mensagem);
-      return;
+    try {
+      const resultado = await gravarRemuneracaoColaborador(codigo, campos);
+      if (!resultado.ok) {
+        setErro(resultado.mensagem);
+        return;
+      }
+      const lista = await listarRemuneracaoColaborador(codigo);
+      onConcluir(resultado.mensagem, true);
+      setModo('lista');
+      setVigencias(lista);
+    } catch (falha: unknown) {
+      setErro(falha instanceof Error ? falha.message : 'Não foi possível salvar.');
+    } finally {
+      setPendente(false);
     }
-    onConcluir(resultado.mensagem, true);
-    setModo('lista');
-    setVigencias(await listarRemuneracaoColaborador(codigo));
   }
 
   async function apagar(inicio: string) {
     setPendente(true);
-    const resultado = await apagarRemuneracaoColaborador(codigo, inicio);
-    setPendente(false);
-    if (!resultado.ok) {
-      onConcluir(resultado.mensagem, false);
-      return;
+    try {
+      const resultado = await apagarRemuneracaoColaborador(codigo, inicio);
+      if (!resultado.ok) {
+        onConcluir(resultado.mensagem, false);
+        return;
+      }
+      const lista = await listarRemuneracaoColaborador(codigo);
+      onConcluir(resultado.mensagem, true);
+      setConfirmando(null);
+      setVigencias(lista);
+    } catch (falha: unknown) {
+      const mensagem = falha instanceof Error ? falha.message : 'Não foi possível apagar.';
+      onConcluir(mensagem, false);
+    } finally {
+      setPendente(false);
     }
-    onConcluir(resultado.mensagem, true);
-    setConfirmando(null);
-    setVigencias(await listarRemuneracaoColaborador(codigo));
   }
 
   return (
