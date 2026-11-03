@@ -98,7 +98,7 @@ export function CadastroPainel({ pessoa, editandoInicial, podeAdministrar, onFec
           <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
         </form>
       ) : null}
-      {pessoa && podeAdministrar ? <RemuneracaoSecao codigo={pessoa.codigo} onConcluir={onConcluir} /> : null}
+      {pessoa && podeAdministrar ? <RemuneracaoSecao key={pessoa.codigo} codigo={pessoa.codigo} onConcluir={onConcluir} /> : null}
     </PainelAcao>
   );
 }
