@@ -153,6 +153,7 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
     cnpj: null,
     razaoSocial: null,
     dataDesligamento: alvo.dataDesligamento ?? null,
+    indicacao: null,
   };
 }
 

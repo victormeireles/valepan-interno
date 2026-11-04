@@ -25,6 +25,7 @@ export const CADASTRO_VAZIO: ColaboradorCadastro = {
   regime: 'clt',
   cnpj: null,
   razaoSocial: null,
+  indicacao: null,
 };
 
 export type ColaboradorCadastro = {
@@ -48,6 +49,7 @@ export type ColaboradorCadastro = {
   regime: Regime;
   cnpj: string | null;
   razaoSocial: string | null;
+  indicacao: string | null;
 };
 
 export class ColaboradorCadastroNormalizador {
@@ -81,8 +83,14 @@ export class ColaboradorCadastroNormalizador {
       contaPoupanca: entrada.contaPoupanca === '1',
       chavePix: this.limite(entrada.chavePix, 140, 'Chave Pix'),
       dataAdmissao: this.dataAdmissao(entrada.dataAdmissao),
+      indicacao: this.indicacao(entrada.indicacao),
       ...this.regimes.normalizar(entrada),
     };
+  }
+
+  private indicacao(valor: string | undefined): string | null {
+    const texto = this.limite(valor, 120, 'Indicação');
+    return texto === null ? null : this.nomes.formatar(texto);
   }
 
   dataAdmissao(valor: string | undefined): string | null {

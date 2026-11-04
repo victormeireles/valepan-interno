@@ -47,6 +47,7 @@ export class ColaboradorListaRowParser {
       cnpj: this.lerTexto(row.cnpj),
       razaoSocial: this.lerTexto(row.razao_social),
       dataDesligamento: this.lerTexto(row.data_desligamento),
+      indicacao: this.lerTexto(row.indicacao),
     };
   }
 

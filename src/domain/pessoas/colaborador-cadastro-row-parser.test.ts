@@ -31,6 +31,7 @@ describe('ColaboradorCadastroRowParser', () => {
     expect(cadastro.regime).toBe('clt');
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
+    expect(cadastro.indicacao).toBeNull();
   });
 
   it('lê regime PJ com CNPJ e razão social', () => {
@@ -38,10 +39,12 @@ describe('ColaboradorCadastroRowParser', () => {
       regime: 'pj',
       cnpj: '11444777000161',
       razao_social: 'Pao LTDA',
+      indicacao: 'Carlos Mendes',
     });
     expect(cadastro.regime).toBe('pj');
     expect(cadastro.cnpj).toBe('11444777000161');
     expect(cadastro.razaoSocial).toBe('Pao LTDA');
+    expect(cadastro.indicacao).toBe('Carlos Mendes');
   });
 
   it('recusa regime desconhecido', () => {

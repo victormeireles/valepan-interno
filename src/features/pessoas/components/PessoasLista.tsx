@@ -116,7 +116,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
         }
       />
       <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-6">
-        <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome, código ou CNPJ" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
+        <Input label="Busca" aria-label="Buscar colaborador" placeholder="Nome, código, CNPJ ou indicação" icon="search" value={termo} onChange={(event) => setTermo(event.target.value)} />
         <Select label="Setor" value={setor} onChange={(event) => setSetor(event.target.value)} options={[{ value: '', label: 'Todos' }, ...setores.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Turno" value={turno} onChange={(event) => setTurno(event.target.value)} options={[{ value: '', label: 'Todos' }, ...turnosNomes.map((nome) => ({ value: nome, label: nome }))]} />
         <Select label="Situação" value={situacao} onChange={(event) => setSituacao(event.target.value)} options={[{ value: '', label: 'Todas' }, { value: 'ativo', label: 'Ativos' }, { value: 'afastado', label: 'Fora do posto' }, { value: 'admissao_prevista', label: 'Admissão prevista' }, { value: 'desligado', label: 'Desligados' }]} />
@@ -136,6 +136,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
                   { label: 'Setor', width: '10rem', align: 'left' },
                   { label: 'Turno', width: '8rem', align: 'left' },
                   { label: 'Líder', width: '6rem', align: 'left' },
+                  { label: 'Indicação', width: '10rem', align: 'left' },
                   { label: 'Próximo exame', width: '10.5rem', align: 'left' },
                 ]}
                 menuWidth="2.75rem"
@@ -153,6 +154,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
                   { value: <ColunaRotulo label="Setor">{item.setorNome ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Turno">{item.turnoNome ?? '—'}</ColunaRotulo>, width: '8rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Líder">{item.liderSetor ? <Badge tone="accent">Líder</Badge> : '—'}</ColunaRotulo>, width: '6rem', align: 'left', tabular: false },
+                  { value: <ColunaRotulo label="Indicação">{item.indicacao ?? '—'}</ColunaRotulo>, width: '10rem', align: 'left', tabular: false },
                   { value: <ColunaRotulo label="Próximo exame"><ProximoExame item={item} situacao={prazo.calcular(item.ultimoExame, hoje)} onAbrir={abrirExames} /></ColunaRotulo>, width: '10.5rem', align: 'left', tabular: false },
                 ]}
                 menu={

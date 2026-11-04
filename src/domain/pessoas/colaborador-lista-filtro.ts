@@ -17,6 +17,7 @@ export type ColaboradorListaItem = {
   cnpj: string | null;
   razaoSocial: string | null;
   dataDesligamento: string | null;
+  indicacao: string | null;
 };
 
 export type ColaboradorListaCriterio = {
@@ -53,7 +54,7 @@ export class ColaboradorListaFiltro {
   }
 
   private textoBate(item: ColaboradorListaItem, termo: string): boolean {
-    return [item.nome, item.codigo, item.razaoSocial ?? ''].some((texto) =>
+    return [item.nome, item.codigo, item.razaoSocial ?? '', item.indicacao ?? ''].some((texto) =>
       this.normalizar(texto).includes(termo),
     );
   }

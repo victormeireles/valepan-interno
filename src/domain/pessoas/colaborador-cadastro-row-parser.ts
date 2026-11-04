@@ -25,6 +25,7 @@ export class ColaboradorCadastroRowParser {
       regime: this.regime(row.regime),
       cnpj: this.texto(row.cnpj),
       razaoSocial: this.texto(row.razao_social),
+      indicacao: this.texto(row.indicacao),
     };
   }
 

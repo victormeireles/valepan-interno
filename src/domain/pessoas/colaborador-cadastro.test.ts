@@ -32,6 +32,7 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.regime).toBe('clt');
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
+    expect(cadastro.indicacao).toBeNull();
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(false);
   });
 
@@ -54,6 +55,7 @@ describe('ColaboradorCadastroNormalizador', () => {
       contaCorrente: '56789-0',
       contaPoupanca: '1',
       chavePix: 'ana@valepan.com',
+      indicacao: 'carlos mendes',
     });
     expect(cadastro.telefone).toBe('24998180620');
     expect(cadastro.email).toBe('ana@valepan.com');
@@ -65,6 +67,7 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.contaCorrente).toBe('56789-0');
     expect(cadastro.contaPoupanca).toBe(true);
     expect(cadastro.tamanhoCamiseta).toBe('G');
+    expect(cadastro.indicacao).toBe('Carlos Mendes');
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(true);
   });
 

@@ -8,7 +8,7 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const SELECT_CADASTRO =
-  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, regime, cnpj, razao_social';
+  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, regime, cnpj, razao_social, indicacao';
 
 export async function obterCadastroColaborador(codigo: string): Promise<ColaboradorCadastro> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -102,6 +102,7 @@ function paraLinha(cadastro: ColaboradorCadastro, normalizador: ColaboradorCadas
     regime: cadastro.regime,
     cnpj: cadastro.cnpj,
     razao_social: cadastro.razaoSocial,
+    indicacao: cadastro.indicacao,
     updated_at: new Date().toISOString(),
   };
 }

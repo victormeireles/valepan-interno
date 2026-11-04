@@ -16,6 +16,7 @@ describe('ColaboradorListaFiltro', () => {
     cnpj: null,
     razaoSocial: null,
     dataDesligamento: null,
+    indicacao: 'Carlos Mendes',
   };
   const itens = [
     primeiro,
@@ -33,6 +34,7 @@ describe('ColaboradorListaFiltro', () => {
       cnpj: null,
       razaoSocial: null,
       dataDesligamento: null,
+      indicacao: null,
     },
     {
       ...primeiro,
@@ -42,6 +44,7 @@ describe('ColaboradorListaFiltro', () => {
       regime: 'pj' as const,
       cnpj: '11444777000161',
       razaoSocial: 'Pão Forte LTDA',
+      indicacao: null,
     },
   ];
   const filtro = new ColaboradorListaFiltro();
@@ -60,6 +63,11 @@ describe('ColaboradorListaFiltro', () => {
     expect(filtro.aplicar(itens, { regime: '' }).length).toBe(3);
     expect(filtro.aplicar(itens, 'pao forte').map((i) => i.codigo)).toEqual(['VP-9003']);
     expect(filtro.aplicar(itens, '11.444.777/0001-61').map((i) => i.codigo)).toEqual(['VP-9003']);
+  });
+
+  it('filtra por indicação', () => {
+    expect(filtro.aplicar(itens, 'carlos').map((i) => i.codigo)).toEqual(['VP-9001']);
+    expect(filtro.aplicar(itens, 'mendes').map((i) => i.codigo)).toEqual(['VP-9001']);
   });
 
   it('não confunde dígito de código com CNPJ', () => {

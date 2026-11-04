@@ -27,8 +27,25 @@ export function CadastroFormulario({
             type="date"
             defaultValue={cadastro.dataAdmissao ?? ''}
           />
+          <Input
+            name="indicacao"
+            label="Indicação"
+            defaultValue={cadastro.indicacao ?? ''}
+            placeholder="Quem indicou para a vaga"
+          />
         </Grupo>
-      ) : null}
+      ) : (
+        <Grupo titulo="Indicação">
+          <div className="sm:col-span-2">
+            <Input
+              name="indicacao"
+              label="Indicação"
+              defaultValue={cadastro.indicacao ?? ''}
+              placeholder="Quem indicou para a vaga"
+            />
+          </div>
+        </Grupo>
+      )}
       <Grupo titulo="Contato">
         <Input name="telefone" label="Telefone" defaultValue={cadastro.telefone ?? ''} inputMode="tel" />
         <Input name="email" label="E-mail" type="email" defaultValue={cadastro.email ?? ''} />
