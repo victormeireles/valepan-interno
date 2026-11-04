@@ -6,6 +6,7 @@ import { salvarRegra } from '@/app/actions/insumo-compra-regra-actions';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
+import ModalPortal from '@/components/ui/ModalPortal';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import type { InsumoCompraJanelaTipo } from '@/domain/insumos/insumo-compra-janela';
@@ -160,20 +161,25 @@ export default function InsumoRegraCompraFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-      <button
-        type="button"
-        className="absolute inset-0 bg-stone-950/35 backdrop-blur-sm"
-        aria-label="Fechar modal"
-        onClick={fechar}
-      />
-
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="regra-compra-modal-title"
-        className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl"
+    <ModalPortal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
       >
+        <button
+          type="button"
+          className="absolute inset-0 bg-stone-950/35 backdrop-blur-sm"
+          aria-label="Fechar modal"
+          onClick={fechar}
+        />
+
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="regra-compra-modal-title"
+          className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl"
+        >
         <header className="flex items-start justify-between gap-4 border-b border-stone-100 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
@@ -379,7 +385,8 @@ export default function InsumoRegraCompraFormModal({
             </Button>
           </footer>
         </form>
-      </section>
-    </div>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }
