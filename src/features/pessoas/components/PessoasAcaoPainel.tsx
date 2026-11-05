@@ -101,6 +101,7 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
         {acao === 'admitir' ? (
           <>
             <Input name="nome" label="Nome" required />
+            <Input name="nascimento" label="Data de nascimento" type="date" />
             <BuscaTurno name="turno" label="Setor e turno" turnos={turnos} onChange={setTurnoCodigo} />
             <Input name="data" label="Data de admissão" type="date" />
             <p className="text-sm text-stone-700">

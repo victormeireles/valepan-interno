@@ -5,6 +5,7 @@ import {
   RemuneracaoVigenciaParser,
   type LinhaRemuneracaoBanco,
 } from '@/domain/pessoas/remuneracao-linha';
+import { PlanoSaudeNascimento } from '@/domain/pessoas/plano-saude-nascimento';
 import { RemuneracaoPacoteNormalizador } from '@/domain/pessoas/remuneracao-pacote';
 import type { RemuneracaoVigencia } from '@/domain/pessoas/remuneracao-quadro';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
@@ -18,7 +19,7 @@ type Cliente = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 export async function listarRemuneracaoColaborador(codigo: string): Promise<RemuneracaoVigencia[]> {
   await requireInternoModulo('interno_pessoas', 'administrar');
   const client = supabaseClientFactory.createServiceRoleClient();
-  const id = await colaboradorId(client, codigo);
+  const id = (await colaboradorRef(client, codigo)).id;
   const { data, error } = await client
     .from('pessoas_remuneracao_vigencias' as never)
     .select(SELECT_VIGENCIA)
@@ -36,8 +37,9 @@ export async function gravarRemuneracaoColaborador(
   try {
     const pacote = new RemuneracaoPacoteNormalizador().normalizar(campos);
     const client = supabaseClientFactory.createServiceRoleClient();
-    const id = await colaboradorId(client, codigo);
-    const linha = new RemuneracaoLinhaGravacao().montar(id, pacote, new Date().toISOString());
+    const pessoa = await colaboradorRef(client, codigo);
+    new PlanoSaudeNascimento().conferir(pacote.planoSaude, pessoa.nascimento);
+    const linha = new RemuneracaoLinhaGravacao().montar(pessoa.id, pacote, new Date().toISOString());
     const { error } = await client
       .from('pessoas_remuneracao_vigencias' as never)
       .upsert(linha as never, { onConflict: 'colaborador_id,inicio' });
@@ -55,7 +57,7 @@ export async function apagarRemuneracaoColaborador(
   await requireInternoModulo('interno_pessoas', 'administrar');
   try {
     const client = supabaseClientFactory.createServiceRoleClient();
-    const id = await colaboradorId(client, codigo);
+    const id = (await colaboradorRef(client, codigo)).id;
     const { data, error } = await client
       .from('pessoas_remuneracao_vigencias' as never)
       .delete()
@@ -70,16 +72,16 @@ export async function apagarRemuneracaoColaborador(
   }
 }
 
-async function colaboradorId(client: Cliente, codigo: string): Promise<string> {
+async function colaboradorRef(client: Cliente, codigo: string): Promise<{ id: string; nascimento: string | null }> {
   const { data, error } = await client
     .from('pessoas_colaboradores' as never)
-    .select('id')
+    .select('id, nascimento')
     .eq('codigo', codigo)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  const id = (data as { id?: string } | null)?.id;
-  if (!id) throw new Error('Colaborador não encontrado.');
-  return id;
+  const linha = data as { id?: string; nascimento?: string | null } | null;
+  if (!linha?.id) throw new Error('Colaborador não encontrado.');
+  return { id: linha.id, nascimento: typeof linha.nascimento === 'string' ? linha.nascimento : null };
 }
 
 function mensagemDe(error: unknown): string {

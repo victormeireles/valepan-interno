@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { obterCadastroColaborador } from '@/app/actions/pessoas-cadastro-actions';
 import {
   apagarRemuneracaoColaborador,
   gravarRemuneracaoColaborador,
@@ -30,6 +31,7 @@ export function RemuneracaoSecao({
   const [pendente, setPendente] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [semNascimento, setSemNascimento] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -40,6 +42,11 @@ export function RemuneracaoSecao({
       .catch((falha: unknown) => {
         if (vivo) setErroCarga(falha instanceof Error ? falha.message : 'Não foi possível carregar a remuneração.');
       });
+    obterCadastroColaborador(codigo)
+      .then((cadastro) => {
+        if (vivo) setSemNascimento(cadastro.nascimento === null);
+      })
+      .catch(() => undefined);
     return () => {
       vivo = false;
     };
@@ -110,6 +117,7 @@ export function RemuneracaoSecao({
               valores={correcao ? valoresDe(correcao) : vazios}
               pendente={pendente}
               erro={erro}
+              semNascimento={semNascimento}
               onCancelar={() => { setErro(null); setModo('lista'); }}
               onSalvar={salvar}
             />

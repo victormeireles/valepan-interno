@@ -17,6 +17,7 @@ export function RemuneracaoForma({
   valores,
   pendente,
   erro,
+  semNascimento,
   onCancelar,
   onSalvar,
 }: {
@@ -24,6 +25,7 @@ export function RemuneracaoForma({
   valores: RemuneracaoFormaValores;
   pendente: boolean;
   erro: string | null;
+  semNascimento: boolean;
   onCancelar: () => void;
   onSalvar: (campos: Record<string, string>) => void;
 }) {
@@ -44,6 +46,11 @@ export function RemuneracaoForma({
       <Input name="valeTransporteValor" label="Valor do vale transporte" defaultValue={valores.valeTransporteValor} inputMode="decimal" required />
       <Input name="valeAlimentacao" label="Vale alimentação/refeição" defaultValue={valores.valeAlimentacao} inputMode="decimal" required />
       <Switch label="Plano de saúde" checked={plano} onChange={setPlano} />
+      {semNascimento ? (
+        <p className="text-sm leading-relaxed text-stone-600">
+          Para marcar o plano de saúde, informe a data de nascimento no cadastro, em Identificação.
+        </p>
+      ) : null}
       {erro ? <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{erro}</p> : null}
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button type="submit" size="lg" fullWidth disabled={pendente}>{pendente ? 'Salvando…' : 'Gravar'}</Button>

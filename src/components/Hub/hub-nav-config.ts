@@ -1,4 +1,4 @@
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
 
 export interface HubNavItem {
   href: string;
@@ -6,8 +6,10 @@ export interface HubNavItem {
   description: string;
   icon: string;
   moduloId: InternoModuloId;
-  /** Se presente, vale o OR (mínimo ler). Senão usa `moduloId`. */
+  /** Se presente, vale o OR. Senão usa `moduloId`. */
   moduloIds?: InternoModuloId[];
+  /** Padrão: ler. Folha exige administrar. */
+  nivelMinimo?: NivelModulo;
 }
 
 export interface HubNavSection {
@@ -171,6 +173,14 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
     description: 'Vagas por setor e turno',
     icon: 'groups',
     moduloId: 'interno_pessoas',
+  },
+  {
+    href: '/pessoas/folha',
+    title: 'Folha',
+    description: 'Pacote vigente por setor',
+    icon: 'payments',
+    moduloId: 'interno_pessoas',
+    nivelMinimo: 'administrar',
   },
   {
     href: '/pessoas/faltas',

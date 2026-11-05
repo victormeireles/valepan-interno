@@ -10,9 +10,10 @@ export function filterHubNavItems(
   manager: InternoAccessManager = new InternoAccessManager(),
 ): HubNavItem[] {
   return items.filter((item) => {
+    const minimo = item.nivelMinimo ?? 'ler';
     if (item.moduloIds?.length) {
-      return item.moduloIds.some((id) => manager.temModulo(snap, id, 'ler'));
+      return item.moduloIds.some((id) => manager.temModulo(snap, id, minimo));
     }
-    return manager.temModulo(snap, item.moduloId, 'ler');
+    return manager.temModulo(snap, item.moduloId, minimo);
   });
 }

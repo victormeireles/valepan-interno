@@ -8,7 +8,7 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const SELECT_CADASTRO =
-  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, regime, cnpj, razao_social, indicacao';
+  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, nascimento, regime, cnpj, razao_social, indicacao';
 
 export async function obterCadastroColaborador(codigo: string): Promise<ColaboradorCadastro> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -32,10 +32,12 @@ export async function atualizarCadastroColaborador(
   let cadastro: ColaboradorCadastro;
   let nome: string | null = null;
   let dataAdmissao: string | null | undefined;
+  let nascimento: string | null | undefined;
   try {
     cadastro = normalizador.normalizar(campos);
     if ('nome' in campos) nome = normalizador.nomeColaborador(campos.nome);
     if ('dataAdmissao' in campos) dataAdmissao = cadastro.dataAdmissao;
+    if ('nascimento' in campos) nascimento = cadastro.nascimento;
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
   }
@@ -51,6 +53,7 @@ export async function atualizarCadastroColaborador(
       ...paraLinha(cadastro, normalizador),
       ...(nome ? { nome } : {}),
       ...(dataAdmissao !== undefined ? { data_admissao: dataAdmissao } : {}),
+      ...(nascimento !== undefined ? { nascimento } : {}),
     } as never)
     .eq('codigo', codigo)
     .select('codigo');

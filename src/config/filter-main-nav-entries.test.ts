@@ -75,4 +75,20 @@ describe('filterMainNavEntries', () => {
       ]),
     );
   });
+
+  it('folha só aparece para quem administra pessoas', () => {
+    const base = { isSystemOwner: false, identidades: ['interno'] };
+    const hrefs = (nivel: 'ler' | 'editar' | 'administrar') => {
+      const entries = filterMainNavEntries(
+        MAIN_NAV_ENTRIES,
+        { ...base, modulosEfetivos: { interno_pessoas: nivel } },
+        manager,
+      );
+      const pessoas = entries.find((entry) => entry.type === 'group' && entry.id === 'pessoas');
+      return pessoas?.type === 'group' ? pessoas.children.map((child) => child.href) : [];
+    };
+    expect(hrefs('ler')).not.toContain('/pessoas/folha');
+    expect(hrefs('editar')).not.toContain('/pessoas/folha');
+    expect(hrefs('administrar')).toContain('/pessoas/folha');
+  });
 });

@@ -3,6 +3,7 @@ import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
 import {
   HUB_INSUMOS_ITEMS,
   HUB_PAINEIS_ITEMS,
+  HUB_PESSOAS_ITEMS,
   HUB_PLANEJAMENTO_ITEMS,
   HUB_PRODUCAO_ITEMS,
   HUB_SECTIONS,
@@ -115,5 +116,20 @@ describe('filterHubNavItems', () => {
 
     const planejamento = filterHubNavItems(HUB_PLANEJAMENTO_ITEMS, snap, manager);
     expect(planejamento.map((item) => item.href)).toEqual(['/ordens-producao']);
+  });
+
+  it('folha do hub só aparece para quem administra pessoas', () => {
+    const hrefs = (nivel: 'ler' | 'administrar') =>
+      filterHubNavItems(
+        HUB_PESSOAS_ITEMS,
+        {
+          isSystemOwner: false,
+          identidades: ['interno'],
+          modulosEfetivos: { interno_pessoas: nivel },
+        },
+        manager,
+      ).map((item) => item.href);
+    expect(hrefs('ler')).not.toContain('/pessoas/folha');
+    expect(hrefs('administrar')).toContain('/pessoas/folha');
   });
 });

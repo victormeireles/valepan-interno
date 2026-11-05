@@ -29,6 +29,7 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.valeTransporte).toBeNull();
     expect(cadastro.contaPoupanca).toBe(false);
     expect(cadastro.dataAdmissao).toBeNull();
+    expect(cadastro.nascimento).toBeNull();
     expect(cadastro.regime).toBe('clt');
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
@@ -89,5 +90,11 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(normalizador.normalizar({ ...vazio, dataAdmissao: '2026-11-04' }).dataAdmissao).toBe('2026-11-04');
     expect(normalizador.dataAdmissao('')).toBeNull();
     expect(() => normalizador.dataAdmissao('04/11/2026')).toThrow('Informe a data de admissão.');
+  });
+
+  it('grava a data de nascimento em ISO e aceita o campo vazio', () => {
+    expect(normalizador.normalizar({ ...vazio, nascimento: '1990-04-11' }).nascimento).toBe('1990-04-11');
+    expect(normalizador.nascimento('')).toBeNull();
+    expect(() => normalizador.nascimento('11/04/1990')).toThrow('Informe a data de nascimento.');
   });
 });

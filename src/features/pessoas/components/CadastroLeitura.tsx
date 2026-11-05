@@ -6,7 +6,8 @@ export function CadastroLeitura({ cadastro }: { cadastro: ColaboradorCadastro })
   const exibir = new CadastroExibicao();
   return (
     <div className="flex flex-col gap-5">
-      <Grupo titulo="Admissão">
+      <Grupo titulo="Identificação">
+        <Campo rotulo="Data de nascimento" valor={exibir.data(cadastro.nascimento)} />
         <Campo rotulo="Data de admissão" valor={exibir.data(cadastro.dataAdmissao)} />
         <Campo rotulo="Indicação" valor={exibir.texto(cadastro.indicacao)} />
       </Grupo>

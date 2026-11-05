@@ -22,6 +22,7 @@ export class ColaboradorCadastroRowParser {
       contaPoupanca: row.conta_poupanca === true,
       chavePix: this.texto(row.chave_pix),
       dataAdmissao: this.data(row.data_admissao),
+      nascimento: this.data(row.nascimento),
       regime: this.regime(row.regime),
       cnpj: this.texto(row.cnpj),
       razaoSocial: this.texto(row.razao_social),

@@ -22,6 +22,7 @@ export const CADASTRO_VAZIO: ColaboradorCadastro = {
   contaPoupanca: false,
   chavePix: null,
   dataAdmissao: null,
+  nascimento: null,
   regime: 'clt',
   cnpj: null,
   razaoSocial: null,
@@ -46,6 +47,7 @@ export type ColaboradorCadastro = {
   contaPoupanca: boolean;
   chavePix: string | null;
   dataAdmissao: string | null;
+  nascimento: string | null;
   regime: Regime;
   cnpj: string | null;
   razaoSocial: string | null;
@@ -83,6 +85,7 @@ export class ColaboradorCadastroNormalizador {
       contaPoupanca: entrada.contaPoupanca === '1',
       chavePix: this.limite(entrada.chavePix, 140, 'Chave Pix'),
       dataAdmissao: this.dataAdmissao(entrada.dataAdmissao),
+      nascimento: this.nascimento(entrada.nascimento),
       indicacao: this.indicacao(entrada.indicacao),
       ...this.regimes.normalizar(entrada),
     };
@@ -94,9 +97,17 @@ export class ColaboradorCadastroNormalizador {
   }
 
   dataAdmissao(valor: string | undefined): string | null {
+    return this.dataCivil(valor, 'Informe a data de admissão.');
+  }
+
+  nascimento(valor: string | undefined): string | null {
+    return this.dataCivil(valor, 'Informe a data de nascimento.');
+  }
+
+  private dataCivil(valor: string | undefined, mensagem: string): string | null {
     const texto = (valor ?? '').trim();
     if (!texto) return null;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) throw new Error('Informe a data de admissão.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) throw new Error(mensagem);
     return texto;
   }
 

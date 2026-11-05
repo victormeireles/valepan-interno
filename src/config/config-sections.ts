@@ -72,4 +72,10 @@ export const CONFIG_SECTIONS: readonly ConfigSection[] = [
     icon: 'chat',
     description: 'Notificações de produção',
   },
+  {
+    href: '/config/plano-saude',
+    label: 'Plano de saúde',
+    icon: 'health_and_safety',
+    description: 'Faixas etárias e valor mensal por pessoa',
+  },
 ] as const;

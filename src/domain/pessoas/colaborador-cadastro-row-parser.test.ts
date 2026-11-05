@@ -21,6 +21,7 @@ describe('ColaboradorCadastroRowParser', () => {
       conta_poupanca: true,
       chave_pix: 'ana@valepan.com',
       data_admissao: '2026-11-04',
+      nascimento: '1990-04-11',
     });
     expect(cadastro.nomeMae).toBe('Maria da Silva');
     expect(cadastro.valeTransporte).toBe(false);
@@ -28,6 +29,7 @@ describe('ColaboradorCadastroRowParser', () => {
     expect(cadastro.contaPoupanca).toBe(true);
     expect(cadastro.telefoneEmergencia).toBeNull();
     expect(cadastro.dataAdmissao).toBe('2026-11-04');
+    expect(cadastro.nascimento).toBe('1990-04-11');
     expect(cadastro.regime).toBe('clt');
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
@@ -45,6 +47,7 @@ describe('ColaboradorCadastroRowParser', () => {
     expect(cadastro.cnpj).toBe('11444777000161');
     expect(cadastro.razaoSocial).toBe('Pao LTDA');
     expect(cadastro.indicacao).toBe('Carlos Mendes');
+    expect(cadastro.nascimento).toBeNull();
   });
 
   it('recusa regime desconhecido', () => {

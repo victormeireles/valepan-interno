@@ -1,4 +1,4 @@
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
 
 export type MainNavLink = {
   type: 'link';
@@ -7,8 +7,10 @@ export type MainNavLink = {
   icon: string;
   /** Ausente = sempre visível para quem já passou a porta do app (ex.: Início). */
   moduloId?: InternoModuloId;
-  /** Se presente, vale o OR (mínimo ler). Senão usa `moduloId`. */
+  /** Se presente, vale o OR. Senão usa `moduloId`. */
   moduloIds?: InternoModuloId[];
+  /** Padrão: ler. Folha exige administrar. */
+  nivelMinimo?: NivelModulo;
   match: (pathname: string) => boolean;
 };
 
@@ -261,6 +263,15 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
       icon: 'groups',
       moduloId: 'interno_pessoas',
       match: (pathname) => pathname.startsWith('/pessoas/quadro'),
+    },
+    {
+      type: 'link',
+      href: '/pessoas/folha',
+      label: 'Folha',
+      icon: 'payments',
+      moduloId: 'interno_pessoas',
+      nivelMinimo: 'administrar',
+      match: (pathname) => pathname.startsWith('/pessoas/folha'),
     },
     {
       type: 'link',

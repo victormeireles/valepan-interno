@@ -39,6 +39,7 @@ describe('MAIN_NAV_ENTRIES', () => {
     expect(groupHrefs('pessoas')).toEqual([
       '/pessoas',
       '/pessoas/quadro',
+      '/pessoas/folha',
       '/pessoas/faltas',
       '/pessoas/extras',
       '/pessoas/painel',

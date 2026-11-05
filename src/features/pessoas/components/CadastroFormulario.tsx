@@ -22,6 +22,12 @@ export function CadastroFormulario({
             <Input name="nome" label="Nome" defaultValue={nome} required autoComplete="name" />
           </div>
           <Input
+            name="nascimento"
+            label="Data de nascimento"
+            type="date"
+            defaultValue={cadastro.nascimento ?? ''}
+          />
+          <Input
             name="dataAdmissao"
             label="Data de admissão"
             type="date"
