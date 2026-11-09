@@ -18,6 +18,37 @@ describe('HUB_SECTIONS', () => {
       'paineis',
       'insumos',
       'pessoas',
+      'manutencao',
+    ]);
+  });
+
+  it('abre manutenção com fila, máquinas e solicitantes', () => {
+    const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
+    expect(secao?.title).toBe('Manutenção');
+    expect(secao?.items).toEqual([
+      {
+        href: '/manutencao',
+        title: 'Fila',
+        description: 'Ordens abertas e recebidas',
+        icon: 'handyman',
+        moduloId: 'interno_manutencao',
+        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      },
+      {
+        href: '/manutencao/maquinas',
+        title: 'Máquinas',
+        description: 'Cadastro por setor',
+        icon: 'precision_manufacturing',
+        moduloId: 'interno_manutencao',
+      },
+      {
+        href: '/manutencao/solicitantes',
+        title: 'Solicitantes',
+        description: 'Setores que podem abrir ordem',
+        icon: 'manage_accounts',
+        moduloId: 'interno_manutencao',
+        nivelMinimo: 'administrar',
+      },
     ]);
   });
 

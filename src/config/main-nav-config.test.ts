@@ -31,8 +31,47 @@ describe('MAIN_NAV_ENTRIES', () => {
       'paineis',
       'insumos',
       'pessoas',
+      'manutencao',
       '/config',
     ]);
+  });
+
+  it('abre manutenção antes de configurações, com match por prefixo', () => {
+    const manutencao = MAIN_NAV_ENTRIES.find(
+      (entry) => entry.type === 'group' && entry.id === 'manutencao',
+    );
+    expect(manutencao?.type).toBe('group');
+    if (!manutencao || manutencao.type !== 'group') return;
+
+    expect(manutencao.label).toBe('Manutenção');
+    expect(manutencao.children.map((child) => child.href)).toEqual([
+      '/manutencao',
+      '/manutencao/maquinas',
+      '/manutencao/solicitantes',
+    ]);
+    expect(manutencao.children.map((child) => child.label)).toEqual([
+      'Fila',
+      'Máquinas',
+      'Solicitantes',
+    ]);
+    expect(manutencao.children[0]).toMatchObject({
+      moduloId: 'interno_manutencao',
+      moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      icon: 'handyman',
+    });
+    expect(manutencao.children[1]?.moduloId).toBe('interno_manutencao');
+    expect(manutencao.children[2]).toMatchObject({
+      moduloId: 'interno_manutencao',
+      nivelMinimo: 'administrar',
+      icon: 'manage_accounts',
+    });
+    expect(manutencao.match('/manutencao')).toBe(true);
+    expect(manutencao.match('/manutencao/maquinas')).toBe(true);
+    expect(manutencao.match('/manutencao/solicitantes')).toBe(true);
+    expect(manutencao.children[0]?.match('/manutencao')).toBe(true);
+    expect(manutencao.children[0]?.match('/manutencao/maquinas')).toBe(false);
+    expect(manutencao.children[1]?.match('/manutencao/maquinas')).toBe(true);
+    expect(manutencao.children[2]?.match('/manutencao/solicitantes')).toBe(true);
   });
 
   it('expõe colaboradores em pessoas com módulo interno_pessoas', () => {

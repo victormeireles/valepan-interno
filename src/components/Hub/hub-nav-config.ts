@@ -205,10 +205,37 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
   },
 ];
 
+export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
+  {
+    href: '/manutencao',
+    title: 'Fila',
+    description: 'Ordens abertas e recebidas',
+    icon: 'handyman',
+    moduloId: 'interno_manutencao',
+    moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+  },
+  {
+    href: '/manutencao/maquinas',
+    title: 'Máquinas',
+    description: 'Cadastro por setor',
+    icon: 'precision_manufacturing',
+    moduloId: 'interno_manutencao',
+  },
+  {
+    href: '/manutencao/solicitantes',
+    title: 'Solicitantes',
+    description: 'Setores que podem abrir ordem',
+    icon: 'manage_accounts',
+    moduloId: 'interno_manutencao',
+    nivelMinimo: 'administrar',
+  },
+];
+
 export const HUB_SECTIONS: HubNavSection[] = [
   { id: 'producao', title: 'Produção', items: HUB_PRODUCAO_ITEMS },
   { id: 'planejamento', title: 'Planejamento', items: HUB_PLANEJAMENTO_ITEMS },
   { id: 'paineis', title: 'Painéis', items: HUB_PAINEIS_ITEMS },
   { id: 'insumos', title: 'Insumos', items: HUB_INSUMOS_ITEMS },
   { id: 'pessoas', title: 'Pessoas', items: HUB_PESSOAS_ITEMS },
+  { id: 'manutencao', title: 'Manutenção', items: HUB_MANUTENCAO_ITEMS },
 ];

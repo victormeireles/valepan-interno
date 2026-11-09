@@ -61,6 +61,24 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
+  it('protege manutenção: fila com qualquer módulo, máquinas e solicitantes no módulo da oficina', () => {
+    expect(map.resolve('/manutencao')).toEqual({
+      kind: 'anyModulo',
+      modulos: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      minimo: 'ler',
+    });
+    expect(map.resolve('/manutencao/maquinas')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_manutencao',
+      minimo: 'ler',
+    });
+    expect(map.resolve('/manutencao/solicitantes')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_manutencao',
+      minimo: 'administrar',
+    });
+  });
+
   it('protege reclamações', () => {
     expect(map.resolve('/reclamacoes')).toEqual({
       kind: 'modulo',

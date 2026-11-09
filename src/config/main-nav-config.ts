@@ -300,6 +300,47 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
   ],
 },
   {
+    type: 'group',
+    id: 'manutencao',
+    label: 'Manutenção',
+    icon: 'handyman',
+    match: (pathname) =>
+      pathname.startsWith('/manutencao/solicitantes') ||
+      pathname.startsWith('/manutencao/maquinas') ||
+      pathname.startsWith('/manutencao'),
+    children: [
+      {
+        type: 'link',
+        href: '/manutencao',
+        label: 'Fila',
+        icon: 'handyman',
+        moduloId: 'interno_manutencao',
+        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        match: (pathname) =>
+          (pathname === '/manutencao' || pathname.startsWith('/manutencao/')) &&
+          !pathname.startsWith('/manutencao/maquinas') &&
+          !pathname.startsWith('/manutencao/solicitantes'),
+      },
+      {
+        type: 'link',
+        href: '/manutencao/maquinas',
+        label: 'Máquinas',
+        icon: 'precision_manufacturing',
+        moduloId: 'interno_manutencao',
+        match: startsWith('/manutencao/maquinas'),
+      },
+      {
+        type: 'link',
+        href: '/manutencao/solicitantes',
+        label: 'Solicitantes',
+        icon: 'manage_accounts',
+        moduloId: 'interno_manutencao',
+        nivelMinimo: 'administrar',
+        match: startsWith('/manutencao/solicitantes'),
+      },
+    ],
+  },
+  {
     type: 'link',
     href: '/config',
     label: 'Configurações',

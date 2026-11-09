@@ -349,6 +349,24 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/manutencao/solicitantes',
+    requirement: modulo('interno_manutencao', 'administrar'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/manutencao/maquinas',
+    requirement: modulo('interno_manutencao', 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/manutencao',
+    requirement: anyModulo(
+      ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      'ler',
+    ),
+  },
+  {
+    match: 'prefix',
     prefix: '/config',
     requirement: modulo('interno_config', 'administrar'),
   },
