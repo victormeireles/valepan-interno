@@ -26,6 +26,7 @@ export default async function PessoasFaltasPage({
       itens={itens}
       anterior={itensAnteriores}
       pessoas={pessoas.map((pessoa) => ({ codigo: pessoa.codigo, nome: pessoa.nome }))}
+      hoje={getTodayISOInBrazilTimezone()}
       inicio={inicio}
       fim={fim}
     />

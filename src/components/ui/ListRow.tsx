@@ -15,6 +15,8 @@ export interface ListRowProps {
   draggable?: boolean;
   title: ReactNode;
   subtitle?: ReactNode;
+  subtitleWrap?: boolean;
+  compact?: boolean;
   columns?: ListRowColumn[];
   menu?: ReactNode;
   onClick?: () => void;
@@ -28,6 +30,8 @@ export function ListRow({
   draggable = false,
   title,
   subtitle,
+  subtitleWrap = false,
+  compact = false,
   columns = [],
   menu,
   onClick,
@@ -51,8 +55,8 @@ export function ListRow({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={[
-        'flex min-w-0 flex-col gap-2 border-b border-stone-100 px-3 py-2.5',
-        'md:flex-row md:items-center md:gap-3 md:py-2',
+        'flex min-w-0 flex-col border-b border-stone-100 px-3',
+        compact ? 'gap-1 py-1 md:flex-row md:items-center md:gap-3 md:py-0.5' : 'gap-2 py-2.5 md:flex-row md:items-center md:gap-3 md:py-2',
         'transition-[background,box-shadow] duration-[120ms]',
         rowBg,
       ].join(' ')}
@@ -77,15 +81,18 @@ export function ListRow({
           type="button"
           onClick={onClick}
           className={[
-            'min-h-11 min-w-0 flex-1 border-none bg-transparent py-1 text-left',
+            compact ? 'min-h-8 py-0.5' : 'min-h-11 py-1',
+            'min-w-0 flex-1 border-none bg-transparent text-left',
             onClick ? 'cursor-pointer' : 'cursor-default',
           ].join(' ')}
         >
-          <span className="block truncate text-sm font-semibold tracking-[-0.004em] text-text-strong">
+          <span className="block truncate text-sm font-semibold leading-tight tracking-[-0.004em] text-text-strong">
             {title}
           </span>
           {subtitle ? (
-            <span className="block truncate text-xs text-text-muted">{subtitle}</span>
+            <span className={['block text-xs leading-tight text-text-muted', subtitleWrap ? 'whitespace-normal' : 'truncate'].join(' ')}>
+              {subtitle}
+            </span>
           ) : null}
         </button>
 

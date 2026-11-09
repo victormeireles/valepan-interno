@@ -38,12 +38,15 @@ export async function resumoFaltasRecentes(codigo: string): Promise<FaltaJanelaC
   return new FaltaJanelaResumo().contar(await faltasDaJanela(client, pessoa.id));
 }
 
+const SELECT_FALTA =
+  'id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao, afastamento), pessoas_setores(nome), pessoas_turnos(nome)';
+
 export async function listFaltas(inicio: string, fim: string): Promise<FaltaListaItem[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
   const client = supabaseClientFactory.createServiceRoleClient();
   const { data, error } = await client
     .from('pessoas_faltas' as never)
-    .select('id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao, afastamento), pessoas_setores(nome), pessoas_turnos(nome)')
+    .select(SELECT_FALTA)
     .gte('data', inicio)
     .lte('data', fim)
     .order('data', { ascending: false });

@@ -13,21 +13,29 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
-import { FaltaAnexoIndicacao } from '@/domain/pessoas/falta-anexo-indicacao';
 import { FaltaAgrupamento, type FaltaPessoaLinha } from '@/domain/pessoas/falta-agrupamento';
+import type { SituacaoDocumento } from '@/domain/pessoas/falta-documento-fila';
 import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
 import { postFaltaAnexo } from '@/features/pessoas/falta-anexo-client';
 import { compressImage } from '@/utils/imageCompression';
-import { FaltaAnexoIndicador } from './FaltaAnexoIndicador';
+import {
+  contarDocumento,
+  filtrarDocumento,
+  periodosDocumento,
+  rotuloPorPessoa,
+  seloPorPessoa,
+  type FiltroDocumento,
+} from '../faltas-lista-consulta';
+import { FaltaDatasMarca } from './FaltaDatasMarca';
+import { FaltaDocumentoSelo } from './FaltaDocumentoSelo';
 import { FaltasClassificacaoFiltro } from './FaltasClassificacaoFiltro';
+import { FaltasDocumentoQuadro } from './FaltasDocumentoQuadro';
 import { FaltasPessoaModal } from './FaltasPessoaModal';
 import { FaltasResumoCards } from './FaltasResumoCards';
 import { ColunaRotulo } from './ColunaRotulo';
 import { FaltaLancamentoForm } from './FaltaLancamentoForm';
 import { PainelAcao } from './PainelAcao';
-
-const anexoIndicacao = new FaltaAnexoIndicacao();
 
 type Pessoa = { codigo: string; nome: string };
 
@@ -35,11 +43,12 @@ type Props = {
   itens: FaltaListaItem[];
   anterior: FaltaListaItem[];
   pessoas: Pessoa[];
+  hoje: string;
   inicio: string;
   fim: string;
 };
 
-export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
+export function FaltasLista({ itens, anterior, pessoas, hoje, inicio, fim }: Props) {
   const router = useRouter();
   const [classificacao, setClassificacao] = useState('injustificada');
   const [termo, setTermo] = useState('');
@@ -49,13 +58,22 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
   const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null);
   const [limite, setLimite] = useState(40);
   const [pendente, setPendente] = useState(false);
+  const [filtroDocumento, setFiltroDocumento] = useState<FiltroDocumento | null>(null);
   const atuais = useMemo(() => porClassificacao(itens, classificacao), [itens, classificacao]);
   const anteriores = useMemo(() => porClassificacao(anterior, classificacao), [anterior, classificacao]);
   const filtrados = useMemo(() => porNome(atuais, termo), [atuais, termo]);
   const pessoasLista = useMemo(() => new FaltaAgrupamento().porPessoa(filtrados), [filtrados]);
+  const periodos = useMemo(() => periodosDocumento(itens, hoje), [itens, hoje]);
+  const documento = useMemo(() => contarDocumento(periodos), [periodos]);
+  const pessoasVisiveis = useMemo(
+    () => filtrarDocumento(pessoasLista, documento, filtroDocumento),
+    [pessoasLista, documento, filtroDocumento],
+  );
+  const rotulos = useMemo(() => rotuloPorPessoa(filtrados), [filtrados]);
   const resumo = useMemo(() => new FaltaResumoCalculo().comparar(atuais, anteriores), [atuais, anteriores]);
   const abertas = filtrados.filter((item) => item.codigo === pessoaCodigo && !item.cancelada);
-  const pessoaAberta = pessoasLista.find((pessoa) => pessoa.codigo === pessoaCodigo);
+  const selos = useMemo(() => seloPorPessoa(pessoasVisiveis, periodos), [pessoasVisiveis, periodos]);
+  const pessoaAberta = pessoasVisiveis.find((pessoa) => pessoa.codigo === pessoaCodigo);
 
   async function lancar(entrada: {
     datas: string[];
@@ -146,8 +164,17 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
         </div>
       </div>
       <FaltasResumoCards resumo={resumo} />
+      <FaltasDocumentoQuadro
+        paraHoje={documento.paraHoje}
+        atrasados={documento.atrasados}
+        filtro={filtroDocumento}
+        onFiltrar={(valor) => {
+          setFiltroDocumento(valor);
+          setLimite(40);
+        }}
+      />
       <div className="mt-4 min-w-0">
-        {pessoasLista.length === 0 ? (
+        {pessoasVisiveis.length === 0 ? (
           <EmptyState icon="event_busy" title="Nenhuma falta no filtro." />
         ) : (
           <Card padding="none">
@@ -155,6 +182,7 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
               <ListColumnHeader
                 leading="Colaborador"
                 columns={[
+                  { label: 'Documento', width: '9rem', align: 'left' },
                   { label: 'Faltas', width: '5rem', align: 'right' },
                   { label: 'Situação', width: '9rem', align: 'left' },
                   { label: 'Setor', width: '9rem', align: 'left' },
@@ -163,19 +191,26 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
                 menuWidth="2.75rem"
               />
             </div>
-            {pessoasLista.slice(0, limite).map((pessoa, index) => (
+            {pessoasVisiveis.slice(0, limite).map((pessoa, index) => (
               <ListRow
                 key={pessoa.codigo}
+                compact
                 even={index % 2 === 1}
-                title={
+                title={pessoa.nome}
+                subtitle={
                   <>
-                    {pessoa.nome}
-                    {anexoIndicacao.existeParaPessoa(filtrados, pessoa.codigo) ? <FaltaAnexoIndicador /> : null}
+                    {pessoa.codigo}
+                    <FaltaDatasMarca periodos={rotulos.get(pessoa.codigo) ?? []} />
                   </>
                 }
-                subtitle={pessoa.codigo}
                 onClick={() => setPessoaCodigo(pessoa.codigo)}
                 columns={[
+                  {
+                    value: <ColunaRotulo label="Documento">{seloDaPessoa(selos.get(pessoa.codigo))}</ColunaRotulo>,
+                    width: '9rem',
+                    align: 'left',
+                    tabular: false,
+                  },
                   {
                     value: <ColunaRotulo label="Faltas">{pessoa.faltas.toLocaleString('pt-BR')}</ColunaRotulo>,
                     width: '5rem',
@@ -209,7 +244,7 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
                   <IconButton
                     icon="visibility"
                     label={`Ver faltas de ${pessoa.nome}`}
-                    size="lg"
+                    size="md"
                     variant="surface"
                     onClick={() => setPessoaCodigo(pessoa.codigo)}
                   />
@@ -218,7 +253,7 @@ export function FaltasLista({ itens, anterior, pessoas, inicio, fim }: Props) {
             ))}
           </Card>
         )}
-        {pessoasLista.length > limite ? (
+        {pessoasVisiveis.length > limite ? (
           <div className="mt-3">
             <Button variant="secondary" size="lg" fullWidth className="sm:w-auto" onClick={() => setLimite((atual) => atual + 40)}>
               Mostrar mais
@@ -284,6 +319,11 @@ function legenda(classificacao: string): string {
   if (classificacao === 'justificada') return 'justificadas';
   if (classificacao === 'suspensao') return 'suspensões';
   return '';
+}
+
+function seloDaPessoa(situacao: SituacaoDocumento | undefined) {
+  if (!situacao) return '—';
+  return <FaltaDocumentoSelo situacao={situacao} />;
 }
 
 function rotuloSituacao(pessoa: FaltaPessoaLinha): string {
