@@ -7,7 +7,18 @@ import { Select } from '@/components/ui/Select';
 import type { MaquinaEntrada } from '@/domain/manutencao/maquina-cadastro';
 import { SetorOperacional, type SetorLinha } from '@/domain/manutencao/setor-operacional';
 
-export type MaquinaFormularioValor = MaquinaEntrada & { id?: string };
+export type MaquinaFormularioValor = MaquinaEntrada & {
+  id?: string;
+  setorNome?: string;
+};
+
+const FORMULARIO_LIMPO: MaquinaFormularioValor = {
+  codigo: '',
+  nome: '',
+  setorId: '',
+  observacao: '',
+  ativo: true,
+};
 
 type MaquinaFormularioProps = {
   setores: SetorLinha[];
@@ -42,6 +53,10 @@ export function MaquinaFormulario({
     setValorFormulario((estado) => ({ ...estado, ...alteracao }));
   }
 
+  function novaMaquina() {
+    setValorFormulario(FORMULARIO_LIMPO);
+  }
+
   return (
     <form onSubmit={enviar} className={`${CARTAO} space-y-4 p-4`}>
       <CamposMaquina
@@ -50,12 +65,42 @@ export function MaquinaFormulario({
         setores={setores}
         onAlterar={alterarValor}
       />
+      <AcoesFormulario
+        editando={Boolean(valorFormulario.id)}
+        podeGravar={podeGravar}
+        salvando={salvando}
+        onNova={novaMaquina}
+      />
+    </form>
+  );
+}
+
+function AcoesFormulario({
+  editando,
+  podeGravar,
+  salvando,
+  onNova,
+}: {
+  editando: boolean;
+  podeGravar: boolean;
+  salvando: boolean;
+  onNova: () => void;
+}) {
+  if (!editando && !podeGravar) return null;
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {editando ? (
+        <Button type="button" variant="secondary" size="lg" disabled={salvando} onClick={onNova}>
+          Nova máquina
+        </Button>
+      ) : null}
       {podeGravar ? (
         <Button type="submit" size="lg" disabled={salvando}>
           Salvar
         </Button>
       ) : null}
-    </form>
+    </div>
   );
 }
 
@@ -88,7 +133,7 @@ function CamposMaquina({
         label="Setor"
         value={valorFormulario.setorId}
         disabled={!podeGravar}
-        options={opcoesDeSetor(setores)}
+        options={opcoesDeSetor(setores, valorFormulario)}
         onChange={(evento) => onAlterar({ setorId: evento.target.value })}
       />
       <Input
@@ -131,10 +176,29 @@ function CampoAtiva({
   );
 }
 
-function opcoesDeSetor(setores: SetorLinha[]) {
+function opcoesDeSetor(setores: SetorLinha[], valor: MaquinaFormularioValor) {
   const operacionais = new SetorOperacional().filtrar(setores);
+  const selecionaveis = operacionais.map((setor) => ({
+    value: setor.id,
+    label: setor.nome,
+  }));
   return [
     { value: '', label: 'Selecione o setor' },
-    ...operacionais.map((setor) => ({ value: setor.id, label: setor.nome })),
+    ...selecionaveis,
+    ...opcaoSetorInativo(setores, valor, selecionaveis),
   ];
+}
+
+function opcaoSetorInativo(
+  setores: SetorLinha[],
+  valor: MaquinaFormularioValor,
+  selecionaveis: { value: string }[],
+) {
+  if (!valor.setorId) return [];
+  if (selecionaveis.some((opcao) => opcao.value === valor.setorId)) return [];
+  const nome =
+    setores.find((setor) => setor.id === valor.setorId)?.nome ||
+    valor.setorNome ||
+    'Setor';
+  return [{ value: valor.setorId, label: `${nome} (inativo)` }];
 }

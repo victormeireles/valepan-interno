@@ -16,6 +16,13 @@ const apoio: SetorLinha = {
   ativo: true,
 };
 
+const operacionalInativo: SetorLinha = {
+  id: 'setor-parado',
+  nome: 'Parado',
+  tipo: 'operacional',
+  ativo: false,
+};
+
 const entradaValida = {
   codigo: '  Forno 01  ',
   nome: '  Forno principal  ',
@@ -40,6 +47,43 @@ describe('MaquinaCadastro', () => {
     expect(
       cadastro.validar({ ...entradaValida, nome: '  ' }, [operacional], []),
     ).toEqual({ ok: false, mensagem: 'Informe o nome.' });
+  });
+
+  it('recusa setor ausente', () => {
+    expect(
+      cadastro.validar({ ...entradaValida, setorId: '' }, [operacional], []),
+    ).toEqual({
+      ok: false,
+      mensagem: 'Escolha um setor operacional ativo.',
+    });
+  });
+
+  it('recusa setor operacional inativo na criação', () => {
+    expect(
+      cadastro.validar(
+        { ...entradaValida, setorId: operacionalInativo.id },
+        [operacional, operacionalInativo],
+        [],
+      ),
+    ).toEqual({
+      ok: false,
+      mensagem: 'Escolha um setor operacional ativo.',
+    });
+  });
+
+  it('na edição mantém o setor atual mesmo inelegível', () => {
+    const resultado = cadastro.validar(
+      { ...entradaValida, setorId: operacionalInativo.id },
+      [operacional, operacionalInativo],
+      [],
+      'maq-1',
+      operacionalInativo.id,
+    );
+
+    expect(resultado).toMatchObject({
+      ok: true,
+      linha: { setorId: operacionalInativo.id },
+    });
   });
 
   it('recusa setor de apoio', () => {

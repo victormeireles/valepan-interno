@@ -11,6 +11,9 @@ AS $$
   );
 $$;
 
+REVOKE ALL ON FUNCTION public.manutencao_setor_vale(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.manutencao_setor_vale(uuid) TO authenticated;
+
 DO $$
 DECLARE
   v_ordem int;
@@ -38,8 +41,8 @@ END $$;
 
 CREATE TABLE public.manutencao_maquinas (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  codigo text NOT NULL,
-  nome text NOT NULL,
+  codigo text NOT NULL CHECK (btrim(codigo) <> ''),
+  nome text NOT NULL CHECK (btrim(nome) <> ''),
   setor_id uuid NOT NULL REFERENCES public.pessoas_setores(id),
   observacao text NULL,
   ativo boolean NOT NULL DEFAULT true,
@@ -79,8 +82,11 @@ CREATE POLICY manutencao_maquinas_select ON public.manutencao_maquinas
 CREATE POLICY manutencao_maquinas_insert ON public.manutencao_maquinas
   FOR INSERT TO authenticated
   WITH CHECK (
-    (SELECT auth_tem_modulo('interno_manutencao', 'administrar'))
-    OR (SELECT is_admin())
+    (
+      (SELECT auth_tem_modulo('interno_manutencao', 'administrar'))
+      OR (SELECT is_admin())
+    )
+    AND public.manutencao_setor_vale(setor_id)
   );
 
 CREATE POLICY manutencao_maquinas_update ON public.manutencao_maquinas

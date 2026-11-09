@@ -30,6 +30,9 @@ type MaquinaRow = {
   ativo: boolean;
 };
 
+type CodigoLinha = { id: string; codigo: string; setor_id: string };
+type CodigoGravado = { id: string; codigo: string; setorId: string };
+
 export async function listarMaquinas(): Promise<{
   maquinas: MaquinaItem[];
   setores: SetorLinha[];
@@ -47,11 +50,13 @@ export async function salvarMaquina(
 ): Promise<Resultado> {
   await requireInternoModulo('interno_manutencao', 'administrar');
   const client = supabaseClientFactory.createServiceRoleClient();
+  const codigos = await lerCodigos(client);
   const validacao = new MaquinaCadastro().validar(
     entrada,
     await lerSetores(client),
-    await lerCodigos(client),
+    codigos,
     entrada.id,
+    setorAtual(codigos, entrada.id),
   );
   if (!validacao.ok) return validacao;
   const erro = entrada.id
@@ -78,12 +83,21 @@ async function lerMaquinas(client: Cliente): Promise<MaquinaRow[]> {
   return (data ?? []) as MaquinaRow[];
 }
 
-async function lerCodigos(client: Cliente): Promise<{ id: string; codigo: string }[]> {
+async function lerCodigos(client: Cliente): Promise<CodigoGravado[]> {
   const { data, error } = await client
     .from('manutencao_maquinas' as never)
-    .select('id, codigo');
+    .select('id, codigo, setor_id');
   if (error) throw new Error(error.message);
-  return (data ?? []) as { id: string; codigo: string }[];
+  return ((data ?? []) as CodigoLinha[]).map((linha) => ({
+    id: linha.id,
+    codigo: linha.codigo,
+    setorId: linha.setor_id,
+  }));
+}
+
+function setorAtual(codigos: CodigoGravado[], id?: string): string | undefined {
+  if (!id) return undefined;
+  return codigos.find((gravado) => gravado.id === id)?.setorId;
 }
 
 function paraItem(linha: MaquinaRow, nomes: Map<string, string>): MaquinaItem {

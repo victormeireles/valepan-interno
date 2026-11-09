@@ -305,9 +305,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     label: 'Manutenção',
     icon: 'handyman',
     match: (pathname) =>
-      pathname.startsWith('/manutencao/solicitantes') ||
-      pathname.startsWith('/manutencao/maquinas') ||
-      pathname.startsWith('/manutencao'),
+      pathname === '/manutencao' || pathname.startsWith('/manutencao/'),
     children: [
       {
         type: 'link',

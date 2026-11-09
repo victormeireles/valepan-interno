@@ -60,7 +60,12 @@ export function MaquinasPainel({ maquinas, setores, podeGravar }: MaquinasPainel
       {aviso ? <AvisoSalvar aviso={aviso} /> : null}
       <ul className={CARTAO}>
         {maquinas.map((maquina) => (
-          <LinhaMaquina key={maquina.id} maquina={maquina} onEditar={editar} />
+          <LinhaMaquina
+            key={maquina.id}
+            maquina={maquina}
+            podeGravar={podeGravar}
+            onEditar={editar}
+          />
         ))}
       </ul>
     </div>
@@ -73,6 +78,7 @@ function valorDaMaquina(maquina: MaquinaItem): MaquinaFormularioValor {
     codigo: maquina.codigo,
     nome: maquina.nome,
     setorId: maquina.setorId,
+    setorNome: maquina.setorNome,
     observacao: maquina.observacao,
     ativo: maquina.ativo,
   };
@@ -89,9 +95,11 @@ function AvisoSalvar({ aviso }: { aviso: Aviso }) {
 
 function LinhaMaquina({
   maquina,
+  podeGravar,
   onEditar,
 }: {
   maquina: MaquinaItem;
+  podeGravar: boolean;
   onEditar: (maquina: MaquinaItem) => void;
 }) {
   return (
@@ -109,9 +117,11 @@ function LinhaMaquina({
           )}
         </p>
       </div>
-      <Button type="button" variant="secondary" size="lg" onClick={() => onEditar(maquina)}>
-        Editar
-      </Button>
+      {podeGravar ? (
+        <Button type="button" variant="secondary" size="lg" onClick={() => onEditar(maquina)}>
+          Editar
+        </Button>
+      ) : null}
     </li>
   );
 }

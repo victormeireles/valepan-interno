@@ -45,7 +45,7 @@ function SolicitanteBloco({
   setores: SetorLinha[];
 }) {
   const [marcados, setMarcados] = useState(() => new Set(usuario.setorIds));
-  const [mensagem, setMensagem] = useState('');
+  const [aviso, setAviso] = useState<AvisoSolicitante | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   function alternar(setorId: string, marcado: boolean) {
@@ -62,7 +62,9 @@ function SolicitanteBloco({
     try {
       const ids = setores.filter((setor) => marcados.has(setor.id)).map((setor) => setor.id);
       const resultado = await salvarSetoresDoSolicitante(usuario.id, ids);
-      setMensagem(resultado.mensagem);
+      setAviso({ texto: resultado.mensagem, ok: resultado.ok });
+    } catch {
+      setAviso({ texto: 'Não foi possível salvar.', ok: false });
     } finally {
       setSalvando(false);
     }
@@ -84,12 +86,19 @@ function SolicitanteBloco({
       <Button type="button" size="lg" disabled={salvando} onClick={salvar}>
         Salvar
       </Button>
-      {mensagem ? (
-        <p className="text-sm text-stone-700" role="status">
-          {mensagem}
-        </p>
-      ) : null}
+      {aviso ? <AvisoSalvar aviso={aviso} /> : null}
     </section>
+  );
+}
+
+type AvisoSolicitante = { texto: string; ok: boolean };
+
+function AvisoSalvar({ aviso }: { aviso: AvisoSolicitante }) {
+  const cor = aviso.ok ? 'text-stone-700' : 'text-red-700';
+  return (
+    <p className={`text-sm ${cor}`} role={aviso.ok ? 'status' : 'alert'}>
+      {aviso.texto}
+    </p>
   );
 }
 

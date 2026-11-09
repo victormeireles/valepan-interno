@@ -8,6 +8,7 @@ import {
 describe('interno-modulos-catalog', () => {
   it('lista exatamente os 14 módulos interno_*', () => {
     expect(MODULOS_INTERNO).toHaveLength(14);
+    expect(MODULOS_INTERNO.every((m) => m.startsWith('interno_'))).toBe(true);
     expect(MODULOS_INTERNO).toContain('interno_manutencao');
     expect(MODULOS_INTERNO).toContain('interno_manutencao_solicitacao');
     expect(isModuloInterno('interno_manutencao')).toBe(true);

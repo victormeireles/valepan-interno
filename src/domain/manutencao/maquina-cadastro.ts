@@ -34,6 +34,7 @@ export class MaquinaCadastro {
     setores: SetorLinha[],
     usadas: MaquinaUsada[],
     proprioId?: string,
+    setorAtualId?: string,
   ): ResultadoMaquinaCadastro {
     const codigo = this.maquinaCodigo.normalizar(entrada.codigo);
     if (!codigo) return { ok: false, mensagem: 'Informe o código.' };
@@ -41,7 +42,7 @@ export class MaquinaCadastro {
     const nome = entrada.nome.trim();
     if (!nome) return { ok: false, mensagem: 'Informe o nome.' };
 
-    if (!this.setorLiberado(entrada.setorId, setores)) {
+    if (!this.setorAceito(entrada.setorId, setores, proprioId, setorAtualId)) {
       return { ok: false, mensagem: 'Escolha um setor operacional ativo.' };
     }
 
@@ -50,6 +51,24 @@ export class MaquinaCadastro {
     }
 
     return { ok: true, linha: this.montarLinha(entrada, codigo, nome) };
+  }
+
+  private setorAceito(
+    setorId: string,
+    setores: SetorLinha[],
+    proprioId?: string,
+    setorAtualId?: string,
+  ): boolean {
+    if (this.mantemSetorAtual(setorId, proprioId, setorAtualId)) return true;
+    return this.setorLiberado(setorId, setores);
+  }
+
+  private mantemSetorAtual(
+    setorId: string,
+    proprioId?: string,
+    setorAtualId?: string,
+  ): boolean {
+    return Boolean(proprioId) && Boolean(setorAtualId) && setorId === setorAtualId;
   }
 
   private setorLiberado(setorId: string, setores: SetorLinha[]): boolean {
