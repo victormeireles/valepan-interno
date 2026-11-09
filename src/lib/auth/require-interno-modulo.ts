@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { algumModuloAtende } from '@/lib/auth/algum-modulo-atende';
 import {
   InternoAccessError,
   InternoAccessManager,
@@ -37,4 +38,27 @@ export async function requireInternoModulo(
   }
 
   return snap;
+}
+
+export async function requireInternoQualquerModulo(
+  modulos: readonly InternoModuloId[],
+  minimo: NivelModulo,
+): Promise<{ snap: UsuarioAuthzSnapshot; usuarioId: string }> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect('/login');
+  }
+
+  const snap = sessionToAuthzSnapshot(session);
+  const manager = new InternoAccessManager();
+
+  if (!manager.podeAcessarApp(snap)) {
+    redirect('/login?error=SemPermissao');
+  }
+
+  if (!algumModuloAtende(snap, modulos, minimo, manager)) {
+    redirect('/?erro=sem-permissao');
+  }
+
+  return { snap, usuarioId: session.user.id };
 }
