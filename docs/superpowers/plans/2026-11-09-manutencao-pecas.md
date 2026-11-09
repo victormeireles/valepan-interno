@@ -4,7 +4,7 @@
 
 **Goal:** Cadastrar peças, lançar entrada e saída manual, e mostrar saldo e valor, com custo médio que só muda na entrada.
 
-**Architecture:** A conta mora em `CustoMedio` e é a referência dos testes. O Postgres grava saldo, custo e movimento na mesma transação, com `SELECT … FOR UPDATE`. A tela só chama a ação depois que o domínio aceita a quantidade e o preço.
+**Architecture:** A conta mora só em `CustoMedio`, e os testes cobrem essa classe. O Postgres não recalcula a média. A função trava a peça, confere o saldo que a ação leu e grava saldo, custo e movimento na mesma transação. A tela só chama a ação depois que o domínio aceita a quantidade e o preço.
 
 **Tech Stack:** Next.js 15, React 19, TypeScript, Vitest, Tailwind, Supabase. Cliente service role nas ações. Consultas `as never` até a regeneração dos tipos.
 
@@ -14,7 +14,7 @@
 
 - pt-BR. Dinheiro em centavos inteiros. Quantidade em milésimos (`numeric(14,3)`).
 - Código de peça: a mesma regra de `MaquinaCodigo`. Reuse a classe. Não a renomeie.
-- Custo médio só muda na entrada. Saldo anterior maior que zero: média ponderada, centavo mais próximo, empate para cima. Saldo anterior zero, negativo, ou custo ainda nulo: o custo passa a ser o preço da entrada.
+- Custo médio só muda na entrada, e só `CustoMedio` faz essa conta. Saldo anterior maior que zero: média ponderada, centavo mais próximo, empate para cima. Saldo anterior zero, negativo, ou custo ainda nulo: o custo passa a ser o preço da entrada. O SQL confere o resultado; não o recalcula.
 - Saída não muda o custo. O preço gravado na saída é o custo vigente, ou zero se ele for nulo.
 - Valor do saldo = saldo × custo, mesmo arredondamento. Sem custo, valor zero. Saldo negativo fica negativo e em destaque.
 - Movimento não se edita. Sem policy de DELETE. Consumo de ordem não entra nesta fatia: a tabela já aceita `consumo_os`, a função desta fatia recusa esse tipo.
@@ -176,7 +176,7 @@ git commit -m "feat(manutencao): valida a peça e quem movimenta o estoque"
 
 **Interfaces:**
 - Consumes: `interno_manutencao` já existe em `public.modulos` pela migration da fundação
-- Produces: `manutencao_pecas`, `manutencao_estoque_movimentos`, `manutencao_registrar_movimento(uuid, text, numeric, integer, text, uuid)`
+- Produces: `manutencao_pecas`, `manutencao_estoque_movimentos`, `manutencao_registrar_movimento(uuid, text, numeric, integer, text, uuid, numeric, integer, numeric, integer)`
 
 - [ ] **Step 1: Escrever a migration**
 
@@ -190,13 +190,13 @@ RLS ligado nas duas. Select: `(SELECT auth_tem_modulo('interno_manutencao', 'ler
 
 Trigger `BEFORE UPDATE` em peças: se `saldo` ou `custo_medio_centavos` mudou e `current_setting('manutencao.movimento', true)` é distinto de `'1'`, `raise exception` com `Saldo só muda por movimento.`
 
-Função `manutencao_registrar_movimento(p_peca uuid, p_tipo text, p_quantidade numeric, p_preco integer, p_motivo text, p_usuario uuid)` `returns table (saldo numeric, custo_medio_centavos integer)`, `language plpgsql`, `security invoker`, `set search_path = public`.
+Função `manutencao_registrar_movimento(p_peca uuid, p_tipo text, p_quantidade numeric, p_preco integer, p_motivo text, p_usuario uuid, p_saldo_esperado numeric, p_custo_esperado integer, p_saldo_novo numeric, p_custo_novo integer)` `returns table (saldo numeric, custo_medio_centavos integer)`, `language plpgsql`, `security invoker`, `set search_path = public`.
 
-Ela trava a peça com `for update`. Peça ausente: `Peça não encontrada.` Peça inativa: `Peça inativa.` Tipo diferente de `entrada` e `saida_manual`: `Movimento inválido.` Quantidade nula ou `<= 0`: `Informe uma quantidade maior que zero, com até 3 casas.`
+Ela trava a peça com `for update`. Peça ausente: `Peça não encontrada.` Peça inativa: `Peça inativa.` Tipo diferente de `entrada` e `saida_manual`: `Movimento inválido.` Quantidade nula ou `<= 0`: `Informe uma quantidade maior que zero, com até 3 casas.` Saldo ou custo diferente do esperado: `Estoque mudou. Tente de novo.` `p_custo_novo` negativo: `Movimento inválido.`
 
-Entrada: preço nulo ou negativo recusa com `Informe o preço.`; motivo gravado nulo; se saldo anterior `> 0` e custo não nulo, `round((saldo * custo + quantidade * preco) / (saldo + quantidade), 0)::integer`; senão o custo novo é o preço. `round` do `numeric` no Postgres, para valor positivo, é o empate para cima. Saldo novo = saldo + quantidade.
+Entrada: preço nulo ou negativo recusa com `Informe o preço.`. Motivo gravado nulo. O saldo novo tem de ser o saldo atual mais a quantidade. Se o saldo atual é zero, negativo, ou o custo atual é nulo, o custo novo tem de ser o preço. Caso contrário a função grava o `p_custo_novo` que a ação calculou, sem refazer a média.
 
-Saída: preço do movimento = `coalesce(custo, 0)`; custo não muda; saldo novo = saldo − quantidade; motivo = `btrim(p_motivo)`.
+Saída: o custo novo tem de ser o custo atual, inclusive quando os dois são nulos. O preço do movimento é `coalesce(custo, 0)`. O saldo novo tem de ser o saldo atual menos a quantidade. Motivo = `btrim(p_motivo)`.
 
 Antes do update, `perform set_config('manutencao.movimento', '1', true)`. Insere o movimento e devolve saldo e custo.
 
@@ -232,7 +232,7 @@ git commit -m "feat(manutencao): cria peças e a transação do movimento"
 
 `registrarEntrada(pecaId, quantidadeTexto, precoTexto)` exige editar. Quantidade inválida: `"Informe uma quantidade maior que zero, com até 3 casas."`. Preço inválido: `"Informe o preço."`. `registrarSaida(pecaId, quantidadeTexto, motivo)` exige editar. Motivo vazio: `"Informe o motivo."`.
 
-As duas chamam `rpc('manutencao_registrar_movimento', …)` com quantidade `milesimos / 1000` em string de 3 casas. A mensagem de exceção da função, quando for uma das frases da task 3, chega intacta. Qualquer outra vira `"Não foi possível movimentar."`.
+As duas leem saldo e custo da peça, calculam o par novo com `CustoMedio` e chamam `rpc('manutencao_registrar_movimento', …)` com quantidade `milesimos / 1000` em string de 3 casas, o saldo esperado, o custo esperado e o par novo. Se a função responder `Estoque mudou. Tente de novo.`, leem outra vez e tentam uma segunda vez. A segunda falha devolve essa frase. As outras frases da task 3 chegam intactas. Qualquer outra vira `"Não foi possível movimentar."`.
 
 Sucesso da entrada: `"Entrada registrada."`. Da saída: `"Saída registrada."`. Se o saldo devolvido for menor que zero, a frase ganha `" Saldo negativo."`.
 
@@ -346,5 +346,5 @@ git commit -m "feat(manutencao): mostra peças, saldo e movimentos"
 
 - Fatia 2 da spec: cadastro, entrada, saída manual, saldo negativo e custo médio. Coberto.
 - Consumo de ordem, finalização e indicadores ficam nas fatias seguintes. A tabela já reserva `consumo_os` e `ordem_id`.
-- O empate do custo positivo usa a mesma direção do `round(numeric)` do Postgres. O valor negativo do saldo é só apresentação e está no teste (`-1,5` → `-1`).
+- A média ponderada existe só em `CustoMedio`. O SQL recusa saldo ou custo que não batem com a linha travada, recusa custo novo que não seja o preço quando a média não se aplica, e na saída exige o mesmo custo. O valor negativo do saldo é só apresentação e está no teste (`-1,5` → `-1`).
 - A troca de setores do solicitante continua sem RPC. Isso só bloqueia a fatia da ordem, não esta.
