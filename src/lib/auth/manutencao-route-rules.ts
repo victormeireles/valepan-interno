@@ -32,7 +32,7 @@ function anyModulo(
   return { kind: 'anyModulo', modulos, minimo };
 }
 
-/** Mais específico primeiro. Peças vem antes do prefixo genérico da fila. */
+/** Mais específico primeiro. Nova, ordens e peças vêm antes do prefixo genérico da fila. */
 export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
   {
     match: 'prefix',
@@ -48,6 +48,22 @@ export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
     match: 'prefix',
     prefix: '/manutencao/pecas',
     requirement: modulo('interno_manutencao', 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/manutencao/nova',
+    requirement: anyModulo(
+      ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      'ler',
+    ),
+  },
+  {
+    match: 'prefix',
+    prefix: '/manutencao/ordens',
+    requirement: anyModulo(
+      ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      'ler',
+    ),
   },
   {
     match: 'prefix',

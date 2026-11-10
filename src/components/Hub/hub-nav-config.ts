@@ -215,6 +215,15 @@ export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
     moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
   },
   {
+    href: '/manutencao/nova',
+    title: 'Nova ordem',
+    description: 'Abrir corretiva',
+    icon: 'add',
+    moduloId: 'interno_manutencao',
+    moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+    nivelMinimo: 'editar',
+  },
+  {
     href: '/manutencao/maquinas',
     title: 'Máquinas',
     description: 'Cadastro por setor',

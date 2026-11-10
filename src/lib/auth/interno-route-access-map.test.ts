@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InternoRouteAccessMap } from './interno-route-access-map';
+import { MANUTENCAO_ROUTE_RULES } from './manutencao-route-rules';
 
 describe('InternoRouteAccessMap', () => {
   const map = new InternoRouteAccessMap();
@@ -82,6 +83,33 @@ describe('InternoRouteAccessMap', () => {
       modulo: 'interno_manutencao',
       minimo: 'ler',
     });
+  });
+
+  it('protege nova ordem e o detalhe com leitura, antes do prefixo da fila', () => {
+    const leitura = {
+      kind: 'anyModulo' as const,
+      modulos: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      minimo: 'ler' as const,
+    };
+    const indiceNova = MANUTENCAO_ROUTE_RULES.findIndex(
+      (rule) => rule.prefix === '/manutencao/nova',
+    );
+    const indiceOrdens = MANUTENCAO_ROUTE_RULES.findIndex(
+      (rule) => rule.prefix === '/manutencao/ordens',
+    );
+    const indiceFila = MANUTENCAO_ROUTE_RULES.findIndex(
+      (rule) => rule.prefix === '/manutencao',
+    );
+
+    expect(indiceNova).toBeGreaterThanOrEqual(0);
+    expect(indiceOrdens).toBeGreaterThanOrEqual(0);
+    expect(indiceNova).toBeLessThan(indiceFila);
+    expect(indiceOrdens).toBeLessThan(indiceFila);
+    expect(MANUTENCAO_ROUTE_RULES[indiceNova]?.requirement).toEqual(leitura);
+    expect(MANUTENCAO_ROUTE_RULES[indiceOrdens]?.requirement).toEqual(leitura);
+    expect(map.resolve('/manutencao/nova')).toEqual(leitura);
+    expect(map.resolve('/manutencao/ordens')).toEqual(leitura);
+    expect(map.resolve('/manutencao/ordens/12')).toEqual(leitura);
   });
 
   it('protege reclamações', () => {

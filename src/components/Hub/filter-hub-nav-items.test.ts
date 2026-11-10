@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { InternoAccessManager } from '@/lib/auth/interno-access-manager';
+import {
+  InternoAccessManager,
+  type UsuarioAuthzSnapshot,
+} from '@/lib/auth/interno-access-manager';
 import {
   HUB_INSUMOS_ITEMS,
   HUB_PAINEIS_ITEMS,
@@ -22,7 +25,7 @@ describe('HUB_SECTIONS', () => {
     ]);
   });
 
-  it('abre manutenção com fila, máquinas, peças e solicitantes', () => {
+  it('abre manutenção com fila, nova ordem, máquinas, peças e solicitantes', () => {
     const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
     expect(secao?.title).toBe('Manutenção');
     expect(secao?.items).toEqual([
@@ -33,6 +36,15 @@ describe('HUB_SECTIONS', () => {
         icon: 'handyman',
         moduloId: 'interno_manutencao',
         moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      },
+      {
+        href: '/manutencao/nova',
+        title: 'Nova ordem',
+        description: 'Abrir corretiva',
+        icon: 'add',
+        moduloId: 'interno_manutencao',
+        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        nivelMinimo: 'editar',
       },
       {
         href: '/manutencao/maquinas',
@@ -154,6 +166,31 @@ describe('filterHubNavItems', () => {
 
     const planejamento = filterHubNavItems(HUB_PLANEJAMENTO_ITEMS, snap, manager);
     expect(planejamento.map((item) => item.href)).toEqual(['/ordens-producao']);
+  });
+
+  it('mostra Nova ordem a quem edita manutenção ou solicitação', () => {
+    const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
+    const hrefs = (modulosEfetivos: UsuarioAuthzSnapshot['modulosEfetivos']) =>
+      filterHubNavItems(
+        secao?.items ?? [],
+        {
+          isSystemOwner: false,
+          identidades: ['interno'],
+          modulosEfetivos,
+        },
+        manager,
+      ).map((item) => item.href);
+
+    expect(
+      hrefs({
+        interno_manutencao: 'ler',
+        interno_manutencao_solicitacao: 'ler',
+      }),
+    ).not.toContain('/manutencao/nova');
+    expect(hrefs({ interno_manutencao: 'editar' })).toContain('/manutencao/nova');
+    expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).toContain(
+      '/manutencao/nova',
+    );
   });
 
   it('folha do hub só aparece para quem administra pessoas', () => {

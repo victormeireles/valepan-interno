@@ -318,7 +318,19 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
           (pathname === '/manutencao' || pathname.startsWith('/manutencao/')) &&
           !pathname.startsWith('/manutencao/maquinas') &&
           !pathname.startsWith('/manutencao/pecas') &&
-          !pathname.startsWith('/manutencao/solicitantes'),
+          !pathname.startsWith('/manutencao/solicitantes') &&
+          !pathname.startsWith('/manutencao/nova') &&
+          !pathname.startsWith('/manutencao/ordens'),
+      },
+      {
+        type: 'link',
+        href: '/manutencao/nova',
+        label: 'Nova ordem',
+        icon: 'add',
+        moduloId: 'interno_manutencao',
+        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        nivelMinimo: 'editar',
+        match: startsWith('/manutencao/nova'),
       },
       {
         type: 'link',
