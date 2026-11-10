@@ -1,6 +1,10 @@
 'use server';
 
 import {
+  EdicaoDescricaoPlano,
+  type PlanoEmEdicao,
+} from '@/domain/manutencao/edicao-descricao-plano';
+import {
   PlanoPreventivo,
   type EntradaPlano,
   type MaquinaDoPlano,
@@ -90,14 +94,25 @@ async function editarPlano(
 ): Promise<Resultado> {
   const atual = await lerPlano(client, id);
   if (!atual?.ativo) return { ok: false, mensagem: NAO_ENCONTRADO };
+  const edicao = new EdicaoDescricaoPlano();
+  const plano = planoEmEdicao(atual);
+  if (edicao.soDescricao(plano, entrada.maquinaId, entrada.frequencia)) {
+    return gravarDescricao(client, id, entrada.descricao);
+  }
   const maquina = await lerMaquina(client, entrada.maquinaId);
-  if (frequenciaIgual(atual, entrada.frequencia)) {
-    return gravarSemRecalcular(client, id, entrada, atual, maquina, hoje);
+  if (edicao.mesmaFrequencia(plano, entrada.frequencia)) {
+    return gravarMaquina(client, id, entrada, atual, maquina, hoje);
   }
   return gravarFrequencia(client, id, entrada, atual, maquina, hoje);
 }
 
-async function gravarSemRecalcular(
+async function gravarDescricao(client: Cliente, id: string, descricao: string): Promise<Resultado> {
+  const aceita = new EdicaoDescricaoPlano().aceitar(descricao);
+  if (!aceita.ok) return aceita;
+  return resultado(await atualizar(client, id, { descricao: aceita.descricao }));
+}
+
+async function gravarMaquina(
   client: Cliente,
   id: string,
   entrada: EntradaSalvarPlano,
@@ -109,7 +124,12 @@ async function gravarSemRecalcular(
   const primeiraData = dataParaValidar(atual, frequencia, hoje);
   const validacao = validar(entrada, frequencia, primeiraData, hoje, maquina);
   if (!validacao.ok) return validacao;
-  return resultado(await atualizar(client, id, camposSemData(atual, entrada, validacao.descricao)));
+  return resultado(
+    await atualizar(client, id, {
+      maquina_id: entrada.maquinaId,
+      descricao: validacao.descricao,
+    }),
+  );
 }
 
 async function gravarFrequencia(
@@ -129,15 +149,6 @@ async function gravarFrequencia(
     ...colunasDaFrequencia(recalculo.frequencia, recalculo.proximaEm),
   });
   return resultado(erro);
-}
-
-function camposSemData(
-  atual: PlanoGravado,
-  entrada: EntradaSalvarPlano,
-  descricao: string,
-): CamposPlano {
-  if (atual.maquina_id === entrada.maquinaId) return { descricao };
-  return { maquina_id: entrada.maquinaId, descricao };
 }
 
 function validar(
@@ -213,11 +224,14 @@ function frequenciaDoPlano(atual: PlanoGravado): FrequenciaPlano {
   return { tipo: 'mensal', diaMes: atual.dia_mes ?? 0 };
 }
 
-function frequenciaIgual(atual: PlanoGravado, nova: FrequenciaEntrada): boolean {
-  if (atual.frequencia_tipo !== nova.tipo) return false;
-  if (nova.tipo === 'a_cada_n_dias') return atual.intervalo_dias === nova.intervalo;
-  if (nova.tipo === 'semanal') return atual.dia_semana === nova.diaSemana;
-  return atual.dia_mes === nova.diaMes;
+function planoEmEdicao(atual: PlanoGravado): PlanoEmEdicao {
+  return {
+    maquinaId: atual.maquina_id,
+    frequenciaTipo: atual.frequencia_tipo,
+    intervaloDias: atual.intervalo_dias,
+    diaSemana: atual.dia_semana,
+    diaMes: atual.dia_mes,
+  };
 }
 
 function dataParaValidar(atual: PlanoGravado, frequencia: FrequenciaPlano, hoje: string): string {
