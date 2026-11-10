@@ -29,11 +29,13 @@ CREATE TABLE public.manutencao_ordens (
   CONSTRAINT manutencao_ordens_tipo_campos CHECK (
     (
       tipo = 'corretiva'
+      AND urgencia IS NOT NULL
       AND urgencia IN (
         'maquina_parou',
         'trabalhando_com_problema',
         'oferecendo_risco'
       )
+      AND tipo_problema IS NOT NULL
       AND tipo_problema IN ('eletrico', 'mecanico', 'ajuste_parametro')
     )
     OR (
@@ -52,6 +54,7 @@ CREATE TABLE public.manutencao_ordens (
       inicio_em IS NOT NULL
       AND fim_em IS NOT NULL
       AND fim_em > inicio_em
+      AND servicos IS NOT NULL
       AND btrim(servicos) <> ''
     )
   ),
@@ -103,7 +106,12 @@ CREATE POLICY manutencao_ordens_select ON public.manutencao_ordens
     OR (SELECT is_admin())
     OR (
       (SELECT auth_tem_modulo('interno_manutencao_solicitacao', 'ler'))
-      AND public.manutencao_setor_vale(setor_id)
+      AND setor_id IN (
+        SELECT lista.setor_id
+        FROM public.manutencao_usuario_setores AS lista
+        WHERE lista.usuario_id = (SELECT auth.uid())
+          AND public.manutencao_setor_vale(lista.setor_id)
+      )
     )
   );
 
@@ -119,7 +127,12 @@ CREATE POLICY manutencao_ordem_pecas_select ON public.manutencao_ordem_pecas
           OR (SELECT is_admin())
           OR (
             (SELECT auth_tem_modulo('interno_manutencao_solicitacao', 'ler'))
-            AND public.manutencao_setor_vale(ordem.setor_id)
+            AND ordem.setor_id IN (
+              SELECT lista.setor_id
+              FROM public.manutencao_usuario_setores AS lista
+              WHERE lista.usuario_id = (SELECT auth.uid())
+                AND public.manutencao_setor_vale(lista.setor_id)
+            )
           )
         )
     )
@@ -137,7 +150,12 @@ CREATE POLICY manutencao_ordem_ajudantes_select ON public.manutencao_ordem_ajuda
           OR (SELECT is_admin())
           OR (
             (SELECT auth_tem_modulo('interno_manutencao_solicitacao', 'ler'))
-            AND public.manutencao_setor_vale(ordem.setor_id)
+            AND ordem.setor_id IN (
+              SELECT lista.setor_id
+              FROM public.manutencao_usuario_setores AS lista
+              WHERE lista.usuario_id = (SELECT auth.uid())
+                AND public.manutencao_setor_vale(lista.setor_id)
+            )
           )
         )
     )
