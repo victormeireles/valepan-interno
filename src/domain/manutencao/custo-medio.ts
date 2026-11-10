@@ -37,17 +37,20 @@ export class CustoMedio {
   valorCentavos(saldoMilesimos: number, custoMedioCentavos: number | null): number {
     if (custoMedioCentavos === null) return 0;
     const numerador = BigInt(saldoMilesimos) * BigInt(custoMedioCentavos);
-    return this.dividirEmpateParaCima(numerador, 1000n);
+    return this.dividirEmpateParaCima(numerador, BigInt(1000));
   }
 
   private dividirEmpateParaCima(numerador: bigint, divisor: bigint): number {
+    const zero = BigInt(0);
+    const um = BigInt(1);
+    const dois = BigInt(2);
     let quociente = numerador / divisor;
     let resto = numerador % divisor;
-    if (divisor > 0n && resto < 0n) {
-      quociente -= 1n;
+    if (divisor > zero && resto < zero) {
+      quociente -= um;
       resto += divisor;
     }
-    if (resto * 2n >= divisor) quociente += 1n;
+    if (resto * dois >= divisor) quociente += um;
     return Number(quociente);
   }
 }
