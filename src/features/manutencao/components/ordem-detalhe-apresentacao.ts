@@ -4,9 +4,6 @@ import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 import { RotulosFila } from './rotulos-fila';
 
-export const apresentacaoOrdem = new ApresentacaoOrdem();
-export const linhaTempoOrdem = new LinhaTempoOrdem();
-
 class ApresentacaoOrdem {
   constructor(
     private readonly precos = new PrecoCentavos(),
@@ -108,3 +105,6 @@ class RelogioSaoPaulo {
     }).format(data);
   }
 }
+
+export const apresentacaoOrdem = new ApresentacaoOrdem();
+export const linhaTempoOrdem = new LinhaTempoOrdem();
