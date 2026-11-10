@@ -50,8 +50,12 @@ CREATE POLICY manutencao_pecas_select ON public.manutencao_pecas
 CREATE POLICY manutencao_pecas_insert ON public.manutencao_pecas
   FOR INSERT TO authenticated
   WITH CHECK (
-    (SELECT auth_tem_modulo('interno_manutencao', 'administrar'))
-    OR (SELECT is_admin())
+    (
+      (SELECT auth_tem_modulo('interno_manutencao', 'administrar'))
+      OR (SELECT is_admin())
+    )
+    AND saldo = 0
+    AND custo_medio_centavos IS NULL
   );
 
 CREATE POLICY manutencao_pecas_update ON public.manutencao_pecas
@@ -156,8 +160,15 @@ BEGIN
     IF p_saldo_novo IS DISTINCT FROM (v_peca.saldo + p_quantidade) THEN
       RAISE EXCEPTION 'Movimento inválido.';
     END IF;
-    IF (v_peca.saldo <= 0 OR v_peca.custo_medio_centavos IS NULL)
-       AND p_custo_novo IS DISTINCT FROM p_preco THEN
+    IF p_custo_novo IS NULL THEN
+      RAISE EXCEPTION 'Movimento inválido.';
+    END IF;
+    IF v_peca.saldo <= 0 OR v_peca.custo_medio_centavos IS NULL THEN
+      IF p_custo_novo IS DISTINCT FROM p_preco THEN
+        RAISE EXCEPTION 'Movimento inválido.';
+      END IF;
+    ELSIF p_custo_novo < LEAST(v_peca.custo_medio_centavos, p_preco)
+       OR p_custo_novo > GREATEST(v_peca.custo_medio_centavos, p_preco) THEN
       RAISE EXCEPTION 'Movimento inválido.';
     END IF;
     v_preco := p_preco;
