@@ -8,6 +8,8 @@ type Pedido = {
   manutencaoEditar: boolean;
   manutencaoAdministrar: boolean;
   motivo: string;
+  setorId: string;
+  setoresElegiveis: readonly string[];
 };
 
 function pedido(parcial: Partial<Pedido> = {}): Pedido {
@@ -18,6 +20,8 @@ function pedido(parcial: Partial<Pedido> = {}): Pedido {
     manutencaoEditar: false,
     manutencaoAdministrar: false,
     motivo: '',
+    setorId: 'setor-1',
+    setoresElegiveis: ['setor-1'],
     ...parcial,
   };
 }
@@ -30,6 +34,48 @@ describe('OrdemCancelamento', () => {
       ok: true,
       exigeMotivo: false,
     });
+  });
+
+  it('recusa o solicitante quando o setor da ordem não está liberado', () => {
+    expect(
+      cancelamento.permite(
+        pedido({
+          solicitacaoEditar: true,
+          setorId: 'setor-2',
+          setoresElegiveis: ['setor-1'],
+        }),
+      ),
+    ).toEqual({ ok: false, mensagem: 'Sem permissão.' });
+    expect(
+      cancelamento.permite(
+        pedido({ solicitacaoEditar: true, setorId: 'setor-1', setoresElegiveis: [] }),
+      ),
+    ).toEqual({ ok: false, mensagem: 'Sem permissão.' });
+  });
+
+  it('deixa oficina e administração cancelarem fora da lista do solicitante', () => {
+    expect(
+      cancelamento.permite(
+        pedido({
+          manutencaoEditar: true,
+          solicitacaoEditar: true,
+          setorId: 'setor-2',
+          setoresElegiveis: [],
+        }),
+      ),
+    ).toEqual({ ok: true, exigeMotivo: false });
+    expect(
+      cancelamento.permite(
+        pedido({
+          manutencaoAdministrar: true,
+          solicitacaoEditar: true,
+          status: 'recebida',
+          motivo: 'Peça errada',
+          setorId: 'setor-9',
+          setoresElegiveis: ['setor-1'],
+        }),
+      ),
+    ).toEqual({ ok: true, exigeMotivo: true });
   });
 
   it('impede o solicitante de cancelar preventiva', () => {

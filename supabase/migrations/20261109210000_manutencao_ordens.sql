@@ -99,6 +99,34 @@ ALTER TABLE public.manutencao_ordens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.manutencao_ordem_pecas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.manutencao_ordem_ajudantes ENABLE ROW LEVEL SECURITY;
 
+-- Custo fica fora do JWT. service_role mantém o acesso padrão da tabela.
+REVOKE ALL ON TABLE public.manutencao_ordens FROM authenticated;
+
+GRANT SELECT (
+  id,
+  numero,
+  tipo,
+  plano_id,
+  maquina_id,
+  setor_id,
+  urgencia,
+  tipo_problema,
+  descricao,
+  status,
+  aberta_por,
+  aberta_em,
+  recebida_por,
+  recebida_em,
+  inicio_em,
+  fim_em,
+  servicos,
+  cancelada_por,
+  cancelada_em,
+  cancelamento_motivo,
+  created_at,
+  updated_at
+) ON public.manutencao_ordens TO authenticated;
+
 CREATE POLICY manutencao_ordens_select ON public.manutencao_ordens
   FOR SELECT TO authenticated
   USING (
@@ -125,15 +153,6 @@ CREATE POLICY manutencao_ordem_pecas_select ON public.manutencao_ordem_pecas
         AND (
           (SELECT auth_tem_modulo('interno_manutencao', 'ler'))
           OR (SELECT is_admin())
-          OR (
-            (SELECT auth_tem_modulo('interno_manutencao_solicitacao', 'ler'))
-            AND ordem.setor_id IN (
-              SELECT lista.setor_id
-              FROM public.manutencao_usuario_setores AS lista
-              WHERE lista.usuario_id = (SELECT auth.uid())
-                AND public.manutencao_setor_vale(lista.setor_id)
-            )
-          )
         )
     )
   );
@@ -148,15 +167,6 @@ CREATE POLICY manutencao_ordem_ajudantes_select ON public.manutencao_ordem_ajuda
         AND (
           (SELECT auth_tem_modulo('interno_manutencao', 'ler'))
           OR (SELECT is_admin())
-          OR (
-            (SELECT auth_tem_modulo('interno_manutencao_solicitacao', 'ler'))
-            AND ordem.setor_id IN (
-              SELECT lista.setor_id
-              FROM public.manutencao_usuario_setores AS lista
-              WHERE lista.usuario_id = (SELECT auth.uid())
-                AND public.manutencao_setor_vale(lista.setor_id)
-            )
-          )
         )
     )
   );

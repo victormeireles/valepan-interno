@@ -11,6 +11,7 @@ import {
 import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { FlagsDaOrdem } from './manutencao-ordem-flags';
 import { OrdemLeitura, type ClienteOrdem } from './manutencao-ordem-leitura';
 
 const MODULOS_ORDEM: readonly InternoModuloId[] = [
@@ -68,7 +69,13 @@ export async function devolverOrdem(numero: number): Promise<ResultadoAcao> {
   const ordem = await lerOrdemAcao(client, numero);
   const recusa = recusaDevolucao(ordem, snap, usuarioId);
   if (recusa) return recusa;
-  const gravou = await atualizarOrdem(client, numero, 'recebida', camposDevolucao());
+  const gravou = await atualizarOrdem(
+    client,
+    numero,
+    'recebida',
+    camposDevolucao(),
+    new ManutencaoAcesso().administra(snap) ? null : usuarioId,
+  );
   if (!gravou) return { ok: false, mensagem: MENSAGEM_MUDOU };
   return { ok: true, mensagem: MENSAGEM_DEVOLVIDA };
 }
@@ -221,7 +228,10 @@ async function prepararCancelamento(
   }
   const tipo = tipoOrdem(ordem.tipo);
   if (!tipo) return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
-  const decisao = new OrdemCancelamento().permite(pedidoCancelamento(ordem, snap, tipo, motivo));
+  const setores = await new FlagsDaOrdem().setoresDoSolicitante(leitura, snap, usuarioId);
+  const decisao = new OrdemCancelamento().permite(
+    pedidoCancelamento(ordem, snap, tipo, motivo, setores),
+  );
   if (!decisao.ok) return decisao;
   return { exigeMotivo: decisao.exigeMotivo };
 }
@@ -231,6 +241,7 @@ function pedidoCancelamento(
   snap: UsuarioAuthzSnapshot,
   tipo: 'corretiva' | 'preventiva',
   motivo: string,
+  setores: readonly string[],
 ) {
   const acesso = new ManutencaoAcesso();
   return {
@@ -244,6 +255,8 @@ function pedidoCancelamento(
     manutencaoEditar: acesso.executaOficina(snap),
     manutencaoAdministrar: acesso.administra(snap),
     motivo,
+    setorId: ordem.setor_id,
+    setoresElegiveis: setores,
   };
 }
 
@@ -274,14 +287,16 @@ async function atualizarOrdem(
   numero: number,
   statusAtual: string,
   campos: Record<string, unknown>,
+  recebidaPor: string | null = null,
 ): Promise<boolean> {
   if (!Number.isInteger(numero) || numero <= 0) return false;
-  const { data, error } = await client
+  const consulta = client
     .from('manutencao_ordens' as never)
     .update(campos as never)
     .eq('numero', numero)
-    .eq('status', statusAtual)
-    .select('numero');
+    .eq('status', statusAtual);
+  const filtrada = recebidaPor ? consulta.eq('recebida_por', recebidaPor) : consulta;
+  const { data, error } = await filtrada.select('numero');
   if (error) throw new Error(error.message);
   return ((data ?? []) as unknown[]).length > 0;
 }

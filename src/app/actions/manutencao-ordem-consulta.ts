@@ -3,15 +3,12 @@
 import { FilaFundacao } from '@/domain/manutencao/fila-fundacao';
 import { FilaOrdem, type FilaItem } from '@/domain/manutencao/fila-ordem';
 import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
-import { OrdemCancelamento } from '@/domain/manutencao/ordem-cancelamento';
 import { OrdemPermissao } from '@/domain/manutencao/ordem-permissao';
-import {
-  InternoAccessManager,
-  type UsuarioAuthzSnapshot,
-} from '@/lib/auth/interno-access-manager';
+import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
 import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { FlagsDaOrdem } from './manutencao-ordem-flags';
 import {
   OrdemLeitura,
   type ClienteOrdem,
@@ -24,8 +21,6 @@ const MODULOS_ORDEM: readonly InternoModuloId[] = [
   'interno_manutencao',
   'interno_manutencao_solicitacao',
 ];
-
-const MOTIVO_SONDA = 'motivo';
 
 export type LinhaFila = {
   numero: number;
@@ -248,11 +243,13 @@ async function comporOrdem(
   if (!tipo || !status) return null;
   const veValores = new ManutencaoAcesso().veTodas(snap);
   const nomes = await nomesDaOrdem(leitura, ordem);
+  const flags = new FlagsDaOrdem();
+  const setores = await flags.setoresDoSolicitante(leitura, snap, usuarioId);
   return {
     ...camposOrdem(ordem, tipo, status, nomes, veValores),
     pecas: await leitura.pecas(ordem.id, veValores),
     ajudantes: await leitura.ajudantes(ordem.id),
-    ...flagsDaOrdem(ordem, snap, usuarioId),
+    ...flags.calcular(ordem, snap, usuarioId, setores),
   };
 }
 
@@ -296,51 +293,6 @@ function camposOrdem(
     cancelamentoMotivo: ordem.cancelamento_motivo,
     custoPecasCentavos: veValores ? ordem.custo_pecas_centavos : null,
   };
-}
-
-function flagsDaOrdem(ordem: OrdemBruta, snap: UsuarioAuthzSnapshot, usuarioId: string) {
-  const acesso = new ManutencaoAcesso();
-  const podeConcluir = podeDevolverOuFinalizar(ordem, snap, usuarioId);
-  const cancelamento = decisaoCancelamento(ordem, snap);
-  return {
-    podeReceber: ordem.status === 'aberta' && acesso.executaOficina(snap),
-    podeDevolver: podeConcluir,
-    podeFinalizar: podeConcluir,
-    podeCancelar: cancelamento?.ok === true,
-    exigeMotivo: cancelamento?.ok === true && cancelamento.exigeMotivo,
-  };
-}
-
-function podeDevolverOuFinalizar(
-  ordem: OrdemBruta,
-  snap: UsuarioAuthzSnapshot,
-  usuarioId: string,
-): boolean {
-  if (ordem.status !== 'recebida' || !ordem.recebida_por) return false;
-  return new OrdemPermissao().devolveOuFinaliza({
-    status: 'recebida',
-    recebidoPor: ordem.recebida_por,
-    usuarioId,
-    administra: new ManutencaoAcesso().administra(snap),
-  });
-}
-
-function decisaoCancelamento(ordem: OrdemBruta, snap: UsuarioAuthzSnapshot) {
-  const tipo = tipoOrdem(ordem.tipo);
-  if (!tipo) return null;
-  const acesso = new ManutencaoAcesso();
-  return new OrdemCancelamento().permite({
-    status: ordem.status,
-    tipo,
-    solicitacaoEditar: new InternoAccessManager().temModulo(
-      snap,
-      'interno_manutencao_solicitacao',
-      'editar',
-    ),
-    manutencaoEditar: acesso.executaOficina(snap),
-    manutencaoAdministrar: acesso.administra(snap),
-    motivo: MOTIVO_SONDA,
-  });
 }
 
 function nomeDe(nomes: Map<string, string>, id: string | null): string | null {

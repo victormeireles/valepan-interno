@@ -5,6 +5,8 @@ type PedidoCancelamento = {
   manutencaoEditar: boolean;
   manutencaoAdministrar: boolean;
   motivo: string;
+  setorId: string;
+  setoresElegiveis: readonly string[];
 };
 
 type ResultadoCancelamento = { ok: true; exigeMotivo: boolean } | { ok: false; mensagem: string };
@@ -40,6 +42,7 @@ export class OrdemCancelamento {
   }
 
   private comoSolicitante(args: PedidoCancelamento): ResultadoCancelamento {
+    if (!args.setoresElegiveis.includes(args.setorId)) return this.recusar('Sem permissão.');
     if (args.tipo === 'preventiva') return this.recusar('Solicitante não cancela preventiva.');
     if (args.status === STATUS_ABERTO) return { ok: true, exigeMotivo: false };
     return this.recusar('Solicitante só cancela corretiva aberta.');
