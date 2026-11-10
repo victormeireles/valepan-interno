@@ -9,6 +9,7 @@ export type FaltaDocumentoEntrada = {
   classificacao: string;
   cancelada: boolean;
   temAnexo: boolean;
+  situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
 };
 
 export type SituacaoDocumento = 'atrasado' | 'enviar_hoje' | 'ainda_ausente';
@@ -58,7 +59,7 @@ export class FaltaDocumentoFila {
     const pessoas = new Map<string, Map<string, DiaFalta>>();
     for (const falta of faltas) {
       const data = extractCalendarDate(falta.data);
-      if (falta.cancelada || !falta.codigo || !data) continue;
+      if (falta.cancelada || falta.situacao !== 'ativo' || !falta.codigo || !data) continue;
       const dias = pessoas.get(falta.codigo) ?? new Map<string, DiaFalta>();
       this.incluir(dias, falta, data);
       pessoas.set(falta.codigo, dias);

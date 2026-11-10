@@ -11,6 +11,7 @@ function falta(parcial: Partial<FaltaDocumentoEntrada> & Pick<FaltaDocumentoEntr
     classificacao: 'injustificada',
     cancelada: false,
     temAnexo: false,
+    situacao: 'ativo',
     ...parcial,
   };
 }
@@ -93,6 +94,14 @@ describe('FaltaDocumentoFila', () => {
       falta({ id: 'cancelada', data: '2026-11-06', cancelada: true }),
       falta({ id: 'justificada', data: '2026-11-05', classificacao: 'justificada' }),
       falta({ id: 'suspensao', data: '2026-11-04', classificacao: 'suspensao' }),
+    ], HOJE);
+    expect(periodos).toEqual([]);
+  });
+
+  it('não cobra documento de colaborador desligado', () => {
+    const periodos = fila.montar([
+      falta({ id: 'desligado', data: '2026-11-05', situacao: 'desligado' }),
+      falta({ id: 'afastado', data: '2026-11-06', codigo: 'VP-2', nome: 'Bia', situacao: 'afastado' }),
     ], HOJE);
     expect(periodos).toEqual([]);
   });
