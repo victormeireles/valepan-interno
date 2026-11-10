@@ -45,6 +45,7 @@ describe('MAIN_NAV_ENTRIES', () => {
       '/manutencao/nova',
       '/manutencao/maquinas',
       '/manutencao/pecas',
+      '/manutencao/preventiva',
       '/manutencao/solicitantes',
     ]);
     expect(manutencao.children.map((child) => child.label)).toEqual([
@@ -52,6 +53,7 @@ describe('MAIN_NAV_ENTRIES', () => {
       'Nova ordem',
       'Máquinas',
       'Peças',
+      'Preventiva',
       'Solicitantes',
     ]);
     expect(manutencao.children[0]).toMatchObject({
@@ -75,6 +77,12 @@ describe('MAIN_NAV_ENTRIES', () => {
       moduloId: 'interno_manutencao',
     });
     expect(manutencao.children[4]).toMatchObject({
+      href: '/manutencao/preventiva',
+      label: 'Preventiva',
+      icon: 'event_repeat',
+      moduloId: 'interno_manutencao',
+    });
+    expect(manutencao.children[5]).toMatchObject({
       moduloId: 'interno_manutencao',
       nivelMinimo: 'administrar',
       icon: 'manage_accounts',
@@ -89,6 +97,9 @@ describe('MAIN_NAV_ENTRIES', () => {
       (child) => child.href === '/manutencao/maquinas',
     );
     const pecas = manutencao.children.find((child) => child.href === '/manutencao/pecas');
+    const preventiva = manutencao.children.find(
+      (child) => child.href === '/manutencao/preventiva',
+    );
     const solicitantes = manutencao.children.find(
       (child) => child.href === '/manutencao/solicitantes',
     );
@@ -99,6 +110,7 @@ describe('MAIN_NAV_ENTRIES', () => {
     expect(manutencao.match('/manutencao/solicitantes')).toBe(true);
     expect(manutencao.match('/manutencao/nova')).toBe(true);
     expect(manutencao.match('/manutencao/ordens')).toBe(true);
+    expect(manutencao.match('/manutencao/preventiva')).toBe(true);
     expect(fila?.match('/manutencao')).toBe(true);
     expect(fila?.match('/manutencao/maquinas')).toBe(false);
     expect(fila?.match('/manutencao/pecas')).toBe(false);
@@ -106,11 +118,14 @@ describe('MAIN_NAV_ENTRIES', () => {
     expect(fila?.match('/manutencao/nova')).toBe(false);
     expect(fila?.match('/manutencao/ordens')).toBe(false);
     expect(fila?.match('/manutencao/ordens/12')).toBe(false);
+    expect(fila?.match('/manutencao/preventiva')).toBe(false);
     expect(nova?.match('/manutencao/nova')).toBe(true);
     expect(nova?.match('/manutencao/ordens')).toBe(false);
     expect(maquinas?.match('/manutencao/maquinas')).toBe(true);
     expect(pecas?.match('/manutencao/pecas')).toBe(true);
     expect(pecas?.match('/manutencao/pecas/entrada')).toBe(true);
+    expect(preventiva?.match('/manutencao/preventiva')).toBe(true);
+    expect(preventiva?.match('/manutencao')).toBe(false);
     expect(pecas?.match('/manutencao')).toBe(false);
     expect(pecas?.match('/manutencao/maquinas')).toBe(false);
     expect(pecas?.match('/manutencao/solicitantes')).toBe(false);

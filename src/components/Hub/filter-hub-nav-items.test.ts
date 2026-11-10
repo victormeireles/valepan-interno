@@ -25,7 +25,7 @@ describe('HUB_SECTIONS', () => {
     ]);
   });
 
-  it('abre manutenção com fila, nova ordem, máquinas, peças e solicitantes', () => {
+  it('abre manutenção com fila, nova ordem, máquinas, peças, preventiva e solicitantes', () => {
     const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
     expect(secao?.title).toBe('Manutenção');
     expect(secao?.items).toEqual([
@@ -58,6 +58,13 @@ describe('HUB_SECTIONS', () => {
         title: 'Peças',
         description: 'Saldo e movimentos',
         icon: 'construction',
+        moduloId: 'interno_manutencao',
+      },
+      {
+        href: '/manutencao/preventiva',
+        title: 'Preventiva',
+        description: 'Planos e próxima data',
+        icon: 'event_repeat',
         moduloId: 'interno_manutencao',
       },
       {
@@ -190,6 +197,10 @@ describe('filterHubNavItems', () => {
     expect(hrefs({ interno_manutencao: 'editar' })).toContain('/manutencao/nova');
     expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).toContain(
       '/manutencao/nova',
+    );
+    expect(hrefs({ interno_manutencao: 'ler' })).toContain('/manutencao/preventiva');
+    expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).not.toContain(
+      '/manutencao/preventiva',
     );
   });
 

@@ -83,6 +83,11 @@ describe('InternoRouteAccessMap', () => {
       modulo: 'interno_manutencao',
       minimo: 'ler',
     });
+    expect(map.resolve('/manutencao/preventiva')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_manutencao',
+      minimo: 'ler',
+    });
   });
 
   it('protege nova ordem e o detalhe com leitura, antes do prefixo da fila', () => {
@@ -97,14 +102,19 @@ describe('InternoRouteAccessMap', () => {
     const indiceOrdens = MANUTENCAO_ROUTE_RULES.findIndex(
       (rule) => rule.prefix === '/manutencao/ordens',
     );
+    const indicePreventiva = MANUTENCAO_ROUTE_RULES.findIndex(
+      (rule) => rule.prefix === '/manutencao/preventiva',
+    );
     const indiceFila = MANUTENCAO_ROUTE_RULES.findIndex(
       (rule) => rule.prefix === '/manutencao',
     );
 
     expect(indiceNova).toBeGreaterThanOrEqual(0);
     expect(indiceOrdens).toBeGreaterThanOrEqual(0);
+    expect(indicePreventiva).toBeGreaterThanOrEqual(0);
     expect(indiceNova).toBeLessThan(indiceFila);
     expect(indiceOrdens).toBeLessThan(indiceFila);
+    expect(indicePreventiva).toBeLessThan(indiceFila);
     expect(MANUTENCAO_ROUTE_RULES[indiceNova]?.requirement).toEqual(leitura);
     expect(MANUTENCAO_ROUTE_RULES[indiceOrdens]?.requirement).toEqual(leitura);
     expect(map.resolve('/manutencao/nova')).toEqual(leitura);

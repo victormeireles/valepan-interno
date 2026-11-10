@@ -238,6 +238,13 @@ export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_manutencao',
   },
   {
+    href: '/manutencao/preventiva',
+    title: 'Preventiva',
+    description: 'Planos e próxima data',
+    icon: 'event_repeat',
+    moduloId: 'interno_manutencao',
+  },
+  {
     href: '/manutencao/solicitantes',
     title: 'Solicitantes',
     description: 'Setores que podem abrir ordem',
