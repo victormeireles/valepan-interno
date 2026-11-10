@@ -51,4 +51,33 @@ describe('ManutencaoAcesso', () => {
     expect(acesso.administra(semModulo)).toBe(false);
     expect(acesso.veFila(semModulo)).toBe(false);
   });
+
+  it('editar e administrar movimentam o estoque', () => {
+    const editar = snap({
+      modulosEfetivos: { interno_manutencao: 'editar' },
+    });
+    const administrar = snap({
+      modulosEfetivos: { interno_manutencao: 'administrar' },
+    });
+
+    expect(acesso.movimenta(editar)).toBe(true);
+    expect(acesso.movimenta(administrar)).toBe(true);
+  });
+
+  it('leitura, solicitação e ausência de módulo não movimentam', () => {
+    const leitura = snap({
+      modulosEfetivos: { interno_manutencao: 'ler' },
+    });
+    const solicitacao = snap({
+      modulosEfetivos: { interno_manutencao_solicitacao: 'editar' },
+    });
+
+    expect(acesso.movimenta(leitura)).toBe(false);
+    expect(acesso.movimenta(solicitacao)).toBe(false);
+    expect(acesso.movimenta(snap())).toBe(false);
+  });
+
+  it('dono do sistema movimenta mesmo sem módulos', () => {
+    expect(acesso.movimenta(snap({ isSystemOwner: true }))).toBe(true);
+  });
 });

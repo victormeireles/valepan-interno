@@ -18,6 +18,10 @@ export class ManutencaoAcesso {
     return this.manager.temModulo(snap, MODULO_MANUTENCAO, 'ler');
   }
 
+  movimenta(snap: UsuarioAuthzSnapshot): boolean {
+    return this.manager.temModulo(snap, MODULO_MANUTENCAO, 'editar');
+  }
+
   administra(snap: UsuarioAuthzSnapshot): boolean {
     return this.manager.temModulo(snap, MODULO_MANUTENCAO, 'administrar');
   }
