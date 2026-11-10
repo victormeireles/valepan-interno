@@ -1,5 +1,13 @@
 import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
 
+/** Mesmo conjunto de `MODULOS_MANUTENCAO_ENTRADA` (domínio); literal evita acoplar config ao domínio. */
+const MODULOS_MANUTENCAO_ENTRADA_HUB: InternoModuloId[] = [
+  'interno_manutencao',
+  'interno_fermentacao',
+  'interno_forno',
+  'interno_embalagem',
+];
+
 export interface HubNavItem {
   href: string;
   title: string;
@@ -208,20 +216,11 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
 export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
   {
     href: '/manutencao',
-    title: 'Fila',
-    description: 'Ordens abertas e recebidas',
+    title: 'Ordens de Serviço',
+    description: 'Fila, detalhe e nova corretiva',
     icon: 'handyman',
     moduloId: 'interno_manutencao',
-    moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
-  },
-  {
-    href: '/manutencao/nova',
-    title: 'Nova ordem',
-    description: 'Abrir corretiva',
-    icon: 'add',
-    moduloId: 'interno_manutencao',
-    moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
-    nivelMinimo: 'editar',
+    moduloIds: MODULOS_MANUTENCAO_ENTRADA_HUB,
   },
   {
     href: '/manutencao/maquinas',
@@ -250,14 +249,6 @@ export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
     description: 'Horas e real no período',
     icon: 'analytics',
     moduloId: 'interno_manutencao',
-  },
-  {
-    href: '/manutencao/solicitantes',
-    title: 'Solicitantes',
-    description: 'Setores que podem abrir ordem',
-    icon: 'manage_accounts',
-    moduloId: 'interno_manutencao',
-    nivelMinimo: 'administrar',
   },
 ];
 

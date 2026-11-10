@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useId, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -12,7 +12,7 @@ export type MaquinaFormularioValor = MaquinaEntrada & {
   setorNome?: string;
 };
 
-const FORMULARIO_LIMPO: MaquinaFormularioValor = {
+export const FORMULARIO_MAQUINA_VAZIO: MaquinaFormularioValor = {
   codigo: '',
   nome: '',
   setorId: '',
@@ -21,133 +21,128 @@ const FORMULARIO_LIMPO: MaquinaFormularioValor = {
 };
 
 type MaquinaFormularioProps = {
-  setores: SetorLinha[];
   valor: MaquinaFormularioValor;
+  setores: SetorLinha[];
   podeGravar: boolean;
-  onSubmit: (valor: MaquinaFormularioValor) => void | Promise<void>;
+  salvando: boolean;
+  erro?: string | null;
+  onChange: (valor: MaquinaFormularioValor) => void;
+  onSubmit: () => void | Promise<unknown>;
+  onCancelar: () => void;
 };
 
-const CARTAO = 'rounded-xl border border-stone-200 bg-white shadow-sm';
-
 export function MaquinaFormulario({
-  setores,
   valor,
+  setores,
   podeGravar,
+  salvando,
+  erro,
+  onChange,
   onSubmit,
+  onCancelar,
 }: MaquinaFormularioProps) {
-  const [valorFormulario, setValorFormulario] = useState(valor);
-  const [salvando, setSalvando] = useState(false);
+  const codigoId = useId();
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (!podeGravar || salvando) return;
-    setSalvando(true);
-    try {
-      await onSubmit(valorFormulario);
-    } finally {
-      setSalvando(false);
-    }
+    await onSubmit();
   }
 
-  function alterarValor(alteracao: Partial<MaquinaFormularioValor>) {
-    setValorFormulario((estado) => ({ ...estado, ...alteracao }));
-  }
-
-  function novaMaquina() {
-    setValorFormulario(FORMULARIO_LIMPO);
+  function alterar(alteracao: Partial<MaquinaFormularioValor>) {
+    onChange({ ...valor, ...alteracao });
   }
 
   return (
-    <form onSubmit={enviar} className={`${CARTAO} space-y-4 p-4`}>
-      <CamposMaquina
-        valorFormulario={valorFormulario}
-        podeGravar={podeGravar}
-        setores={setores}
-        onAlterar={alterarValor}
-      />
-      <AcoesFormulario
-        editando={Boolean(valorFormulario.id)}
-        podeGravar={podeGravar}
-        salvando={salvando}
-        onNova={novaMaquina}
-      />
+    <form onSubmit={enviar} className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+        {erro ? (
+          <p
+            role="alert"
+            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700"
+          >
+            <span className="material-icons text-base" aria-hidden="true">
+              error
+            </span>
+            {erro}
+          </p>
+        ) : null}
+        <CamposMaquina
+          valor={valor}
+          podeGravar={podeGravar}
+          setores={setores}
+          codigoId={codigoId}
+          onAlterar={alterar}
+        />
+      </div>
+      <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-stone-100 px-4 py-4 sm:flex-row sm:px-5">
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          disabled={salvando}
+          className="flex-1"
+          onClick={onCancelar}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" size="lg" icon="save" disabled={!podeGravar || salvando} className="flex-1">
+          {salvando ? 'Salvando…' : 'Salvar'}
+        </Button>
+      </div>
     </form>
   );
 }
 
-function AcoesFormulario({
-  editando,
-  podeGravar,
-  salvando,
-  onNova,
-}: {
-  editando: boolean;
-  podeGravar: boolean;
-  salvando: boolean;
-  onNova: () => void;
-}) {
-  if (!editando && !podeGravar) return null;
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      {editando ? (
-        <Button type="button" variant="secondary" size="lg" disabled={salvando} onClick={onNova}>
-          Nova máquina
-        </Button>
-      ) : null}
-      {podeGravar ? (
-        <Button type="submit" size="lg" disabled={salvando}>
-          Salvar
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 function CamposMaquina({
-  valorFormulario,
+  valor,
   podeGravar,
   setores,
+  codigoId,
   onAlterar,
 }: {
-  valorFormulario: MaquinaFormularioValor;
+  valor: MaquinaFormularioValor;
   podeGravar: boolean;
   setores: SetorLinha[];
+  codigoId: string;
   onAlterar: (alteracao: Partial<MaquinaFormularioValor>) => void;
 }) {
   return (
-    <>
+    <div className="grid gap-4 sm:grid-cols-2">
       <Input
+        id={codigoId}
         label="Código"
-        value={valorFormulario.codigo}
+        value={valor.codigo}
+        autoComplete="off"
+        autoFocus
         disabled={!podeGravar}
         onChange={(evento) => onAlterar({ codigo: evento.target.value })}
       />
       <Input
         label="Nome"
-        value={valorFormulario.nome}
+        value={valor.nome}
+        autoComplete="off"
         disabled={!podeGravar}
         onChange={(evento) => onAlterar({ nome: evento.target.value })}
       />
       <Select
         label="Setor"
-        value={valorFormulario.setorId}
+        value={valor.setorId}
         disabled={!podeGravar}
-        options={opcoesDeSetor(setores, valorFormulario)}
+        options={opcoesDeSetor(setores, valor)}
         onChange={(evento) => onAlterar({ setorId: evento.target.value })}
       />
-      <Input
-        label="Observação"
-        value={valorFormulario.observacao}
-        disabled={!podeGravar}
-        onChange={(evento) => onAlterar({ observacao: evento.target.value })}
-      />
-      <CampoAtiva
-        ativo={valorFormulario.ativo}
-        podeGravar={podeGravar}
-        onAlterar={onAlterar}
-      />
-    </>
+      <CampoAtiva ativo={valor.ativo} podeGravar={podeGravar} onAlterar={onAlterar} />
+      <div className="sm:col-span-2">
+        <Input
+          label="Observação"
+          value={valor.observacao}
+          autoComplete="off"
+          disabled={!podeGravar}
+          onChange={(evento) => onAlterar({ observacao: evento.target.value })}
+        />
+      </div>
+    </div>
   );
 }
 

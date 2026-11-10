@@ -5,6 +5,10 @@ import {
   type MaquinaEntrada,
   type MaquinaLinhaValidada,
 } from '@/domain/manutencao/maquina-cadastro';
+import {
+  MaquinaRemocao,
+  type AvaliacaoRemocaoMaquina,
+} from '@/domain/manutencao/maquina-remocao';
 import { SetorOperacional, type SetorLinha } from '@/domain/manutencao/setor-operacional';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -63,6 +67,61 @@ export async function salvarMaquina(
     ? await atualizarMaquina(client, entrada.id, validacao.linha)
     : await inserirMaquina(client, validacao.linha);
   return erro ? { ok: false, mensagem: erro } : { ok: true, mensagem: 'Máquina salva.' };
+}
+
+export async function avaliarRemocaoMaquina(id: string): Promise<AvaliacaoRemocaoMaquina> {
+  await requireInternoModulo('interno_manutencao', 'administrar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  return new MaquinaRemocao().avaliar(await lerVinculosMaquina(client, id));
+}
+
+export async function removerMaquina(id: string): Promise<Resultado> {
+  await requireInternoModulo('interno_manutencao', 'administrar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const avaliacao = new MaquinaRemocao().avaliar(await lerVinculosMaquina(client, id));
+  if (!avaliacao.pode) {
+    return { ok: false, mensagem: avaliacao.mensagem };
+  }
+  const { data, error } = await client
+    .from('manutencao_maquinas' as never)
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) {
+    return {
+      ok: false,
+      mensagem:
+        error.code === '23503'
+          ? 'Não é possível remover esta máquina. Há vínculos que precisam ser removidos antes.'
+          : error.message,
+    };
+  }
+  if (!data || (data as unknown[]).length === 0) {
+    return { ok: false, mensagem: 'Máquina não encontrada.' };
+  }
+  return { ok: true, mensagem: 'Máquina removida.' };
+}
+
+async function lerVinculosMaquina(client: Cliente, id: string) {
+  const [ordens, planos] = await Promise.all([
+    contar(client, 'manutencao_ordens', 'maquina_id', id),
+    contar(client, 'manutencao_planos', 'maquina_id', id),
+  ]);
+  return { ordens, planos };
+}
+
+async function contar(
+  client: Cliente,
+  tabela: string,
+  coluna: string,
+  id: string,
+): Promise<number> {
+  const { count, error } = await client
+    .from(tabela as never)
+    .select('id', { count: 'exact', head: true })
+    .eq(coluna, id);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 async function lerSetores(client: Cliente): Promise<SetorLinha[]> {

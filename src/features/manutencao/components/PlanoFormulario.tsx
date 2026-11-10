@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type FormEvent } from 'react';
+import { useId, type FormEvent } from 'react';
 import type { EntradaSalvarPlano, FrequenciaEntrada } from '@/app/actions/manutencao-plano-actions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -37,10 +37,14 @@ export const FORMULARIO_PLANO_VAZIO: PlanoFormularioValor = {
 type PlanoFormularioProps = {
   maquinas: MaquinaPlanoOpcao[];
   valor: PlanoFormularioValor;
+  origem: PlanoFormularioValor;
+  salvando: boolean;
+  erro?: string | null;
+  onChange: (valor: PlanoFormularioValor) => void;
   onSubmit: (entrada: EntradaSalvarPlano) => void | Promise<unknown>;
+  onCancelar: () => void;
 };
 
-const CARTAO = 'rounded-xl border border-stone-200 bg-white p-4 shadow-sm';
 const TIPOS: SelectOption[] = [
   { value: 'a_cada_n_dias', label: 'A cada N dias' },
   { value: 'semanal', label: 'Semanal' },
@@ -56,65 +60,91 @@ const DIAS_SEMANA: SelectOption[] = [
   { value: '7', label: 'Domingo' },
 ];
 
-export function PlanoFormulario({ maquinas, valor, onSubmit }: PlanoFormularioProps) {
-  const [valorFormulario, setValorFormulario] = useState(valor);
-  const [salvando, setSalvando] = useState(false);
-  const editando = Boolean(valorFormulario.id);
-  const frequenciaAlterada = editando && frequenciaDiferente(valorFormulario, valor);
+export function PlanoFormulario({
+  maquinas,
+  valor,
+  origem,
+  salvando,
+  erro,
+  onChange,
+  onSubmit,
+  onCancelar,
+}: PlanoFormularioProps) {
+  const editando = Boolean(valor.id);
+  const frequenciaAlterada = editando && frequenciaDiferente(valor, origem);
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (salvando) return;
-    setSalvando(true);
-    try {
-      await onSubmit(new EntradaDoFormulario().montar(valorFormulario));
-    } finally {
-      setSalvando(false);
-    }
+    await onSubmit(new EntradaDoFormulario().montar(valor));
   }
 
   function alterar(alteracao: Partial<PlanoFormularioValor>) {
-    setValorFormulario((estado) => ({ ...estado, ...alteracao }));
+    onChange({ ...valor, ...alteracao });
   }
 
   return (
-    <form onSubmit={enviar} className={`${CARTAO} space-y-4`}>
-      <CamposPlano
-        maquinas={maquinas}
-        valorFormulario={valorFormulario}
-        editando={editando}
-        frequenciaAlterada={frequenciaAlterada}
-        onAlterar={alterar}
-      />
-      <AcoesFormulario
-        salvando={salvando}
-        onNovo={() => setValorFormulario(FORMULARIO_PLANO_VAZIO)}
-      />
+    <form onSubmit={enviar} className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+        {erro ? (
+          <p
+            role="alert"
+            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700"
+          >
+            <span className="material-icons text-base" aria-hidden="true">
+              error
+            </span>
+            {erro}
+          </p>
+        ) : null}
+        <CamposPlano
+          maquinas={maquinas}
+          valor={valor}
+          editando={editando}
+          frequenciaAlterada={frequenciaAlterada}
+          onAlterar={alterar}
+        />
+      </div>
+      <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-stone-100 px-4 py-4 sm:flex-row sm:px-5">
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          disabled={salvando}
+          className="flex-1"
+          onClick={onCancelar}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" size="lg" icon="save" disabled={salvando} className="flex-1">
+          {salvando ? 'Salvando…' : 'Salvar'}
+        </Button>
+      </div>
     </form>
   );
 }
 
 function CamposPlano({
   maquinas,
-  valorFormulario,
+  valor,
   editando,
   frequenciaAlterada,
   onAlterar,
 }: {
   maquinas: MaquinaPlanoOpcao[];
-  valorFormulario: PlanoFormularioValor;
+  valor: PlanoFormularioValor;
   editando: boolean;
   frequenciaAlterada: boolean;
   onAlterar: (alteracao: Partial<PlanoFormularioValor>) => void;
 }) {
-  const opcoes = new OpcoesDeMaquina().listar(maquinas, valorFormulario);
+  const opcoes = new OpcoesDeMaquina().listar(maquinas, valor);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Select
         label="Máquina"
         required
-        value={valorFormulario.maquinaId}
+        value={valor.maquinaId}
         options={opcoesMaquina(opcoes)}
         hint={opcoes.length === 0 ? 'Nenhuma máquina ativa.' : undefined}
         onChange={(evento) => onAlterar({ maquinaId: evento.target.value })}
@@ -122,21 +152,21 @@ function CamposPlano({
       <Select
         label="Frequência"
         required
-        value={valorFormulario.tipo}
+        value={valor.tipo}
         options={TIPOS}
         onChange={(evento) =>
           onAlterar({ tipo: evento.target.value as PlanoFormularioValor['tipo'] })
         }
       />
-      <CampoDaFrequencia valorFormulario={valorFormulario} onAlterar={onAlterar} />
+      <CampoDaFrequencia valor={valor} onAlterar={onAlterar} />
       <CampoData
-        valorFormulario={valorFormulario}
+        valor={valor}
         editando={editando}
         frequenciaAlterada={frequenciaAlterada}
         onAlterar={onAlterar}
       />
       <CampoDescricao
-        descricao={valorFormulario.descricao}
+        descricao={valor.descricao}
         onAlterar={(descricao) => onAlterar({ descricao })}
       />
     </div>
@@ -144,24 +174,24 @@ function CamposPlano({
 }
 
 function CampoDaFrequencia({
-  valorFormulario,
+  valor,
   onAlterar,
 }: {
-  valorFormulario: PlanoFormularioValor;
+  valor: PlanoFormularioValor;
   onAlterar: (alteracao: Partial<PlanoFormularioValor>) => void;
 }) {
-  if (valorFormulario.tipo === 'semanal') {
+  if (valor.tipo === 'semanal') {
     return (
       <Select
         label="Dia da semana"
         required
-        value={valorFormulario.diaSemana}
+        value={valor.diaSemana}
         options={DIAS_SEMANA}
         onChange={(evento) => onAlterar({ diaSemana: evento.target.value })}
       />
     );
   }
-  if (valorFormulario.tipo === 'mensal') {
+  if (valor.tipo === 'mensal') {
     return (
       <Input
         label="Dia do mês"
@@ -170,7 +200,7 @@ function CampoDaFrequencia({
         required
         min={1}
         max={28}
-        value={valorFormulario.diaMes}
+        value={valor.diaMes}
         onChange={(evento) => onAlterar({ diaMes: evento.target.value })}
       />
     );
@@ -182,19 +212,19 @@ function CampoDaFrequencia({
       numeric
       required
       min={1}
-      value={valorFormulario.intervalo}
+      value={valor.intervalo}
       onChange={(evento) => onAlterar({ intervalo: evento.target.value })}
     />
   );
 }
 
 function CampoData({
-  valorFormulario,
+  valor,
   editando,
   frequenciaAlterada,
   onAlterar,
 }: {
-  valorFormulario: PlanoFormularioValor;
+  valor: PlanoFormularioValor;
   editando: boolean;
   frequenciaAlterada: boolean;
   onAlterar: (alteracao: Partial<PlanoFormularioValor>) => void;
@@ -206,7 +236,7 @@ function CampoData({
       numeric
       required
       disabled={editando}
-      value={valorFormulario.data}
+      value={valor.data}
       hint={
         frequenciaAlterada
           ? 'Ao salvar, a próxima data passa para o encaixe seguinte.'
@@ -239,19 +269,6 @@ function CampoDescricao({
         onChange={(evento) => onAlterar(evento.target.value)}
         className="min-h-28 w-full rounded-[9px] border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/35"
       />
-    </div>
-  );
-}
-
-function AcoesFormulario({ salvando, onNovo }: { salvando: boolean; onNovo: () => void }) {
-  return (
-    <div className="flex flex-wrap gap-3">
-      <Button type="button" variant="secondary" size="lg" disabled={salvando} onClick={onNovo}>
-        Novo plano
-      </Button>
-      <Button type="submit" size="lg" disabled={salvando}>
-        Salvar
-      </Button>
     </div>
   );
 }

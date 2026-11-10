@@ -62,21 +62,21 @@ describe('InternoRouteAccessMap', () => {
     });
   });
 
-  it('protege manutenção: fila com qualquer módulo, máquinas e solicitantes no módulo da oficina', () => {
+  it('protege manutenção: fila com qualquer módulo de entrada e máquinas no módulo da oficina', () => {
     expect(map.resolve('/manutencao')).toEqual({
       kind: 'anyModulo',
-      modulos: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      modulos: [
+        'interno_manutencao',
+        'interno_fermentacao',
+        'interno_forno',
+        'interno_embalagem',
+      ],
       minimo: 'ler',
     });
     expect(map.resolve('/manutencao/maquinas')).toEqual({
       kind: 'modulo',
       modulo: 'interno_manutencao',
       minimo: 'ler',
-    });
-    expect(map.resolve('/manutencao/solicitantes')).toEqual({
-      kind: 'modulo',
-      modulo: 'interno_manutencao',
-      minimo: 'administrar',
     });
     expect(map.resolve('/manutencao/pecas')).toEqual({
       kind: 'modulo',
@@ -98,7 +98,12 @@ describe('InternoRouteAccessMap', () => {
   it('protege nova ordem e o detalhe com leitura, antes do prefixo da fila', () => {
     const leitura = {
       kind: 'anyModulo' as const,
-      modulos: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+      modulos: [
+        'interno_manutencao',
+        'interno_fermentacao',
+        'interno_forno',
+        'interno_embalagem',
+      ],
       minimo: 'ler' as const,
     };
     const indiceNova = MANUTENCAO_ROUTE_RULES.findIndex(

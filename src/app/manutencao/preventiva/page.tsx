@@ -11,12 +11,15 @@ export default async function PreventivaPage() {
   const snap = await requireInternoModulo('interno_manutencao', 'ler');
   const [planos, catalogo] = await Promise.all([listarPlanos(), listarMaquinas()]);
 
+  const acesso = new ManutencaoAcesso();
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <PlanosPainel
         planos={planos}
         maquinas={opcoesDeMaquina(catalogo.maquinas)}
-        podeEditar={new ManutencaoAcesso().movimenta(snap)}
+        podeEditar={acesso.movimenta(snap)}
+        podeExcluir={acesso.administra(snap)}
       />
     </div>
   );

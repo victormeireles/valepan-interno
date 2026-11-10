@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useId, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { PecaEntrada } from '@/domain/manutencao/peca-cadastro';
@@ -19,106 +19,111 @@ export const FORMULARIO_PECA_VAZIO: PecaFormularioValor = {
 type PecaFormularioProps = {
   valor: PecaFormularioValor;
   podeCadastrar: boolean;
-  onSubmit: (valor: PecaFormularioValor) => void | Promise<unknown>;
+  salvando: boolean;
+  erro?: string | null;
+  onChange: (valor: PecaFormularioValor) => void;
+  onSubmit: () => void | Promise<unknown>;
+  onCancelar: () => void;
 };
 
-const CARTAO = 'rounded-xl border border-stone-200 bg-white shadow-sm';
-
-export function PecaFormulario({ valor, podeCadastrar, onSubmit }: PecaFormularioProps) {
-  const [valorFormulario, setValorFormulario] = useState(valor);
-  const [salvando, setSalvando] = useState(false);
+export function PecaFormulario({
+  valor,
+  podeCadastrar,
+  salvando,
+  erro,
+  onChange,
+  onSubmit,
+  onCancelar,
+}: PecaFormularioProps) {
+  const codigoId = useId();
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (!podeCadastrar || salvando) return;
-    setSalvando(true);
-    try {
-      await onSubmit(valorFormulario);
-    } finally {
-      setSalvando(false);
-    }
+    await onSubmit();
   }
 
-  function alterarValor(alteracao: Partial<PecaFormularioValor>) {
-    setValorFormulario((estado) => ({ ...estado, ...alteracao }));
-  }
-
-  function novaPeca() {
-    setValorFormulario(FORMULARIO_PECA_VAZIO);
+  function alterar(alteracao: Partial<PecaFormularioValor>) {
+    onChange({ ...valor, ...alteracao });
   }
 
   return (
-    <form onSubmit={enviar} className={`${CARTAO} space-y-4 p-4`}>
-      <CamposPeca
-        valorFormulario={valorFormulario}
-        podeCadastrar={podeCadastrar}
-        onAlterar={alterarValor}
-      />
-      <AcoesFormulario podeCadastrar={podeCadastrar} salvando={salvando} onNova={novaPeca} />
+    <form onSubmit={enviar} className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+        {erro ? (
+          <p
+            role="alert"
+            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700"
+          >
+            <span className="material-icons text-base" aria-hidden="true">
+              error
+            </span>
+            {erro}
+          </p>
+        ) : null}
+        <CamposPeca
+          valor={valor}
+          podeCadastrar={podeCadastrar}
+          codigoId={codigoId}
+          onAlterar={alterar}
+        />
+      </div>
+      <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-stone-100 px-4 py-4 sm:flex-row sm:px-5">
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          disabled={salvando}
+          className="flex-1"
+          onClick={onCancelar}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" size="lg" icon="save" disabled={!podeCadastrar || salvando} className="flex-1">
+          {salvando ? 'Salvando…' : 'Salvar'}
+        </Button>
+      </div>
     </form>
   );
 }
 
-function AcoesFormulario({
-  podeCadastrar,
-  salvando,
-  onNova,
-}: {
-  podeCadastrar: boolean;
-  salvando: boolean;
-  onNova: () => void;
-}) {
-  if (!podeCadastrar) return null;
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      <Button type="button" variant="secondary" size="lg" disabled={salvando} onClick={onNova}>
-        Nova peça
-      </Button>
-      <Button type="submit" size="lg" disabled={salvando}>
-        Salvar
-      </Button>
-    </div>
-  );
-}
-
 function CamposPeca({
-  valorFormulario,
+  valor,
   podeCadastrar,
+  codigoId,
   onAlterar,
 }: {
-  valorFormulario: PecaFormularioValor;
+  valor: PecaFormularioValor;
   podeCadastrar: boolean;
+  codigoId: string;
   onAlterar: (alteracao: Partial<PecaFormularioValor>) => void;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Input
+        id={codigoId}
         label="Código"
-        value={valorFormulario.codigo}
+        value={valor.codigo}
         autoComplete="off"
+        autoFocus
         disabled={!podeCadastrar}
         onChange={(evento) => onAlterar({ codigo: evento.target.value })}
       />
       <Input
         label="Nome"
-        value={valorFormulario.nome}
+        value={valor.nome}
         autoComplete="off"
         disabled={!podeCadastrar}
         onChange={(evento) => onAlterar({ nome: evento.target.value })}
       />
       <Input
         label="Unidade"
-        value={valorFormulario.unidade}
+        value={valor.unidade}
         autoComplete="off"
         disabled={!podeCadastrar}
         onChange={(evento) => onAlterar({ unidade: evento.target.value })}
       />
-      <CampoAtiva
-        ativo={valorFormulario.ativo}
-        podeCadastrar={podeCadastrar}
-        onAlterar={onAlterar}
-      />
+      <CampoAtiva ativo={valor.ativo} podeCadastrar={podeCadastrar} onAlterar={onAlterar} />
     </div>
   );
 }

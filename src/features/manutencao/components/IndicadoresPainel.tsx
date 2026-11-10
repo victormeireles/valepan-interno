@@ -10,7 +10,6 @@ const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shad
 const NUMERO = 'text-right font-mono tabular-nums text-stone-800';
 const GRADE =
   'grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_minmax(0,12rem)_auto_auto]';
-const calendario = new MesCalendario();
 
 type Intervalo = { inicio: string; fim: string };
 
@@ -257,3 +256,5 @@ class MesCalendario {
     return inicio.slice(0, 7);
   }
 }
+
+const calendario = new MesCalendario();

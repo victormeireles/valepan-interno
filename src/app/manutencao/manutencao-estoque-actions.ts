@@ -196,7 +196,15 @@ function mensagemSucesso(base: string, saldo: string | number): string {
 
 function fraseDaFuncao(error: ErroMovimento): string {
   const texto = [error.message, error.details, error.hint].filter(Boolean).join(' ');
-  return FRASES_FUNCAO.find((frase) => texto.includes(frase)) ?? FALHA;
+  const conhecida = FRASES_FUNCAO.find((frase) => texto.includes(frase));
+  if (conhecida) return conhecida;
+  if (/schema cache|Could not find the function/i.test(texto)) {
+    return 'Função de estoque ainda não disponível. Aguarde e tente de novo.';
+  }
+  if (/manutencao_estoque_movimentos_usuario_id_fkey|usuario_id/i.test(texto)) {
+    return 'Usuário da sessão não existe em usuarios. Ajuste AUTH_DEV_BYPASS_USER_ID.';
+  }
+  return FALHA;
 }
 
 function saldoDevolvido(corpo: unknown): string | number | null {

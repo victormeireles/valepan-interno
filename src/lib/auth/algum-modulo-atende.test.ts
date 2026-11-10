@@ -14,15 +14,15 @@ function snap(
 
 describe('algumModuloAtende', () => {
   it('é verdadeiro quando um dos módulos atende o nível', () => {
-    const leituraESolicitacao = snap({
+    const leituraEFermentacao = snap({
       interno_manutencao: 'ler',
-      interno_manutencao_solicitacao: 'editar',
+      interno_fermentacao: 'editar',
     });
 
     expect(
       algumModuloAtende(
-        leituraESolicitacao,
-        ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        leituraEFermentacao,
+        ['interno_manutencao', 'interno_fermentacao'],
         'editar',
       ),
     ).toBe(true);
@@ -34,7 +34,7 @@ describe('algumModuloAtende', () => {
     expect(
       algumModuloAtende(
         soLeitura,
-        ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        ['interno_manutencao', 'interno_fermentacao'],
         'administrar',
       ),
     ).toBe(false);

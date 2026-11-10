@@ -25,6 +25,14 @@ export type MainNavGroup = {
 
 export type MainNavEntry = MainNavLink | MainNavGroup;
 
+/** Mesmo conjunto de `MODULOS_MANUTENCAO_ENTRADA` (domínio); literal evita acoplar config ao domínio. */
+const MODULOS_MANUTENCAO_ENTRADA_NAV: InternoModuloId[] = [
+  'interno_manutencao',
+  'interno_fermentacao',
+  'interno_forno',
+  'interno_embalagem',
+];
+
 const startsWith =
   (prefix: string) =>
   (pathname: string): boolean =>
@@ -310,29 +318,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
       {
         type: 'link',
         href: '/manutencao',
-        label: 'Fila',
+        label: 'Ordens de Serviço',
         icon: 'handyman',
         moduloId: 'interno_manutencao',
-        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
+        moduloIds: MODULOS_MANUTENCAO_ENTRADA_NAV,
         match: (pathname) =>
-          (pathname === '/manutencao' || pathname.startsWith('/manutencao/')) &&
-          !pathname.startsWith('/manutencao/maquinas') &&
-          !pathname.startsWith('/manutencao/pecas') &&
-          !pathname.startsWith('/manutencao/solicitantes') &&
-          !pathname.startsWith('/manutencao/nova') &&
-          !pathname.startsWith('/manutencao/ordens') &&
-          !pathname.startsWith('/manutencao/preventiva') &&
-          !pathname.startsWith('/manutencao/indicadores'),
-      },
-      {
-        type: 'link',
-        href: '/manutencao/nova',
-        label: 'Nova ordem',
-        icon: 'add',
-        moduloId: 'interno_manutencao',
-        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
-        nivelMinimo: 'editar',
-        match: startsWith('/manutencao/nova'),
+          pathname === '/manutencao' ||
+          pathname.startsWith('/manutencao/nova') ||
+          pathname.startsWith('/manutencao/ordens'),
       },
       {
         type: 'link',
@@ -365,15 +358,6 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'analytics',
         moduloId: 'interno_manutencao',
         match: startsWith('/manutencao/indicadores'),
-      },
-      {
-        type: 'link',
-        href: '/manutencao/solicitantes',
-        label: 'Solicitantes',
-        icon: 'manage_accounts',
-        moduloId: 'interno_manutencao',
-        nivelMinimo: 'administrar',
-        match: startsWith('/manutencao/solicitantes'),
       },
     ],
   },

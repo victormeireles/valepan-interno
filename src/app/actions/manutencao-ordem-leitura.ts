@@ -20,16 +20,16 @@ type PecaBruta = {
 export class OrdemLeitura {
   constructor(private readonly client: ClienteOrdem) {}
 
-  async setoresElegiveis(usuarioId: string): Promise<string[]> {
-    const ids = await this.idsMarcados(usuarioId);
-    if (ids.length === 0) return [];
-    const setores = await this.client
+  async setoresPorCodigos(codigos: string[]): Promise<string[]> {
+    const unicos = [...new Set(codigos.filter(Boolean))];
+    if (unicos.length === 0) return [];
+    const { data, error } = await this.client
       .from('pessoas_setores' as never)
-      .select('id, nome, tipo, ativo')
-      .in('id', ids);
-    if (setores.error) throw new Error(setores.error.message);
+      .select('id, nome, tipo, ativo, codigo')
+      .in('codigo', unicos);
+    if (error) throw new Error(error.message);
     return new SetorOperacional()
-      .filtrar((setores.data ?? []) as SetorLinha[])
+      .filtrar((data ?? []) as SetorLinha[])
       .map((setor) => setor.id);
   }
 
@@ -75,15 +75,6 @@ export class OrdemLeitura {
     return ids
       .map((id) => ({ nome: nomes.get(id) ?? '' }))
       .sort((esquerda, direita) => esquerda.nome.localeCompare(direita.nome, 'pt-BR'));
-  }
-
-  private async idsMarcados(usuarioId: string): Promise<string[]> {
-    const marcados = await this.client
-      .from('manutencao_usuario_setores' as never)
-      .select('setor_id')
-      .eq('usuario_id', usuarioId);
-    if (marcados.error) throw new Error(marcados.error.message);
-    return ((marcados.data ?? []) as { setor_id: string }[]).map((linha) => linha.setor_id);
   }
 
   private async linhasPeca(ordemId: string): Promise<PecaBruta[]> {

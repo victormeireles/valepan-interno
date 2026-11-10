@@ -17,7 +17,7 @@ describe('filterMainNavEntries', () => {
     );
   });
 
-  it('tablet fermentação vê Início + Produção + Painéis', () => {
+  it('tablet fermentação vê Início + Produção + Painéis + Manutenção (Ordens de Serviço)', () => {
     const snap = {
       isSystemOwner: false,
       identidades: ['interno'],
@@ -32,6 +32,7 @@ describe('filterMainNavEntries', () => {
       '/',
       'producao',
       'paineis',
+      'manutencao',
     ]);
 
     const producao = entries.find((e) => e.type === 'group' && e.id === 'producao');
@@ -46,6 +47,11 @@ describe('filterMainNavEntries', () => {
       '/painel/fermentacao',
       '/painel/forno',
       '/painel/embalagem',
+    ]);
+
+    const manutencao = entries.find((e) => e.type === 'group' && e.id === 'manutencao');
+    expect(manutencao?.type === 'group' ? manutencao.children.map((c) => c.href) : []).toEqual([
+      '/manutencao',
     ]);
   });
 

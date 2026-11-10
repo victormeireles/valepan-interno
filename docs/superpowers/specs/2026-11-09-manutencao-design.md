@@ -3,6 +3,8 @@
 Data: 2026-11-09  
 Status: aguardando revisão do stakeholder
 
+> Nota: o acesso de solicitação (tela/módulo Solicitantes) foi supersedido pelo spec 2026-11-10 (`2026-11-10-manutencao-acesso-por-modulo-design.md`).
+
 ## Objetivo
 
 Concentrar a manutenção dos equipamentos num módulo do app interno: máquinas por setor operacional, peças com estoque e custo médio, ordens corretivas e preventivas na mesma fila, e indicadores de hora parada, hora de execução e real gasto em peças.

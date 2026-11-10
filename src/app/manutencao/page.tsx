@@ -1,20 +1,21 @@
+import { redirect } from 'next/navigation';
 import { listarFila, type FilaListada } from '@/app/actions/manutencao-ordem-consulta';
 import { FilaOrdens } from '@/features/manutencao/components/FilaOrdens';
 import { FilaVazia } from '@/features/manutencao/components/FilaVazia';
 import { FilaFundacao } from '@/domain/manutencao/fila-fundacao';
-import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import {
+  MODULOS_MANUTENCAO_ENTRADA,
+  ManutencaoAcesso,
+} from '@/domain/manutencao/manutencao-acesso';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 
 export const dynamic = 'force-dynamic';
 
-const MODULOS_FILA: readonly InternoModuloId[] = [
-  'interno_manutencao',
-  'interno_manutencao_solicitacao',
-];
-
 export default async function ManutencaoFilaPage() {
-  const { snap } = await requireInternoQualquerModulo(MODULOS_FILA, 'ler');
+  const { snap } = await requireInternoQualquerModulo(MODULOS_MANUTENCAO_ENTRADA, 'ler');
+  const acesso = new ManutencaoAcesso();
+  if (!acesso.veFila(snap)) redirect('/?erro=sem-permissao');
+
   const fila = await listarFila();
   const aviso = avisoSemSetor(fila);
 
@@ -26,7 +27,7 @@ export default async function ManutencaoFilaPage() {
         <FilaOrdens
           itens={fila.itens}
           mensagem={fila.mensagem}
-          podeAbrir={new ManutencaoAcesso().abreCorretiva(snap)}
+          podeAbrir={acesso.abreCorretiva(snap)}
         />
       )}
     </div>

@@ -12,7 +12,6 @@ export const MODULOS_INTERNO = [
   'interno_pessoas',
   'interno_config',
   'interno_manutencao',
-  'interno_manutencao_solicitacao',
 ] as const;
 
 export type InternoModuloId = (typeof MODULOS_INTERNO)[number];

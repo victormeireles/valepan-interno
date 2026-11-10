@@ -33,7 +33,7 @@ export function FilaOrdens({ itens, mensagem, podeAbrir }: FilaOrdensProps) {
 function CabecalhoFila({ podeAbrir }: { podeAbrir: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-xl font-bold tracking-tight text-stone-900">Fila</h1>
+      <h1 className="text-xl font-bold tracking-tight text-stone-900">Ordens de Serviço</h1>
       {podeAbrir ? <LinkNovaOrdem /> : null}
     </div>
   );

@@ -3,14 +3,22 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { devolverOrdem, receberOrdem } from '@/app/actions/manutencao-ordem-actions';
-import type { OrdemCarregada, PecaOrdemVista } from '@/app/actions/manutencao-ordem-consulta';
+import {
+  avaliarRemocaoOrdem,
+  devolverOrdem,
+  receberOrdem,
+  removerOrdem,
+} from '@/app/actions/manutencao-ordem-actions';
+import type { OrdemCarregada } from '@/app/actions/manutencao-ordem-consulta';
+import type { PecaOrdemVista } from '@/app/actions/manutencao-ordem-leitura';
 import { Button } from '@/components/ui/Button';
 import { OrdemCancelarFormulario } from './OrdemCancelarFormulario';
 import { OrdemFinalizarFormulario } from './OrdemFinalizarFormulario';
+import { RemocaoCadastroModal } from './RemocaoCadastroModal';
 import { apresentacaoOrdem, linhaTempoOrdem } from './ordem-detalhe-apresentacao';
 import type { AjudanteEscolha, PecaEscolha } from './ordem-finalizar-estado';
 import { RotulosFila } from './rotulos-fila';
+import { useCadastroRemocao } from './useCadastroRemocao';
 
 const CARTAO = 'rounded-xl border border-stone-200 bg-white shadow-sm';
 const ROTULO_TIPO = { corretiva: 'Corretiva', preventiva: 'Preventiva' } as const;
@@ -37,7 +45,7 @@ type ResultadoAcao = { ok: boolean; mensagem: string };
 const rotulos = new RotulosFila();
 
 export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
-  const acoes = useAcoesOrdem();
+  const acoes = useAcoesOrdem(ordem.numero);
 
   return (
     <div className="space-y-4">
@@ -47,7 +55,13 @@ export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
       <PecasOrdem ordem={ordem} />
       <AjudantesFeitos ajudantes={ordem.ajudantes} />
       {acoes.aviso ? <AvisoAcao aviso={acoes.aviso} /> : null}
-      <BarraAcoes ordem={ordem} enviando={acoes.enviando} onAcao={acoes.disparar} onPainel={acoes.abrir} />
+      <BarraAcoes
+        ordem={ordem}
+        enviando={acoes.enviando || acoes.remocao.salvando}
+        onAcao={acoes.disparar}
+        onPainel={acoes.abrir}
+        onExcluir={acoes.pedirExclusao}
+      />
       {ordem.podeFinalizar && acoes.painel === 'finalizar' ? (
         <OrdemFinalizarFormulario
           numero={ordem.numero}
@@ -67,15 +81,28 @@ export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
           onConcluir={acoes.concluir}
         />
       ) : null}
+      <RemocaoCadastroModal
+        estado={acoes.remocao.estado}
+        salvando={acoes.remocao.salvando}
+        onFechar={acoes.remocao.fechar}
+        onConfirmar={acoes.remocao.confirmar}
+      />
     </div>
   );
 }
 
-function useAcoesOrdem() {
+function useAcoesOrdem(numero: number) {
   const router = useRouter();
   const [painel, setPainel] = useState<Painel>('nenhum');
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const remocao = useCadastroRemocao({
+    entidade: 'ordem',
+    avaliar: (id) => avaliarRemocaoOrdem(Number(id)),
+    remover: (id) => removerOrdem(Number(id)),
+    onAviso: setAviso,
+    onSucesso: () => router.push('/manutencao'),
+  });
 
   async function disparar(acao: () => Promise<ResultadoAcao>) {
     if (enviando) return;
@@ -95,16 +122,25 @@ function useAcoesOrdem() {
     router.refresh();
   }
 
+  function pedirExclusao() {
+    void remocao.pedirRemocao({
+      id: String(numero),
+      rotulo: apresentacaoOrdem.numero(numero),
+    });
+  }
+
   return {
     painel,
     aviso,
     enviando,
+    remocao,
     abrir: (proximo: Painel) => {
       setAviso(null);
       setPainel(proximo);
     },
     disparar,
     concluir,
+    pedirExclusao,
   };
 }
 
@@ -130,7 +166,7 @@ function Cabecalho({ ordem }: { ordem: OrdemCarregada }) {
         <span className="material-icons text-lg" aria-hidden="true">
           arrow_back
         </span>
-        Fila
+        Ordens de Serviço
       </Link>
       <h1 className="font-mono text-xl font-bold tabular-nums tracking-tight text-stone-900">
         {apresentacaoOrdem.numero(ordem.numero)}
@@ -267,11 +303,13 @@ function BarraAcoes({
   enviando,
   onAcao,
   onPainel,
+  onExcluir,
 }: {
   ordem: OrdemCarregada;
   enviando: boolean;
   onAcao: (acao: () => Promise<ResultadoAcao>) => void;
   onPainel: (painel: Painel) => void;
+  onExcluir: () => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -293,6 +331,11 @@ function BarraAcoes({
       {ordem.podeCancelar ? (
         <Button size="lg" variant="danger" icon="cancel" disabled={enviando} onClick={() => onPainel('cancelar')}>
           Cancelar
+        </Button>
+      ) : null}
+      {ordem.podeExcluir ? (
+        <Button size="lg" variant="danger" icon="delete" disabled={enviando} onClick={onExcluir}>
+          Remover
         </Button>
       ) : null}
     </div>

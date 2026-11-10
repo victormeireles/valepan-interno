@@ -1,27 +1,30 @@
 'use client';
 
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { registrarEntrada, registrarSaida } from '@/app/manutencao/manutencao-estoque-actions';
-import { salvarPeca } from '@/app/manutencao/manutencao-peca-actions';
+import {
+  avaliarRemocaoPeca,
+  removerPeca,
+  salvarPeca,
+} from '@/app/manutencao/manutencao-peca-actions';
 import type { PecaItem } from '@/app/manutencao/manutencao-peca-consulta';
 import { Button } from '@/components/ui/Button';
-import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
-import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
-import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
+import { Toast } from '@/components/ui/Toast';
+import { PecaListaFiltro } from '@/domain/manutencao/peca-lista-filtro';
 import {
   FORMULARIO_PECA_VAZIO,
-  PecaFormulario,
   type PecaFormularioValor,
 } from './PecaFormulario';
+import { PecaFormularioModal } from './PecaFormularioModal';
 import {
-  MovimentoFormulario,
-  type PedidoEntrada,
-  type PedidoSaida,
-  type PecaMovimentoOpcao,
-} from './MovimentoFormulario';
-
-const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm';
+  PecaMovimentoModal,
+  type TipoMovimentoPeca,
+} from './PecaMovimentoModal';
+import { PecasLista } from './PecasLista';
+import { RemocaoCadastroModal } from './RemocaoCadastroModal';
+import { useCadastroRemocao } from './useCadastroRemocao';
+import type { PedidoEntrada, PedidoSaida } from './movimento-pedido';
 
 type PecasPainelProps = {
   pecas: PecaItem[];
@@ -32,88 +35,191 @@ type PecasPainelProps = {
 type Aviso = { texto: string; ok: boolean };
 type Resultado = { ok: boolean; mensagem: string };
 
+const filtroPecas = new PecaListaFiltro();
+
 export function PecasPainel({ pecas, podeCadastrar, podeMovimentar }: PecasPainelProps) {
-  const painel = usePainelPecas();
-  const ativas = pecas.filter((peca) => peca.ativo).map(opcaoDaPeca);
+  const [termo, setTermo] = useState('');
+  const [avisoRemocao, setAvisoRemocao] = useState<Aviso | null>(null);
+  const cadastro = useCadastroPecaModal();
+  const movimento = useMovimentoPecaModal();
+  const remocao = useCadastroRemocao({
+    entidade: 'peça',
+    avaliar: avaliarRemocaoPeca,
+    remover: removerPeca,
+    onAviso: setAvisoRemocao,
+    descricaoConfirmacao: (rotulo) =>
+      `Remover ${rotulo}? Os movimentos de estoque desta peça também serão apagados.`,
+  });
+  const filtradas = useMemo(() => filtroPecas.aplicar(pecas, termo), [pecas, termo]);
+  const aviso = avisoRemocao ?? cadastro.aviso ?? movimento.aviso;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold tracking-tight text-stone-900">Peças</h1>
-      {podeCadastrar ? (
-        <PecaFormulario
-          key={painel.versaoFormulario}
-          valor={painel.valor}
-          podeCadastrar={podeCadastrar}
-          onSubmit={painel.gravar}
-        />
-      ) : null}
-      {painel.avisoCadastro ? <AvisoSalvar aviso={painel.avisoCadastro} /> : null}
-      {podeMovimentar ? (
-        <MovimentoFormulario pecas={ativas} onEntrada={painel.entrar} onSaida={painel.sair} />
-      ) : null}
-      {painel.avisoMovimento ? <AvisoSalvar aviso={painel.avisoMovimento} /> : null}
-      <ListaPecas pecas={pecas} podeCadastrar={podeCadastrar} onEditar={painel.editar} />
+      <CabecalhoPecas
+        totalVisivel={filtradas.length}
+        totalGeral={pecas.length}
+        termoAtivo={termo.trim().length > 0}
+        podeCadastrar={podeCadastrar}
+        onCriar={cadastro.abrirCriacao}
+      />
+      {aviso ? <AvisoToast aviso={aviso} /> : null}
+      <PecasLista
+        pecas={filtradas}
+        termo={termo}
+        totalGeral={pecas.length}
+        podeCadastrar={podeCadastrar}
+        podeMovimentar={podeMovimentar}
+        onTermo={setTermo}
+        onCriar={cadastro.abrirCriacao}
+        onEditar={cadastro.abrirEdicao}
+        onRemover={(peca) =>
+          void remocao.pedirRemocao({ id: peca.id, rotulo: `${peca.codigo} · ${peca.nome}` })
+        }
+        onEntrada={movimento.abrirEntrada}
+        onSaida={movimento.abrirSaida}
+      />
+      <PecaFormularioModal
+        aberto={cadastro.aberto}
+        valorInicial={cadastro.valorInicial}
+        podeCadastrar={podeCadastrar}
+        onFechar={cadastro.fechar}
+        onSalvar={cadastro.gravar}
+      />
+      <PecaMovimentoModal
+        aberto={movimento.aberto}
+        tipo={movimento.tipo}
+        peca={movimento.peca}
+        onFechar={movimento.fechar}
+        onEntrada={movimento.entrar}
+        onSaida={movimento.sair}
+      />
+      <RemocaoCadastroModal
+        estado={remocao.estado}
+        salvando={remocao.salvando}
+        onFechar={remocao.fechar}
+        onConfirmar={remocao.confirmar}
+      />
     </div>
   );
 }
 
-function usePainelPecas() {
-  const cadastro = useCadastroPeca();
-  const movimento = useMovimentoPeca();
-  return { ...cadastro, ...movimento };
+function CabecalhoPecas({
+  totalVisivel,
+  totalGeral,
+  termoAtivo,
+  podeCadastrar,
+  onCriar,
+}: {
+  totalVisivel: number;
+  totalGeral: number;
+  termoAtivo: boolean;
+  podeCadastrar: boolean;
+  onCriar: () => void;
+}) {
+  const resumo = resumoCabecalho(totalVisivel, totalGeral, termoAtivo);
+
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold tracking-tight text-stone-900">Peças</h1>
+        <p className="mt-0.5 text-sm text-stone-500">{resumo}</p>
+      </div>
+      {podeCadastrar ? (
+        <Button type="button" size="lg" icon="add" onClick={onCriar}>
+          Nova peça
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
-function useCadastroPeca() {
-  const router = useRouter();
-  const [valor, setValor] = useState(FORMULARIO_PECA_VAZIO);
-  const [versaoFormulario, setVersaoFormulario] = useState(0);
-  const [avisoCadastro, setAvisoCadastro] = useState<Aviso | null>(null);
-
-  function editar(peca: PecaItem) {
-    setValor(valorDaPeca(peca));
-    setVersaoFormulario((atual) => atual + 1);
-    setAvisoCadastro(null);
+function resumoCabecalho(totalVisivel: number, totalGeral: number, termoAtivo: boolean): string {
+  if (totalGeral === 0) return 'Nenhuma peça';
+  if (termoAtivo) {
+    return `${totalVisivel} de ${totalGeral} peça${totalGeral === 1 ? '' : 's'}`;
   }
-
-  function gravar(entrada: PecaFormularioValor) {
-    return executar(
-      () => salvarPeca(entrada),
-      setAvisoCadastro,
-      'Não foi possível salvar.',
-      () => concluirCadastro(setValor, setVersaoFormulario, () => router.refresh()),
-    );
-  }
-
-  return { valor, versaoFormulario, avisoCadastro, editar, gravar };
+  return `${totalGeral} peça${totalGeral === 1 ? '' : 's'}`;
 }
 
-function useMovimentoPeca() {
+function useCadastroPecaModal() {
   const router = useRouter();
-  const [avisoMovimento, setAvisoMovimento] = useState<Aviso | null>(null);
+  const [aberto, setAberto] = useState(false);
+  const [valorInicial, setValorInicial] = useState<PecaFormularioValor | null>(null);
+  const [aviso, setAviso] = useState<Aviso | null>(null);
+
+  function abrirCriacao() {
+    setValorInicial(FORMULARIO_PECA_VAZIO);
+    setAberto(true);
+    setAviso(null);
+  }
+
+  function abrirEdicao(peca: PecaItem) {
+    setValorInicial(valorDaPeca(peca));
+    setAberto(true);
+    setAviso(null);
+  }
+
+  function fechar() {
+    setAberto(false);
+    setValorInicial(null);
+  }
+
+  async function gravar(entrada: PecaFormularioValor): Promise<Resultado> {
+    try {
+      const resultado = await salvarPeca(entrada);
+      if (resultado.ok) {
+        setAviso({
+          texto: entrada.id ? 'Peça atualizada.' : 'Peça criada.',
+          ok: true,
+        });
+        router.refresh();
+      }
+      return resultado;
+    } catch {
+      return { ok: false, mensagem: 'Não foi possível salvar.' };
+    }
+  }
+
+  return { aberto, valorInicial, aviso, abrirCriacao, abrirEdicao, fechar, gravar };
+}
+
+function useMovimentoPecaModal() {
+  const router = useRouter();
+  const [tipo, setTipo] = useState<TipoMovimentoPeca | null>(null);
+  const [peca, setPeca] = useState<PecaItem | null>(null);
+  const [aviso, setAviso] = useState<Aviso | null>(null);
+  const aberto = tipo !== null && peca !== null;
+
+  function abrirEntrada(item: PecaItem) {
+    setPeca(item);
+    setTipo('entrada');
+    setAviso(null);
+  }
+
+  function abrirSaida(item: PecaItem) {
+    setPeca(item);
+    setTipo('saida');
+    setAviso(null);
+  }
+
+  function fechar() {
+    setTipo(null);
+    setPeca(null);
+  }
 
   function entrar(pedido: PedidoEntrada) {
-    return dispararMovimento(pedido.pecaId, setAvisoMovimento, () => router.refresh(), () =>
+    return dispararMovimento(pedido.pecaId, setAviso, () => router.refresh(), () =>
       registrarEntrada(pedido.pecaId, pedido.quantidade, pedido.preco),
     );
   }
 
   function sair(pedido: PedidoSaida) {
-    return dispararMovimento(pedido.pecaId, setAvisoMovimento, () => router.refresh(), () =>
+    return dispararMovimento(pedido.pecaId, setAviso, () => router.refresh(), () =>
       registrarSaida(pedido.pecaId, pedido.quantidade, pedido.motivo),
     );
   }
 
-  return { avisoMovimento, entrar, sair };
-}
-
-function concluirCadastro(
-  definirValor: Dispatch<SetStateAction<PecaFormularioValor>>,
-  definirVersao: Dispatch<SetStateAction<number>>,
-  atualizar: () => void,
-) {
-  definirValor(FORMULARIO_PECA_VAZIO);
-  definirVersao((atual) => atual + 1);
-  atualizar();
+  return { aberto, tipo, peca, aviso, abrirEntrada, abrirSaida, fechar, entrar, sair };
 }
 
 async function dispararMovimento(
@@ -123,204 +229,22 @@ async function dispararMovimento(
   acao: () => Promise<Resultado>,
 ): Promise<Resultado> {
   if (!pecaId) return publicarFalha(publicar, 'Selecione a peça.');
-  return executar(acao, publicar, 'Não foi possível movimentar.', atualizar);
-}
-
-function ListaPecas({
-  pecas,
-  podeCadastrar,
-  onEditar,
-}: {
-  pecas: PecaItem[];
-  podeCadastrar: boolean;
-  onEditar: (peca: PecaItem) => void;
-}) {
-  if (pecas.length === 0) {
-    return <p className={`${CARTAO} px-4 py-6 text-sm text-stone-600`}>Nenhuma peça.</p>;
+  try {
+    const resultado = await acao();
+    publicar({ texto: resultado.mensagem, ok: resultado.ok });
+    if (resultado.ok) atualizar();
+    return resultado;
+  } catch {
+    return publicarFalha(publicar, 'Não foi possível movimentar.');
   }
-
-  const grade = gradeDaLista(podeCadastrar);
-
-  return (
-    <div className={CARTAO}>
-      <CabecalhoLista grade={grade} podeCadastrar={podeCadastrar} />
-      <ul>
-        {pecas.map((peca, indice) => (
-          <LinhaPeca
-            key={peca.id}
-            peca={peca}
-            par={indice % 2 === 1}
-            grade={grade}
-            podeCadastrar={podeCadastrar}
-            onEditar={onEditar}
-          />
-        ))}
-      </ul>
-    </div>
-  );
 }
 
-function CabecalhoLista({ grade, podeCadastrar }: { grade: string; podeCadastrar: boolean }) {
+function AvisoToast({ aviso }: { aviso: Aviso }) {
   return (
-    <div
-      className={`hidden border-b border-stone-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 md:grid md:items-center md:gap-3 ${grade}`}
-    >
-      <span className="whitespace-nowrap">Código</span>
-      <span className="whitespace-nowrap">Nome</span>
-      <span className="whitespace-nowrap">Unidade</span>
-      <span className="whitespace-nowrap text-right">Saldo</span>
-      <span className="whitespace-nowrap text-right">Custo médio</span>
-      <span className="whitespace-nowrap text-right">Valor</span>
-      {podeCadastrar ? <span className="sr-only">Ações</span> : null}
-    </div>
-  );
-}
-
-function LinhaPeca({
-  peca,
-  par,
-  grade,
-  podeCadastrar,
-  onEditar,
-}: {
-  peca: PecaItem;
-  par: boolean;
-  grade: string;
-  podeCadastrar: boolean;
-  onEditar: (peca: PecaItem) => void;
-}) {
-  const celulas = celulasDaPeca(peca);
-  const fundo = par ? 'bg-stone-50/60' : 'bg-white';
-
-  return (
-    <li
-      className={`grid grid-cols-1 gap-2 border-b border-stone-100 px-4 py-3 last:border-b-0 md:items-center md:gap-3 md:py-2 ${grade} ${fundo} hover:bg-amber-50/60`}
-    >
-      <IdentidadePeca peca={peca} />
-      <NumerosPeca celulas={celulas} />
-      {podeCadastrar ? (
-        <Button type="button" variant="secondary" size="lg" onClick={() => onEditar(peca)}>
-          Editar
-        </Button>
-      ) : null}
-    </li>
-  );
-}
-
-function IdentidadePeca({ peca }: { peca: PecaItem }) {
-  return (
-    <div className="min-w-0 md:contents">
-      <p className="min-w-0 truncate font-mono text-sm tabular-nums text-stone-900">{peca.codigo}</p>
-      <p className="flex min-w-0 items-baseline gap-2 text-sm font-medium text-stone-900">
-        <span className="truncate">{peca.nome}</span>
-        {peca.ativo ? null : (
-          <span className="shrink-0 font-medium text-amber-800">Inativa</span>
-        )}
-      </p>
-      <p className="text-sm text-stone-700">
-        <RotuloMovel>Unidade</RotuloMovel>
-        {peca.unidade}
-      </p>
-    </div>
-  );
-}
-
-function NumerosPeca({ celulas }: { celulas: CelulasPeca }) {
-  const corSaldo = celulas.saldoNegativo ? 'text-red-700' : 'text-stone-900';
-  const corValor = celulas.valorNegativo ? 'text-red-700' : 'text-stone-900';
-
-  return (
-    <div className="grid grid-cols-3 gap-2 md:contents">
-      <CampoNumero rotulo="Saldo" className={corSaldo}>
-        {celulas.saldo}
-      </CampoNumero>
-      <CampoNumero rotulo="Custo médio" className="text-stone-700">
-        {celulas.custo}
-      </CampoNumero>
-      <CampoNumero rotulo="Valor" className={corValor}>
-        {celulas.valor}
-      </CampoNumero>
-    </div>
-  );
-}
-
-function CampoNumero({
-  rotulo,
-  className,
-  children,
-}: {
-  rotulo: string;
-  className: string;
-  children: ReactNode;
-}) {
-  return (
-    <p className="flex items-baseline justify-between gap-2 md:block md:text-right">
-      <RotuloMovel>{rotulo}</RotuloMovel>
-      <span className={`font-mono text-sm tabular-nums ${className}`}>{children}</span>
-    </p>
-  );
-}
-
-function RotuloMovel({ children }: { children: string }) {
-  return (
-    <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-500 md:hidden">
-      {children}
-    </span>
-  );
-}
-
-function AvisoSalvar({ aviso }: { aviso: Aviso }) {
-  const cor = aviso.ok ? 'text-emerald-800' : 'text-red-700';
-  return (
-    <p className={`text-sm ${cor}`} role={aviso.ok ? 'status' : 'alert'}>
+    <Toast tone={aviso.ok ? 'success' : 'error'} icon={aviso.ok ? 'check_circle' : 'error'}>
       {aviso.texto}
-    </p>
+    </Toast>
   );
-}
-
-type CelulasPeca = {
-  saldo: string;
-  saldoNegativo: boolean;
-  custo: string;
-  valor: string;
-  valorNegativo: boolean;
-};
-
-class ApresentacaoPeca {
-  constructor(
-    private readonly quantidades = new QuantidadeEstoque(),
-    private readonly precos = new PrecoCentavos(),
-    private readonly saldos = new ConversorSaldo(),
-  ) {}
-
-  textoSaldo(saldo: string): string {
-    return this.quantidades.formatar(this.saldos.emMilesimos(saldo));
-  }
-
-  saldoNegativo(saldo: string): boolean {
-    return this.saldos.emMilesimos(saldo) < 0;
-  }
-
-  textoCusto(centavos: number | null): string {
-    if (centavos === null) return '—';
-    return this.precos.formatar(centavos);
-  }
-
-  textoValor(centavos: number): string {
-    return this.precos.formatar(centavos);
-  }
-}
-
-const apresentacao = new ApresentacaoPeca();
-
-function celulasDaPeca(peca: PecaItem): CelulasPeca {
-  return {
-    saldo: apresentacao.textoSaldo(peca.saldo),
-    saldoNegativo: apresentacao.saldoNegativo(peca.saldo),
-    custo: apresentacao.textoCusto(peca.custoMedioCentavos),
-    valor: apresentacao.textoValor(peca.valorCentavos),
-    valorNegativo: peca.valorCentavos < 0,
-  };
 }
 
 function valorDaPeca(peca: PecaItem): PecaFormularioValor {
@@ -331,33 +255,6 @@ function valorDaPeca(peca: PecaItem): PecaFormularioValor {
     unidade: peca.unidade,
     ativo: peca.ativo,
   };
-}
-
-function opcaoDaPeca(peca: PecaItem): PecaMovimentoOpcao {
-  return { id: peca.id, codigo: peca.codigo, nome: peca.nome };
-}
-
-function gradeDaLista(podeCadastrar: boolean): string {
-  if (podeCadastrar) {
-    return 'md:grid-cols-[6.5rem_minmax(0,1.6fr)_4.5rem_6rem_8.5rem_6.5rem_auto]';
-  }
-  return 'md:grid-cols-[6.5rem_minmax(0,1.6fr)_4.5rem_6rem_8.5rem_6.5rem]';
-}
-
-async function executar(
-  acao: () => Promise<Resultado>,
-  publicar: (aviso: Aviso) => void,
-  falha: string,
-  aoOk: () => void,
-): Promise<Resultado> {
-  try {
-    const resultado = await acao();
-    publicar({ texto: resultado.mensagem, ok: resultado.ok });
-    if (resultado.ok) aoOk();
-    return resultado;
-  } catch {
-    return publicarFalha(publicar, falha);
-  }
 }
 
 function publicarFalha(publicar: (aviso: Aviso) => void, texto: string): Resultado {

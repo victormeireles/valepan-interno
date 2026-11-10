@@ -1,22 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { salvarMaquina } from '@/app/actions/manutencao-maquina-actions';
-import type { MaquinaItem } from '@/app/actions/manutencao-maquina-actions';
+import {
+  avaliarRemocaoMaquina,
+  removerMaquina,
+  salvarMaquina,
+  type MaquinaItem,
+} from '@/app/actions/manutencao-maquina-actions';
 import { Button } from '@/components/ui/Button';
+import { Toast } from '@/components/ui/Toast';
+import { MaquinaListaFiltro } from '@/domain/manutencao/maquina-lista-filtro';
 import type { SetorLinha } from '@/domain/manutencao/setor-operacional';
-import { MaquinaFormulario, type MaquinaFormularioValor } from './MaquinaFormulario';
-
-const FORMULARIO_VAZIO: MaquinaFormularioValor = {
-  codigo: '',
-  nome: '',
-  setorId: '',
-  observacao: '',
-  ativo: true,
-};
-
-const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm';
+import {
+  FORMULARIO_MAQUINA_VAZIO,
+  type MaquinaFormularioValor,
+} from './MaquinaFormulario';
+import { MaquinaFormularioModal } from './MaquinaFormularioModal';
+import { MaquinasLista } from './MaquinasLista';
+import { RemocaoCadastroModal } from './RemocaoCadastroModal';
+import { useCadastroRemocao } from './useCadastroRemocao';
 
 type MaquinasPainelProps = {
   maquinas: MaquinaItem[];
@@ -25,51 +28,151 @@ type MaquinasPainelProps = {
 };
 
 type Aviso = { texto: string; ok: boolean };
+type Resultado = { ok: boolean; mensagem: string };
+
+const filtroMaquinas = new MaquinaListaFiltro();
 
 export function MaquinasPainel({ maquinas, setores, podeGravar }: MaquinasPainelProps) {
-  const router = useRouter();
-  const [valor, setValor] = useState(FORMULARIO_VAZIO);
-  const [versaoFormulario, setVersaoFormulario] = useState(0);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
-
-  function editar(maquina: MaquinaItem) {
-    setValor(valorDaMaquina(maquina));
-    setVersaoFormulario((atual) => atual + 1);
-    setAviso(null);
-  }
-
-  async function gravar(entrada: MaquinaFormularioValor) {
-    const resultado = await salvarMaquina(entrada);
-    setAviso({ texto: resultado.mensagem, ok: resultado.ok });
-    if (!resultado.ok) return;
-    setValor(FORMULARIO_VAZIO);
-    setVersaoFormulario((atual) => atual + 1);
-    router.refresh();
-  }
+  const [termo, setTermo] = useState('');
+  const cadastro = useCadastroMaquinaModal();
+  const remocao = useCadastroRemocao({
+    entidade: 'máquina',
+    avaliar: avaliarRemocaoMaquina,
+    remover: removerMaquina,
+    onAviso: cadastro.definirAviso,
+  });
+  const filtradas = useMemo(() => filtroMaquinas.aplicar(maquinas, termo), [maquinas, termo]);
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold tracking-tight text-stone-900">Máquinas</h1>
-      <MaquinaFormulario
-        key={versaoFormulario}
-        setores={setores}
-        valor={valor}
+      <CabecalhoMaquinas
+        totalVisivel={filtradas.length}
+        totalGeral={maquinas.length}
+        termoAtivo={termo.trim().length > 0}
         podeGravar={podeGravar}
-        onSubmit={gravar}
+        onCriar={cadastro.abrirCriacao}
       />
-      {aviso ? <AvisoSalvar aviso={aviso} /> : null}
-      <ul className={CARTAO}>
-        {maquinas.map((maquina) => (
-          <LinhaMaquina
-            key={maquina.id}
-            maquina={maquina}
-            podeGravar={podeGravar}
-            onEditar={editar}
-          />
-        ))}
-      </ul>
+      {cadastro.aviso ? <AvisoToast aviso={cadastro.aviso} /> : null}
+      <MaquinasLista
+        maquinas={filtradas}
+        termo={termo}
+        totalGeral={maquinas.length}
+        podeGravar={podeGravar}
+        onTermo={setTermo}
+        onCriar={cadastro.abrirCriacao}
+        onEditar={cadastro.abrirEdicao}
+        onRemover={(maquina) =>
+          void remocao.pedirRemocao({
+            id: maquina.id,
+            rotulo: `${maquina.codigo} · ${maquina.nome}`,
+          })
+        }
+      />
+      <MaquinaFormularioModal
+        aberto={cadastro.aberto}
+        valorInicial={cadastro.valorInicial}
+        setores={setores}
+        podeGravar={podeGravar}
+        onFechar={cadastro.fechar}
+        onSalvar={cadastro.gravar}
+      />
+      <RemocaoCadastroModal
+        estado={remocao.estado}
+        salvando={remocao.salvando}
+        onFechar={remocao.fechar}
+        onConfirmar={remocao.confirmar}
+      />
     </div>
   );
+}
+
+function CabecalhoMaquinas({
+  totalVisivel,
+  totalGeral,
+  termoAtivo,
+  podeGravar,
+  onCriar,
+}: {
+  totalVisivel: number;
+  totalGeral: number;
+  termoAtivo: boolean;
+  podeGravar: boolean;
+  onCriar: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold tracking-tight text-stone-900">Máquinas</h1>
+        <p className="mt-0.5 text-sm text-stone-500">
+          {resumoCabecalho(totalVisivel, totalGeral, termoAtivo)}
+        </p>
+      </div>
+      {podeGravar ? (
+        <Button type="button" size="lg" icon="add" onClick={onCriar}>
+          Nova máquina
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function resumoCabecalho(totalVisivel: number, totalGeral: number, termoAtivo: boolean): string {
+  if (totalGeral === 0) return 'Nenhuma máquina';
+  if (termoAtivo) {
+    return `${totalVisivel} de ${totalGeral} máquina${totalGeral === 1 ? '' : 's'}`;
+  }
+  return `${totalGeral} máquina${totalGeral === 1 ? '' : 's'}`;
+}
+
+function useCadastroMaquinaModal() {
+  const router = useRouter();
+  const [aberto, setAberto] = useState(false);
+  const [valorInicial, setValorInicial] = useState<MaquinaFormularioValor | null>(null);
+  const [aviso, setAviso] = useState<Aviso | null>(null);
+
+  function abrirCriacao() {
+    setValorInicial(FORMULARIO_MAQUINA_VAZIO);
+    setAberto(true);
+    setAviso(null);
+  }
+
+  function abrirEdicao(maquina: MaquinaItem) {
+    setValorInicial(valorDaMaquina(maquina));
+    setAberto(true);
+    setAviso(null);
+  }
+
+  function fechar() {
+    setAberto(false);
+    setValorInicial(null);
+  }
+
+  async function gravar(entrada: MaquinaFormularioValor): Promise<Resultado> {
+    try {
+      const resultado = await salvarMaquina(entrada);
+      if (resultado.ok) {
+        setAviso({
+          texto: entrada.id ? 'Máquina atualizada.' : 'Máquina criada.',
+          ok: true,
+        });
+        router.refresh();
+      }
+      return resultado;
+    } catch {
+      return { ok: false, mensagem: 'Não foi possível salvar.' };
+    }
+  }
+
+  return {
+    aberto,
+    valorInicial,
+    aviso,
+    definirAviso: setAviso,
+    abrirCriacao,
+    abrirEdicao,
+    fechar,
+    gravar,
+  };
 }
 
 function valorDaMaquina(maquina: MaquinaItem): MaquinaFormularioValor {
@@ -84,44 +187,10 @@ function valorDaMaquina(maquina: MaquinaItem): MaquinaFormularioValor {
   };
 }
 
-function AvisoSalvar({ aviso }: { aviso: Aviso }) {
-  const cor = aviso.ok ? 'text-emerald-800' : 'text-red-700';
+function AvisoToast({ aviso }: { aviso: Aviso }) {
   return (
-    <p className={`text-sm ${cor}`} role={aviso.ok ? 'status' : 'alert'}>
+    <Toast tone={aviso.ok ? 'success' : 'error'} icon={aviso.ok ? 'check_circle' : 'error'}>
       {aviso.texto}
-    </p>
-  );
-}
-
-function LinhaMaquina({
-  maquina,
-  podeGravar,
-  onEditar,
-}: {
-  maquina: MaquinaItem;
-  podeGravar: boolean;
-  onEditar: (maquina: MaquinaItem) => void;
-}) {
-  return (
-    <li className="flex min-h-11 flex-col gap-2 border-b border-stone-100 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-stone-900">
-          <span className="font-mono tabular-nums">{maquina.codigo}</span>
-          {' · '}
-          {maquina.nome}
-        </p>
-        <p className="truncate text-sm text-stone-600">
-          {maquina.setorNome}
-          {maquina.ativo ? null : (
-            <span className="ml-2 font-medium text-amber-800">Inativa</span>
-          )}
-        </p>
-      </div>
-      {podeGravar ? (
-        <Button type="button" variant="secondary" size="lg" onClick={() => onEditar(maquina)}>
-          Editar
-        </Button>
-      ) : null}
-    </li>
+    </Toast>
   );
 }

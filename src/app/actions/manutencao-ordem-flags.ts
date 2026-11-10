@@ -1,10 +1,8 @@
 import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
+import { ManutencaoSetoresPorModulo } from '@/domain/manutencao/manutencao-setores-por-modulo';
 import { OrdemCancelamento } from '@/domain/manutencao/ordem-cancelamento';
 import { OrdemPermissao } from '@/domain/manutencao/ordem-permissao';
-import {
-  InternoAccessManager,
-  type UsuarioAuthzSnapshot,
-} from '@/lib/auth/interno-access-manager';
+import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
 import { OrdemLeitura } from './manutencao-ordem-leitura';
 
 const MOTIVO_SONDA = 'motivo';
@@ -21,6 +19,7 @@ export type FlagsOrdem = {
   podeDevolver: boolean;
   podeFinalizar: boolean;
   podeCancelar: boolean;
+  podeExcluir: boolean;
   exigeMotivo: boolean;
 };
 
@@ -28,10 +27,10 @@ export class FlagsDaOrdem {
   async setoresDoSolicitante(
     leitura: OrdemLeitura,
     snap: UsuarioAuthzSnapshot,
-    usuarioId: string,
   ): Promise<string[]> {
     if (new ManutencaoAcesso().executaOficina(snap)) return [];
-    return leitura.setoresElegiveis(usuarioId);
+    const codigos = new ManutencaoSetoresPorModulo().codigosElegiveis(snap);
+    return leitura.setoresPorCodigos(codigos);
   }
 
   calcular(
@@ -48,6 +47,7 @@ export class FlagsDaOrdem {
       podeDevolver: podeConcluir,
       podeFinalizar: podeConcluir,
       podeCancelar: cancelamento?.ok === true,
+      podeExcluir: acesso.administra(snap),
       exigeMotivo: cancelamento?.ok === true && cancelamento.exigeMotivo,
     };
   }
@@ -77,11 +77,7 @@ export class FlagsDaOrdem {
     return new OrdemCancelamento().permite({
       status: ordem.status,
       tipo,
-      solicitacaoEditar: new InternoAccessManager().temModulo(
-        snap,
-        'interno_manutencao_solicitacao',
-        'editar',
-      ),
+      solicitacaoEditar: acesso.abreCorretiva(snap),
       manutencaoEditar: acesso.executaOficina(snap),
       manutencaoAdministrar: acesso.administra(snap),
       motivo: MOTIVO_SONDA,

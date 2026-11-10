@@ -32,13 +32,16 @@ function anyModulo(
   return { kind: 'anyModulo', modulos, minimo };
 }
 
+/** Mesmo conjunto de `MODULOS_MANUTENCAO_ENTRADA` (domínio); literal aqui evita ciclo de import. */
+const MODULOS_ENTRADA_MANUTENCAO: InternoModuloId[] = [
+  'interno_manutencao',
+  'interno_fermentacao',
+  'interno_forno',
+  'interno_embalagem',
+];
+
 /** Mais específico primeiro. Indicadores, nova, ordens, peças e preventiva vêm antes da fila. */
 export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
-  {
-    match: 'prefix',
-    prefix: '/manutencao/solicitantes',
-    requirement: modulo('interno_manutencao', 'administrar'),
-  },
   {
     match: 'prefix',
     prefix: '/manutencao/maquinas',
@@ -62,25 +65,16 @@ export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
   {
     match: 'prefix',
     prefix: '/manutencao/nova',
-    requirement: anyModulo(
-      ['interno_manutencao', 'interno_manutencao_solicitacao'],
-      'ler',
-    ),
+    requirement: anyModulo([...MODULOS_ENTRADA_MANUTENCAO], 'ler'),
   },
   {
     match: 'prefix',
     prefix: '/manutencao/ordens',
-    requirement: anyModulo(
-      ['interno_manutencao', 'interno_manutencao_solicitacao'],
-      'ler',
-    ),
+    requirement: anyModulo([...MODULOS_ENTRADA_MANUTENCAO], 'ler'),
   },
   {
     match: 'prefix',
     prefix: '/manutencao',
-    requirement: anyModulo(
-      ['interno_manutencao', 'interno_manutencao_solicitacao'],
-      'ler',
-    ),
+    requirement: anyModulo([...MODULOS_ENTRADA_MANUTENCAO], 'ler'),
   },
 ];

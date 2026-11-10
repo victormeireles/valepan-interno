@@ -1,23 +1,25 @@
 'use server';
 
-import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
+import {
+  ManutencaoAcesso,
+  MODULOS_MANUTENCAO_ENTRADA,
+} from '@/domain/manutencao/manutencao-acesso';
+import { ManutencaoSetoresPorModulo } from '@/domain/manutencao/manutencao-setores-por-modulo';
 import { OrdemAbertura, type AberturaEntrada } from '@/domain/manutencao/ordem-abertura';
 import { OrdemCancelamento } from '@/domain/manutencao/ordem-cancelamento';
 import { OrdemPermissao } from '@/domain/manutencao/ordem-permissao';
 import {
-  InternoAccessManager,
-  type UsuarioAuthzSnapshot,
-} from '@/lib/auth/interno-access-manager';
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
-import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
+  OrdemRemocao,
+  type AvaliacaoRemocaoOrdem,
+} from '@/domain/manutencao/ordem-remocao';
+import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
+import {
+  requireInternoModulo,
+  requireInternoQualquerModulo,
+} from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { FlagsDaOrdem } from './manutencao-ordem-flags';
 import { OrdemLeitura, type ClienteOrdem } from './manutencao-ordem-leitura';
-
-const MODULOS_ORDEM: readonly InternoModuloId[] = [
-  'interno_manutencao',
-  'interno_manutencao_solicitacao',
-];
 
 const MENSAGEM_ABERTA = 'Ordem aberta.';
 const MENSAGEM_RECEBIDA = 'Ordem recebida.';
@@ -44,11 +46,14 @@ type OrdemAcao = {
 };
 
 export async function abrirCorretiva(entrada: AberturaEntrada): Promise<ResultadoAbertura> {
-  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_ORDEM, 'editar');
+  const { snap, usuarioId } = await requireInternoQualquerModulo(
+    MODULOS_MANUTENCAO_ENTRADA,
+    'editar',
+  );
   const client = supabaseClientFactory.createServiceRoleClient();
   const leitura = new OrdemLeitura(client);
   const maquina = await lerMaquina(client, entrada.maquinaId);
-  const setores = await setoresParaAbrir(leitura, snap, usuarioId);
+  const setores = await setoresParaAbrir(leitura, snap);
   const validacao = new OrdemAbertura().validar(entrada, maquina, setores);
   if (!validacao.ok) return validacao;
   return inserirCorretiva(client, entrada, validacao.setorId, validacao.descricao, usuarioId);
@@ -81,7 +86,10 @@ export async function devolverOrdem(numero: number): Promise<ResultadoAcao> {
 }
 
 export async function cancelarOrdem(numero: number, motivo: string): Promise<ResultadoAcao> {
-  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_ORDEM, 'editar');
+  const { snap, usuarioId } = await requireInternoQualquerModulo(
+    MODULOS_MANUTENCAO_ENTRADA,
+    'editar',
+  );
   const client = supabaseClientFactory.createServiceRoleClient();
   const ordem = await lerOrdemAcao(client, numero);
   if (!ordem) return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
@@ -98,13 +106,100 @@ export async function cancelarOrdem(numero: number, motivo: string): Promise<Res
   return { ok: true, mensagem: MENSAGEM_CANCELADA };
 }
 
+export async function avaliarRemocaoOrdem(numero: number): Promise<AvaliacaoRemocaoOrdem> {
+  await requireInternoModulo('interno_manutencao', 'administrar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const ordemId = await lerOrdemId(client, numero);
+  if (!ordemId) {
+    return {
+      pode: false,
+      vinculos: [],
+      mensagem: MENSAGEM_NAO_ENCONTRADA,
+    };
+  }
+  return new OrdemRemocao().avaliar(await lerVinculosOrdem(client, ordemId));
+}
+
+export async function removerOrdem(numero: number): Promise<ResultadoAcao> {
+  await requireInternoModulo('interno_manutencao', 'administrar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const ordemId = await lerOrdemId(client, numero);
+  if (!ordemId) return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
+  const avaliacao = new OrdemRemocao().avaliar(await lerVinculosOrdem(client, ordemId));
+  if (!avaliacao.pode) return { ok: false, mensagem: avaliacao.mensagem };
+  const limpeza = await limparAjudantes(client, ordemId);
+  if (limpeza) return { ok: false, mensagem: limpeza };
+  const { data, error } = await client
+    .from('manutencao_ordens' as never)
+    .delete()
+    .eq('id', ordemId)
+    .select('id');
+  if (error) {
+    return {
+      ok: false,
+      mensagem:
+        error.code === '23503'
+          ? 'Não é possível remover esta ordem. Há vínculos que precisam ser removidos antes.'
+          : error.message,
+    };
+  }
+  if (!data || (data as unknown[]).length === 0) {
+    return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
+  }
+  return { ok: true, mensagem: 'Ordem removida.' };
+}
+
+async function lerOrdemId(client: Cliente, numero: number): Promise<string | null> {
+  const { data, error } = await client
+    .from('manutencao_ordens' as never)
+    .select('id')
+    .eq('numero', numero)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return ((data as { id: string } | null) ?? null)?.id ?? null;
+}
+
+async function lerVinculosOrdem(client: Cliente, ordemId: string) {
+  const [pecasUsadas, movimentosEstoque] = await Promise.all([
+    contarPorColuna(client, 'manutencao_ordem_pecas', 'ordem_id', ordemId),
+    contarPorColuna(client, 'manutencao_estoque_movimentos', 'ordem_id', ordemId),
+  ]);
+  return { pecasUsadas, movimentosEstoque };
+}
+
+async function limparAjudantes(client: Cliente, ordemId: string): Promise<string | null> {
+  const { error } = await client
+    .from('manutencao_ordem_ajudantes' as never)
+    .delete()
+    .eq('ordem_id', ordemId);
+  return error ? error.message : null;
+}
+
+async function contarPorColuna(
+  client: Cliente,
+  tabela: string,
+  coluna: string,
+  id: string,
+): Promise<number> {
+  const { count, error } = await client
+    .from(tabela as never)
+    .select('*', { count: 'exact', head: true })
+    .eq(coluna, id);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 async function setoresParaAbrir(
   leitura: OrdemLeitura,
   snap: UsuarioAuthzSnapshot,
-  usuarioId: string,
 ): Promise<string[] | 'todos'> {
   if (new ManutencaoAcesso().executaOficina(snap)) return 'todos';
-  return leitura.setoresElegiveis(usuarioId);
+  return setoresDoSnapshot(leitura, snap);
+}
+
+function setoresDoSnapshot(leitura: OrdemLeitura, snap: UsuarioAuthzSnapshot): Promise<string[]> {
+  const codigos = new ManutencaoSetoresPorModulo().codigosElegiveis(snap);
+  return leitura.setoresPorCodigos(codigos);
 }
 
 async function lerMaquina(
@@ -223,12 +318,12 @@ async function prepararCancelamento(
   usuarioId: string,
   motivo: string,
 ): Promise<Resultado | { exigeMotivo: boolean }> {
-  if (!(await veOrdem(leitura, snap, usuarioId, ordem.setor_id))) {
+  if (!(await veOrdem(leitura, snap, ordem.setor_id))) {
     return { ok: false, mensagem: MENSAGEM_SEM_PERMISSAO };
   }
   const tipo = tipoOrdem(ordem.tipo);
   if (!tipo) return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
-  const setores = await new FlagsDaOrdem().setoresDoSolicitante(leitura, snap, usuarioId);
+  const setores = await new FlagsDaOrdem().setoresDoSolicitante(leitura, snap);
   const decisao = new OrdemCancelamento().permite(
     pedidoCancelamento(ordem, snap, tipo, motivo, setores),
   );
@@ -247,11 +342,7 @@ function pedidoCancelamento(
   return {
     status: ordem.status,
     tipo,
-    solicitacaoEditar: new InternoAccessManager().temModulo(
-      snap,
-      'interno_manutencao_solicitacao',
-      'editar',
-    ),
+    solicitacaoEditar: acesso.abreCorretiva(snap),
     manutencaoEditar: acesso.executaOficina(snap),
     manutencaoAdministrar: acesso.administra(snap),
     motivo,
@@ -263,11 +354,10 @@ function pedidoCancelamento(
 async function veOrdem(
   leitura: OrdemLeitura,
   snap: UsuarioAuthzSnapshot,
-  usuarioId: string,
   setorId: string,
 ): Promise<boolean> {
   const acesso = new ManutencaoAcesso();
-  const setores = acesso.veTodas(snap) ? [] : await leitura.setoresElegiveis(usuarioId);
+  const setores = acesso.veTodas(snap) ? [] : await setoresDoSnapshot(leitura, snap);
   return new OrdemPermissao().veDetalhe(acesso.veTodas(snap), setores, setorId);
 }
 

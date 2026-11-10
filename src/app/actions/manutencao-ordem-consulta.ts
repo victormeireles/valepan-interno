@@ -2,10 +2,13 @@
 
 import { FilaFundacao } from '@/domain/manutencao/fila-fundacao';
 import { FilaOrdem, type FilaItem } from '@/domain/manutencao/fila-ordem';
-import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
+import {
+  ManutencaoAcesso,
+  MODULOS_MANUTENCAO_ENTRADA,
+} from '@/domain/manutencao/manutencao-acesso';
+import { ManutencaoSetoresPorModulo } from '@/domain/manutencao/manutencao-setores-por-modulo';
 import { OrdemPermissao } from '@/domain/manutencao/ordem-permissao';
 import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { FlagsDaOrdem } from './manutencao-ordem-flags';
@@ -14,13 +17,6 @@ import {
   type ClienteOrdem,
   type PecaOrdemVista,
 } from './manutencao-ordem-leitura';
-
-export type { PecaOrdemVista } from './manutencao-ordem-leitura';
-
-const MODULOS_ORDEM: readonly InternoModuloId[] = [
-  'interno_manutencao',
-  'interno_manutencao_solicitacao',
-];
 
 export type LinhaFila = {
   numero: number;
@@ -62,6 +58,7 @@ export type OrdemCarregada = {
   podeDevolver: boolean;
   podeFinalizar: boolean;
   podeCancelar: boolean;
+  podeExcluir: boolean;
   exigeMotivo: boolean;
 };
 
@@ -111,15 +108,16 @@ type CorpoOrdem = Omit<
   | 'podeDevolver'
   | 'podeFinalizar'
   | 'podeCancelar'
+  | 'podeExcluir'
   | 'exigeMotivo'
 >;
 
 export async function listarFila(): Promise<FilaListada> {
-  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_ORDEM, 'ler');
+  const { snap } = await requireInternoQualquerModulo(MODULOS_MANUTENCAO_ENTRADA, 'ler');
   const veTodas = new ManutencaoAcesso().veTodas(snap);
   const client = supabaseClientFactory.createServiceRoleClient();
   const leitura = new OrdemLeitura(client);
-  const setores = veTodas ? [] : await leitura.setoresElegiveis(usuarioId);
+  const setores = veTodas ? [] : await setoresDoSnapshot(leitura, snap);
   if (!veTodas && setores.length === 0) return filaVazia(false, 0);
   const itens = await montarFila(leitura, await lerFila(client, veTodas ? null : setores));
   if (itens.length === 0) return filaVazia(veTodas, setores.length);
@@ -127,12 +125,12 @@ export async function listarFila(): Promise<FilaListada> {
 }
 
 export async function carregarOrdem(numero: number): Promise<OrdemCarregada | null> {
-  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_ORDEM, 'ler');
+  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_MANUTENCAO_ENTRADA, 'ler');
   if (!Number.isInteger(numero) || numero <= 0) return null;
   const client = supabaseClientFactory.createServiceRoleClient();
   const leitura = new OrdemLeitura(client);
   const ordem = await lerOrdem(client, numero);
-  if (!ordem || !(await podeVer(leitura, snap, usuarioId, ordem.setor_id))) return null;
+  if (!ordem || !(await podeVer(leitura, snap, ordem.setor_id))) return null;
   return comporOrdem(leitura, ordem, snap, usuarioId);
 }
 
@@ -224,12 +222,16 @@ async function lerOrdem(client: ClienteOrdem, numero: number): Promise<OrdemBrut
 async function podeVer(
   leitura: OrdemLeitura,
   snap: UsuarioAuthzSnapshot,
-  usuarioId: string,
   setorId: string,
 ): Promise<boolean> {
   const acesso = new ManutencaoAcesso();
-  const setores = acesso.veTodas(snap) ? [] : await leitura.setoresElegiveis(usuarioId);
+  const setores = acesso.veTodas(snap) ? [] : await setoresDoSnapshot(leitura, snap);
   return new OrdemPermissao().veDetalhe(acesso.veTodas(snap), setores, setorId);
+}
+
+function setoresDoSnapshot(leitura: OrdemLeitura, snap: UsuarioAuthzSnapshot): Promise<string[]> {
+  const codigos = new ManutencaoSetoresPorModulo().codigosElegiveis(snap);
+  return leitura.setoresPorCodigos(codigos);
 }
 
 async function comporOrdem(
@@ -244,7 +246,7 @@ async function comporOrdem(
   const veValores = new ManutencaoAcesso().veTodas(snap);
   const nomes = await nomesDaOrdem(leitura, ordem);
   const flags = new FlagsDaOrdem();
-  const setores = await flags.setoresDoSolicitante(leitura, snap, usuarioId);
+  const setores = await flags.setoresDoSolicitante(leitura, snap);
   return {
     ...camposOrdem(ordem, tipo, status, nomes, veValores),
     pecas: await leitura.pecas(ordem.id, veValores),

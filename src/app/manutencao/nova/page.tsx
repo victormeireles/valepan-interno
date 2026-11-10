@@ -1,17 +1,18 @@
+import { redirect } from 'next/navigation';
 import { listarMaquinasAbertura } from '@/app/actions/manutencao-maquinas-abertura';
 import { NovaOrdemFormulario } from '@/features/manutencao/components/NovaOrdemFormulario';
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import {
+  MODULOS_MANUTENCAO_ENTRADA,
+  ManutencaoAcesso,
+} from '@/domain/manutencao/manutencao-acesso';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 
 export const dynamic = 'force-dynamic';
 
-const MODULOS_ABERTURA: readonly InternoModuloId[] = [
-  'interno_manutencao',
-  'interno_manutencao_solicitacao',
-];
-
 export default async function NovaOrdemPage() {
-  await requireInternoQualquerModulo(MODULOS_ABERTURA, 'editar');
+  const { snap } = await requireInternoQualquerModulo(MODULOS_MANUTENCAO_ENTRADA, 'ler');
+  if (!new ManutencaoAcesso().abreCorretiva(snap)) redirect('/?erro=sem-permissao');
+
   const maquinas = await listarMaquinasAbertura();
 
   return (

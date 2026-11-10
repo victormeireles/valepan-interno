@@ -1,15 +1,14 @@
 'use server';
 
-import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
-import type { InternoModuloId } from '@/lib/auth/interno-modulos-catalog';
+import {
+  ManutencaoAcesso,
+  MODULOS_MANUTENCAO_ENTRADA,
+} from '@/domain/manutencao/manutencao-acesso';
+import { ManutencaoSetoresPorModulo } from '@/domain/manutencao/manutencao-setores-por-modulo';
+import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { OrdemLeitura, type ClienteOrdem } from './manutencao-ordem-leitura';
-
-const MODULOS_ORDEM: readonly InternoModuloId[] = [
-  'interno_manutencao',
-  'interno_manutencao_solicitacao',
-];
 
 export type MaquinaAberturaItem = {
   id: string;
@@ -18,14 +17,18 @@ export type MaquinaAberturaItem = {
 };
 
 export async function listarMaquinasAbertura(): Promise<MaquinaAberturaItem[]> {
-  const { snap, usuarioId } = await requireInternoQualquerModulo(MODULOS_ORDEM, 'editar');
+  const { snap } = await requireInternoQualquerModulo(MODULOS_MANUTENCAO_ENTRADA, 'editar');
   const client = supabaseClientFactory.createServiceRoleClient();
   if (new ManutencaoAcesso().executaOficina(snap)) return lerAtivas(client, null);
-  return lerDoEscopo(client, usuarioId);
+  return lerDoEscopo(client, snap);
 }
 
-async function lerDoEscopo(client: ClienteOrdem, usuarioId: string): Promise<MaquinaAberturaItem[]> {
-  const setores = await new OrdemLeitura(client).setoresElegiveis(usuarioId);
+async function lerDoEscopo(
+  client: ClienteOrdem,
+  snap: UsuarioAuthzSnapshot,
+): Promise<MaquinaAberturaItem[]> {
+  const codigos = new ManutencaoSetoresPorModulo().codigosElegiveis(snap);
+  const setores = await new OrdemLeitura(client).setoresPorCodigos(codigos);
   if (setores.length === 0) return [];
   return lerAtivas(client, setores);
 }

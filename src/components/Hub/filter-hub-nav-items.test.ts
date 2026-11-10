@@ -25,26 +25,23 @@ describe('HUB_SECTIONS', () => {
     ]);
   });
 
-  it('abre manutenção com fila, nova ordem, máquinas, peças, preventiva, indicadores e solicitantes', () => {
+  it('abre manutenção com fila, nova ordem, máquinas, peças, preventiva e indicadores', () => {
+    const modulosEntrada = [
+      'interno_manutencao',
+      'interno_fermentacao',
+      'interno_forno',
+      'interno_embalagem',
+    ];
     const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
     expect(secao?.title).toBe('Manutenção');
     expect(secao?.items).toEqual([
       {
         href: '/manutencao',
-        title: 'Fila',
-        description: 'Ordens abertas e recebidas',
+        title: 'Ordens de Serviço',
+        description: 'Fila, detalhe e nova corretiva',
         icon: 'handyman',
         moduloId: 'interno_manutencao',
-        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
-      },
-      {
-        href: '/manutencao/nova',
-        title: 'Nova ordem',
-        description: 'Abrir corretiva',
-        icon: 'add',
-        moduloId: 'interno_manutencao',
-        moduloIds: ['interno_manutencao', 'interno_manutencao_solicitacao'],
-        nivelMinimo: 'editar',
+        moduloIds: modulosEntrada,
       },
       {
         href: '/manutencao/maquinas',
@@ -73,14 +70,6 @@ describe('HUB_SECTIONS', () => {
         description: 'Horas e real no período',
         icon: 'analytics',
         moduloId: 'interno_manutencao',
-      },
-      {
-        href: '/manutencao/solicitantes',
-        title: 'Solicitantes',
-        description: 'Setores que podem abrir ordem',
-        icon: 'manage_accounts',
-        moduloId: 'interno_manutencao',
-        nivelMinimo: 'administrar',
       },
     ]);
   });
@@ -182,7 +171,7 @@ describe('filterHubNavItems', () => {
     expect(planejamento.map((item) => item.href)).toEqual(['/ordens-producao']);
   });
 
-  it('mostra Nova ordem a quem edita manutenção ou solicitação', () => {
+  it('mostra Ordens de Serviço a quem lê manutenção ou edita produção', () => {
     const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
     const hrefs = (modulosEfetivos: UsuarioAuthzSnapshot['modulosEfetivos']) =>
       filterHubNavItems(
@@ -195,24 +184,19 @@ describe('filterHubNavItems', () => {
         manager,
       ).map((item) => item.href);
 
-    expect(
-      hrefs({
-        interno_manutencao: 'ler',
-        interno_manutencao_solicitacao: 'ler',
-      }),
-    ).not.toContain('/manutencao/nova');
-    expect(hrefs({ interno_manutencao: 'editar' })).toContain('/manutencao/nova');
-    expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).toContain(
-      '/manutencao/nova',
-    );
+    expect(hrefs({ interno_manutencao: 'ler' })).toContain('/manutencao');
+    expect(hrefs({ interno_fermentacao: 'editar' })).toContain('/manutencao');
+    expect(hrefs({ interno_forno: 'editar' })).toContain('/manutencao');
+    expect(hrefs({ interno_embalagem: 'editar' })).toContain('/manutencao');
     expect(hrefs({ interno_manutencao: 'ler' })).toContain('/manutencao/preventiva');
     expect(hrefs({ interno_manutencao: 'ler' })).toContain('/manutencao/indicadores');
-    expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).not.toContain(
+    expect(hrefs({ interno_fermentacao: 'editar' })).not.toContain(
       '/manutencao/preventiva',
     );
-    expect(hrefs({ interno_manutencao_solicitacao: 'editar' })).not.toContain(
+    expect(hrefs({ interno_fermentacao: 'editar' })).not.toContain(
       '/manutencao/indicadores',
     );
+    expect(hrefs({ interno_fermentacao: 'editar' })).not.toContain('/manutencao/nova');
   });
 
   it('folha do hub só aparece para quem administra pessoas', () => {
