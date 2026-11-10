@@ -209,7 +209,7 @@ function useMovimentoPecaModal() {
 
   function entrar(pedido: PedidoEntrada) {
     return dispararMovimento(pedido.pecaId, setAviso, () => router.refresh(), () =>
-      registrarEntrada(pedido.pecaId, pedido.quantidade, pedido.preco),
+      registrarEntrada(pedido.pecaId, pedido.quantidade),
     );
   }
 

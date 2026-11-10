@@ -31,7 +31,6 @@ export function PecaMovimentoModal({
 }: PecaMovimentoModalProps) {
   const tituloId = useId();
   const [quantidade, setQuantidade] = useState('');
-  const [preco, setPreco] = useState('');
   const [motivo, setMotivo] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -39,7 +38,6 @@ export function PecaMovimentoModal({
   useEffect(() => {
     if (!aberto) return;
     setQuantidade('');
-    setPreco('');
     setMotivo('');
     setErro(null);
     setSalvando(false);
@@ -72,7 +70,7 @@ export function PecaMovimentoModal({
     setErro(null);
     try {
       const resultado = entrada
-        ? await onEntrada({ pecaId: pecaAtual.id, quantidade, preco })
+        ? await onEntrada({ pecaId: pecaAtual.id, quantidade })
         : await onSaida({ pecaId: pecaAtual.id, quantidade, motivo });
       if (!resultado.ok) {
         setErro(resultado.mensagem);
@@ -152,16 +150,7 @@ export function PecaMovimentoModal({
                 value={quantidade}
                 onChange={(evento) => setQuantidade(evento.target.value)}
               />
-              {entrada ? (
-                <Input
-                  label="Preço"
-                  numeric
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={preco}
-                  onChange={(evento) => setPreco(evento.target.value)}
-                />
-              ) : (
+              {entrada ? null : (
                 <Input
                   label="Motivo"
                   autoComplete="off"

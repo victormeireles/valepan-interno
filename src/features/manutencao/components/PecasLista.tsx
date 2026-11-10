@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
-import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 
 const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm';
@@ -141,8 +140,6 @@ function CabecalhoLista({ grade, temAcoes }: { grade: string; temAcoes: boolean 
       <span className="whitespace-nowrap">Nome</span>
       <span className="whitespace-nowrap">Unidade</span>
       <span className="whitespace-nowrap text-right">Saldo</span>
-      <span className="whitespace-nowrap text-right">Custo médio</span>
-      <span className="whitespace-nowrap text-right">Valor</span>
       {temAcoes ? <span className="sr-only">Ações</span> : null}
     </div>
   );
@@ -169,7 +166,8 @@ function LinhaPeca({
   onEntrada: (peca: PecaItem) => void;
   onSaida: (peca: PecaItem) => void;
 }) {
-  const celulas = celulasDaPeca(peca);
+  const saldo = apresentacao.textoSaldo(peca.saldo);
+  const saldoNegativo = apresentacao.saldoNegativo(peca.saldo);
   const fundo = par ? 'bg-stone-50/60' : 'bg-white';
   const temAcoes = podeCadastrar || podeMovimentar;
 
@@ -177,8 +175,22 @@ function LinhaPeca({
     <li
       className={`grid grid-cols-1 gap-2 border-b border-stone-100 px-4 py-3 last:border-b-0 md:items-center md:gap-3 md:py-2 ${grade} ${fundo} transition-colors duration-150 hover:bg-amber-50/60`}
     >
-      <IdentidadePeca peca={peca} />
-      <NumerosPeca celulas={celulas} />
+      <p className="min-w-0 truncate font-mono text-sm tabular-nums text-stone-900">{peca.codigo}</p>
+      <p className="flex min-w-0 items-baseline gap-2 text-sm font-medium text-stone-900">
+        <span className="truncate">{peca.nome}</span>
+        {peca.ativo ? null : (
+          <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+            Inativa
+          </span>
+        )}
+      </p>
+      <p className="text-sm text-stone-700">
+        <RotuloMovel>Unidade</RotuloMovel>
+        {peca.unidade}
+      </p>
+      <CampoNumero rotulo="Saldo" className={saldoNegativo ? 'text-red-700' : 'text-stone-900'}>
+        {saldo}
+      </CampoNumero>
       {temAcoes ? (
         <AcoesLinha
           peca={peca}
@@ -269,45 +281,6 @@ function AcoesLinha({
   );
 }
 
-function IdentidadePeca({ peca }: { peca: PecaItem }) {
-  return (
-    <div className="min-w-0 md:contents">
-      <p className="min-w-0 truncate font-mono text-sm tabular-nums text-stone-900">{peca.codigo}</p>
-      <p className="flex min-w-0 items-baseline gap-2 text-sm font-medium text-stone-900">
-        <span className="truncate">{peca.nome}</span>
-        {peca.ativo ? null : (
-          <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-            Inativa
-          </span>
-        )}
-      </p>
-      <p className="text-sm text-stone-700">
-        <RotuloMovel>Unidade</RotuloMovel>
-        {peca.unidade}
-      </p>
-    </div>
-  );
-}
-
-function NumerosPeca({ celulas }: { celulas: CelulasPeca }) {
-  const corSaldo = celulas.saldoNegativo ? 'text-red-700' : 'text-stone-900';
-  const corValor = celulas.valorNegativo ? 'text-red-700' : 'text-stone-900';
-
-  return (
-    <div className="grid grid-cols-3 gap-2 md:contents">
-      <CampoNumero rotulo="Saldo" className={corSaldo}>
-        {celulas.saldo}
-      </CampoNumero>
-      <CampoNumero rotulo="Custo médio" className="text-stone-700">
-        {celulas.custo}
-      </CampoNumero>
-      <CampoNumero rotulo="Valor" className={corValor}>
-        {celulas.valor}
-      </CampoNumero>
-    </div>
-  );
-}
-
 function CampoNumero({
   rotulo,
   className,
@@ -333,18 +306,9 @@ function RotuloMovel({ children }: { children: string }) {
   );
 }
 
-type CelulasPeca = {
-  saldo: string;
-  saldoNegativo: boolean;
-  custo: string;
-  valor: string;
-  valorNegativo: boolean;
-};
-
 class ApresentacaoPeca {
   constructor(
     private readonly quantidades = new QuantidadeEstoque(),
-    private readonly precos = new PrecoCentavos(),
     private readonly saldos = new ConversorSaldo(),
   ) {}
 
@@ -355,32 +319,13 @@ class ApresentacaoPeca {
   saldoNegativo(saldo: string): boolean {
     return this.saldos.emMilesimos(saldo) < 0;
   }
-
-  textoCusto(centavos: number | null): string {
-    if (centavos === null) return '—';
-    return this.precos.formatar(centavos);
-  }
-
-  textoValor(centavos: number): string {
-    return this.precos.formatar(centavos);
-  }
 }
 
 const apresentacao = new ApresentacaoPeca();
 
-function celulasDaPeca(peca: PecaItem): CelulasPeca {
-  return {
-    saldo: apresentacao.textoSaldo(peca.saldo),
-    saldoNegativo: apresentacao.saldoNegativo(peca.saldo),
-    custo: apresentacao.textoCusto(peca.custoMedioCentavos),
-    valor: apresentacao.textoValor(peca.valorCentavos),
-    valorNegativo: peca.valorCentavos < 0,
-  };
-}
-
 function gradeDaLista(temAcoes: boolean): string {
   if (temAcoes) {
-    return 'md:grid-cols-[6.5rem_minmax(0,1.4fr)_4.5rem_5.5rem_7.5rem_6rem_minmax(16rem,auto)]';
+    return 'md:grid-cols-[6.5rem_minmax(0,1.6fr)_4.5rem_6rem_minmax(16rem,auto)]';
   }
-  return 'md:grid-cols-[6.5rem_minmax(0,1.6fr)_4.5rem_6rem_8.5rem_6.5rem]';
+  return 'md:grid-cols-[6.5rem_minmax(0,1.8fr)_4.5rem_6.5rem]';
 }

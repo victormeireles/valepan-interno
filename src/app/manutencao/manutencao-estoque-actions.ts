@@ -3,7 +3,6 @@
 import { redirect } from 'next/navigation';
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
 import { CustoMedio } from '@/domain/manutencao/custo-medio';
-import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 import { auth } from '@/lib/auth';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
@@ -51,18 +50,15 @@ const FRASES_FUNCAO = [
 export async function registrarEntrada(
   pecaId: string,
   quantidadeTexto: string,
-  precoTexto: string,
 ): Promise<Resultado> {
   await requireInternoModulo('interno_manutencao', 'editar');
   const quantidadeMilesimos = new QuantidadeEstoque().emMilesimos(quantidadeTexto);
   if (quantidadeMilesimos === null) return { ok: false, mensagem: QUANTIDADE_INVALIDA };
-  const preco = new PrecoCentavos().parse(precoTexto);
-  if (preco === null) return { ok: false, mensagem: 'Informe o preço.' };
   return gravarMovimento({
     pecaId,
     tipo: 'entrada',
     quantidadeMilesimos,
-    preco,
+    preco: 0,
     motivo: null,
     sucesso: 'Entrada registrada.',
   });
