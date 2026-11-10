@@ -321,7 +321,8 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
           !pathname.startsWith('/manutencao/solicitantes') &&
           !pathname.startsWith('/manutencao/nova') &&
           !pathname.startsWith('/manutencao/ordens') &&
-          !pathname.startsWith('/manutencao/preventiva'),
+          !pathname.startsWith('/manutencao/preventiva') &&
+          !pathname.startsWith('/manutencao/indicadores'),
       },
       {
         type: 'link',
@@ -356,6 +357,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'event_repeat',
         moduloId: 'interno_manutencao',
         match: startsWith('/manutencao/preventiva'),
+      },
+      {
+        type: 'link',
+        href: '/manutencao/indicadores',
+        label: 'Indicadores',
+        icon: 'analytics',
+        moduloId: 'interno_manutencao',
+        match: startsWith('/manutencao/indicadores'),
       },
       {
         type: 'link',

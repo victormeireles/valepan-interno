@@ -245,6 +245,13 @@ export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_manutencao',
   },
   {
+    href: '/manutencao/indicadores',
+    title: 'Indicadores',
+    description: 'Horas e real no período',
+    icon: 'analytics',
+    moduloId: 'interno_manutencao',
+  },
+  {
     href: '/manutencao/solicitantes',
     title: 'Solicitantes',
     description: 'Setores que podem abrir ordem',

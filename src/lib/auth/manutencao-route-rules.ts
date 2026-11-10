@@ -32,7 +32,7 @@ function anyModulo(
   return { kind: 'anyModulo', modulos, minimo };
 }
 
-/** Mais específico primeiro. Nova, ordens, peças e preventiva vêm antes do prefixo da fila. */
+/** Mais específico primeiro. Indicadores, nova, ordens, peças e preventiva vêm antes da fila. */
 export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
   {
     match: 'prefix',
@@ -52,6 +52,11 @@ export const MANUTENCAO_ROUTE_RULES: ManutencaoRouteRule[] = [
   {
     match: 'prefix',
     prefix: '/manutencao/preventiva',
+    requirement: modulo('interno_manutencao', 'ler'),
+  },
+  {
+    match: 'prefix',
+    prefix: '/manutencao/indicadores',
     requirement: modulo('interno_manutencao', 'ler'),
   },
   {
