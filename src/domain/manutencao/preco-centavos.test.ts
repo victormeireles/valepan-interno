@@ -18,6 +18,14 @@ describe('PrecoCentavos', () => {
     expect(preco.parse('abc')).toBeNull();
   });
 
+  it('apara o texto, aceita ponto ou vírgula e recusa milhar', () => {
+    expect(preco.parse(' 12.50 ')).toBe(1250);
+    expect(preco.parse('12,50')).toBe(1250);
+    expect(preco.parse('12.5')).toBe(1250);
+    expect(preco.parse('1.000')).toBeNull();
+    expect(preco.parse('12.505')).toBeNull();
+  });
+
   it('formata centavos com duas casas e vírgula', () => {
     expect(preco.formatar(1050)).toBe('10,50');
   });

@@ -96,4 +96,20 @@ describe('PecaCadastro', () => {
 
     expect(resultado.ok).toBe(true);
   });
+
+  it('recusa o código de outra peça na edição', () => {
+    expect(
+      cadastro.validar(
+        entradaValida,
+        [
+          { id: 'peca-1', codigo: 'rol-1' },
+          { id: 'peca-2', codigo: '  ROL-1 ' },
+        ],
+        'peca-1',
+      ),
+    ).toEqual({
+      ok: false,
+      mensagem: 'Já existe uma peça com esse código.',
+    });
+  });
 });

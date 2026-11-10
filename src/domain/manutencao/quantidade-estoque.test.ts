@@ -8,6 +8,7 @@ describe('QuantidadeEstoque', () => {
     expect(quantidade.emMilesimos('1')).toBe(1000);
     expect(quantidade.emMilesimos('1,5')).toBe(1500);
     expect(quantidade.emMilesimos('0.001')).toBe(1);
+    expect(quantidade.emMilesimos(' 1,5 ')).toBe(1500);
   });
 
   it('recusa vazio, zero, negativo, mais de 3 casas e texto', () => {

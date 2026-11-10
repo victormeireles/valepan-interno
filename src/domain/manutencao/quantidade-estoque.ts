@@ -2,7 +2,7 @@ const QUANTIDADE_TEXTO = /^\d+(\.\d{1,3})?$/;
 
 export class QuantidadeEstoque {
   emMilesimos(texto: string): number | null {
-    const normalizado = texto.replace(/,/g, '.');
+    const normalizado = texto.trim().replace(/,/g, '.');
     if (!QUANTIDADE_TEXTO.test(normalizado)) return null;
     const milesimos = this.milesimosDe(normalizado);
     return milesimos > 0 ? milesimos : null;

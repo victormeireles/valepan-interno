@@ -1,9 +1,10 @@
-const PRECO_TEXTO = /^\d+(,\d{1,2})?$/;
+const PRECO_TEXTO = /^\d+([.,]\d{1,2})?$/;
 
 export class PrecoCentavos {
   parse(texto: string): number | null {
-    if (!PRECO_TEXTO.test(texto)) return null;
-    const [reais, fracao = ''] = texto.split(',');
+    const aparado = texto.trim();
+    if (!PRECO_TEXTO.test(aparado)) return null;
+    const [reais, fracao = ''] = aparado.split(/[.,]/);
     return Number(reais) * 100 + Number(fracao.padEnd(2, '0'));
   }
 

@@ -37,6 +37,12 @@ CREATE TABLE public.manutencao_estoque_movimentos (
   )
 );
 
+CREATE INDEX manutencao_estoque_movimentos_peca_created_idx
+  ON public.manutencao_estoque_movimentos (peca_id, created_at);
+
+CREATE INDEX manutencao_estoque_movimentos_usuario_id_idx
+  ON public.manutencao_estoque_movimentos (usuario_id);
+
 ALTER TABLE public.manutencao_pecas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.manutencao_estoque_movimentos ENABLE ROW LEVEL SECURITY;
 
