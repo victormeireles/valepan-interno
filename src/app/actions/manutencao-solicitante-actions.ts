@@ -125,15 +125,10 @@ async function substituirSetores(
   usuarioId: string,
   setorIds: string[],
 ): Promise<Resultado> {
-  const apagados = await client
-    .from('manutencao_usuario_setores' as never)
-    .delete()
-    .eq('usuario_id', usuarioId);
-  if (apagados.error) return { ok: false, mensagem: apagados.error.message };
-  if (setorIds.length === 0) return { ok: true, mensagem: MENSAGEM_SALVO };
-  const gravados = await client.from('manutencao_usuario_setores' as never).insert(
-    setorIds.map((setorId) => ({ usuario_id: usuarioId, setor_id: setorId })) as never,
+  const { error } = await client.rpc(
+    'manutencao_substituir_usuario_setores' as never,
+    { p_usuario: usuarioId, p_setores: setorIds } as never,
   );
-  if (gravados.error) return { ok: false, mensagem: gravados.error.message };
+  if (error) return { ok: false, mensagem: error.message };
   return { ok: true, mensagem: MENSAGEM_SALVO };
 }
