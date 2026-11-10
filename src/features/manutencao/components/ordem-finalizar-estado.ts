@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { atualizarFinalizacaoOrdem } from '@/app/actions/manutencao-ordem-atualizar-finalizacao-actions';
 import {
   finalizarOrdem,
   type EntradaFinalizacao,
@@ -11,13 +12,39 @@ import { ParedeSaoPaulo } from './parede-sao-paulo';
 
 const MENSAGEM_QUANTIDADE = 'Informe uma quantidade maior que zero, com até 3 casas.';
 
-export type PecaEscolha = { id: string; codigo: string; nome: string; unidade: string };
+export type ModoFinalizacao = 'finalizar' | 'editar';
+
+export type PecaEscolha = {
+  id: string;
+  codigo: string;
+  nome: string;
+  unidade: string;
+  saldo: string;
+};
+
 export type AjudanteEscolha = { id: string; nome: string };
+
 export type LinhaPeca = {
   pecaId: string;
   rotulo: string;
   quantidadeTexto: string;
   unidade: string;
+};
+
+export type ValoresIniciaisFinalizacao = {
+  servicos: string;
+  linhas: LinhaPeca[];
+  ajudanteIds: string[];
+};
+
+export type ApoioFinalizacao = {
+  pecas: PecaEscolha[];
+  ajudantes: AjudanteEscolha[];
+  inicioPadrao: string;
+  fimPadrao: string;
+  inicioIsoPadrao: string;
+  fimIsoPadrao: string;
+  iniciais: ValoresIniciaisFinalizacao | null;
 };
 
 type Recusa = { ok: false; mensagem: string };
@@ -40,11 +67,13 @@ export function useFinalizacao(
   numero: number,
   pecas: PecaEscolha[],
   padroes: PadroesHorario,
+  modo: ModoFinalizacao,
+  iniciais: ValoresIniciaisFinalizacao | null,
   onConcluir: (mensagem: string) => void,
 ) {
-  const campos = useCamposFinalizacao(padroes.inicio, padroes.fim);
-  const pecasForm = usePecasFinalizacao(pecas, campos.definirErro);
-  const ajudantes = useAjudantesMarcados();
+  const campos = useCamposFinalizacao(padroes.inicio, padroes.fim, iniciais?.servicos ?? '');
+  const pecasForm = usePecasFinalizacao(pecas, iniciais?.linhas ?? [], campos.definirErro);
+  const ajudantes = useAjudantesMarcados(iniciais?.ajudanteIds ?? []);
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -54,7 +83,7 @@ export function useFinalizacao(
       campos.definirErro(pedido.mensagem);
       return;
     }
-    await gravar(numero, pedido.entrada, campos.definirErro, campos.definirEnviando, onConcluir);
+    await gravar(numero, modo, pedido.entrada, campos.definirErro, campos.definirEnviando, onConcluir);
   }
 
   return {
@@ -66,10 +95,10 @@ export function useFinalizacao(
   };
 }
 
-function useCamposFinalizacao(inicioPadrao: string, fimPadrao: string) {
+function useCamposFinalizacao(inicioPadrao: string, fimPadrao: string, servicosPadrao: string) {
   const [inicio, definirInicio] = useState(inicioPadrao);
   const [fim, definirFim] = useState(fimPadrao);
-  const [servicos, definirServicos] = useState('');
+  const [servicos, definirServicos] = useState(servicosPadrao);
   const [erro, definirErro] = useState<string | null>(null);
   const [enviando, definirEnviando] = useState(false);
   return {
@@ -86,10 +115,14 @@ function useCamposFinalizacao(inicioPadrao: string, fimPadrao: string) {
   };
 }
 
-function usePecasFinalizacao(pecas: PecaEscolha[], definirErro: (mensagem: string | null) => void) {
+function usePecasFinalizacao(
+  pecas: PecaEscolha[],
+  linhasIniciais: LinhaPeca[],
+  definirErro: (mensagem: string | null) => void,
+) {
   const [pecaId, definirPecaId] = useState('');
   const [quantidade, definirQuantidade] = useState('');
-  const [linhas, definirLinhas] = useState<LinhaPeca[]>([]);
+  const [linhas, definirLinhas] = useState<LinhaPeca[]>(linhasIniciais);
 
   function adicionar() {
     const escolhida = pecas.find((peca) => peca.id === pecaId) ?? null;
@@ -110,8 +143,8 @@ function usePecasFinalizacao(pecas: PecaEscolha[], definirErro: (mensagem: strin
   return { pecaId, quantidade, linhas, definirPecaId, definirQuantidade, adicionar, remover };
 }
 
-function useAjudantesMarcados() {
-  const [ids, definirIds] = useState<string[]>([]);
+function useAjudantesMarcados(idsIniciais: string[]) {
+  const [ids, definirIds] = useState<string[]>(idsIniciais);
 
   function alternar(id: string) {
     definirIds((atuais) =>
@@ -132,6 +165,7 @@ function rascunhoDe(
 
 async function gravar(
   numero: number,
+  modo: ModoFinalizacao,
   entrada: EntradaFinalizacao,
   definirErro: (mensagem: string | null) => void,
   definirEnviando: (enviando: boolean) => void,
@@ -140,7 +174,10 @@ async function gravar(
   definirEnviando(true);
   definirErro(null);
   try {
-    const resultado = await finalizarOrdem(numero, entrada);
+    const resultado =
+      modo === 'editar'
+        ? await atualizarFinalizacaoOrdem(numero, entrada)
+        : await finalizarOrdem(numero, entrada);
     if (!resultado.ok) {
       definirErro(resultado.mensagem);
       return;

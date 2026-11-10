@@ -1,9 +1,19 @@
+'use client';
+
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { LinhaFila } from '@/app/actions/manutencao-ordem-consulta';
+import { Tabs } from '@/components/ui/Tabs';
+import {
+  FilaStatusFiltro,
+  type FilaStatusFiltroId,
+} from '@/domain/manutencao/fila-status-filtro';
 import { FilaVazia } from './FilaVazia';
 import { RotulosFila } from './rotulos-fila';
 
 const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm';
+const FILTRO_PADRAO: FilaStatusFiltroId = 'abertas';
+const filtroStatus = new FilaStatusFiltro();
 
 type FilaOrdensProps = {
   itens: LinhaFila[];
@@ -12,22 +22,40 @@ type FilaOrdensProps = {
 };
 
 export function FilaOrdens({ itens, mensagem, podeAbrir }: FilaOrdensProps) {
+  const [filtro, setFiltro] = useState<FilaStatusFiltroId>(FILTRO_PADRAO);
   const rotulos = new RotulosFila();
+  const contagem = useMemo(() => filtroStatus.contar(itens), [itens]);
+  const filtradas = useMemo(() => filtroStatus.aplicar(itens, filtro), [itens, filtro]);
+  const vazia = mensagemVazia(filtro, mensagem);
 
   return (
     <div className="space-y-4">
       <CabecalhoFila podeAbrir={podeAbrir} />
-      {itens.length === 0 ? (
-        <FilaVazia mensagem={mensagem ?? 'Nenhuma ordem.'} comTitulo={false} />
+      <Tabs
+        ariaLabel="Filtro da fila"
+        value={filtro}
+        onChange={(id) => setFiltro(id as FilaStatusFiltroId)}
+        tabs={[
+          { id: 'abertas', label: 'Abertas', count: contagem.abertas },
+          { id: 'finalizadas', label: 'Finalizadas', count: contagem.finalizadas },
+        ]}
+      />
+      {filtradas.length === 0 ? (
+        <FilaVazia mensagem={vazia} comTitulo={false} />
       ) : (
         <ul className={CARTAO}>
-          {itens.map((item) => (
+          {filtradas.map((item) => (
             <LinhaFila key={item.numero} item={item} rotulos={rotulos} />
           ))}
         </ul>
       )}
     </div>
   );
+}
+
+function mensagemVazia(filtro: FilaStatusFiltroId, mensagem?: string): string {
+  if (filtro === 'finalizadas') return 'Nenhuma ordem finalizada.';
+  return mensagem ?? 'Nenhuma ordem aberta.';
 }
 
 function CabecalhoFila({ podeAbrir }: { podeAbrir: boolean }) {

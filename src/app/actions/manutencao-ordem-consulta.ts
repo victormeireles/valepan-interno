@@ -25,9 +25,10 @@ export type LinhaFila = {
   urgencia: string | null;
   tipoProblema: string | null;
   tipo: 'corretiva' | 'preventiva';
-  status: 'aberta' | 'recebida';
+  status: 'aberta' | 'recebida' | 'finalizada';
   recebidaPorNome: string | null;
   abertaEm: string;
+  fimEm: string | null;
 };
 
 export type FilaListada = { mensagem?: string; itens: LinhaFila[] };
@@ -53,10 +54,11 @@ export type OrdemCarregada = {
   cancelamentoMotivo: string | null;
   custoPecasCentavos: number | null;
   pecas: PecaOrdemVista[];
-  ajudantes: { nome: string }[];
+  ajudantes: { id: string; nome: string }[];
   podeReceber: boolean;
   podeDevolver: boolean;
   podeFinalizar: boolean;
+  podeEditarFinalizacao: boolean;
   podeCancelar: boolean;
   podeExcluir: boolean;
   exigeMotivo: boolean;
@@ -72,6 +74,7 @@ type FilaBruta = {
   status: string;
   recebida_por: string | null;
   aberta_em: string;
+  fim_em: string | null;
 };
 type OrdemBruta = {
   id: string;
@@ -107,6 +110,7 @@ type CorpoOrdem = Omit<
   | 'podeReceber'
   | 'podeDevolver'
   | 'podeFinalizar'
+  | 'podeEditarFinalizacao'
   | 'podeCancelar'
   | 'podeExcluir'
   | 'exigeMotivo'
@@ -142,9 +146,9 @@ async function lerFila(client: ClienteOrdem, setores: string[] | null): Promise<
   const consulta = client
     .from('manutencao_ordens' as never)
     .select(
-      'numero, maquina_id, setor_id, urgencia, tipo_problema, tipo, status, recebida_por, aberta_em',
+      'numero, maquina_id, setor_id, urgencia, tipo_problema, tipo, status, recebida_por, aberta_em, fim_em',
     )
-    .in('status', ['aberta', 'recebida']);
+    .in('status', ['aberta', 'recebida', 'finalizada']);
   const filtrada = setores ? consulta.in('setor_id', setores) : consulta;
   const { data, error } = await filtrada;
   if (error) throw new Error(error.message);
@@ -186,6 +190,7 @@ function paraLinhaFila(
     status,
     recebidaPorNome: linha.recebida_por ? (pessoas.get(linha.recebida_por) ?? null) : null,
     abertaEm: linha.aberta_em,
+    fimEm: linha.fim_em,
   };
 }
 
@@ -204,6 +209,7 @@ function paraItemFila(linha: LinhaFila): FilaItem {
     urgencia: linha.urgencia,
     status: linha.status,
     abertaEm: linha.abertaEm,
+    fimEm: linha.fimEm,
   };
 }
 
@@ -307,8 +313,8 @@ function tipoOrdem(valor: string): 'corretiva' | 'preventiva' | null {
   return null;
 }
 
-function statusFila(valor: string): 'aberta' | 'recebida' | null {
-  if (valor === 'aberta' || valor === 'recebida') return valor;
+function statusFila(valor: string): 'aberta' | 'recebida' | 'finalizada' | null {
+  if (valor === 'aberta' || valor === 'recebida' || valor === 'finalizada') return valor;
   return null;
 }
 

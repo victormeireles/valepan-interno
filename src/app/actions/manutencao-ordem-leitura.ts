@@ -3,10 +3,16 @@ import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 export type ClienteOrdem = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 export type PecaOrdemVista = {
+  pecaId: string;
   nome: string;
   quantidade: string;
   custoUnitarioCentavos: number | null;
   custoTotalCentavos: number | null;
+};
+
+export type AjudanteOrdemVista = {
+  id: string;
+  nome: string;
 };
 
 type NomeTabela = 'usuarios' | 'manutencao_maquinas' | 'pessoas_setores' | 'manutencao_pecas';
@@ -64,7 +70,7 @@ export class OrdemLeitura {
       .sort((esquerda, direita) => esquerda.nome.localeCompare(direita.nome, 'pt-BR'));
   }
 
-  async ajudantes(ordemId: string): Promise<{ nome: string }[]> {
+  async ajudantes(ordemId: string): Promise<AjudanteOrdemVista[]> {
     const { data, error } = await this.client
       .from('manutencao_ordem_ajudantes' as never)
       .select('usuario_id')
@@ -73,7 +79,7 @@ export class OrdemLeitura {
     const ids = ((data ?? []) as { usuario_id: string }[]).map((linha) => linha.usuario_id);
     const nomes = await this.nomesPorId('usuarios', ids);
     return ids
-      .map((id) => ({ nome: nomes.get(id) ?? '' }))
+      .map((id) => ({ id, nome: nomes.get(id) ?? '' }))
       .sort((esquerda, direita) => esquerda.nome.localeCompare(direita.nome, 'pt-BR'));
   }
 
@@ -94,6 +100,7 @@ export class OrdemLeitura {
     const quantidade =
       typeof linha.quantidade === 'string' ? linha.quantidade : String(linha.quantidade);
     return {
+      pecaId: linha.peca_id,
       nome: nomes.get(linha.peca_id) ?? '',
       quantidade,
       custoUnitarioCentavos: veValores ? linha.custo_unitario_centavos : null,

@@ -48,4 +48,34 @@ describe('OrdemPermissao', () => {
       }),
     ).toBe(false);
   });
+
+  it('edita finalização para quem recebeu ou para quem administra', () => {
+    expect(
+      permissao.editaFinalizacao({
+        status: 'finalizada',
+        recebidoPor: 'user-1',
+        usuarioId: 'user-1',
+        administra: false,
+      }),
+    ).toBe(true);
+    expect(
+      permissao.editaFinalizacao({
+        status: 'finalizada',
+        recebidoPor: 'user-1',
+        usuarioId: 'user-2',
+        administra: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('nega editar finalização para outra pessoa sem administrar', () => {
+    expect(
+      permissao.editaFinalizacao({
+        status: 'finalizada',
+        recebidoPor: 'user-1',
+        usuarioId: 'user-2',
+        administra: false,
+      }),
+    ).toBe(false);
+  });
 });

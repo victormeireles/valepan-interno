@@ -7,8 +7,9 @@ function item(
   urgencia: string | null,
   abertaEm: string,
   status: FilaItem['status'] = 'aberta',
+  fimEm: string | null = null,
 ): FilaItem {
-  return { numero, tipo, urgencia, status, abertaEm };
+  return { numero, tipo, urgencia, status, abertaEm, fimEm };
 }
 
 describe('FilaOrdem', () => {
@@ -29,5 +30,17 @@ describe('FilaOrdem', () => {
     const ordenados = fila.ordenar(itens).map((linha) => linha.numero);
 
     expect(ordenados).toEqual([5, 3, 8, 4, 6, 2, 1, 7]);
+  });
+
+  it('mantém finalizadas depois das abertas e recebidas, da mais nova para a mais antiga', () => {
+    const itens = [
+      item(10, 'corretiva', 'maquina_parou', '2026-11-08T08:00:00-03:00', 'finalizada', '2026-11-08T12:00:00-03:00'),
+      item(11, 'corretiva', 'maquina_parou', '2026-11-09T08:00:00-03:00'),
+      item(12, 'corretiva', 'oferecendo_risco', '2026-11-07T08:00:00-03:00', 'finalizada', '2026-11-09T18:00:00-03:00'),
+    ];
+
+    const ordenados = fila.ordenar(itens).map((linha) => linha.numero);
+
+    expect(ordenados).toEqual([11, 12, 10]);
   });
 });

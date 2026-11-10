@@ -1,79 +1,177 @@
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
+import ModalPortal from '@/components/ui/ModalPortal';
 import { Select, type SelectOption } from '@/components/ui/Select';
+import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
+import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 import {
   useFinalizacao,
   type AjudanteEscolha,
   type LinhaPeca,
+  type ModoFinalizacao,
   type PecaEscolha,
+  type ValoresIniciaisFinalizacao,
 } from './ordem-finalizar-estado';
 
-const CARTAO = 'max-w-xl space-y-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm';
-
 type OrdemFinalizarFormularioProps = {
+  aberto: boolean;
   numero: number;
+  modo: ModoFinalizacao;
   pecas: PecaEscolha[];
   ajudantes: AjudanteEscolha[];
   inicioPadrao: string;
   fimPadrao: string;
   inicioIsoPadrao: string;
   fimIsoPadrao: string;
+  iniciais: ValoresIniciaisFinalizacao | null;
+  onFechar: () => void;
   onConcluir: (mensagem: string) => void;
 };
 
 export function OrdemFinalizarFormulario({
+  aberto,
   numero,
+  modo,
   pecas,
   ajudantes,
   inicioPadrao,
   fimPadrao,
   inicioIsoPadrao,
   fimIsoPadrao,
+  iniciais,
+  onFechar,
   onConcluir,
 }: OrdemFinalizarFormularioProps) {
+  const tituloId = useId();
   const formulario = useFinalizacao(
     numero,
     pecas,
     { inicio: inicioPadrao, fim: fimPadrao, inicioIso: inicioIsoPadrao, fimIso: fimIsoPadrao },
-    onConcluir,
+    modo,
+    iniciais,
+    (mensagem) => {
+      onConcluir(mensagem);
+      onFechar();
+    },
   );
 
+  useEffect(() => {
+    if (!aberto) return;
+    const fecharTecla = (evento: KeyboardEvent) => {
+      if (evento.key === 'Escape' && !formulario.enviando) onFechar();
+    };
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', fecharTecla);
+    return () => {
+      document.body.style.overflow = overflowAnterior;
+      window.removeEventListener('keydown', fecharTecla);
+    };
+  }, [aberto, formulario.enviando, onFechar]);
+
+  if (!aberto) return null;
+
+  const titulo = modo === 'editar' ? 'Editar finalização' : 'Finalizar ordem';
+  const rotuloBotao = modo === 'editar' ? 'Salvar finalização' : 'Finalizar ordem';
+
+  function tentarFechar() {
+    if (!formulario.enviando) onFechar();
+  }
+
   return (
-    <form onSubmit={formulario.enviar} className={CARTAO}>
-      <h2 className="text-base font-semibold text-stone-900">Finalizar ordem</h2>
-      <Horarios
-        inicio={formulario.inicio}
-        fim={formulario.fim}
-        onInicio={formulario.definirInicio}
-        onFim={formulario.definirFim}
-      />
-      <CampoServicos servicos={formulario.servicos} onAlterar={formulario.definirServicos} />
-      <SeletorPecas
-        pecas={pecas}
-        pecaId={formulario.pecaId}
-        quantidade={formulario.quantidade}
-        onPeca={formulario.definirPecaId}
-        onQuantidade={formulario.definirQuantidade}
-        onAdicionar={formulario.adicionar}
-      />
-      <LinhasPeca linhas={formulario.linhas} onRemover={formulario.remover} />
-      <AjudantesOpcao
-        ajudantes={ajudantes}
-        marcados={formulario.ajudanteIds}
-        onAlternar={formulario.alternarAjudante}
-      />
-      {formulario.erro ? (
-        <p role="alert" className="text-sm text-red-700">
-          {formulario.erro}
-        </p>
-      ) : null}
-      <Button type="submit" size="lg" disabled={formulario.enviando} icon="check_circle">
-        Finalizar ordem
-      </Button>
-    </form>
+    <ModalPortal>
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-0 sm:items-center sm:p-4"
+        onClick={tentarFechar}
+      >
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tituloId}
+          className={[
+            'flex w-full max-w-xl flex-col overflow-hidden border-stone-200 bg-white shadow-lg',
+            'max-h-[100dvh] rounded-t-2xl border sm:max-h-[min(90dvh,44rem)] sm:rounded-2xl',
+            'pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:pt-0',
+          ].join(' ')}
+          onClick={(evento) => evento.stopPropagation()}
+        >
+          <header className="flex shrink-0 items-start justify-between gap-3 border-b border-stone-100 px-4 py-4 sm:px-5">
+            <div className="min-w-0">
+              <h2
+                id={tituloId}
+                className="text-lg font-semibold tracking-tight text-stone-900 sm:text-xl"
+              >
+                {titulo}
+              </h2>
+              <p className="mt-0.5 text-sm text-stone-500">Horários, serviços, peças e ajudantes</p>
+            </div>
+            <IconButton
+              icon="close"
+              label="Fechar"
+              size="lg"
+              variant="ghost"
+              disabled={formulario.enviando}
+              onClick={tentarFechar}
+            />
+          </header>
+          <form onSubmit={formulario.enviar} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+              <Horarios
+                inicio={formulario.inicio}
+                fim={formulario.fim}
+                onInicio={formulario.definirInicio}
+                onFim={formulario.definirFim}
+              />
+              <CampoServicos servicos={formulario.servicos} onAlterar={formulario.definirServicos} />
+              <SeletorPecas
+                pecas={pecas}
+                pecaId={formulario.pecaId}
+                quantidade={formulario.quantidade}
+                onPeca={formulario.definirPecaId}
+                onQuantidade={formulario.definirQuantidade}
+                onAdicionar={formulario.adicionar}
+              />
+              <LinhasPeca linhas={formulario.linhas} onRemover={formulario.remover} />
+              <AjudantesOpcao
+                ajudantes={ajudantes}
+                marcados={formulario.ajudanteIds}
+                onAlternar={formulario.alternarAjudante}
+              />
+              {formulario.erro ? (
+                <p role="alert" className="text-sm text-red-700">
+                  {formulario.erro}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-stone-100 px-4 py-4 sm:flex-row sm:px-5">
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                disabled={formulario.enviando}
+                className="flex-1"
+                onClick={tentarFechar}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="lg"
+                disabled={formulario.enviando}
+                icon="check_circle"
+                className="flex-1"
+              >
+                {formulario.enviando ? 'Salvando…' : rotuloBotao}
+              </Button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </ModalPortal>
   );
 }
 
@@ -241,9 +339,15 @@ function AjudantesOpcao({
   );
 }
 
+const quantidades = new QuantidadeEstoque();
+const saldos = new ConversorSaldo();
+
 function opcoesPeca(pecas: PecaEscolha[]): SelectOption[] {
   return [
     { value: '', label: 'Selecione a peça' },
-    ...pecas.map((peca) => ({ value: peca.id, label: `${peca.codigo} · ${peca.nome}` })),
+    ...pecas.map((peca) => ({
+      value: peca.id,
+      label: `${peca.codigo} · ${peca.nome} · estoque ${quantidades.formatar(saldos.emMilesimos(peca.saldo))} ${peca.unidade}`,
+    })),
   ];
 }

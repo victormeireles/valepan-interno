@@ -18,6 +18,7 @@ export type FlagsOrdem = {
   podeReceber: boolean;
   podeDevolver: boolean;
   podeFinalizar: boolean;
+  podeEditarFinalizacao: boolean;
   podeCancelar: boolean;
   podeExcluir: boolean;
   exigeMotivo: boolean;
@@ -46,6 +47,7 @@ export class FlagsDaOrdem {
       podeReceber: ordem.status === 'aberta' && acesso.executaOficina(snap),
       podeDevolver: podeConcluir,
       podeFinalizar: podeConcluir,
+      podeEditarFinalizacao: this.liberaEdicaoFinalizacao(ordem, snap, usuarioId),
       podeCancelar: cancelamento?.ok === true,
       podeExcluir: acesso.administra(snap),
       exigeMotivo: cancelamento?.ok === true && cancelamento.exigeMotivo,
@@ -60,6 +62,20 @@ export class FlagsDaOrdem {
     if (ordem.status !== 'recebida' || !ordem.recebida_por) return false;
     return new OrdemPermissao().devolveOuFinaliza({
       status: 'recebida',
+      recebidoPor: ordem.recebida_por,
+      usuarioId,
+      administra: new ManutencaoAcesso().administra(snap),
+    });
+  }
+
+  private liberaEdicaoFinalizacao(
+    ordem: OrdemParaFlags,
+    snap: UsuarioAuthzSnapshot,
+    usuarioId: string,
+  ): boolean {
+    if (ordem.status !== 'finalizada' || !ordem.recebida_por) return false;
+    return new OrdemPermissao().editaFinalizacao({
+      status: 'finalizada',
       recebidoPor: ordem.recebida_por,
       usuarioId,
       administra: new ManutencaoAcesso().administra(snap),

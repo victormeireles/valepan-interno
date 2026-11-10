@@ -16,7 +16,7 @@ import { OrdemCancelarFormulario } from './OrdemCancelarFormulario';
 import { OrdemFinalizarFormulario } from './OrdemFinalizarFormulario';
 import { RemocaoCadastroModal } from './RemocaoCadastroModal';
 import { apresentacaoOrdem, linhaTempoOrdem } from './ordem-detalhe-apresentacao';
-import type { AjudanteEscolha, PecaEscolha } from './ordem-finalizar-estado';
+import type { ApoioFinalizacao, ModoFinalizacao } from './ordem-finalizar-estado';
 import { RotulosFila } from './rotulos-fila';
 import { useCadastroRemocao } from './useCadastroRemocao';
 
@@ -29,16 +29,8 @@ const ROTULO_STATUS: Record<OrdemCarregada['status'], string> = {
   cancelada: 'Cancelada',
 };
 
-type Painel = 'nenhum' | 'finalizar' | 'cancelar';
+type Painel = 'nenhum' | 'finalizar' | 'editar' | 'cancelar';
 type Aviso = { texto: string; ok: boolean };
-type ApoioFinalizacao = {
-  pecas: PecaEscolha[];
-  ajudantes: AjudanteEscolha[];
-  inicioPadrao: string;
-  fimPadrao: string;
-  inicioIsoPadrao: string;
-  fimIsoPadrao: string;
-};
 type OrdemDetalheProps = { ordem: OrdemCarregada; apoio: ApoioFinalizacao };
 type ResultadoAcao = { ok: boolean; mensagem: string };
 
@@ -46,6 +38,7 @@ const rotulos = new RotulosFila();
 
 export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
   const acoes = useAcoesOrdem(ordem.numero);
+  const modoModal = modoDoPainel(acoes.painel);
 
   return (
     <div className="space-y-4">
@@ -62,15 +55,20 @@ export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
         onPainel={acoes.abrir}
         onExcluir={acoes.pedirExclusao}
       />
-      {ordem.podeFinalizar && acoes.painel === 'finalizar' ? (
+      {modoModal ? (
         <OrdemFinalizarFormulario
+          key={modoModal}
+          aberto
           numero={ordem.numero}
+          modo={modoModal}
           pecas={apoio.pecas}
           ajudantes={apoio.ajudantes}
           inicioPadrao={apoio.inicioPadrao}
           fimPadrao={apoio.fimPadrao}
           inicioIsoPadrao={apoio.inicioIsoPadrao}
           fimIsoPadrao={apoio.fimIsoPadrao}
+          iniciais={modoModal === 'editar' ? apoio.iniciais : null}
+          onFechar={() => acoes.abrir('nenhum')}
           onConcluir={acoes.concluir}
         />
       ) : null}
@@ -89,6 +87,12 @@ export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
       />
     </div>
   );
+}
+
+function modoDoPainel(painel: Painel): ModoFinalizacao | null {
+  if (painel === 'finalizar') return 'finalizar';
+  if (painel === 'editar') return 'editar';
+  return null;
 }
 
 function useAcoesOrdem(numero: number) {
@@ -231,8 +235,6 @@ function LinhaDoTempo({ ordem }: { ordem: OrdemCarregada }) {
 }
 
 function PecasOrdem({ ordem }: { ordem: OrdemCarregada }) {
-  const veCusto = ordem.custoPecasCentavos !== null;
-
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold text-stone-900">Peças</h2>
@@ -241,41 +243,22 @@ function PecasOrdem({ ordem }: { ordem: OrdemCarregada }) {
       ) : (
         <ul className={`${CARTAO} overflow-hidden`}>
           {ordem.pecas.map((peca, indice) => (
-            <LinhaPecaOrdem key={`${peca.nome}-${indice}`} peca={peca} veCusto={veCusto} />
+            <LinhaPecaOrdem key={`${peca.pecaId}-${indice}`} peca={peca} />
           ))}
         </ul>
       )}
-      {veCusto && (ordem.pecas.length > 0 || ordem.status === 'finalizada') ? (
-        <TotalPecas centavos={ordem.custoPecasCentavos ?? 0} />
-      ) : null}
     </section>
   );
 }
 
-function LinhaPecaOrdem({ peca, veCusto }: { peca: PecaOrdemVista; veCusto: boolean }) {
+function LinhaPecaOrdem({ peca }: { peca: PecaOrdemVista }) {
   return (
     <li className="flex min-h-11 items-baseline justify-between gap-3 border-b border-stone-100 px-4 py-3 last:border-b-0 even:bg-stone-50/60">
       <span className="min-w-0 truncate text-sm font-medium text-stone-900">{peca.nome}</span>
       <span className="font-mono text-sm tabular-nums text-stone-800">
         {apresentacaoOrdem.quantidade(peca.quantidade)}
       </span>
-      {veCusto && peca.custoTotalCentavos !== null ? (
-        <span
-          className={`font-mono text-sm tabular-nums ${peca.custoTotalCentavos < 0 ? 'text-red-700' : 'text-stone-900'}`}
-        >
-          {apresentacaoOrdem.reais(peca.custoTotalCentavos)}
-        </span>
-      ) : null}
     </li>
-  );
-}
-
-function TotalPecas({ centavos }: { centavos: number }) {
-  return (
-    <p className={`text-right text-sm ${centavos < 0 ? 'text-red-700' : 'text-stone-700'}`}>
-      Total{' '}
-      <span className="font-mono font-semibold tabular-nums">{apresentacaoOrdem.reais(centavos)}</span>
-    </p>
   );
 }
 
@@ -326,6 +309,11 @@ function BarraAcoes({
       {ordem.podeFinalizar ? (
         <Button size="lg" icon="check_circle" disabled={enviando} onClick={() => onPainel('finalizar')}>
           Finalizar
+        </Button>
+      ) : null}
+      {ordem.podeEditarFinalizacao ? (
+        <Button size="lg" variant="secondary" icon="edit" disabled={enviando} onClick={() => onPainel('editar')}>
+          Editar finalização
         </Button>
       ) : null}
       {ordem.podeCancelar ? (

@@ -15,6 +15,7 @@ const ROTULO_PROBLEMA: Record<string, string> = {
 const ROTULO_STATUS: Record<string, string> = {
   aberta: 'Aberta',
   recebida: 'Recebida',
+  finalizada: 'Finalizada',
 };
 
 export class RotulosFila {
