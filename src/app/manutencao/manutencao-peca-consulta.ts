@@ -1,5 +1,6 @@
 'use server';
 
+import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
 import { CustoMedio } from '@/domain/manutencao/custo-medio';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
@@ -52,20 +53,13 @@ function paraItem(linha: PecaRow): PecaItem {
     saldo,
     custoMedioCentavos,
     ativo: linha.ativo,
-    valorCentavos: new CustoMedio().valorCentavos(milesimosDeSaldo(saldo), custoMedioCentavos),
+    valorCentavos: new CustoMedio().valorCentavos(
+      new ConversorSaldo().emMilesimos(saldo),
+      custoMedioCentavos,
+    ),
   };
 }
 
 function porNomePtBr(esquerda: PecaItem, direita: PecaItem): number {
   return esquerda.nome.localeCompare(direita.nome, 'pt-BR');
-}
-
-function milesimosDeSaldo(valor: string): number {
-  const texto = valor.trim();
-  const negativo = texto.startsWith('-');
-  const absoluto = negativo ? texto.slice(1) : texto;
-  const [inteiroTexto, fracaoTexto = ''] = absoluto.split('.');
-  const inteiro = Number(inteiroTexto || '0');
-  const fracao = Number(fracaoTexto.padEnd(3, '0').slice(0, 3) || '0');
-  return (negativo ? -1 : 1) * (inteiro * 1000 + fracao);
 }

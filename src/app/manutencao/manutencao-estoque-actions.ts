@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
 import { CustoMedio } from '@/domain/manutencao/custo-medio';
 import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
@@ -121,7 +122,7 @@ async function lerPeca(client: Cliente, pecaId: string): Promise<PecaEstoque | n
   const linha = data as { saldo: string | number; custo_medio_centavos: number | null };
   return {
     saldoTexto: textoSaldo(linha.saldo),
-    saldoMilesimos: milesimosDeSaldo(linha.saldo),
+    saldoMilesimos: new ConversorSaldo().emMilesimos(linha.saldo),
     custoMedioCentavos: linha.custo_medio_centavos ?? null,
   };
 }
@@ -163,13 +164,13 @@ function argumentosMovimento(
   return {
     p_peca: pedido.pecaId,
     p_tipo: pedido.tipo,
-    p_quantidade: textoDeMilesimos(pedido.quantidadeMilesimos),
+    p_quantidade: new ConversorSaldo().numerico(pedido.quantidadeMilesimos),
     p_preco: calculo.preco,
     p_motivo: pedido.motivo,
     p_usuario: usuarioId,
     p_saldo_esperado: peca.saldoTexto,
     p_custo_esperado: peca.custoMedioCentavos,
-    p_saldo_novo: textoDeMilesimos(calculo.par.saldoMilesimos),
+    p_saldo_novo: new ConversorSaldo().numerico(calculo.par.saldoMilesimos),
     p_custo_novo: calculo.par.custoMedioCentavos,
   };
 }
@@ -189,7 +190,7 @@ async function chamarMovimento(
 }
 
 function mensagemSucesso(base: string, saldo: string | number): string {
-  if (milesimosDeSaldo(saldo) < 0) return `${base} Saldo negativo.`;
+  if (new ConversorSaldo().emMilesimos(saldo) < 0) return `${base} Saldo negativo.`;
   return base;
 }
 
@@ -214,24 +215,7 @@ async function usuarioAtual(): Promise<string> {
 }
 
 function textoSaldo(valor: string | number): string {
-  return typeof valor === 'string' ? valor.trim() : textoDeMilesimos(milesimosDeSaldo(valor));
-}
-
-function milesimosDeSaldo(valor: string | number): number {
-  const texto = String(valor).trim();
-  const negativo = texto.startsWith('-');
-  const absoluto = negativo ? texto.slice(1) : texto;
-  const [inteiroTexto, fracaoTexto = ''] = absoluto.split('.');
-  const inteiro = Number(inteiroTexto || '0');
-  const fracao = Number(fracaoTexto.padEnd(3, '0').slice(0, 3) || '0');
-  return (negativo ? -1 : 1) * (inteiro * 1000 + fracao);
-}
-
-function textoDeMilesimos(milesimos: number): string {
-  const negativo = milesimos < 0;
-  const absoluto = Math.abs(milesimos);
-  const inteiro = Math.trunc(absoluto / 1000);
-  const fracao = String(absoluto % 1000).padStart(3, '0');
-  const texto = `${inteiro}.${fracao}`;
-  return negativo ? `-${texto}` : texto;
+  if (typeof valor === 'string') return valor.trim();
+  const conversor = new ConversorSaldo();
+  return conversor.numerico(conversor.emMilesimos(valor));
 }
