@@ -29,4 +29,12 @@ export class ManutencaoAcesso {
   veFila(snap: UsuarioAuthzSnapshot): boolean {
     return algumModuloAtende(snap, MODULOS_FILA, 'ler', this.manager);
   }
+
+  abreCorretiva(snap: UsuarioAuthzSnapshot): boolean {
+    return algumModuloAtende(snap, MODULOS_FILA, 'editar', this.manager);
+  }
+
+  executaOficina(snap: UsuarioAuthzSnapshot): boolean {
+    return this.manager.temModulo(snap, MODULO_MANUTENCAO, 'editar');
+  }
 }

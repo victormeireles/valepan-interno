@@ -80,4 +80,41 @@ describe('ManutencaoAcesso', () => {
   it('dono do sistema movimenta mesmo sem módulos', () => {
     expect(acesso.movimenta(snap({ isSystemOwner: true }))).toBe(true);
   });
+
+  it('abre corretiva quem edita manutenção ou solicitação, e o dono', () => {
+    const oficina = snap({ modulosEfetivos: { interno_manutencao: 'editar' } });
+    const admin = snap({ modulosEfetivos: { interno_manutencao: 'administrar' } });
+    const solicitacao = snap({
+      modulosEfetivos: { interno_manutencao_solicitacao: 'editar' },
+    });
+    const leitura = snap({ modulosEfetivos: { interno_manutencao: 'ler' } });
+    const solicitacaoLeitura = snap({
+      modulosEfetivos: { interno_manutencao_solicitacao: 'ler' },
+    });
+
+    expect(acesso.abreCorretiva(oficina)).toBe(true);
+    expect(acesso.abreCorretiva(admin)).toBe(true);
+    expect(acesso.abreCorretiva(solicitacao)).toBe(true);
+    expect(acesso.abreCorretiva(snap({ isSystemOwner: true }))).toBe(true);
+    expect(acesso.abreCorretiva(leitura)).toBe(false);
+    expect(acesso.abreCorretiva(solicitacaoLeitura)).toBe(false);
+    expect(acesso.abreCorretiva(snap())).toBe(false);
+  });
+
+  it('executa a oficina quem edita manutenção, sem a solicitação', () => {
+    const oficina = snap({ modulosEfetivos: { interno_manutencao: 'editar' } });
+    const admin = snap({ modulosEfetivos: { interno_manutencao: 'administrar' } });
+    const solicitacao = snap({
+      modulosEfetivos: { interno_manutencao_solicitacao: 'editar' },
+    });
+
+    expect(acesso.executaOficina(oficina)).toBe(true);
+    expect(acesso.executaOficina(admin)).toBe(true);
+    expect(acesso.executaOficina(snap({ isSystemOwner: true }))).toBe(true);
+    expect(acesso.executaOficina(solicitacao)).toBe(false);
+    expect(acesso.executaOficina(snap({ modulosEfetivos: { interno_manutencao: 'ler' } }))).toBe(
+      false,
+    );
+    expect(acesso.executaOficina(snap())).toBe(false);
+  });
 });
