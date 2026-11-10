@@ -41,9 +41,13 @@ export class CustoMedio {
   }
 
   private dividirEmpateParaCima(numerador: bigint, divisor: bigint): number {
-    const quociente = numerador / divisor;
-    const resto = numerador % divisor;
-    if (resto * 2n >= divisor) return Number(quociente + 1n);
+    let quociente = numerador / divisor;
+    let resto = numerador % divisor;
+    if (divisor > 0n && resto < 0n) {
+      quociente -= 1n;
+      resto += divisor;
+    }
+    if (resto * 2n >= divisor) quociente += 1n;
     return Number(quociente);
   }
 }

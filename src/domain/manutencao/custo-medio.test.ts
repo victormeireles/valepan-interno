@@ -54,4 +54,12 @@ describe('CustoMedio', () => {
     expect(custo.valorCentavos(-1500, 1)).toBe(-1);
     expect(custo.valorCentavos(1000, null)).toBe(0);
   });
+
+  it('arredonda saldo negativo para o centavo mais próximo, com empate para cima', () => {
+    expect(custo.valorCentavos(-1600, 1)).toBe(-2);
+    expect(custo.valorCentavos(-1900, 1)).toBe(-2);
+    expect(custo.valorCentavos(-600, 1)).toBe(-1);
+    expect(custo.valorCentavos(-1400, 1)).toBe(-1);
+    expect(custo.valorCentavos(-1500, 1)).toBe(-1);
+  });
 });
