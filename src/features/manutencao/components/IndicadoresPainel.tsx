@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { IndicadoresCarregados, LinhaIndicador, ParadaEmAndamento } from '@/app/actions/manutencao-indicadores-consulta';
 import { Button } from '@/components/ui/Button';
@@ -7,7 +8,11 @@ import { Input } from '@/components/ui/Input';
 
 const CARTAO = 'overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm';
 const NUMERO = 'text-right font-mono tabular-nums text-stone-800';
+const GRADE =
+  'grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_minmax(0,12rem)_auto_auto]';
 const calendario = new MesCalendario();
+
+type Intervalo = { inicio: string; fim: string };
 
 type PainelProps = { painel: IndicadoresCarregados };
 
@@ -54,34 +59,79 @@ function SeletorPeriodo({
   mes: string;
   navegacao: NavegacaoPeriodo;
 }) {
+  const local = usePeriodoLocal(painel.inicio, painel.fim, mes);
+  const aplicar = (inicio: string, fim: string) => navegacao.intervalo(inicio, fim, painel);
+
   return (
-    <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_minmax(0,12rem)_auto]">
+    <div className={GRADE}>
       <Input
-        key={`mes-${mes}`}
         label="Mês"
         type="month"
-        defaultValue={mes}
-        onChange={(event) => navegacao.mes(event.target.value)}
+        value={local.mesLocal}
+        onChange={(event) => aoEscolherMes(event.target.value, mes, local.setMesLocal, navegacao, painel)}
       />
-      <Input
-        key={`de-${painel.inicio}`}
-        label="De"
-        type="date"
-        defaultValue={painel.inicio}
-        onChange={(event) => navegacao.intervalo(event.target.value, painel.fim)}
-      />
-      <Input
-        key={`ate-${painel.fim}`}
-        label="Até"
-        type="date"
-        defaultValue={painel.fim}
-        onChange={(event) => navegacao.intervalo(painel.inicio, event.target.value)}
-      />
+      <CampoData label="De" valor={local.de} onChange={local.setDe} onBlur={(valor) => aplicar(valor, local.ate)} />
+      <CampoData label="Até" valor={local.ate} onChange={local.setAte} onBlur={(valor) => aplicar(local.de, valor)} />
+      <Button type="button" size="lg" onClick={() => aplicar(local.de, local.ate)}>
+        Aplicar
+      </Button>
       <Button type="button" size="lg" variant="secondary" onClick={() => navegacao.mesAtual()}>
         Mês atual
       </Button>
     </div>
   );
+}
+
+function usePeriodoLocal(inicio: string, fim: string, mes: string) {
+  const chave = `${inicio}|${fim}|${mes}`;
+  const [vista, setVista] = useState(chave);
+  const [de, setDe] = useState(inicio);
+  const [ate, setAte] = useState(fim);
+  const [mesLocal, setMesLocal] = useState(mes);
+  if (vista !== chave) {
+    setVista(chave);
+    setDe(inicio);
+    setAte(fim);
+    setMesLocal(mes);
+  }
+  return { de, ate, mesLocal, setDe, setAte, setMesLocal };
+}
+
+function CampoData({
+  label,
+  valor,
+  onChange,
+  onBlur,
+}: {
+  label: string;
+  valor: string;
+  onChange: (valor: string) => void;
+  onBlur: (valor: string) => void;
+}) {
+  return (
+    <Input
+      label={label}
+      type="date"
+      value={valor}
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={(event) => onBlur(event.target.value)}
+    />
+  );
+}
+
+function aoEscolherMes(
+  valor: string,
+  mesCommitado: string,
+  definir: (valor: string) => void,
+  navegacao: NavegacaoPeriodo,
+  atual: Intervalo,
+): void {
+  if (!calendario.limites(valor)) {
+    definir(mesCommitado);
+    return;
+  }
+  definir(valor);
+  navegacao.mes(valor, atual);
 }
 
 function TabelaMaquinas({ linhas }: { linhas: LinhaIndicador[] }) {
@@ -168,14 +218,18 @@ function LinhaAjustes({ valor }: { valor: string }) {
 class NavegacaoPeriodo {
   constructor(private readonly ir: (href: string) => void) {}
 
-  mes(valor: string): void {
+  mes(valor: string, atual: Intervalo): void {
     const limites = calendario.limites(valor);
-    if (limites) this.intervalo(limites.inicio, limites.fim);
+    if (limites) this.intervalo(limites.inicio, limites.fim, atual);
   }
 
-  intervalo(inicio: string, fim: string): void {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio) || !/^\d{4}-\d{2}-\d{2}$/.test(fim) || inicio > fim) return;
+  intervalo(inicio: string, fim: string, atual: Intervalo): void {
+    if (!this.aceitavel(inicio, fim) || (atual.inicio === inicio && atual.fim === fim)) return;
     this.ir(`/manutencao/indicadores?inicio=${inicio}&fim=${fim}`);
+  }
+
+  private aceitavel(inicio: string, fim: string): boolean {
+    return /^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim) && inicio <= fim;
   }
 
   mesAtual(): void {
