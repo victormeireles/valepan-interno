@@ -1,4 +1,5 @@
 import type { InternoModuloId, NivelModulo } from './interno-modulos-catalog';
+import { MANUTENCAO_ROUTE_RULES } from './manutencao-route-rules';
 
 export type InternoRouteRequirement =
   | { kind: 'modulo'; modulo: InternoModuloId; minimo: NivelModulo }
@@ -347,24 +348,7 @@ const ROUTE_RULES: RouteRule[] = [
     prefix: '/pessoas',
     requirement: modulo('interno_pessoas', 'ler'),
   },
-  {
-    match: 'prefix',
-    prefix: '/manutencao/solicitantes',
-    requirement: modulo('interno_manutencao', 'administrar'),
-  },
-  {
-    match: 'prefix',
-    prefix: '/manutencao/maquinas',
-    requirement: modulo('interno_manutencao', 'ler'),
-  },
-  {
-    match: 'prefix',
-    prefix: '/manutencao',
-    requirement: anyModulo(
-      ['interno_manutencao', 'interno_manutencao_solicitacao'],
-      'ler',
-    ),
-  },
+  ...MANUTENCAO_ROUTE_RULES,
   {
     match: 'prefix',
     prefix: '/config',

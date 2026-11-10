@@ -77,6 +77,11 @@ describe('InternoRouteAccessMap', () => {
       modulo: 'interno_manutencao',
       minimo: 'administrar',
     });
+    expect(map.resolve('/manutencao/pecas')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_manutencao',
+      minimo: 'ler',
+    });
   });
 
   it('protege reclamações', () => {

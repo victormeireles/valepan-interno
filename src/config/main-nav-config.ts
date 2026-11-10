@@ -317,6 +317,7 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         match: (pathname) =>
           (pathname === '/manutencao' || pathname.startsWith('/manutencao/')) &&
           !pathname.startsWith('/manutencao/maquinas') &&
+          !pathname.startsWith('/manutencao/pecas') &&
           !pathname.startsWith('/manutencao/solicitantes'),
       },
       {
@@ -326,6 +327,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
         icon: 'precision_manufacturing',
         moduloId: 'interno_manutencao',
         match: startsWith('/manutencao/maquinas'),
+      },
+      {
+        type: 'link',
+        href: '/manutencao/pecas',
+        label: 'Peças',
+        icon: 'construction',
+        moduloId: 'interno_manutencao',
+        match: startsWith('/manutencao/pecas'),
       },
       {
         type: 'link',

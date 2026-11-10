@@ -36,22 +36,20 @@ describe('MAIN_NAV_ENTRIES', () => {
     ]);
   });
 
-  it('abre manutenção antes de configurações, com match por prefixo', () => {
-    const manutencao = MAIN_NAV_ENTRIES.find(
-      (entry) => entry.type === 'group' && entry.id === 'manutencao',
-    );
-    expect(manutencao?.type).toBe('group');
-    if (!manutencao || manutencao.type !== 'group') return;
+  it('abre manutenção antes de configurações, com peças na barra', () => {
+    const manutencao = groupById('manutencao');
 
     expect(manutencao.label).toBe('Manutenção');
     expect(manutencao.children.map((child) => child.href)).toEqual([
       '/manutencao',
       '/manutencao/maquinas',
+      '/manutencao/pecas',
       '/manutencao/solicitantes',
     ]);
     expect(manutencao.children.map((child) => child.label)).toEqual([
       'Fila',
       'Máquinas',
+      'Peças',
       'Solicitantes',
     ]);
     expect(manutencao.children[0]).toMatchObject({
@@ -61,17 +59,38 @@ describe('MAIN_NAV_ENTRIES', () => {
     });
     expect(manutencao.children[1]?.moduloId).toBe('interno_manutencao');
     expect(manutencao.children[2]).toMatchObject({
+      href: '/manutencao/pecas',
+      label: 'Peças',
+      icon: 'construction',
+      moduloId: 'interno_manutencao',
+    });
+    expect(manutencao.children[3]).toMatchObject({
       moduloId: 'interno_manutencao',
       nivelMinimo: 'administrar',
       icon: 'manage_accounts',
     });
+  });
+
+  it('não marca a fila em peças, máquinas ou solicitantes', () => {
+    const manutencao = groupById('manutencao');
+    const fila = manutencao.children[0];
+    const pecas = manutencao.children[2];
+
     expect(manutencao.match('/manutencao')).toBe(true);
     expect(manutencao.match('/manutencao/maquinas')).toBe(true);
+    expect(manutencao.match('/manutencao/pecas')).toBe(true);
     expect(manutencao.match('/manutencao/solicitantes')).toBe(true);
-    expect(manutencao.children[0]?.match('/manutencao')).toBe(true);
-    expect(manutencao.children[0]?.match('/manutencao/maquinas')).toBe(false);
+    expect(fila?.match('/manutencao')).toBe(true);
+    expect(fila?.match('/manutencao/maquinas')).toBe(false);
+    expect(fila?.match('/manutencao/pecas')).toBe(false);
+    expect(fila?.match('/manutencao/solicitantes')).toBe(false);
     expect(manutencao.children[1]?.match('/manutencao/maquinas')).toBe(true);
-    expect(manutencao.children[2]?.match('/manutencao/solicitantes')).toBe(true);
+    expect(pecas?.match('/manutencao/pecas')).toBe(true);
+    expect(pecas?.match('/manutencao/pecas/entrada')).toBe(true);
+    expect(pecas?.match('/manutencao')).toBe(false);
+    expect(pecas?.match('/manutencao/maquinas')).toBe(false);
+    expect(pecas?.match('/manutencao/solicitantes')).toBe(false);
+    expect(manutencao.children[3]?.match('/manutencao/solicitantes')).toBe(true);
   });
 
   it('expõe colaboradores em pessoas com módulo interno_pessoas', () => {

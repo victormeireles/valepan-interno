@@ -22,7 +22,7 @@ describe('HUB_SECTIONS', () => {
     ]);
   });
 
-  it('abre manutenção com fila, máquinas e solicitantes', () => {
+  it('abre manutenção com fila, máquinas, peças e solicitantes', () => {
     const secao = HUB_SECTIONS.find((section) => section.id === 'manutencao');
     expect(secao?.title).toBe('Manutenção');
     expect(secao?.items).toEqual([
@@ -39,6 +39,13 @@ describe('HUB_SECTIONS', () => {
         title: 'Máquinas',
         description: 'Cadastro por setor',
         icon: 'precision_manufacturing',
+        moduloId: 'interno_manutencao',
+      },
+      {
+        href: '/manutencao/pecas',
+        title: 'Peças',
+        description: 'Saldo e movimentos',
+        icon: 'construction',
         moduloId: 'interno_manutencao',
       },
       {

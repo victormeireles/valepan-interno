@@ -222,6 +222,13 @@ export const HUB_MANUTENCAO_ITEMS: HubNavItem[] = [
     moduloId: 'interno_manutencao',
   },
   {
+    href: '/manutencao/pecas',
+    title: 'Peças',
+    description: 'Saldo e movimentos',
+    icon: 'construction',
+    moduloId: 'interno_manutencao',
+  },
+  {
     href: '/manutencao/solicitantes',
     title: 'Solicitantes',
     description: 'Setores que podem abrir ordem',
