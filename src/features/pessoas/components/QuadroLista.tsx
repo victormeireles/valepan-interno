@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import { Badge } from '@/components/ui/Badge';
@@ -11,6 +11,9 @@ import { Toolbar } from '@/components/ui/Toolbar';
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
+import { QuadroAviso } from '@/domain/pessoas/quadro-aviso';
+import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
+import { QuadroOcupacao } from '@/domain/pessoas/quadro-ocupacao';
 import { QuadroTotais, type QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
 import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { MenuPessoa } from './MenuPessoa';
@@ -21,6 +24,9 @@ import { QuadroSetorCartao } from './QuadroSetorCartao';
 import { QuadroSetorOrdemPainel } from './QuadroSetorOrdemPainel';
 import { QuadroSetorPainel } from './QuadroSetorPainel';
 import { QuadroTurnoPainel, type EdicaoTurno } from './QuadroTurnoPainel';
+
+const aviso = new QuadroAviso();
+const ocupacao = new QuadroOcupacao();
 
 type Props = { setores: QuadroSetor[]; turnos: TurnoOpcao[]; podeEditar: boolean };
 
@@ -54,7 +60,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
         title="Quadro"
         sticky={false}
         flush
-        resumo="Aprovadas, contratados, a entrar e vagas livres"
+        resumo="Aprovadas, contratados, a entrar, em aviso e vagas livres"
         actions={
           podeEditar ? (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
@@ -147,7 +153,7 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
     turnoNome,
     turnoCodigo: alvo.turnoCodigo,
     liderSetor: alvo.lider,
-    avisoAtivo: false,
+    avisoAtivo: alvo.avisoAtivo === true,
     ultimoExame: null,
     regime: alvo.regime ?? 'clt',
     cnpj: null,
@@ -164,10 +170,32 @@ function situacaoDoPapel(papel: QuadroPessoa['papel']): ColaboradorListaItem['si
 }
 
 function rotuloPapel(pessoa: QuadroPessoa): string {
-  if (pessoa.papel === 'reserva') return 'A entrar';
-  if (pessoa.papel === 'apoio') return 'Apoio';
-  if (pessoa.papel === 'afastado') return new AfastamentoRotulo().exibir(pessoa.afastamento);
-  return 'Ocupação';
+  const saida = aviso.rotulo(pessoa);
+  if (pessoa.papel === 'reserva') return saida ? `${saida} · A entrar` : 'A entrar';
+  if (pessoa.papel === 'apoio') return saida ? `${saida} · Apoio` : 'Apoio';
+  if (pessoa.papel === 'afastado') {
+    const motivo = new AfastamentoRotulo().exibir(pessoa.afastamento);
+    return saida ? `${motivo} · ${saida}` : motivo;
+  }
+  return saida ?? 'Ocupação';
+}
+
+function colunasPessoa(pessoa: QuadroPessoa) {
+  const saida = aviso.rotulo(pessoa);
+  const colunas: { value: ReactNode; width: string; align: 'left'; tabular: false }[] = [];
+  if (saida) colunas.push({ value: <Badge tone="warning">{saida}</Badge>, width: '7.5rem', align: 'left', tabular: false });
+  if (pessoa.lider) colunas.push({ value: <Badge tone="accent">Líder</Badge>, width: '4.5rem', align: 'left', tabular: false });
+  return colunas;
+}
+
+function resumoTurno(numeros: QuadroNumeros): string {
+  const livres = `${numeros.livres.toLocaleString('pt-BR')} ${numeros.livres === 1 ? 'vaga livre' : 'vagas livres'}`;
+  const contratados = `${numeros.contratados.toLocaleString('pt-BR')} ${numeros.contratados === 1 ? 'contratado' : 'contratados'}`;
+  if (numeros.avisos <= 0) return `${livres} · ${contratados}`;
+  const avisos = `${numeros.avisos.toLocaleString('pt-BR')} em aviso`;
+  const apos = ocupacao.segmentos(numeros).livresAposSaidas;
+  const livresApos = `${apos.toLocaleString('pt-BR')} ${apos === 1 ? 'vaga livre' : 'vagas livres'} após as saídas`;
+  return `${livres} · ${contratados} · ${avisos} · ${livresApos}`;
 }
 
 function TurnoDetalhe({
@@ -186,11 +214,7 @@ function TurnoDetalhe({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-stone-700">{lider ? `Líder do setor: ${lider}` : 'Sem líder cadastrado'}</p>
-      <p className="font-mono text-sm tabular-nums text-stone-600">
-        {numeros.livres.toLocaleString('pt-BR')} {numeros.livres === 1 ? 'vaga livre' : 'vagas livres'}
-        {' · '}
-        {numeros.contratados.toLocaleString('pt-BR')} {numeros.contratados === 1 ? 'contratado' : 'contratados'}
-      </p>
+      <p className="font-mono text-sm tabular-nums text-stone-600">{resumoTurno(numeros)}</p>
       {pessoas.length === 0 ? (
         <p className="text-sm text-stone-600">Nenhuma pessoa neste turno.</p>
       ) : (
@@ -201,11 +225,7 @@ function TurnoDetalhe({
                 even={index % 2 === 1}
                 title={pessoa.nome}
                 subtitle={`${pessoa.codigo} · ${rotuloPapel(pessoa)}`}
-                columns={
-                  pessoa.lider
-                    ? [{ value: <Badge tone="accent">Líder</Badge>, width: '4.5rem', align: 'left', tabular: false }]
-                    : []
-                }
+                columns={colunasPessoa(pessoa)}
                 menu={
                   <MenuPessoa
                     item={paraColaborador(pessoa, turno.turnoNome)}

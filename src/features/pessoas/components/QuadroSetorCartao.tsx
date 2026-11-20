@@ -6,7 +6,9 @@ import { HorarioSemana } from '@/domain/pessoas/horario-semana';
 import type { QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroTotais } from '@/domain/pessoas/quadro-totais';
 import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
-import { BarraOcupacao, NotaAfastados, QuadroContagem } from './QuadroContagem';
+import { BarrasQuadro } from './QuadroBarraOcupacao';
+import { QuadroContagem } from './QuadroContagem';
+import { NotasQuadro } from './QuadroNotas';
 
 type Props = {
   setor: QuadroSetor;
@@ -93,31 +95,43 @@ function TurnoCartao({
         ) : null}
       </div>
       <button type="button" className="w-full p-3 text-left" onClick={onAbrir}>
-        <BarraOcupacao numeros={numeros} altura="h-2" />
-        <span className="mt-2 grid grid-cols-4 gap-1 text-center sm:gap-2">
+        <BarrasQuadro numeros={numeros} altura="h-2" />
+        <span className="mt-2 grid grid-cols-3 gap-1 text-center sm:grid-cols-5 sm:gap-2">
           <Metrica rotulo="Aprovadas" curto="Aprov." valor={numeros.aprovado} />
           <Metrica rotulo="Contratados" curto="Contr." valor={numeros.contratados} />
           <Metrica rotulo="A entrar" curto="Entrar" valor={numeros.reservas} />
-          <Metrica rotulo="Livres" curto="Livres" valor={numeros.livres} />
+          <Metrica rotulo="Em aviso" curto="Aviso" valor={numeros.avisos} tom={numeros.avisos > 0 ? 'aviso' : 'padrao'} />
+          <Metrica rotulo="Livres" curto="Livres" valor={numeros.livres} tom={numeros.livres > 0 ? 'livre' : 'padrao'} />
         </span>
       </button>
-      {numeros.afastados > 0 ? (
+      {numeros.afastados > 0 || numeros.avisos > 0 ? (
         <div className="px-3 pb-3">
-          <NotaAfastados numeros={numeros} />
+          <NotasQuadro numeros={numeros} />
         </div>
       ) : null}
     </article>
   );
 }
 
-function Metrica({ rotulo, curto, valor }: { rotulo: string; curto: string; valor: number }) {
+function Metrica({
+  rotulo,
+  curto,
+  valor,
+  tom = 'padrao',
+}: {
+  rotulo: string;
+  curto: string;
+  valor: number;
+  tom?: 'aviso' | 'livre' | 'padrao';
+}) {
+  const cor = tom === 'aviso' ? 'text-rose-700' : tom === 'livre' ? 'text-amber-800' : 'text-stone-900';
   return (
     <span className="flex min-w-0 flex-col">
       <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-stone-500">
         <span className="sm:hidden">{curto}</span>
         <span className="hidden sm:inline">{rotulo}</span>
       </span>
-      <span className="font-mono text-base tabular-nums text-stone-900 sm:text-lg">{valor.toLocaleString('pt-BR')}</span>
+      <span className={`font-mono text-base tabular-nums sm:text-lg ${cor}`}>{valor.toLocaleString('pt-BR')}</span>
     </span>
   );
 }
