@@ -21,6 +21,7 @@ describe('QuadroTotais', () => {
       contratados: 2,
       reservas: 0,
       afastados: 0,
+      avisos: 0,
       livres: 0,
     });
   });
@@ -31,6 +32,7 @@ describe('QuadroTotais', () => {
       contratados: 0,
       reservas: 0,
       afastados: 0,
+      avisos: 0,
       livres: 0,
     });
     expect(new QuadroTotais().doTurno(expedicao.turnos[0]!, 'operacional')).toEqual({
@@ -38,6 +40,7 @@ describe('QuadroTotais', () => {
       contratados: 3,
       reservas: 1,
       afastados: 0,
+      avisos: 0,
       livres: 2,
     });
   });
@@ -48,6 +51,7 @@ describe('QuadroTotais', () => {
       contratados: 16,
       reservas: 2,
       afastados: 0,
+      avisos: 0,
       livres: 4,
     });
     expect(new QuadroTotais().geral([producao, expedicao, comercial], 'operacional')).toEqual({
@@ -55,6 +59,7 @@ describe('QuadroTotais', () => {
       contratados: 14,
       reservas: 2,
       afastados: 0,
+      avisos: 0,
       livres: 4,
     });
   });
@@ -65,6 +70,7 @@ describe('QuadroTotais', () => {
       contratados: 0,
       reservas: 0,
       afastados: 0,
+      avisos: 0,
       livres: 0,
     });
   });
@@ -76,6 +82,7 @@ describe('QuadroTotais', () => {
       contratados: 10,
       reservas: 0,
       afastados: 2,
+      avisos: 0,
       livres: 2,
     });
     expect(new QuadroTotais().doTurno(turno, 'operacional')).toEqual({
@@ -83,7 +90,14 @@ describe('QuadroTotais', () => {
       contratados: 8,
       reservas: 0,
       afastados: 2,
+      avisos: 0,
       livres: 2,
     });
+  });
+
+  it('soma avisos sem mudar as vagas livres de hoje', () => {
+    const turno = { aprovado: 10, contratados: 8, reservas: 0, livres: 2, avisos: 3, operacional: true };
+    expect(new QuadroTotais().doTurno(turno, 'total')).toMatchObject({ avisos: 3, livres: 2, contratados: 8 });
+    expect(new QuadroTotais().geral([{ turnos: [turno] }], 'operacional').avisos).toBe(3);
   });
 });

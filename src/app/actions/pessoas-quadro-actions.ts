@@ -2,6 +2,7 @@
 
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import { QuadroAgrupamento, type HorarioDiaQuadro, type QuadroPessoa, type QuadroSetor } from '@/domain/pessoas/quadro-agrupamento';
+import { QuadroAviso } from '@/domain/pessoas/quadro-aviso';
 import { QuadroHorarioAnexo, type HorarioTurnoCarga } from '@/domain/pessoas/quadro-horario-anexo';
 import { QuadroSetorCatalogo, type SetorCatalogoItem } from '@/domain/pessoas/quadro-setor-catalogo';
 import { QuadroVisao } from '@/domain/pessoas/quadro-visao';
@@ -9,10 +10,12 @@ import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
+const aviso = new QuadroAviso();
+
 export async function listQuadro(): Promise<QuadroSetor[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
   const client = supabaseClientFactory.createServiceRoleClient();
-  const [posicoes, alocacoes, catalogo] = await Promise.all([
+  const [posicoes, alocacoes, catalogo, avisos] = await Promise.all([
     client
       .from('pessoas_posicoes' as never)
       .select('codigo, pessoas_setores(nome, codigo), pessoas_turnos(nome, codigo, operacional)')
@@ -26,11 +29,18 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
       .select('codigo, nome, ordem')
       .eq('ativo', true)
       .order('ordem'),
+    client.from('pessoas_avisos' as never).select('pessoas_colaboradores(codigo)').eq('situacao', 'ativo'),
   ]);
   if (posicoes.error) throw new Error(posicoes.error.message);
   if (alocacoes.error) throw new Error(alocacoes.error.message);
   if (catalogo.error) throw new Error(catalogo.error.message);
-  const pessoas = ((alocacoes.data ?? []) as AlocacaoRow[]).map(paraPessoa);
+  if (avisos.error) throw new Error(avisos.error.message);
+  const comAviso = new Set(
+    ((avisos.data ?? []) as { pessoas_colaboradores: { codigo: string } | { codigo: string }[] | null }[])
+      .map((row) => codigoDe(row.pessoas_colaboradores))
+      .filter(Boolean),
+  );
+  const pessoas = ((alocacoes.data ?? []) as AlocacaoRow[]).map((row) => paraPessoa(row, comAviso));
   const linhas = new QuadroVisao().montar(
     ((posicoes.data ?? []) as PosicaoRow[]).map((row) => ({
       setorNome: nomeDe(row.pessoas_setores),
@@ -43,6 +53,7 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
       turnoNome: '',
       turnoCodigo: pessoa.turnoCodigo,
       papel: pessoa.papel,
+      avisoAtivo: aviso.ocupaVaga(pessoa),
     })),
   );
   const anexo = new QuadroHorarioAnexo();
@@ -102,15 +113,17 @@ type ColaboradorAlocadoRow = {
   data_desligamento: string | null;
 };
 
-function paraPessoa(row: AlocacaoRow): QuadroPessoa {
+function paraPessoa(row: AlocacaoRow, comAviso: Set<string>): QuadroPessoa {
   const pessoa = Array.isArray(row.pessoas_colaboradores) ? row.pessoas_colaboradores[0] : row.pessoas_colaboradores;
+  const codigo = pessoa?.codigo ?? '';
   return {
-    codigo: pessoa?.codigo ?? '',
+    codigo,
     nome: pessoa?.nome ?? '',
     papel: row.papel,
     afastamento: new AfastamentoRotulo().ler(pessoa?.afastamento),
     lider: pessoa?.lider_setor === true,
     regime: pessoa?.regime ?? 'clt',
+    avisoAtivo: comAviso.has(codigo),
     dataDesligamento: pessoa?.data_desligamento ?? null,
     setorNome: nomeDe(row.pessoas_setores),
     turnoCodigo: codigoDe(row.pessoas_turnos),

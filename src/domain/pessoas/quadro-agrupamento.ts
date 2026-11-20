@@ -9,6 +9,7 @@ export type QuadroPessoa = {
   afastamento?: MotivoAfastamento | null;
   lider: boolean;
   regime?: Regime;
+  avisoAtivo?: boolean;
   dataDesligamento?: string | null;
   setorNome: string;
   turnoCodigo: string;

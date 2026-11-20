@@ -37,6 +37,7 @@ describe('QuadroMontagem', () => {
       contratados: 1,
       reservas: 1,
       afastados: 0,
+      avisos: 0,
       livres: 1,
     });
   });
@@ -71,6 +72,7 @@ describe('QuadroMontagem', () => {
       contratados: 64,
       reservas: 1,
       afastados: 0,
+      avisos: 0,
       livres: 28,
     });
     expect(resultado.alocacoes.filter((a) => a.papel === 'apoio')).toHaveLength(11);
@@ -97,7 +99,23 @@ describe('QuadroMontagem', () => {
       contratados: 1,
       reservas: 0,
       afastados: 1,
+      avisos: 0,
       livres: 1,
+    });
+  });
+
+  it('conta ocupação em aviso sem liberar a vaga agora', () => {
+    const resultado = montagem.montar(
+      [{ setorCodigo: 'PRO', turnoCodigo: 'PRO-M', quantidade: 2 }],
+      [pessoa({ codigo: 'VP-1' }), pessoa({ codigo: 'VP-2', avisoAtivo: true })],
+    );
+    expect(contagem.contar(resultado)).toEqual({
+      aprovado: 2,
+      contratados: 2,
+      reservas: 0,
+      afastados: 0,
+      avisos: 1,
+      livres: 0,
     });
   });
 });

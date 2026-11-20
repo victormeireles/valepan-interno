@@ -3,11 +3,14 @@
 import { Chip } from '@/components/ui/Chip';
 import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
 import type { QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
+import { BarrasQuadro } from './QuadroBarraOcupacao';
+import { NotasQuadro } from './QuadroNotas';
 
 const ROTULOS = [
   { chave: 'aprovado', rotulo: 'Aprovadas', curto: 'Aprov.' },
   { chave: 'contratados', rotulo: 'Contratados', curto: 'Contr.' },
   { chave: 'reservas', rotulo: 'A entrar', curto: 'Entrar' },
+  { chave: 'avisos', rotulo: 'Em aviso', curto: 'Aviso' },
   { chave: 'livres', rotulo: 'Livres', curto: 'Livres' },
 ] as const;
 
@@ -44,20 +47,20 @@ function FaixaGeral({
           </Chip>
         </div>
       ) : null}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-2">
+      <dl className="grid grid-cols-3 gap-3 sm:grid-cols-5 sm:gap-2">
         {ROTULOS.map((item) => (
           <Celula
             key={item.chave}
             rotulo={item.rotulo}
             curto={item.curto}
             valor={numeros[item.chave]}
-            destaque={item.chave === 'livres'}
+            tom={tomDaCelula(item.chave, numeros[item.chave])}
             tamanho="geral"
           />
         ))}
       </dl>
-      <NotaAfastados numeros={numeros} modo={modo} />
-      <BarraOcupacao numeros={numeros} />
+      <NotasQuadro numeros={numeros} modo={modo} />
+      <BarrasQuadro numeros={numeros} />
     </section>
   );
 }
@@ -65,19 +68,19 @@ function FaixaGeral({
 function FaixaSetor({ numeros }: { numeros: QuadroNumeros }) {
   return (
     <div>
-      <dl aria-label="Totais do setor" className="grid w-full grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-4">
+      <dl aria-label="Totais do setor" className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5">
         {ROTULOS.map((item) => (
           <Celula
             key={item.chave}
             rotulo={item.rotulo}
             curto={item.curto}
             valor={numeros[item.chave]}
-            destaque={item.chave === 'livres'}
+            tom={tomDaCelula(item.chave, numeros[item.chave])}
             tamanho="setor"
           />
         ))}
       </dl>
-      <NotaAfastados numeros={numeros} />
+      <NotasQuadro numeros={numeros} />
     </div>
   );
 }
@@ -86,17 +89,17 @@ function Celula({
   rotulo,
   curto,
   valor,
-  destaque,
+  tom,
   tamanho,
 }: {
   rotulo: string;
   curto: string;
   valor: number;
-  destaque: boolean;
+  tom: 'aviso' | 'livre' | 'padrao';
   tamanho: 'geral' | 'setor';
 }) {
   const numero = tamanho === 'geral' ? 'text-xl sm:text-2xl' : 'text-sm';
-  const cor = destaque && valor > 0 ? 'text-amber-800' : 'text-stone-900';
+  const cor = tom === 'aviso' ? 'text-rose-700' : tom === 'livre' ? 'text-amber-800' : 'text-stone-900';
   return (
     <div className={tamanho === 'setor' ? 'bg-stone-50 px-2 py-1.5 text-center sm:px-3' : 'text-center sm:text-left'}>
       <dt className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
@@ -108,26 +111,8 @@ function Celula({
   );
 }
 
-export function NotaAfastados({ numeros, modo = 'total' }: { numeros: QuadroNumeros; modo?: QuadroTotaisModo }) {
-  if (numeros.afastados <= 0) return null;
-  const quantidade = numeros.afastados.toLocaleString('pt-BR');
-  const pessoa = numeros.afastados === 1 ? 'pessoa fora do posto' : 'pessoas fora do posto';
-  const texto =
-    modo === 'total'
-      ? `Inclui ${quantidade} ${pessoa} no quadro. A vaga continua livre.`
-      : `${quantidade} ${pessoa}. A vaga continua livre.`;
-  return <p className="mt-2 text-xs text-stone-600">{texto}</p>;
-}
-
-export function BarraOcupacao({ numeros, altura = 'h-1.5' }: { numeros: QuadroNumeros; altura?: string }) {
-  const reservas = Math.max(numeros.reservas, 0);
-  const livres = Math.max(numeros.livres, 0);
-  const noPosto = Math.max(numeros.aprovado - reservas - livres, 0);
-  return (
-    <span className={`mt-3 flex overflow-hidden rounded-full bg-stone-200 ${altura}`} aria-hidden>
-      {noPosto > 0 ? <span className="bg-amber-600" style={{ flex: `${noPosto} 1 0%` }} /> : null}
-      {reservas > 0 ? <span className="bg-[#C6A848]" style={{ flex: `${reservas} 1 0%` }} /> : null}
-      {livres > 0 ? <span style={{ flex: `${livres} 1 0%` }} /> : null}
-    </span>
-  );
+function tomDaCelula(chave: (typeof ROTULOS)[number]['chave'], valor: number): 'aviso' | 'livre' | 'padrao' {
+  if (chave === 'avisos' && valor > 0) return 'aviso';
+  if (chave === 'livres' && valor > 0) return 'livre';
+  return 'padrao';
 }

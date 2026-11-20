@@ -6,6 +6,7 @@ export type PessoaQuadro = {
   setorCodigo: string | null;
   turnoCodigo: string | null;
   noQuadro: boolean;
+  avisoAtivo?: boolean;
 };
 
 export type VagaAprovada = {
@@ -26,6 +27,7 @@ export type AlocacaoPlanejada = {
   turnoCodigo: string;
   papel: 'ocupacao' | 'reserva' | 'apoio' | 'afastado';
   posicaoCodigo: string | null;
+  avisoAtivo: boolean;
 };
 
 export type QuadroMontagemResultado = {
@@ -39,7 +41,17 @@ export type QuadroNumeros = {
   contratados: number;
   reservas: number;
   afastados: number;
+  avisos: number;
   livres: number;
+};
+
+export const QUADRO_NUMEROS_VAZIO: QuadroNumeros = {
+  aprovado: 0,
+  contratados: 0,
+  reservas: 0,
+  afastados: 0,
+  avisos: 0,
+  livres: 0,
 };
 
 export class QuadroMontagem {
@@ -102,6 +114,7 @@ export class QuadroMontagem {
       turnoCodigo: pessoa.turnoCodigo,
       papel: pessoa.situacao === 'admissao_prevista' ? 'reserva' : 'ocupacao',
       posicaoCodigo: codigo,
+      avisoAtivo: pessoa.avisoAtivo === true,
     };
   }
 
@@ -112,6 +125,7 @@ export class QuadroMontagem {
       turnoCodigo: pessoa.turnoCodigo ?? '',
       papel,
       posicaoCodigo: null,
+      avisoAtivo: pessoa.avisoAtivo === true,
     };
   }
 
@@ -134,6 +148,7 @@ export class QuadroContagem {
       contratados,
       reservas,
       afastados: this.papel(resultado, 'afastado'),
+      avisos: resultado.alocacoes.filter((item) => item.papel === 'ocupacao' && item.avisoAtivo).length,
       livres: aprovado - contratados - reservas,
     };
   }
