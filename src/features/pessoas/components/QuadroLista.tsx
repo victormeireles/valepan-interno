@@ -209,7 +209,7 @@ function TurnoDetalhe({
   podeDefinirLider: boolean;
   onAcao: (acao: AcaoPessoa, pessoa: QuadroPessoa, turnoNome: string) => void;
 }) {
-  const pessoas = [...turno.pessoas, ...turno.apoio];
+  const pessoas = [...turno.pessoas, ...turno.apoio].filter((pessoa) => pessoa.papel !== 'afastado');
   const numeros = new QuadroTotais().doTurno(turno, 'total');
   return (
     <div className="flex flex-col gap-3">
