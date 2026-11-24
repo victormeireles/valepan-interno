@@ -16,6 +16,7 @@ describe('ColaboradorListaFiltro', () => {
     cnpj: null,
     razaoSocial: null,
     dataDesligamento: null,
+    dataAdmissao: '2026-11-01',
     indicacao: 'Carlos Mendes',
   };
   const itens = [
@@ -34,6 +35,7 @@ describe('ColaboradorListaFiltro', () => {
       cnpj: null,
       razaoSocial: null,
       dataDesligamento: null,
+      dataAdmissao: '2026-11-01',
       indicacao: null,
     },
     {
@@ -73,6 +75,33 @@ describe('ColaboradorListaFiltro', () => {
   it('não confunde dígito de código com CNPJ', () => {
     expect(filtro.aplicar(itens, 'VP-1').map((i) => i.codigo)).toEqual([]);
     expect(filtro.aplicar(itens, 'VP-9001').map((i) => i.codigo)).toEqual(['VP-9001']);
+  });
+
+  it('filtra experiência a vencer em 7 dias e ignora desligado', () => {
+    expect(
+      filtro.aplicar(itens, { vencimento: 'experiencia', hoje: '2026-11-24' }).map((item) => item.codigo),
+    ).toEqual(['VP-9001', 'VP-9003']);
+    expect(filtro.aplicar(itens, { vencimento: 'experiencia', hoje: '2026-11-24', regime: 'pj' }).map((item) => item.codigo)).toEqual([
+      'VP-9003',
+    ]);
+  });
+
+  it('filtra exame que vence em até 14 dias, depois da experiência', () => {
+    const base = { ...primeiro, liderSetor: false, dataAdmissao: '2026-01-01', indicacao: null };
+    const comExame = [
+      { ...base, codigo: 'VP-9101', nome: 'Perto', ultimoExame: '2025-12-01' },
+      { ...base, codigo: 'VP-9102', nome: 'Hoje', ultimoExame: '2025-11-24' },
+      { ...base, codigo: 'VP-9103', nome: 'Limite', ultimoExame: '2025-12-08' },
+      { ...base, codigo: 'VP-9104', nome: 'Longe', ultimoExame: '2025-12-09' },
+      { ...base, codigo: 'VP-9105', nome: 'Vencido', ultimoExame: '2025-10-01' },
+      { ...base, codigo: 'VP-9106', nome: 'Ainda na experiência', dataAdmissao: '2026-11-01', ultimoExame: '2025-12-01' },
+      { ...primeiro, codigo: 'VP-9107', nome: 'PJ com exame', regime: 'pj' as const, dataAdmissao: '2026-01-01', ultimoExame: '2025-12-10' },
+    ];
+    expect(filtro.aplicar(comExame, { vencimento: 'exame', hoje: '2026-11-24' }).map((item) => item.codigo)).toEqual([
+      'VP-9101',
+      'VP-9102',
+      'VP-9103',
+    ]);
   });
 
   it('combina regime com os demais filtros', () => {

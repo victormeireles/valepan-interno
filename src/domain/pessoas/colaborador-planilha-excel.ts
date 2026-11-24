@@ -1,7 +1,15 @@
 import { PlanilhaXlsx } from '@/domain/planilha/planilha-xlsx';
 import { ColaboradorPlanilha, type ColaboradorPlanilhaOrigem } from './colaborador-planilha';
 
-const COLUNAS = ['id', 'nome', 'lider', 'setor', 'turno', 'data de admissao', 'situacao'];
+const COLUNAS = [
+  'id',
+  'nome',
+  'lider',
+  'setor',
+  'turno',
+  'data de admissao',
+  'situacao',
+];
 
 export class ColaboradorPlanilhaExcel {
   constructor(

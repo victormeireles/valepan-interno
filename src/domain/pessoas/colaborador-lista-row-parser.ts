@@ -1,6 +1,7 @@
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
+import { extractCalendarDate } from '@/lib/utils/date-utils';
 
 const SITUACOES = new Set<ColaboradorListaItem['situacao']>([
   'ativo',
@@ -47,6 +48,7 @@ export class ColaboradorListaRowParser {
       cnpj: this.lerTexto(row.cnpj),
       razaoSocial: this.lerTexto(row.razao_social),
       dataDesligamento: this.lerTexto(row.data_desligamento),
+      dataAdmissao: this.data(row.data_admissao),
       indicacao: this.lerTexto(row.indicacao),
     };
   }
@@ -82,6 +84,11 @@ export class ColaboradorListaRowParser {
     const registro = Array.isArray(valor) ? valor[0] : valor;
     if (!this.isRecord(registro)) return null;
     return this.lerTexto(registro.codigo);
+  }
+
+  private data(valor: unknown): string | null {
+    const iso = extractCalendarDate(valor);
+    return iso || null;
   }
 
   private lerTexto(valor: unknown): string | null {

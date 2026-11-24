@@ -26,6 +26,8 @@ describe('ColaboradorPlanilhaExcel', () => {
     expect(bytes[1]).toBe(0x4b);
     expect(texto).toContain('id');
     expect(texto).toContain('data de admissao');
+    expect(texto).toContain('20/11/2026');
+    expect(texto).not.toContain('Vencimento experiência');
     expect(texto).toContain('Ana &amp; Cia');
     expect(texto).toContain('Período de experiência');
     expect(texto).not.toContain('>Ex<');

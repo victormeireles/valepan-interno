@@ -1,4 +1,6 @@
 import type { MotivoAfastamento } from './afastamento';
+import { ExamePrazo } from './exame-prazo';
+import { ProximoVencimentoExperiencia } from './proximo-vencimento-experiencia';
 import type { Regime } from './regime-cadastro';
 import type { SituacaoColaborador } from './situacao-colaborador';
 
@@ -17,8 +19,11 @@ export type ColaboradorListaItem = {
   cnpj: string | null;
   razaoSocial: string | null;
   dataDesligamento: string | null;
+  dataAdmissao: string | null;
   indicacao: string | null;
 };
+
+export type VencimentoLista = '' | 'experiencia' | 'exame';
 
 export type ColaboradorListaCriterio = {
   termo?: string;
@@ -28,9 +33,18 @@ export type ColaboradorListaCriterio = {
   aviso?: boolean;
   lider?: string;
   regime?: '' | Regime;
+  vencimento?: VencimentoLista;
+  hoje?: string;
 };
 
 export class ColaboradorListaFiltro {
+  static readonly EXAME_A_VENCER_DIAS = 14;
+
+  constructor(
+    private readonly experiencia = new ProximoVencimentoExperiencia(),
+    private readonly exames = new ExamePrazo(),
+  ) {}
+
   aplicar(
     itens: ColaboradorListaItem[],
     termoOuCriterio: string | ColaboradorListaCriterio,
@@ -47,10 +61,25 @@ export class ColaboradorListaFiltro {
     if (criterio.aviso && !item.avisoAtivo) return false;
     if (criterio.lider === 'sim' && !item.liderSetor) return false;
     if (criterio.lider === 'nao' && item.liderSetor) return false;
+    if (criterio.vencimento === 'experiencia' && !this.experienciaPerto(item, criterio.hoje)) return false;
+    if (criterio.vencimento === 'exame' && !this.examePerto(item, criterio.hoje)) return false;
     const termoBruto = criterio.termo ?? '';
     const termo = this.normalizar(termoBruto);
     if (!termo) return true;
     return this.textoBate(item, termo) || this.cnpjBate(item, termoBruto);
+  }
+
+  private experienciaPerto(item: ColaboradorListaItem, hoje: string | undefined): boolean {
+    if (item.situacao === 'desligado') return false;
+    return this.experiencia.pertoDeVencer(item.dataAdmissao, hoje ?? '');
+  }
+
+  private examePerto(item: ColaboradorListaItem, hoje: string | undefined): boolean {
+    if (item.situacao === 'desligado' || item.regime !== 'clt') return false;
+    const dia = hoje ?? '';
+    if (this.experiencia.proximo(item.dataAdmissao, dia)) return false;
+    const situacao = this.exames.calcular(item.ultimoExame, dia);
+    return situacao.dias !== null && situacao.dias >= 0 && situacao.dias <= ColaboradorListaFiltro.EXAME_A_VENCER_DIAS;
   }
 
   private textoBate(item: ColaboradorListaItem, termo: string): boolean {
