@@ -21,6 +21,7 @@ import { ExamePrazo } from '@/domain/pessoas/exame-prazo';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
+import { BaixarColaboradoresExcel } from './BaixarColaboradoresExcel';
 import { CadastroPainel } from './CadastroPainel';
 import { ColunaRotulo } from './ColunaRotulo';
 import { ExamePrazoMarca } from './ExamePrazoMarca';
@@ -110,9 +111,12 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
         flush
         resumo={`${filtrados.length.toLocaleString('pt-BR')} de ${itens.length.toLocaleString('pt-BR')}`}
         actions={
-          <Button size="lg" icon="person_add" fullWidth className="sm:w-auto" onClick={() => abrir('admitir', null)}>
-            Admitir
-          </Button>
+          <>
+            <BaixarColaboradoresExcel onErro={(texto) => setAviso({ texto, ok: false })} />
+            <Button size="lg" icon="person_add" fullWidth className="sm:w-auto" onClick={() => abrir('admitir', null)}>
+              Admitir
+            </Button>
+          </>
         }
       />
       <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-6">
