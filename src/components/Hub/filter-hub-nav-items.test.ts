@@ -212,5 +212,7 @@ describe('filterHubNavItems', () => {
       ).map((item) => item.href);
     expect(hrefs('ler')).not.toContain('/pessoas/folha');
     expect(hrefs('administrar')).toContain('/pessoas/folha');
+    expect(hrefs('ler')).not.toContain('/pessoas/cargos');
+    expect(hrefs('administrar')).toContain('/pessoas/cargos');
   });
 });

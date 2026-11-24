@@ -345,6 +345,11 @@ const ROUTE_RULES: RouteRule[] = [
   },
   {
     match: 'prefix',
+    prefix: '/pessoas/cargos',
+    requirement: modulo('interno_pessoas', 'administrar'),
+  },
+  {
+    match: 'prefix',
     prefix: '/pessoas',
     requirement: modulo('interno_pessoas', 'ler'),
   },

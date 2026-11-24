@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { atualizarCadastroColaborador, obterCadastroColaborador } from '@/app/actions/pessoas-cadastro-actions';
 import { Button } from '@/components/ui/Button';
+import type { CargoOpcao } from '@/domain/pessoas/cargo-opcao';
 import type { ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import { CadastroFormulario } from './CadastroFormulario';
@@ -12,11 +13,12 @@ import { PainelAcao } from './PainelAcao';
 type Props = {
   pessoa: ColaboradorListaItem | null;
   editandoInicial: boolean;
+  cargos: CargoOpcao[];
   onFechar: () => void;
   onConcluir: (mensagem: string, ok: boolean) => void;
 };
 
-export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }: Props) {
+export function CadastroPainel({ pessoa, editandoInicial, cargos, onFechar, onConcluir }: Props) {
   const formId = useId();
   const [editando, setEditando] = useState(editandoInicial);
   const [cadastro, setCadastro] = useState<ColaboradorCadastro | null>(null);
@@ -93,7 +95,7 @@ export function CadastroPainel({ pessoa, editandoInicial, onFechar, onConcluir }
       {cadastro && !editando ? <CadastroLeitura cadastro={cadastro} /> : null}
       {cadastro && editando ? (
         <form id={formId} className="flex flex-col gap-5" onSubmit={salvar}>
-          <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} />
+          <CadastroFormulario cadastro={cadastro} nome={pessoa?.nome ?? ''} opcoes={cargos} />
         </form>
       ) : null}
     </PainelAcao>

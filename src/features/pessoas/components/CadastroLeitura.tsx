@@ -10,6 +10,7 @@ export function CadastroLeitura({ cadastro }: { cadastro: ColaboradorCadastro })
         <Campo rotulo="Data de nascimento" valor={exibir.data(cadastro.nascimento)} />
         <Campo rotulo="Data de admissão" valor={exibir.data(cadastro.dataAdmissao)} />
         <Campo rotulo="Indicação" valor={exibir.texto(cadastro.indicacao)} />
+        <Campo rotulo="Cargo" valor={exibir.texto(cadastro.cargoNome)} />
       </Grupo>
       <Grupo titulo="Contato">
         <Campo rotulo="Telefone" valor={exibir.telefone(cadastro.telefone)} />

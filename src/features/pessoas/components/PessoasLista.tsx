@@ -12,6 +12,7 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Select } from '@/components/ui/Select';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
+import type { CargoOpcao } from '@/domain/pessoas/cargo-opcao';
 import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import {
   ColaboradorListaFiltro,
@@ -42,11 +43,12 @@ const lideresDoSetor = new LiderDoSetor();
 type Props = {
   itens: ColaboradorListaItem[];
   turnos: TurnoOpcao[];
+  cargos: CargoOpcao[];
   filtrosIniciais: { situacao?: string; aviso?: string };
   podeAdministrar: boolean;
 };
 
-export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdministrar }: Props) {
+export default function PessoasLista({ itens, turnos, cargos, filtrosIniciais, podeAdministrar }: Props) {
   const router = useRouter();
   const [termo, setTermo] = useState('');
   const [setor, setSetor] = useState('');
@@ -191,6 +193,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
       <CadastroPainel
         pessoa={cadastro}
         editandoInicial={editandoCadastro}
+        cargos={cargos}
         onFechar={() => setCadastro(null)}
         onConcluir={(texto, ok) => {
           setAviso({ texto, ok });
@@ -215,6 +218,7 @@ export default function PessoasLista({ itens, turnos, filtrosIniciais, podeAdmin
         acao={acao}
         pessoa={pessoa}
         turnos={turnos}
+        cargos={cargos}
         onFechar={() => setAcao(null)}
         onConcluir={(texto, ok) => {
           setAviso({ texto, ok });

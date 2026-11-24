@@ -1,3 +1,4 @@
+import { CargoIdentificador } from './cargo-opcao';
 import { CpfVerificador } from './cpf-verificador';
 import { NomeCapitalizador } from './nome-capitalizador';
 import { RegimeCadastroNormalizador, type Regime } from './regime-cadastro';
@@ -27,6 +28,8 @@ export const CADASTRO_VAZIO: ColaboradorCadastro = {
   cnpj: null,
   razaoSocial: null,
   indicacao: null,
+  cargoId: null,
+  cargoNome: null,
 };
 
 export type ColaboradorCadastro = {
@@ -52,12 +55,15 @@ export type ColaboradorCadastro = {
   cnpj: string | null;
   razaoSocial: string | null;
   indicacao: string | null;
+  cargoId: string | null;
+  cargoNome: string | null;
 };
 
 export class ColaboradorCadastroNormalizador {
   private readonly nomes = new NomeCapitalizador();
   private readonly cpfs = new CpfVerificador();
   private readonly regimes = new RegimeCadastroNormalizador();
+  private readonly cargos = new CargoIdentificador();
 
   nomeColaborador(valor: string | undefined): string {
     const texto = this.limite(valor, 200, 'Nome');
@@ -87,6 +93,8 @@ export class ColaboradorCadastroNormalizador {
       dataAdmissao: this.dataAdmissao(entrada.dataAdmissao),
       nascimento: this.nascimento(entrada.nascimento),
       indicacao: this.indicacao(entrada.indicacao),
+      cargoId: this.cargos.doFormulario(entrada.cargoId),
+      cargoNome: null,
       ...this.regimes.normalizar(entrada),
     };
   }

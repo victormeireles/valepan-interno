@@ -130,6 +130,7 @@ describe('MAIN_NAV_ENTRIES', () => {
       '/pessoas',
       '/pessoas/quadro',
       '/pessoas/folha',
+      '/pessoas/cargos',
       '/pessoas/faltas',
       '/pessoas/extras',
       '/pessoas/painel',

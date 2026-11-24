@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import type { CargoOpcao } from '@/domain/pessoas/cargo-opcao';
 import type { TurnoOpcao } from '@/app/actions/pessoas-vinculo-actions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -28,9 +29,9 @@ import { QuadroTurnoPainel, type EdicaoTurno } from './QuadroTurnoPainel';
 const aviso = new QuadroAviso();
 const ocupacao = new QuadroOcupacao();
 
-type Props = { setores: QuadroSetor[]; turnos: TurnoOpcao[]; podeEditar: boolean };
+type Props = { setores: QuadroSetor[]; turnos: TurnoOpcao[]; cargos: CargoOpcao[]; podeEditar: boolean };
 
-export function QuadroLista({ setores, turnos, podeEditar }: Props) {
+export function QuadroLista({ setores, turnos, cargos, podeEditar }: Props) {
   const router = useRouter();
   const [turnoCodigo, setTurnoCodigo] = useState<string | null>(null);
   const [acao, setAcao] = useState<AcaoPessoa>(null);
@@ -109,6 +110,7 @@ export function QuadroLista({ setores, turnos, podeEditar }: Props) {
         acao={acao}
         pessoa={pessoa}
         turnos={turnos}
+        cargos={cargos}
         onFechar={() => setAcao(null)}
         onConcluir={concluir}
       />

@@ -34,6 +34,8 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
     expect(cadastro.indicacao).toBeNull();
+    expect(cadastro.cargoId).toBeNull();
+    expect(cadastro.cargoNome).toBeNull();
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(false);
   });
 
@@ -69,6 +71,7 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(cadastro.contaPoupanca).toBe(true);
     expect(cadastro.tamanhoCamiseta).toBe('G');
     expect(cadastro.indicacao).toBe('Carlos Mendes');
+    expect(cadastro.cargoId).toBeNull();
     expect(normalizador.cpfConferido(cadastro.cpf)).toBe(true);
   });
 
@@ -96,5 +99,12 @@ describe('ColaboradorCadastroNormalizador', () => {
     expect(normalizador.normalizar({ ...vazio, nascimento: '1990-04-11' }).nascimento).toBe('1990-04-11');
     expect(normalizador.nascimento('')).toBeNull();
     expect(() => normalizador.nascimento('11/04/1990')).toThrow('Informe a data de nascimento.');
+  });
+
+  it('aceita o cargo pelo identificador e recusa texto livre', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(normalizador.normalizar({ ...vazio, cargoId: id }).cargoId).toBe(id);
+    expect(normalizador.normalizar({ ...vazio, cargoId: '' }).cargoId).toBeNull();
+    expect(() => normalizador.normalizar({ ...vazio, cargoId: 'Auxiliar' })).toThrow('Cargo inválido.');
   });
 });

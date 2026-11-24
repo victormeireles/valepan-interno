@@ -4,16 +4,20 @@ import { useState, type ReactNode } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
+import { CargoOpcoesLista, type CargoOpcao } from '@/domain/pessoas/cargo-opcao';
 import { TAMANHOS_CAMISETA, type ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
 import { CadastroRegimeCampos } from './CadastroRegimeCampos';
 
 export function CadastroFormulario({
   cadastro,
   nome,
+  opcoes = [],
 }: {
   cadastro: ColaboradorCadastro;
   nome?: string;
+  opcoes?: CargoOpcao[];
 }) {
+  const cargos = new CargoOpcoesLista().montar(opcoes, cadastro);
   return (
     <>
       {nome !== undefined ? (
@@ -52,6 +56,14 @@ export function CadastroFormulario({
           </div>
         </Grupo>
       )}
+      <Grupo titulo="Cargo">
+        <Select
+          name="cargoId"
+          label="Cargo"
+          defaultValue={cadastro.cargoId ?? ''}
+          options={[{ value: '', label: 'Não informado' }, ...cargos.map((cargo) => ({ value: cargo.id, label: cargo.nome }))]}
+        />
+      </Grupo>
       <Grupo titulo="Contato">
         <Input name="telefone" label="Telefone" defaultValue={cadastro.telefone ?? ''} inputMode="tel" />
         <Input name="email" label="E-mail" type="email" defaultValue={cadastro.email ?? ''} />

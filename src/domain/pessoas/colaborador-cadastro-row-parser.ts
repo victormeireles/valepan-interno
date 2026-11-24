@@ -1,7 +1,10 @@
+import { CargoIdentificador } from './cargo-opcao';
 import type { ColaboradorCadastro } from './colaborador-cadastro';
 import type { Regime } from './regime-cadastro';
 
 export class ColaboradorCadastroRowParser {
+  private readonly cargos = new CargoIdentificador();
+
   parse(row: unknown): ColaboradorCadastro {
     if (!this.registro(row)) throw new Error('Cadastro do colaborador inválido.');
     return {
@@ -27,6 +30,8 @@ export class ColaboradorCadastroRowParser {
       cnpj: this.texto(row.cnpj),
       razaoSocial: this.texto(row.razao_social),
       indicacao: this.texto(row.indicacao),
+      cargoId: this.cargos.ouNulo(row.cargo_id),
+      cargoNome: this.cargoNome(row.cargo),
     };
   }
 
@@ -49,6 +54,12 @@ export class ColaboradorCadastroRowParser {
   private booleano(valor: unknown): boolean | null {
     if (valor === true || valor === false) return valor;
     return null;
+  }
+
+  private cargoNome(valor: unknown): string | null {
+    const registro = Array.isArray(valor) ? valor[0] : valor;
+    if (!this.registro(registro)) return null;
+    return this.texto(registro.nome);
   }
 
   private registro(valor: unknown): valor is Record<string, unknown> {

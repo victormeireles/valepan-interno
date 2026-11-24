@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
+import type { CargoOpcao } from '@/domain/pessoas/cargo-opcao';
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import { CADASTRO_VAZIO } from '@/domain/pessoas/colaborador-cadastro';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
@@ -44,11 +45,12 @@ type Props = {
   acao: AcaoPessoa;
   pessoa: ColaboradorListaItem | null;
   turnos: TurnoOpcao[];
+  cargos: CargoOpcao[];
   onFechar: () => void;
   onConcluir: (mensagem: string, ok: boolean) => void;
 };
 
-export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }: Props) {
+export function PessoasAcaoPainel({ acao, pessoa, turnos, cargos, onFechar, onConcluir }: Props) {
   const formId = useId();
   const [pendente, setPendente] = useState(false);
   const [turnoCodigo, setTurnoCodigo] = useState('');
@@ -109,7 +111,7 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
             <p className="text-sm text-stone-700">
               Em branco ou futura registra admissão prevista e conta em A entrar. Data de hoje ou anterior admite e conta em Contratados.
             </p>
-            <CadastroFormulario cadastro={CADASTRO_VAZIO} />
+            <CadastroFormulario cadastro={CADASTRO_VAZIO} opcoes={cargos} />
           </>
         ) : null}
         {acao === 'contratar' ? (

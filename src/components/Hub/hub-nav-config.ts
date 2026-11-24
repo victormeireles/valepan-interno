@@ -191,6 +191,14 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
     nivelMinimo: 'administrar',
   },
   {
+    href: '/pessoas/cargos',
+    title: 'Cargos',
+    description: 'Nome e faixa salarial de cada cargo',
+    icon: 'badge',
+    moduloId: 'interno_pessoas',
+    nivelMinimo: 'administrar',
+  },
+  {
     href: '/pessoas/faltas',
     title: 'Faltas',
     description: 'Lançamento e classificação',

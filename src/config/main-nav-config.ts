@@ -283,6 +283,15 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     },
     {
       type: 'link',
+      href: '/pessoas/cargos',
+      label: 'Cargos',
+      icon: 'badge',
+      moduloId: 'interno_pessoas',
+      nivelMinimo: 'administrar',
+      match: (pathname) => pathname.startsWith('/pessoas/cargos'),
+    },
+    {
+      type: 'link',
       href: '/pessoas/faltas',
       label: 'Faltas',
       icon: 'event_busy',

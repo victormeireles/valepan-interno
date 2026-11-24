@@ -60,6 +60,11 @@ describe('InternoRouteAccessMap', () => {
       modulo: 'interno_pessoas',
       minimo: 'ler',
     });
+    expect(map.resolve('/pessoas/cargos')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_pessoas',
+      minimo: 'administrar',
+    });
   });
 
   it('protege manutenção: fila com qualquer módulo de entrada e máquinas no módulo da oficina', () => {

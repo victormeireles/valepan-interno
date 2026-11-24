@@ -1,5 +1,6 @@
 'use server';
 
+import { CargoVinculo } from '@/domain/pessoas/cargo-vinculo';
 import { ColaboradorCadastroNormalizador, type ColaboradorCadastro } from '@/domain/pessoas/colaborador-cadastro';
 import { ColaboradorCadastroRowParser } from '@/domain/pessoas/colaborador-cadastro-row-parser';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
@@ -8,7 +9,7 @@ import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
 const SELECT_CADASTRO =
-  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, nascimento, regime, cnpj, razao_social, indicacao';
+  'telefone, email, nome_mae, cpf, endereco, vale_transporte, contato_emergencia, telefone_emergencia, tamanho_camiseta, tamanho_calca, numero_calcado, banco, agencia, conta_corrente, conta_poupanca, chave_pix, data_admissao, nascimento, regime, cnpj, razao_social, indicacao, cargo_id, cargo:pessoas_cargos(nome)';
 
 export async function obterCadastroColaborador(codigo: string): Promise<ColaboradorCadastro> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -44,6 +45,7 @@ export async function atualizarCadastroColaborador(
   const client = supabaseClientFactory.createServiceRoleClient();
   try {
     await validarTrocaDeRegime(client, codigo, cadastro.regime);
+    await conferirCargoEscolhido(client, codigo, cadastro.cargoId);
   } catch (error) {
     return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível salvar.' };
   }
@@ -83,6 +85,21 @@ async function validarTrocaDeRegime(client: ClienteServico, codigo: string, dest
   new RegimeTroca().avaliar(destino, (avisos.count ?? 0) > 0, atual.situacao, atual.data_desligamento);
 }
 
+async function conferirCargoEscolhido(client: ClienteServico, codigo: string, cargoId: string | null): Promise<void> {
+  if (!cargoId) return;
+  const cargo = await client.from('pessoas_cargos' as never).select('ativo').eq('id', cargoId).maybeSingle();
+  if (cargo.error) throw new Error(cargo.error.message);
+  const atual = await client.from('pessoas_colaboradores' as never).select('cargo_id').eq('codigo', codigo).maybeSingle();
+  if (atual.error) throw new Error(atual.error.message);
+  const linha = atual.data as { cargo_id: string | null } | null;
+  const faixa = cargo.data as { ativo: boolean } | null;
+  new CargoVinculo().aceitar({
+    ativo: faixa ? faixa.ativo : null,
+    cargoAtualId: linha?.cargo_id ?? null,
+    escolhido: cargoId,
+  });
+}
+
 function paraLinha(cadastro: ColaboradorCadastro, normalizador: ColaboradorCadastroNormalizador) {
   return {
     telefone: cadastro.telefone,
@@ -106,6 +123,7 @@ function paraLinha(cadastro: ColaboradorCadastro, normalizador: ColaboradorCadas
     cnpj: cadastro.cnpj,
     razao_social: cadastro.razaoSocial,
     indicacao: cadastro.indicacao,
+    cargo_id: cadastro.cargoId,
     updated_at: new Date().toISOString(),
   };
 }

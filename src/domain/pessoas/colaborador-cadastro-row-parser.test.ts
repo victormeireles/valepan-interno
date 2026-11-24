@@ -34,6 +34,8 @@ describe('ColaboradorCadastroRowParser', () => {
     expect(cadastro.cnpj).toBeNull();
     expect(cadastro.razaoSocial).toBeNull();
     expect(cadastro.indicacao).toBeNull();
+    expect(cadastro.cargoId).toBeNull();
+    expect(cadastro.cargoNome).toBeNull();
   });
 
   it('lê regime PJ com CNPJ e razão social', () => {
@@ -42,12 +44,16 @@ describe('ColaboradorCadastroRowParser', () => {
       cnpj: '11444777000161',
       razao_social: 'Pao LTDA',
       indicacao: 'Carlos Mendes',
+      cargo_id: '11111111-1111-4111-8111-111111111111',
+      cargo: { nome: 'Auxiliar de Produção I' },
     });
     expect(cadastro.regime).toBe('pj');
     expect(cadastro.cnpj).toBe('11444777000161');
     expect(cadastro.razaoSocial).toBe('Pao LTDA');
     expect(cadastro.indicacao).toBe('Carlos Mendes');
     expect(cadastro.nascimento).toBeNull();
+    expect(cadastro.cargoId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(cadastro.cargoNome).toBe('Auxiliar de Produção I');
   });
 
   it('recusa regime desconhecido', () => {
