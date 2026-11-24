@@ -70,6 +70,11 @@ describe('VinculoRegras', () => {
     expect(() => regras.cancelarAviso(false)).toThrow(/aviso ativo/);
   });
 
+  it('cancela desligamento só de quem já saiu', () => {
+    expect(regras.cancelarDesligamento('desligado')).toEqual({ cancela: true });
+    expect(() => regras.cancelarDesligamento('ativo')).toThrow(/desligado/);
+  });
+
   it('afasta ativo com motivo e retoma só afastado', () => {
     expect(regras.afastar('ativo', 'inss')).toEqual({ motivo: 'inss' });
     expect(regras.afastar('ativo', 'abandono')).toEqual({ motivo: 'abandono' });

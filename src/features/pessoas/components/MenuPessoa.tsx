@@ -40,6 +40,9 @@ export function MenuPessoa({
       {new RegimeTroca().saidaPrevista(item.regime, item.situacao, item.dataDesligamento) ? (
         <OverflowMenuItem icon="undo" label="Cancelar saída" onClick={() => onAcao('cancelar_saida')} />
       ) : null}
+      {item.situacao === 'desligado' ? (
+        <OverflowMenuItem icon="undo" label="Cancelar desligamento" onClick={() => onAcao('cancelar_desligamento')} />
+      ) : null}
       {item.situacao !== 'desligado' ? <OverflowMenuItem icon="person_off" label="Desligar" tone="danger" onClick={() => onAcao('desligar')} /> : null}
     </OverflowMenu>
   );

@@ -6,6 +6,7 @@ import {
   admitirNovo,
   afastarColaborador,
   cancelarAvisoColaborador,
+  cancelarDesligamentoColaborador,
   cancelarSaidaColaborador,
   definirLiderColaborador,
   desistirAdmissao,
@@ -34,6 +35,7 @@ export type AcaoPessoa =
   | 'retomar'
   | 'cancelar_aviso'
   | 'cancelar_saida'
+  | 'cancelar_desligamento'
   | 'desistir'
   | 'lider'
   | null;
@@ -181,6 +183,13 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, onFechar, onConcluir }
             O aviso será cancelado e {pessoa?.nome ?? 'a pessoa'} volta ao quadro como ativa.
           </p>
         ) : null}
+        {acao === 'cancelar_desligamento' ? (
+          <p className="text-sm text-stone-700">
+            {pessoa?.nome ?? 'A pessoa'} volta ao quadro, no mesmo turno. A vaga anterior é reocupada se ainda
+            estiver livre. Se já foi preenchida, entra em outra vaga livre desse turno. Sem vaga livre, o
+            cancelamento não é feito.
+          </p>
+        ) : null}
         {acao === 'lider' ? <p className="text-sm text-stone-700">{textoLider(pessoa)}</p> : null}
       </form>
     </PainelAcao>
@@ -201,6 +210,7 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'retomar') return 'Voltar ao posto';
   if (acao === 'cancelar_saida') return 'Cancelar saída';
   if (acao === 'cancelar_aviso') return 'Cancelar aviso';
+  if (acao === 'cancelar_desligamento') return 'Cancelar desligamento';
   if (acao === 'desistir') return 'Desistir da admissão';
   if (acao === 'lider') return pessoa?.liderSetor ? 'Remover liderança' : 'Definir líder';
   return '';
@@ -229,6 +239,7 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
   if (acao === 'contratar') return admitirColaborador(pessoa.codigo, data);
   if (acao === 'transferir') return transferirColaborador(pessoa.codigo, turno, form.get('lider') === '1');
   if (acao === 'cancelar_saida') return cancelarSaidaColaborador(pessoa.codigo);
+  if (acao === 'cancelar_desligamento') return cancelarDesligamentoColaborador(pessoa.codigo, pessoa.situacao);
   if (acao === 'desligar') {
     return desligarColaborador(pessoa.codigo, data, pessoa.regime === 'pj' ? '' : String(form.get('tipo') ?? ''));
   }

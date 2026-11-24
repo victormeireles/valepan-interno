@@ -105,6 +105,17 @@ export async function cancelarSaidaColaborador(codigo: string): Promise<VinculoR
   return { ok: true, mensagem: 'Saída prevista cancelada.' };
 }
 
+export async function cancelarDesligamentoColaborador(codigo: string, situacao: string): Promise<VinculoResultado> {
+  try {
+    new VinculoRegras().cancelarDesligamento(situacao);
+  } catch (error) {
+    return { ok: false, mensagem: error instanceof Error ? error.message : 'Não foi possível cancelar o desligamento.' };
+  }
+  const resultado = await rpc('pessoas_cancelar_desligamento', { p_codigo: codigo });
+  if (!resultado.ok) return resultado;
+  return { ok: true, mensagem: 'Desligamento cancelado. A pessoa voltou ao quadro.' };
+}
+
 export async function cancelarAvisoColaborador(codigo: string, avisoAtivo: boolean): Promise<VinculoResultado> {
   try {
     new VinculoRegras().cancelarAviso(avisoAtivo);

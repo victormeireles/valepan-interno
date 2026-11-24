@@ -61,6 +61,11 @@ export class VinculoRegras {
     return { cancela: true };
   }
 
+  cancelarDesligamento(situacao: string): { cancela: true } {
+    if (situacao !== 'desligado') throw new Error('Só um desligado pode cancelar o desligamento.');
+    return { cancela: true };
+  }
+
   afastar(situacao: string, motivo: string, regime: Regime = 'clt'): { motivo: MotivoAfastamento } {
     if (situacao !== 'ativo') throw new Error('Só um colaborador ativo pode ser afastado.');
     const lido = new AfastamentoRotulo().ler(motivo);
