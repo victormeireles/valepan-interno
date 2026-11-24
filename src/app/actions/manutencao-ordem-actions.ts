@@ -117,7 +117,7 @@ export async function avaliarRemocaoOrdem(numero: number): Promise<AvaliacaoRemo
       mensagem: MENSAGEM_NAO_ENCONTRADA,
     };
   }
-  return new OrdemRemocao().avaliar(await lerVinculosOrdem(client, ordemId));
+  return new OrdemRemocao().avaliar();
 }
 
 export async function removerOrdem(numero: number): Promise<ResultadoAcao> {
@@ -125,27 +125,13 @@ export async function removerOrdem(numero: number): Promise<ResultadoAcao> {
   const client = supabaseClientFactory.createServiceRoleClient();
   const ordemId = await lerOrdemId(client, numero);
   if (!ordemId) return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
-  const avaliacao = new OrdemRemocao().avaliar(await lerVinculosOrdem(client, ordemId));
+  const avaliacao = new OrdemRemocao().avaliar();
   if (!avaliacao.pode) return { ok: false, mensagem: avaliacao.mensagem };
-  const limpeza = await limparAjudantes(client, ordemId);
-  if (limpeza) return { ok: false, mensagem: limpeza };
-  const { data, error } = await client
-    .from('manutencao_ordens' as never)
-    .delete()
-    .eq('id', ordemId)
-    .select('id');
-  if (error) {
-    return {
-      ok: false,
-      mensagem:
-        error.code === '23503'
-          ? 'Não é possível remover esta ordem. Há vínculos que precisam ser removidos antes.'
-          : error.message,
-    };
-  }
-  if (!data || (data as unknown[]).length === 0) {
-    return { ok: false, mensagem: MENSAGEM_NAO_ENCONTRADA };
-  }
+  const { error } = await client.rpc(
+    'manutencao_remover_ordem' as never,
+    { p_ordem: ordemId } as never,
+  );
+  if (error) return { ok: false, mensagem: mensagemRemocao(error) };
   return { ok: true, mensagem: 'Ordem removida.' };
 }
 
@@ -159,34 +145,13 @@ async function lerOrdemId(client: Cliente, numero: number): Promise<string | nul
   return ((data as { id: string } | null) ?? null)?.id ?? null;
 }
 
-async function lerVinculosOrdem(client: Cliente, ordemId: string) {
-  const [pecasUsadas, movimentosEstoque] = await Promise.all([
-    contarPorColuna(client, 'manutencao_ordem_pecas', 'ordem_id', ordemId),
-    contarPorColuna(client, 'manutencao_estoque_movimentos', 'ordem_id', ordemId),
-  ]);
-  return { pecasUsadas, movimentosEstoque };
-}
-
-async function limparAjudantes(client: Cliente, ordemId: string): Promise<string | null> {
-  const { error } = await client
-    .from('manutencao_ordem_ajudantes' as never)
-    .delete()
-    .eq('ordem_id', ordemId);
-  return error ? error.message : null;
-}
-
-async function contarPorColuna(
-  client: Cliente,
-  tabela: string,
-  coluna: string,
-  id: string,
-): Promise<number> {
-  const { count, error } = await client
-    .from(tabela as never)
-    .select('*', { count: 'exact', head: true })
-    .eq(coluna, id);
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+function mensagemRemocao(error: { code?: string; message: string }): string {
+  const texto = error.message ?? '';
+  if (texto.includes('Ordem não encontrada')) return MENSAGEM_NAO_ENCONTRADA;
+  if (error.code === '23503') {
+    return 'Não é possível remover esta ordem. Há vínculos que precisam ser removidos antes.';
+  }
+  return texto || 'Não foi possível remover a ordem.';
 }
 
 async function setoresParaAbrir(

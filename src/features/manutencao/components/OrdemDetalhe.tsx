@@ -106,6 +106,8 @@ function useAcoesOrdem(numero: number) {
     remover: (id) => removerOrdem(Number(id)),
     onAviso: setAviso,
     onSucesso: () => router.push('/manutencao'),
+    descricaoConfirmacao: (rotulo) =>
+      `Remover ${rotulo}? Se houver peças usadas, a quantidade volta ao estoque. A peça continua cadastrada.`,
   });
 
   async function disparar(acao: () => Promise<ResultadoAcao>) {
