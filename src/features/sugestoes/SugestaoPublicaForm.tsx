@@ -139,7 +139,7 @@ function Envio(props: {
   return (
     <form className="mt-6 flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); props.onEnviar(); }}>
       <p className="text-sm text-text-strong">Você é {props.nome}?</p>
-      <Button size="lg" type="button" variant="secondary" onClick={props.onNaoSouEu}>Não sou esta pessoa</Button>
+      <Button size="lg" type="button" variant="secondary" disabled={props.ocupado} onClick={props.onNaoSouEu}>Não sou esta pessoa</Button>
       <label className="text-sm font-medium text-stone-700">
         Tema
         <select className="mt-1.5 min-h-11 w-full rounded-xl border border-border-default px-3" value={props.tema} onChange={(e) => props.onTema(e.target.value)}>
