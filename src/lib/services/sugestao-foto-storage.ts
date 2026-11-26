@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import type { Database } from '@/types/database';
+import type { SugestaoFotoArquivo } from './sugestao-registro';
 
 const BUCKET = 'sugestoes-melhoria';
 const EXT: Record<string, string> = {
@@ -9,11 +11,13 @@ const EXT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-export class SugestaoFotoStorage {
-  constructor(private readonly client?: SupabaseClient) {}
+export class SugestaoFotoStorage implements SugestaoFotoArquivo {
+  constructor(private readonly client?: SupabaseClient<Database>) {}
 
   private get db(): SupabaseClient {
-    return this.client ?? supabaseClientFactory.createServiceRoleClient();
+    const resolved =
+      this.client ?? supabaseClientFactory.createServiceRoleClient();
+    return resolved as unknown as SupabaseClient;
   }
 
   async upload(bytes: Uint8Array, type: string): Promise<string> {

@@ -40,7 +40,13 @@ export class SugestaoRegistro {
         foto_path: path,
       });
     } catch (error) {
-      if (path) await this.fotos.remove([path]);
+      if (path) {
+        try {
+          await this.fotos.remove([path]);
+        } catch {
+          throw error;
+        }
+      }
       throw error;
     }
   }
