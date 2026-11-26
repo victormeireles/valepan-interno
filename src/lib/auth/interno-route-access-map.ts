@@ -64,6 +64,7 @@ const ROUTE_RULES: RouteRule[] = [
   { match: 'prefix', prefix: '/api/webhooks', requirement: { kind: 'public' } },
   { match: 'prefix', prefix: '/api/health', requirement: { kind: 'public' } },
   { match: 'prefix', prefix: '/login', requirement: { kind: 'public' } },
+  { match: 'exact', path: '/sugestoes', requirement: { kind: 'public' } },
 
   // —— APIs de produção (prefixos específicos antes de genéricos) ——
   {

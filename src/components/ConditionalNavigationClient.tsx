@@ -8,20 +8,8 @@ import {
   type UsuarioAuthzSnapshot,
 } from '@/lib/auth/interno-access-manager';
 import type { InternoModuloId, NivelModulo } from '@/lib/auth/interno-modulos-catalog';
+import { navegacaoOculta } from '@/lib/navegacao-oculta';
 import Navigation from './Navigation';
-
-const AUTH_PATH_PREFIXES = ['/login', '/completar-email'];
-const TV_PATH_PREFIXES = [
-  '/painel/fermentacao',
-  '/painel/forno',
-  '/painel/embalagem',
-];
-
-function pathHasPrefix(pathname: string, prefixes: string[]): boolean {
-  return prefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 type ConditionalNavigationClientProps = {
   isSystemOwner: boolean;
@@ -33,9 +21,7 @@ export default function ConditionalNavigationClient({
   modulosEfetivos,
 }: ConditionalNavigationClientProps) {
   const pathname = usePathname();
-  const hideNav =
-    pathHasPrefix(pathname, AUTH_PATH_PREFIXES) ||
-    pathHasPrefix(pathname, TV_PATH_PREFIXES);
+  const hideNav = navegacaoOculta(pathname);
 
   if (hideNav) return null;
 

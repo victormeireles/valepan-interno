@@ -170,6 +170,15 @@ describe('InternoRouteAccessMap', () => {
     expect(map.resolve('/api/health').kind).toBe('public');
   });
 
+  it('libera a sugestão pública e protege a lista', () => {
+    expect(map.resolve('/sugestoes')).toEqual({ kind: 'public' });
+    expect(map.resolve('/pessoas/sugestoes')).toEqual({
+      kind: 'modulo',
+      modulo: 'interno_pessoas',
+      minimo: 'ler',
+    });
+  });
+
   it('mapeia APIs de produção por módulo (mais específico primeiro)', () => {
     expect(map.resolve('/api/producao/fermentacao/ordem/1/lote')).toEqual({
       kind: 'modulo',
