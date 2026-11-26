@@ -46,6 +46,9 @@ export function SugestaoPublicaForm() {
   function naoSouEu() {
     setNome('');
     setToken('');
+    setTema('');
+    setTexto('');
+    setArquivo(null);
     setMensagem('');
   }
 
