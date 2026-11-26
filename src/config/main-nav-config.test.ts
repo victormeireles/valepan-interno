@@ -133,6 +133,7 @@ describe('MAIN_NAV_ENTRIES', () => {
       '/pessoas/cargos',
       '/pessoas/faltas',
       '/pessoas/extras',
+      '/pessoas/sugestoes',
       '/pessoas/painel',
     ]);
     expect(groupById('pessoas').children[0]?.moduloId).toBe('interno_pessoas');

@@ -308,6 +308,14 @@ export const MAIN_NAV_ENTRIES: MainNavEntry[] = [
     },
     {
       type: 'link',
+      href: '/pessoas/sugestoes',
+      label: 'Sugestões',
+      icon: 'lightbulb',
+      moduloId: 'interno_pessoas',
+      match: (pathname) => pathname.startsWith('/pessoas/sugestoes'),
+    },
+    {
+      type: 'link',
       href: '/pessoas/painel',
       label: 'Visão geral',
       icon: 'dashboard',

@@ -213,6 +213,13 @@ export const HUB_PESSOAS_ITEMS: HubNavItem[] = [
     moduloId: 'interno_pessoas',
   },
   {
+    href: '/pessoas/sugestoes',
+    title: 'Sugestões',
+    description: 'Melhorias enviadas pelo QR',
+    icon: 'lightbulb',
+    moduloId: 'interno_pessoas',
+  },
+  {
     href: '/pessoas/painel',
     title: 'Visão geral',
     description: 'Contagens que abrem as listas',
