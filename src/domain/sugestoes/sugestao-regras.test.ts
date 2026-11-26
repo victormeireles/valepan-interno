@@ -28,13 +28,13 @@ describe('regras da sugestão', () => {
     expect(texto.avaliar('a'.repeat(2001)).ok).toBe(false);
   });
 
-  it('aceita foto ausente e jpeg, png ou webp até 5 MB', () => {
+  it('aceita foto ausente e jpeg, png ou webp até 4 MB', () => {
     expect(foto.avaliar(null)).toEqual({ ok: true, arquivo: null });
     expect(foto.avaliar({ type: 'image/png', size: 10, bytes: new Uint8Array([1]) }).ok).toBe(true);
     expect(foto.avaliar({ type: 'image/gif', size: 10, bytes: new Uint8Array([1]) })).toEqual({
       ok: false,
-      mensagem: 'Use uma foto de até 5 MB.',
+      mensagem: 'Use uma foto de até 4 MB.',
     });
-    expect(foto.avaliar({ type: 'image/jpeg', size: 5_242_881, bytes: new Uint8Array([1]) }).ok).toBe(false);
+    expect(foto.avaliar({ type: 'image/jpeg', size: 4_194_305, bytes: new Uint8Array([1]) }).ok).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ CREATE POLICY sugestoes_melhoria_delete ON public.sugestoes_melhoria
 CREATE FUNCTION public.sugestoes_ativos_por_cpf(digitos text)
 RETURNS TABLE (id uuid, nome text)
 LANGUAGE sql STABLE
+SET search_path = ''
 AS $$
   SELECT c.id, c.nome FROM public.pessoas_colaboradores c
   WHERE c.situacao = 'ativo'
@@ -52,7 +53,7 @@ GRANT EXECUTE ON FUNCTION public.sugestoes_ativos_por_cpf(text) TO service_role;
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
-  'sugestoes-melhoria', 'sugestoes-melhoria', false, 5242880,
+  'sugestoes-melhoria', 'sugestoes-melhoria', false, 4194304,
   ARRAY['image/jpeg', 'image/png', 'image/webp']::text[]
 )
 ON CONFLICT (id) DO NOTHING;

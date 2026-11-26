@@ -1,6 +1,6 @@
 import { SUGESTAO_MENSAGENS } from './sugestao-mensagens';
 
-export const SUGESTAO_FOTO_MAX_BYTES = 5_242_880;
+export const SUGESTAO_FOTO_MAX_BYTES = 4_194_304;
 const MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export type SugestaoFotoEntrada = { type: string; size: number; bytes: Uint8Array };

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { SugestaoTemaCatalogo } from '@/domain/sugestoes/sugestao-tema-catalogo';
+import { SUGESTAO_FOTO_MAX_BYTES } from '@/domain/sugestoes/sugestao-foto-regra';
 import { SUGESTAO_MENSAGENS } from '@/domain/sugestoes/sugestao-mensagens';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -53,6 +54,10 @@ export function SugestaoPublicaForm() {
   }
 
   async function enviar() {
+    if (arquivo !== null && arquivo.size > SUGESTAO_FOTO_MAX_BYTES) {
+      setMensagem(SUGESTAO_MENSAGENS.foto);
+      return;
+    }
     setOcupado(true);
     setMensagem('');
     const form = new FormData();
