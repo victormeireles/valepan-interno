@@ -4,6 +4,11 @@ import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-fi
 import { RegimeTroca } from '@/domain/pessoas/regime-troca';
 import type { AcaoPessoa } from './PessoasAcaoPainel';
 
+function podeLancarFerias(item: ColaboradorListaItem): boolean {
+  if (item.ferias || item.situacao !== 'ativo' || item.avisoAtivo) return false;
+  return !new RegimeTroca().saidaPrevista(item.regime, item.situacao, item.dataDesligamento);
+}
+
 export function MenuPessoa({
   item,
   onAcao,
@@ -34,6 +39,9 @@ export function MenuPessoa({
         />
       ) : null}
       {item.situacao === 'ativo' ? <OverflowMenuItem icon="pause_circle" label="Afastar" onClick={() => onAcao('afastar')} /> : null}
+      {podeLancarFerias(item) ? <OverflowMenuItem icon="beach_access" label="Férias" onClick={() => onAcao('ferias')} /> : null}
+      {item.ferias ? <OverflowMenuItem icon="edit_calendar" label="Alterar férias" onClick={() => onAcao('alterar_ferias')} /> : null}
+      {item.ferias ? <OverflowMenuItem icon="event_busy" label="Cancelar férias" onClick={() => onAcao('cancelar_ferias')} /> : null}
       {item.situacao === 'afastado' ? <OverflowMenuItem icon="how_to_reg" label="Voltar ao posto" onClick={() => onAcao('retomar')} /> : null}
       {item.situacao === 'admissao_prevista' ? <OverflowMenuItem icon="undo" label="Desistir da admissão" onClick={() => onAcao('desistir')} /> : null}
       {item.avisoAtivo ? <OverflowMenuItem icon="undo" label="Cancelar aviso" onClick={() => onAcao('cancelar_aviso')} /> : null}

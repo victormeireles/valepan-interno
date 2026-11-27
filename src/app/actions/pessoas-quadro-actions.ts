@@ -1,14 +1,17 @@
 'use server';
 
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
+import { FeriasQuadro } from '@/domain/pessoas/ferias-quadro';
 import { QuadroAgrupamento, type HorarioDiaQuadro, type QuadroPessoa, type QuadroSetor } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroAviso } from '@/domain/pessoas/quadro-aviso';
 import { QuadroHorarioAnexo, type HorarioTurnoCarga } from '@/domain/pessoas/quadro-horario-anexo';
 import { QuadroSetorCatalogo, type SetorCatalogoItem } from '@/domain/pessoas/quadro-setor-catalogo';
 import { QuadroVisao } from '@/domain/pessoas/quadro-visao';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
+import { mapaFeriasAbertas } from '@/app/actions/pessoas-ferias-leitura';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 const aviso = new QuadroAviso();
 
@@ -35,12 +38,17 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
   if (alocacoes.error) throw new Error(alocacoes.error.message);
   if (catalogo.error) throw new Error(catalogo.error.message);
   if (avisos.error) throw new Error(avisos.error.message);
+  const hoje = getTodayISOInBrazilTimezone();
+  const ferias = await mapaFeriasAbertas(client, hoje);
   const comAviso = new Set(
     ((avisos.data ?? []) as { pessoas_colaboradores: { codigo: string } | { codigo: string }[] | null }[])
       .map((row) => codigoDe(row.pessoas_colaboradores))
       .filter(Boolean),
   );
-  const pessoas = ((alocacoes.data ?? []) as AlocacaoRow[]).map((row) => paraPessoa(row, comAviso));
+  const pessoas = ((alocacoes.data ?? []) as AlocacaoRow[]).map((row) => {
+    const pessoa = paraPessoa(row, comAviso);
+    return { ...pessoa, ferias: ferias.get(pessoa.codigo) ?? null };
+  });
   const linhas = new QuadroVisao().montar(
     ((posicoes.data ?? []) as PosicaoRow[]).map((row) => ({
       setorNome: nomeDe(row.pessoas_setores),
@@ -60,7 +68,18 @@ export async function listQuadro(): Promise<QuadroSetor[]> {
   const dados = await horarios(client);
   const agrupados = new QuadroAgrupamento().agrupar(anexo.completar(linhas, dados), pessoas);
   const comHorario = anexo.aplicar(agrupados, dados);
-  return new QuadroSetorCatalogo().completar(comHorario, (catalogo.data ?? []) as SetorCatalogoItem[]);
+  return contarFerias(new QuadroSetorCatalogo().completar(comHorario, (catalogo.data ?? []) as SetorCatalogoItem[]), hoje);
+}
+
+function contarFerias(setores: QuadroSetor[], hoje: string): QuadroSetor[] {
+  const quadro = new FeriasQuadro();
+  return setores.map((setor) => ({
+    ...setor,
+    turnos: setor.turnos.map((turno) => ({
+      ...turno,
+      ferias: quadro.contar(turno.pessoas, hoje),
+    })),
+  }));
 }
 
 async function horarios(

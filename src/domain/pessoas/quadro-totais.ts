@@ -5,6 +5,7 @@ export type QuadroTotaisModo = 'total' | 'operacional';
 type TurnoContavel = Pick<QuadroNumeros, 'aprovado' | 'contratados' | 'reservas' | 'livres'> & {
   afastados?: number;
   avisos?: number;
+  ferias?: number;
   operacional?: boolean;
 };
 
@@ -39,6 +40,7 @@ export class QuadroTotais {
           afastados: acumulado.afastados + numeros.afastados,
           avisos: acumulado.avisos + numeros.avisos,
           livres: acumulado.livres + numeros.livres,
+          ferias: (acumulado.ferias ?? 0) + (numeros.ferias ?? 0),
         };
       },
       { ...QUADRO_NUMEROS_VAZIO },
@@ -56,6 +58,7 @@ export class QuadroTotais {
       afastados,
       avisos: turno.avisos ?? 0,
       livres: turno.livres,
+      ferias: turno.ferias ?? 0,
     };
   }
 }

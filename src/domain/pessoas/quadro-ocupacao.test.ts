@@ -16,6 +16,7 @@ describe('QuadroOcupacao', () => {
       }),
     ).toEqual({
       noPosto: 5,
+      ferias: 0,
       avisos: 2,
       reservas: 1,
       livres: 2,
@@ -48,6 +49,7 @@ describe('QuadroOcupacao', () => {
       }),
     ).toEqual({
       noPosto: 3,
+      ferias: 0,
       avisos: 0,
       reservas: 0,
       livres: 1,

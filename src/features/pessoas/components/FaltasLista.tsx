@@ -7,7 +7,6 @@ import { Badge, type BadgeTone } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
-import { Input } from '@/components/ui/Input';
 import { ListColumnHeader } from '@/components/ui/ListColumnHeader';
 import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
@@ -15,8 +14,19 @@ import { Toolbar } from '@/components/ui/Toolbar';
 import { Card } from '@/components/ui/Card';
 import { FaltaAgrupamento, type FaltaPessoaLinha } from '@/domain/pessoas/falta-agrupamento';
 import type { SituacaoDocumento } from '@/domain/pessoas/falta-documento-fila';
-import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
 import { FaltaResumoCalculo } from '@/domain/pessoas/falta-resumo';
+import {
+  FALTA_SETOR_TIPO_PADRAO,
+  FaltaSetorTipoFiltro,
+  type FaltaSetorTipoFiltroValor,
+} from '@/domain/pessoas/falta-setor-tipo-filtro';
+import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
+import { FaltaTotalPessoas, type PessoaBaseFalta } from '@/domain/pessoas/falta-total-pessoas';
+import {
+  FALTA_SITUACAO_PADRAO,
+  FaltaSituacaoFiltro,
+  type FaltaSituacaoFiltroValor,
+} from '@/domain/pessoas/falta-situacao-filtro';
 import { postFaltaAnexo } from '@/features/pessoas/falta-anexo-client';
 import { compressImage } from '@/utils/imageCompression';
 import {
@@ -29,7 +39,7 @@ import {
 } from '../faltas-lista-consulta';
 import { FaltaDatasMarca } from './FaltaDatasMarca';
 import { FaltaDocumentoSelo } from './FaltaDocumentoSelo';
-import { FaltasClassificacaoFiltro } from './FaltasClassificacaoFiltro';
+import { FaltasFiltrosBar } from './FaltasFiltrosBar';
 import { FaltasDocumentoQuadro } from './FaltasDocumentoQuadro';
 import { FaltasPessoaModal } from './FaltasPessoaModal';
 import { FaltasResumoCards } from './FaltasResumoCards';
@@ -43,14 +53,17 @@ type Props = {
   itens: FaltaListaItem[];
   anterior: FaltaListaItem[];
   pessoas: Pessoa[];
+  quadro: PessoaBaseFalta[];
   hoje: string;
   inicio: string;
   fim: string;
 };
 
-export function FaltasLista({ itens, anterior, pessoas, hoje, inicio, fim }: Props) {
+export function FaltasLista({ itens, anterior, pessoas, quadro, hoje, inicio, fim }: Props) {
   const router = useRouter();
   const [classificacao, setClassificacao] = useState('injustificada');
+  const [situacao, setSituacao] = useState<FaltaSituacaoFiltroValor>(FALTA_SITUACAO_PADRAO);
+  const [setorTipo, setSetorTipo] = useState<FaltaSetorTipoFiltroValor>(FALTA_SETOR_TIPO_PADRAO);
   const [termo, setTermo] = useState('');
   const [aberto, setAberto] = useState(false);
   const [pessoaCodigo, setPessoaCodigo] = useState<string | null>(null);
@@ -59,11 +72,33 @@ export function FaltasLista({ itens, anterior, pessoas, hoje, inicio, fim }: Pro
   const [limite, setLimite] = useState(40);
   const [pendente, setPendente] = useState(false);
   const [filtroDocumento, setFiltroDocumento] = useState<FiltroDocumento | null>(null);
-  const atuais = useMemo(() => porClassificacao(itens, classificacao), [itens, classificacao]);
-  const anteriores = useMemo(() => porClassificacao(anterior, classificacao), [anterior, classificacao]);
+  const situacaoFiltro = useMemo(() => new FaltaSituacaoFiltro(), []);
+  const setorFiltro = useMemo(() => new FaltaSetorTipoFiltro(), []);
+  const noSetor = useMemo(() => setorFiltro.aplicar(itens, setorTipo), [itens, setorTipo, setorFiltro]);
+  const noSetorAnterior = useMemo(
+    () => setorFiltro.aplicar(anterior, setorTipo),
+    [anterior, setorTipo, setorFiltro],
+  );
+  const noEscopo = useMemo(
+    () => situacaoFiltro.aplicar(noSetor, situacao),
+    [noSetor, situacao, situacaoFiltro],
+  );
+  const noEscopoAnterior = useMemo(
+    () => situacaoFiltro.aplicar(noSetorAnterior, situacao),
+    [noSetorAnterior, situacao, situacaoFiltro],
+  );
+  const totalPessoas = useMemo(
+    () => new FaltaTotalPessoas().contar(quadro, itens, { situacao, setorTipo }),
+    [quadro, itens, situacao, setorTipo],
+  );
+  const atuais = useMemo(() => porClassificacao(noEscopo, classificacao), [noEscopo, classificacao]);
+  const anteriores = useMemo(
+    () => porClassificacao(noEscopoAnterior, classificacao),
+    [noEscopoAnterior, classificacao],
+  );
   const filtrados = useMemo(() => porNome(atuais, termo), [atuais, termo]);
   const pessoasLista = useMemo(() => new FaltaAgrupamento().porPessoa(filtrados), [filtrados]);
-  const periodos = useMemo(() => periodosDocumento(itens, hoje), [itens, hoje]);
+  const periodos = useMemo(() => periodosDocumento(noEscopo, hoje), [noEscopo, hoje]);
   const documento = useMemo(() => contarDocumento(periodos), [periodos]);
   const pessoasVisiveis = useMemo(
     () => filtrarDocumento(pessoasLista, documento, filtroDocumento),
@@ -130,40 +165,29 @@ export function FaltasLista({ itens, anterior, pessoas, hoje, inicio, fim }: Pro
           </Button>
         }
       />
-      <div className="grid grid-cols-1 items-end gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,11rem)_minmax(0,11rem)_minmax(0,1fr)_auto]">
-        <Input
-          key={`de-${inicio}`}
-          label="De"
-          type="date"
-          defaultValue={inicio}
-          onChange={(event) => aplicarPeriodo(router, event.target.value, fim)}
-        />
-        <Input
-          key={`ate-${fim}`}
-          label="Até"
-          type="date"
-          defaultValue={fim}
-          onChange={(event) => aplicarPeriodo(router, inicio, event.target.value)}
-        />
-        <Input
-          label="Busca"
-          aria-label="Buscar falta"
-          placeholder="Nome"
-          icon="search"
-          value={termo}
-          onChange={(event) => setTermo(event.target.value)}
-        />
-        <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-          <FaltasClassificacaoFiltro
-            value={classificacao}
-            onChange={(valor) => {
-              setClassificacao(valor);
-              setLimite(40);
-            }}
-          />
-        </div>
-      </div>
-      <FaltasResumoCards resumo={resumo} />
+      <FaltasFiltrosBar
+        inicio={inicio}
+        fim={fim}
+        situacao={situacao}
+        setorTipo={setorTipo}
+        classificacao={classificacao}
+        termo={termo}
+        onPeriodo={(de, ate) => aplicarPeriodo(router, de, ate)}
+        onSituacao={(valor) => {
+          setSituacao(valor);
+          setLimite(40);
+        }}
+        onSetorTipo={(valor) => {
+          setSetorTipo(valor);
+          setLimite(40);
+        }}
+        onClassificacao={(valor) => {
+          setClassificacao(valor);
+          setLimite(40);
+        }}
+        onTermo={setTermo}
+      />
+      <FaltasResumoCards resumo={resumo} total={totalPessoas} />
       <FaltasDocumentoQuadro
         paraHoje={documento.paraHoje}
         atrasados={documento.atrasados}

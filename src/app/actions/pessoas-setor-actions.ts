@@ -1,6 +1,7 @@
 'use server';
 
 import { SetorCodigo } from '@/domain/pessoas/setor-codigo';
+import { SetorEdicao, type SetorEdicaoContexto, type SetorEdicaoItem } from '@/domain/pessoas/setor-edicao';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
@@ -48,4 +49,38 @@ export async function reordenarSetores(codigos: string[]): Promise<SetorResultad
     if (error) return { ok: false, mensagem: error.message };
   }
   return { ok: true, mensagem: 'Ordem atualizada.' };
+}
+
+export async function listarSetoresEdicao(): Promise<SetorEdicaoItem[]> {
+  await requireInternoModulo('interno_pessoas', 'editar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const leitura = await client
+    .from('pessoas_setores' as never)
+    .select('codigo, nome, tipo, ativo')
+    .order('ordem');
+  if (leitura.error) throw new Error(leitura.error.message);
+  return new SetorEdicao().listarAtivos((leitura.data ?? []) as SetorEdicaoContexto[]);
+}
+
+export async function atualizarSetor(entrada: {
+  codigo: string;
+  nome: string;
+  tipo: string;
+}): Promise<SetorResultado> {
+  await requireInternoModulo('interno_pessoas', 'editar');
+  const client = supabaseClientFactory.createServiceRoleClient();
+  const leitura = await client.from('pessoas_setores' as never).select('codigo, nome, tipo, ativo');
+  if (leitura.error) return { ok: false, mensagem: leitura.error.message };
+  const validacao = new SetorEdicao().validar(entrada, (leitura.data ?? []) as SetorEdicaoContexto[]);
+  if (!validacao.ok) return validacao;
+  const { error } = await client
+    .from('pessoas_setores' as never)
+    .update({
+      nome: validacao.valor.nome,
+      tipo: validacao.valor.tipo,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('codigo', validacao.valor.codigo as never);
+  if (error) return { ok: false, mensagem: error.message };
+  return { ok: true, mensagem: 'Setor atualizado.' };
 }

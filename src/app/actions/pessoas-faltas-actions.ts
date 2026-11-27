@@ -1,15 +1,18 @@
 'use server';
 
 import { AfastamentoRotulo, type MotivoAfastamento } from '@/domain/pessoas/afastamento';
+import { FeriasFalta } from '@/domain/pessoas/ferias-falta';
+import type { PeriodoFerias } from '@/domain/pessoas/ferias-periodo';
 import { FaltaCampos, type FaltaEdicaoPatch, type FaltaPayloadCampos } from '@/domain/pessoas/falta-campos';
 import { FaltaJanelaResumo, type FaltaJanelaContagem, type FaltaJanelaEntrada } from '@/domain/pessoas/falta-janela-resumo';
 import { FaltaLancamento } from '@/domain/pessoas/falta-lancamento';
+import type { SetorTipo } from '@/domain/pessoas/setor-edicao';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 import { extractCalendarDate, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 
 type ServiceClient = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
-type ColaboradorFalta = { id: string; setor_id: string | null; turno_id: string | null };
+type ColaboradorFalta = { id: string; nome: string; setor_id: string | null; turno_id: string | null };
 
 export type FaltaListaItem = {
   id: string;
@@ -20,6 +23,7 @@ export type FaltaListaItem = {
   justificativa: string | null;
   cancelada: boolean;
   setorNome: string | null;
+  setorTipo: SetorTipo | null;
   turnoNome: string | null;
   situacao: 'ativo' | 'admissao_prevista' | 'desligado' | 'afastado';
   afastamento: MotivoAfastamento | null;
@@ -39,7 +43,7 @@ export async function resumoFaltasRecentes(codigo: string): Promise<FaltaJanelaC
 }
 
 const SELECT_FALTA =
-  'id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao, afastamento), pessoas_setores(nome), pessoas_turnos(nome)';
+  'id, data, classificacao, justificativa, medida, anexo_storage_path, cancelada_em, pessoas_colaboradores(codigo, nome, situacao, afastamento), pessoas_setores(nome, tipo), pessoas_turnos(nome)';
 
 export async function listFaltas(inicio: string, fim: string): Promise<FaltaListaItem[]> {
   await requireInternoModulo('interno_pessoas', 'ler');
@@ -111,9 +115,11 @@ type FaltaRow = {
   anexo_storage_path: string | null;
   cancelada_em: string | null;
   pessoas_colaboradores: PessoaFalta | PessoaFalta[] | null;
-  pessoas_setores: { nome: string } | { nome: string }[] | null;
+  pessoas_setores: SetorFalta | SetorFalta[] | null;
   pessoas_turnos: { nome: string } | { nome: string }[] | null;
 };
+
+type SetorFalta = { nome: string; tipo?: string | null };
 
 type PessoaFalta = {
   codigo: string;
@@ -142,6 +148,7 @@ function paraItem(row: FaltaRow, comAviso: Set<string>): FaltaListaItem {
     justificativa: row.justificativa,
     cancelada: Boolean(row.cancelada_em),
     setorNome: nomeDe(row.pessoas_setores),
+    setorTipo: tipoDe(row.pessoas_setores),
     turnoNome: nomeDe(row.pessoas_turnos),
     situacao: pessoa?.situacao ?? 'ativo',
     afastamento: new AfastamentoRotulo().ler(pessoa?.afastamento),
@@ -167,6 +174,13 @@ async function codigosEmAviso(client: ReturnType<typeof supabaseClientFactory.cr
   );
 }
 
+function tipoDe(valor: SetorFalta | SetorFalta[] | null): SetorTipo | null {
+  if (!valor) return null;
+  const tipo = Array.isArray(valor) ? valor[0]?.tipo : valor.tipo;
+  if (tipo === 'operacional' || tipo === 'apoio') return tipo;
+  return null;
+}
+
 function nomeDe(valor: { nome: string } | { nome: string }[] | null): string | null {
   if (!valor) return null;
   const nome = Array.isArray(valor) ? valor[0]?.nome : valor.nome;
@@ -176,11 +190,24 @@ function nomeDe(valor: { nome: string } | { nome: string }[] | null): string | n
 async function colaboradorPorCodigo(client: ServiceClient, codigo: string): Promise<ColaboradorFalta | null> {
   const pessoa = await client
     .from('pessoas_colaboradores' as never)
-    .select('id, setor_id, turno_id')
+    .select('id, nome, setor_id, turno_id')
     .eq('codigo', codigo)
     .maybeSingle();
   if (pessoa.error || !pessoa.data) return null;
   return pessoa.data as ColaboradorFalta;
+}
+
+async function mensagemDeFerias(client: ServiceClient, pessoa: ColaboradorFalta, datas: string[]): Promise<string | null> {
+  const consulta = await client
+    .from('pessoas_ferias' as never)
+    .select('inicio, volta')
+    .eq('colaborador_id', pessoa.id)
+    .is('cancelada_em', null);
+  if (consulta.error) throw new Error(consulta.error.message);
+  const falta = new FeriasFalta();
+  const atingidos = falta.atingidos(datas, (consulta.data ?? []) as PeriodoFerias[]);
+  if (atingidos.length === 0) return null;
+  return falta.mensagemAusencia(pessoa.nome, atingidos);
 }
 
 async function inserirFaltas(
@@ -192,6 +219,8 @@ async function inserirFaltas(
   if ('erro' in campos) return { ok: false, mensagem: campos.erro, ids: [] };
   const lancamento = new FaltaLancamento();
   const pedidas = lancamento.normalizar(input.datas);
+  const ferias = await mensagemDeFerias(client, pessoa, pedidas);
+  if (ferias) return { ok: false, mensagem: ferias, ids: [] };
   const ocupadas = await datasComFalta(client, pessoa.id, pedidas);
   const { livres, repetidas } = lancamento.separar(pedidas, ocupadas);
   if (livres.length === 0) return { ok: false, mensagem: lancamento.mensagem(0, repetidas), ids: [] };

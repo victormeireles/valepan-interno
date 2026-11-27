@@ -1,4 +1,5 @@
 import type { QuadroNumeros } from '@/domain/pessoas/quadro-montagem';
+import { FeriasQuadro } from '@/domain/pessoas/ferias-quadro';
 import { QuadroOcupacao } from '@/domain/pessoas/quadro-ocupacao';
 import type { QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
 
@@ -29,11 +30,18 @@ export function NotaAvisos({ numeros }: { numeros: QuadroNumeros }) {
   );
 }
 
+export function NotaFerias({ numeros }: { numeros: QuadroNumeros }) {
+  const texto = new FeriasQuadro().nota(numeros);
+  if (!texto) return null;
+  return <p className="mt-2 text-xs text-stone-600">{texto}</p>;
+}
+
 export function NotasQuadro({ numeros, modo = 'total' }: { numeros: QuadroNumeros; modo?: QuadroTotaisModo }) {
   return (
     <>
       <NotaAfastados numeros={numeros} modo={modo} />
       <NotaAvisos numeros={numeros} />
+      <NotaFerias numeros={numeros} />
     </>
   );
 }

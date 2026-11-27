@@ -10,6 +10,7 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Toast } from '@/components/ui/Toast';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
+import { FeriasQuadro } from '@/domain/pessoas/ferias-quadro';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import type { QuadroPessoa, QuadroSetor, QuadroTurno } from '@/domain/pessoas/quadro-agrupamento';
 import { QuadroAviso } from '@/domain/pessoas/quadro-aviso';
@@ -18,10 +19,12 @@ import { QuadroOcupacao } from '@/domain/pessoas/quadro-ocupacao';
 import { QuadroTotais, type QuadroTotaisModo } from '@/domain/pessoas/quadro-totais';
 import { TurnoRemocao } from '@/domain/pessoas/turno-remocao';
 import { MenuPessoa } from './MenuPessoa';
+import { SeloFerias } from './SeloFerias';
 import { QuadroContagem } from './QuadroContagem';
 import { PainelAcao } from './PainelAcao';
 import { PessoasAcaoPainel, type AcaoPessoa } from './PessoasAcaoPainel';
 import { QuadroSetorCartao } from './QuadroSetorCartao';
+import { QuadroSetorEdicaoPainel } from './QuadroSetorEdicaoPainel';
 import { QuadroSetorOrdemPainel } from './QuadroSetorOrdemPainel';
 import { QuadroSetorPainel } from './QuadroSetorPainel';
 import { QuadroTurnoPainel, type EdicaoTurno } from './QuadroTurnoPainel';
@@ -38,6 +41,7 @@ export function QuadroLista({ setores, turnos, cargos, podeEditar }: Props) {
   const [pessoa, setPessoa] = useState<ColaboradorListaItem | null>(null);
   const [edicao, setEdicao] = useState<EdicaoTurno | null>(null);
   const [novoSetor, setNovoSetor] = useState(false);
+  const [editarSetores, setEditarSetores] = useState(false);
   const [reordenar, setReordenar] = useState(false);
   const [modoTotais, setModoTotais] = useState<QuadroTotaisModo>('total');
   const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null);
@@ -65,6 +69,9 @@ export function QuadroLista({ setores, turnos, cargos, podeEditar }: Props) {
         actions={
           podeEditar ? (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
+              <Button type="button" variant="secondary" size="lg" icon="edit" fullWidth className="sm:w-auto" onClick={() => setEditarSetores(true)}>
+                Editar setores
+              </Button>
               <Button type="button" variant="secondary" size="lg" icon="swap_vert" fullWidth className="sm:w-auto" onClick={() => setReordenar(true)}>
                 Reordenar
               </Button>
@@ -99,6 +106,7 @@ export function QuadroLista({ setores, turnos, cargos, podeEditar }: Props) {
         ) : null}
       </PainelAcao>
       <QuadroSetorPainel aberto={novoSetor} onFechar={() => setNovoSetor(false)} onConcluir={concluir} />
+      <QuadroSetorEdicaoPainel aberto={editarSetores} onFechar={() => setEditarSetores(false)} onConcluir={concluir} />
       <QuadroSetorOrdemPainel
         aberto={reordenar}
         setores={setores}
@@ -163,6 +171,7 @@ function paraColaborador(alvo: QuadroPessoa, turnoNome: string): ColaboradorList
     dataDesligamento: alvo.dataDesligamento ?? null,
     dataAdmissao: null,
     indicacao: null,
+    ferias: alvo.ferias ?? null,
   };
 }
 
@@ -186,19 +195,27 @@ function rotuloPapel(pessoa: QuadroPessoa): string {
 function colunasPessoa(pessoa: QuadroPessoa) {
   const saida = aviso.rotulo(pessoa);
   const colunas: { value: ReactNode; width: string; align: 'left'; tabular: false }[] = [];
+  if (pessoa.ferias) {
+    colunas.push({ value: <SeloFerias periodo={pessoa.ferias} />, width: '11rem', align: 'left', tabular: false });
+  }
   if (saida) colunas.push({ value: <Badge tone="warning">{saida}</Badge>, width: '7.5rem', align: 'left', tabular: false });
   if (pessoa.lider) colunas.push({ value: <Badge tone="accent">Líder</Badge>, width: '4.5rem', align: 'left', tabular: false });
   return colunas;
 }
 
 function resumoTurno(numeros: QuadroNumeros): string {
-  const livres = `${numeros.livres.toLocaleString('pt-BR')} ${numeros.livres === 1 ? 'vaga livre' : 'vagas livres'}`;
-  const contratados = `${numeros.contratados.toLocaleString('pt-BR')} ${numeros.contratados === 1 ? 'contratado' : 'contratados'}`;
-  if (numeros.avisos <= 0) return `${livres} · ${contratados}`;
-  const avisos = `${numeros.avisos.toLocaleString('pt-BR')} em aviso`;
-  const apos = ocupacao.segmentos(numeros).livresAposSaidas;
-  const livresApos = `${apos.toLocaleString('pt-BR')} ${apos === 1 ? 'vaga livre' : 'vagas livres'} após as saídas`;
-  return `${livres} · ${contratados} · ${avisos} · ${livresApos}`;
+  const partes = [
+    `${numeros.livres.toLocaleString('pt-BR')} ${numeros.livres === 1 ? 'vaga livre' : 'vagas livres'}`,
+    `${numeros.contratados.toLocaleString('pt-BR')} ${numeros.contratados === 1 ? 'contratado' : 'contratados'}`,
+  ];
+  const ferias = new FeriasQuadro().resumo(numeros.ferias ?? 0);
+  if (ferias) partes.push(ferias);
+  if (numeros.avisos > 0) {
+    partes.push(`${numeros.avisos.toLocaleString('pt-BR')} em aviso`);
+    const apos = ocupacao.segmentos(numeros).livresAposSaidas;
+    partes.push(`${apos.toLocaleString('pt-BR')} ${apos === 1 ? 'vaga livre' : 'vagas livres'} após as saídas`);
+  }
+  return partes.join(' · ');
 }
 
 function TurnoDetalhe({

@@ -24,6 +24,7 @@ export type QuadroLinha = {
   afastados: number;
   avisos: number;
   livres: number;
+  ferias?: number;
 };
 
 export class QuadroVisao {

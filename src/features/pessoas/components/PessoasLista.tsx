@@ -24,6 +24,7 @@ import { LiderDoSetor } from '@/domain/pessoas/lider-do-setor';
 import { ProximoVencimentoExperiencia } from '@/domain/pessoas/proximo-vencimento-experiencia';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
 import { SituacaoColaboradorRotulo } from '@/domain/pessoas/situacao-colaborador';
+import { SeloFerias } from './SeloFerias';
 import { formatISODateBr, getTodayISOInBrazilTimezone } from '@/lib/utils/date-utils';
 import { BaixarColaboradoresExcel } from './BaixarColaboradoresExcel';
 import { CadastroPainel } from './CadastroPainel';
@@ -254,7 +255,12 @@ function SetorTurno({ item }: { item: ColaboradorListaItem }) {
 
 function BadgeSituacao({ item }: { item: ColaboradorListaItem }) {
   const marca = situacaoRotulo.exibir(item.situacao, item.avisoAtivo, item.afastamento);
-  return <Badge tone={marca.tom}>{marca.texto}</Badge>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge tone={marca.tom}>{marca.texto}</Badge>
+      <SeloFerias periodo={item.ferias} />
+    </span>
+  );
 }
 
 function DataAdmissao({ iso }: { iso: string | null }) {

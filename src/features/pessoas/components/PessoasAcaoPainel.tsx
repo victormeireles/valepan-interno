@@ -15,6 +15,7 @@ import {
   transferirColaborador,
   type TurnoOpcao,
 } from '@/app/actions/pessoas-vinculo-actions';
+import { alterarFerias, cancelarFerias, lancarFerias } from '@/app/actions/pessoas-ferias-actions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -25,6 +26,7 @@ import { CADASTRO_VAZIO } from '@/domain/pessoas/colaborador-cadastro';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import { BuscaTurno } from './BuscaTurno';
 import { CadastroFormulario } from './CadastroFormulario';
+import { FeriasAcaoCampos } from './FeriasAcaoCampos';
 import { PainelAcao } from './PainelAcao';
 
 export type AcaoPessoa =
@@ -33,6 +35,9 @@ export type AcaoPessoa =
   | 'transferir'
   | 'desligar'
   | 'afastar'
+  | 'ferias'
+  | 'alterar_ferias'
+  | 'cancelar_ferias'
   | 'retomar'
   | 'cancelar_aviso'
   | 'cancelar_saida'
@@ -167,6 +172,9 @@ export function PessoasAcaoPainel({ acao, pessoa, turnos, cargos, onFechar, onCo
             </p>
           </>
         ) : null}
+        {acao === 'ferias' || acao === 'alterar_ferias' || acao === 'cancelar_ferias' ? (
+          <FeriasAcaoCampos pessoa={pessoa} acao={acao} />
+        ) : null}
         {acao === 'retomar' ? (
           <p className="text-sm text-stone-700">
             {pessoa?.nome ?? 'A pessoa'} volta a ocupar uma vaga livre neste turno. Sem vaga livre, o retorno não é feito.
@@ -209,6 +217,9 @@ function titulo(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null): string {
   if (acao === 'transferir') return 'Alterar setor e turno';
   if (acao === 'desligar') return 'Desligar';
   if (acao === 'afastar') return 'Afastar';
+  if (acao === 'ferias') return 'Férias';
+  if (acao === 'alterar_ferias') return 'Alterar férias';
+  if (acao === 'cancelar_ferias') return 'Cancelar férias';
   if (acao === 'retomar') return 'Voltar ao posto';
   if (acao === 'cancelar_saida') return 'Cancelar saída';
   if (acao === 'cancelar_aviso') return 'Cancelar aviso';
@@ -246,6 +257,9 @@ async function executar(acao: AcaoPessoa, pessoa: ColaboradorListaItem | null, f
     return desligarColaborador(pessoa.codigo, data, pessoa.regime === 'pj' ? '' : String(form.get('tipo') ?? ''));
   }
   if (acao === 'afastar') return afastarColaborador(pessoa.codigo, pessoa.situacao, String(form.get('motivo') ?? ''));
+  if (acao === 'ferias') return lancarFerias(pessoa.codigo, String(form.get('inicio') ?? ''), String(form.get('volta') ?? ''));
+  if (acao === 'alterar_ferias') return alterarFerias(pessoa.codigo, String(form.get('inicio') ?? ''), String(form.get('volta') ?? ''));
+  if (acao === 'cancelar_ferias') return cancelarFerias(pessoa.codigo);
   if (acao === 'retomar') return retomarColaborador(pessoa.codigo, pessoa.situacao);
   if (acao === 'cancelar_aviso') return cancelarAvisoColaborador(pessoa.codigo, pessoa.avisoAtivo);
   if (acao === 'lider') return definirLiderColaborador(pessoa.codigo, !pessoa.liderSetor);

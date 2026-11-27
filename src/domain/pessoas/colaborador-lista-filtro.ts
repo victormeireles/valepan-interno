@@ -2,6 +2,7 @@ import type { MotivoAfastamento } from './afastamento';
 import { ExamePrazo } from './exame-prazo';
 import { ProximoVencimentoExperiencia } from './proximo-vencimento-experiencia';
 import type { Regime } from './regime-cadastro';
+import type { SetorTipo } from './setor-edicao';
 import type { SituacaoColaborador } from './situacao-colaborador';
 
 export type ColaboradorListaItem = {
@@ -10,6 +11,7 @@ export type ColaboradorListaItem = {
   situacao: SituacaoColaborador;
   afastamento?: MotivoAfastamento | null;
   setorNome: string | null;
+  setorTipo?: SetorTipo | null;
   turnoNome: string | null;
   turnoCodigo: string | null;
   liderSetor: boolean;
@@ -21,6 +23,7 @@ export type ColaboradorListaItem = {
   dataDesligamento: string | null;
   dataAdmissao: string | null;
   indicacao: string | null;
+  ferias?: { inicio: string; volta: string } | null;
 };
 
 export type VencimentoLista = '' | 'experiencia' | 'exame';

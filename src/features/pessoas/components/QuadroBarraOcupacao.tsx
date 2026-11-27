@@ -40,6 +40,7 @@ export function LegendaOcupacao({ numeros }: { numeros: QuadroNumeros }) {
   return (
     <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-stone-600">
       <Item cor="bg-amber-600" texto="No posto" />
+      {(numeros.ferias ?? 0) > 0 ? <Item cor="bg-stone-400" texto="Em férias" /> : null}
       {numeros.avisos > 0 ? <Item cor="bg-rose-500" texto="Em aviso" /> : null}
       {numeros.reservas > 0 ? <Item cor="bg-[#C6A848]" texto="A entrar" /> : null}
       <Item cor="bg-stone-200" texto="Livres" />
@@ -51,6 +52,7 @@ function FaixasAtual({ segmentos }: { segmentos: QuadroOcupacaoSegmentos }) {
   return (
     <>
       <Faixa cor="bg-amber-600" valor={segmentos.noPosto} />
+      <Faixa cor="bg-stone-400" valor={segmentos.ferias} />
       <Faixa cor="bg-rose-500" valor={segmentos.avisos} />
       <Faixa cor="bg-[#C6A848]" valor={segmentos.reservas} />
       <Faixa valor={segmentos.livres} />
@@ -62,6 +64,7 @@ function FaixasProjecao({ segmentos }: { segmentos: QuadroOcupacaoSegmentos }) {
   return (
     <>
       <Faixa cor="bg-amber-600" valor={segmentos.noPosto} />
+      <Faixa cor="bg-stone-400" valor={segmentos.ferias} />
       <Faixa cor="bg-[#C6A848]" valor={segmentos.reservas} />
       <Faixa valor={segmentos.livresAposSaidas} />
     </>

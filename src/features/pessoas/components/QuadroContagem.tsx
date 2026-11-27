@@ -9,6 +9,7 @@ import { NotasQuadro } from './QuadroNotas';
 const ROTULOS = [
   { chave: 'aprovado', rotulo: 'Aprovadas', curto: 'Aprov.' },
   { chave: 'contratados', rotulo: 'Contratados', curto: 'Contr.' },
+  { chave: 'ferias', rotulo: 'Em férias', curto: 'Férias' },
   { chave: 'reservas', rotulo: 'A entrar', curto: 'Entrar' },
   { chave: 'avisos', rotulo: 'Em aviso', curto: 'Aviso' },
   { chave: 'livres', rotulo: 'Livres', curto: 'Livres' },
@@ -47,14 +48,14 @@ function FaixaGeral({
           </Chip>
         </div>
       ) : null}
-      <dl className="grid grid-cols-3 gap-3 sm:grid-cols-5 sm:gap-2">
+      <dl className="grid grid-cols-3 gap-3 sm:grid-cols-6 sm:gap-2">
         {ROTULOS.map((item) => (
           <Celula
             key={item.chave}
             rotulo={item.rotulo}
             curto={item.curto}
-            valor={numeros[item.chave]}
-            tom={tomDaCelula(item.chave, numeros[item.chave])}
+            valor={numeros[item.chave] ?? 0}
+            tom={tomDaCelula(item.chave, numeros[item.chave] ?? 0)}
             tamanho="geral"
           />
         ))}
@@ -68,14 +69,14 @@ function FaixaGeral({
 function FaixaSetor({ numeros }: { numeros: QuadroNumeros }) {
   return (
     <div>
-      <dl aria-label="Totais do setor" className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5">
+      <dl aria-label="Totais do setor" className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-6">
         {ROTULOS.map((item) => (
           <Celula
             key={item.chave}
             rotulo={item.rotulo}
             curto={item.curto}
-            valor={numeros[item.chave]}
-            tom={tomDaCelula(item.chave, numeros[item.chave])}
+            valor={numeros[item.chave] ?? 0}
+            tom={tomDaCelula(item.chave, numeros[item.chave] ?? 0)}
             tamanho="setor"
           />
         ))}

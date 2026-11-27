@@ -1,6 +1,7 @@
 import { AfastamentoRotulo } from '@/domain/pessoas/afastamento';
 import type { ColaboradorListaItem } from '@/domain/pessoas/colaborador-lista-filtro';
 import type { Regime } from '@/domain/pessoas/regime-cadastro';
+import type { SetorTipo } from '@/domain/pessoas/setor-edicao';
 import { extractCalendarDate } from '@/lib/utils/date-utils';
 
 const SITUACOES = new Set<ColaboradorListaItem['situacao']>([
@@ -39,6 +40,7 @@ export class ColaboradorListaRowParser {
       situacao,
       afastamento: new AfastamentoRotulo().ler(row.afastamento),
       setorNome: this.lerNomeRelacao(row.pessoas_setores),
+      setorTipo: this.lerTipoRelacao(row.pessoas_setores),
       turnoNome: this.lerNomeRelacao(row.pessoas_turnos),
       turnoCodigo: this.lerCodigoRelacao(row.pessoas_turnos),
       liderSetor: row.lider_setor === true,
@@ -77,6 +79,14 @@ export class ColaboradorListaRowParser {
       throw new Error('Erro ao listar colaboradores: nome de setor/turno inválido.');
     }
     return nome;
+  }
+
+  private lerTipoRelacao(valor: unknown): SetorTipo | null {
+    if (valor == null) return null;
+    const registro = Array.isArray(valor) ? valor[0] : valor;
+    if (!this.isRecord(registro)) return null;
+    if (registro.tipo === 'operacional' || registro.tipo === 'apoio') return registro.tipo;
+    return null;
   }
 
   private lerCodigoRelacao(valor: unknown): string | null {

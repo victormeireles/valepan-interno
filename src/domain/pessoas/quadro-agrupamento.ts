@@ -13,6 +13,7 @@ export type QuadroPessoa = {
   dataDesligamento?: string | null;
   setorNome: string;
   turnoCodigo: string;
+  ferias?: { inicio: string; volta: string } | null;
 };
 
 export type HorarioDiaQuadro = {

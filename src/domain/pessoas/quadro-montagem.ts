@@ -43,6 +43,7 @@ export type QuadroNumeros = {
   afastados: number;
   avisos: number;
   livres: number;
+  ferias?: number;
 };
 
 export const QUADRO_NUMEROS_VAZIO: QuadroNumeros = {
@@ -52,6 +53,7 @@ export const QUADRO_NUMEROS_VAZIO: QuadroNumeros = {
   afastados: 0,
   avisos: 0,
   livres: 0,
+  ferias: 0,
 };
 
 export class QuadroMontagem {
