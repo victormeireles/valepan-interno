@@ -1,10 +1,13 @@
+import type { AlvoPlano, EscopoManutencao } from './escopo-manutencao';
+
 export type FrequenciaInformada =
   | { tipo: 'a_cada_n_dias'; intervalo: number }
   | { tipo: 'semanal'; diaSemana: number }
   | { tipo: 'mensal'; diaMes: number };
 
 export type PlanoEmEdicao = {
-  maquinaId: string;
+  escopo: EscopoManutencao;
+  maquinaId: string | null;
   frequenciaTipo: FrequenciaInformada['tipo'];
   intervaloDias: number | null;
   diaSemana: number | null;
@@ -18,8 +21,12 @@ export type DescricaoAceita =
 const DESCRICAO_VAZIA = 'Informe a descrição.';
 
 export class EdicaoDescricaoPlano {
-  soDescricao(atual: PlanoEmEdicao, maquinaId: string, frequencia: FrequenciaInformada): boolean {
-    return atual.maquinaId === maquinaId && this.mesmaFrequencia(atual, frequencia);
+  soDescricao(atual: PlanoEmEdicao, alvo: AlvoPlano, frequencia: FrequenciaInformada): boolean {
+    return this.mesmoAlvo(atual, alvo) && this.mesmaFrequencia(atual, frequencia);
+  }
+
+  mesmoAlvo(atual: PlanoEmEdicao, alvo: AlvoPlano): boolean {
+    return atual.escopo === alvo.escopo && (atual.maquinaId ?? '') === (alvo.maquinaId ?? '');
   }
 
   aceitar(descricao: string): DescricaoAceita {

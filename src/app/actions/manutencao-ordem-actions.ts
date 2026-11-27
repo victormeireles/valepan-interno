@@ -41,7 +41,7 @@ type MaquinaLinha = { id: string; ativo: boolean; setor_id: string };
 type OrdemAcao = {
   status: string;
   tipo: string;
-  setor_id: string;
+  setor_id: string | null;
   recebida_por: string | null;
 };
 
@@ -319,7 +319,7 @@ function pedidoCancelamento(
 async function veOrdem(
   leitura: OrdemLeitura,
   snap: UsuarioAuthzSnapshot,
-  setorId: string,
+  setorId: string | null,
 ): Promise<boolean> {
   const acesso = new ManutencaoAcesso();
   const setores = acesso.veTodas(snap) ? [] : await setoresDoSnapshot(leitura, snap);

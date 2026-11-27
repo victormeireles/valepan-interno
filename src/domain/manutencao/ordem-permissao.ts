@@ -13,8 +13,9 @@ type EdicaoFinalizacao = {
 };
 
 export class OrdemPermissao {
-  veDetalhe(veTodas: boolean, setores: string[], setorOrdem: string): boolean {
+  veDetalhe(veTodas: boolean, setores: string[], setorOrdem: string | null): boolean {
     if (veTodas) return true;
+    if (!setorOrdem) return false;
     return setores.includes(setorOrdem);
   }
 

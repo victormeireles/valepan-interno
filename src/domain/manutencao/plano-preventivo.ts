@@ -1,9 +1,11 @@
+import type { EscopoManutencao } from './escopo-manutencao';
 import {
   ProximaDataPreventiva,
   type FrequenciaPlano,
 } from './proxima-data-preventiva';
 
 export type EntradaPlano = {
+  escopo: EscopoManutencao;
   maquinaId: string;
   descricao: string;
   frequencia: FrequenciaPlano;
@@ -13,6 +15,10 @@ export type EntradaPlano = {
 
 export type MaquinaDoPlano = { id: string; ativo: boolean };
 
+export type ContextoAlvoPlano =
+  | { escopo: 'maquina'; maquina: MaquinaDoPlano | null }
+  | { escopo: 'fabrica' };
+
 export type ResultadoPlano =
   | { ok: true; descricao: string; proximaEm: string; ancora?: string }
   | { ok: false; mensagem: string };
@@ -20,15 +26,15 @@ export type ResultadoPlano =
 export class PlanoPreventivo {
   constructor(private readonly proxima = new ProximaDataPreventiva()) {}
 
-  validar(entrada: EntradaPlano, maquina: MaquinaDoPlano | null): ResultadoPlano {
-    const mensagem = this.recusa(entrada, maquina);
+  validar(entrada: EntradaPlano, contexto: ContextoAlvoPlano): ResultadoPlano {
+    const mensagem = this.recusa(entrada, contexto);
     if (mensagem) return { ok: false, mensagem };
     return this.aceitar(entrada);
   }
 
-  private recusa(entrada: EntradaPlano, maquina: MaquinaDoPlano | null): string | null {
+  private recusa(entrada: EntradaPlano, contexto: ContextoAlvoPlano): string | null {
     return (
-      this.recusaMaquina(entrada, maquina) ??
+      this.recusaAlvo(entrada, contexto) ??
       this.recusaDescricao(entrada.descricao) ??
       this.recusaFrequencia(entrada.frequencia) ??
       this.recusaData(entrada) ??
@@ -36,12 +42,22 @@ export class PlanoPreventivo {
     );
   }
 
-  private recusaMaquina(
-    entrada: EntradaPlano,
-    maquina: MaquinaDoPlano | null,
-  ): string | null {
-    if (!maquina || maquina.id !== entrada.maquinaId) return 'Máquina não encontrada.';
-    if (!maquina.ativo) return 'Máquina inativa.';
+  private recusaAlvo(entrada: EntradaPlano, contexto: ContextoAlvoPlano): string | null {
+    if (entrada.escopo === 'fabrica') return this.recusaFabrica(contexto);
+    return this.recusaMaquina(entrada, contexto);
+  }
+
+  private recusaFabrica(contexto: ContextoAlvoPlano): string | null {
+    if (contexto.escopo === 'fabrica') return null;
+    return 'Máquina não encontrada.';
+  }
+
+  private recusaMaquina(entrada: EntradaPlano, contexto: ContextoAlvoPlano): string | null {
+    if (contexto.escopo !== 'maquina') return 'Máquina não encontrada.';
+    if (!contexto.maquina || contexto.maquina.id !== entrada.maquinaId) {
+      return 'Máquina não encontrada.';
+    }
+    if (!contexto.maquina.ativo) return 'Máquina inativa.';
     return null;
   }
 

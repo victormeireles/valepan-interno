@@ -1,6 +1,7 @@
 'use server';
 
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
+import { ALVO_FABRICA, RotuloAlvoManutencao } from '@/domain/manutencao/escopo-manutencao';
 import { IndicadoresManutencao, type OrdemIndicador, type SaidaManual } from '@/domain/manutencao/indicadores-manutencao';
 import { PrecoCentavos } from '@/domain/manutencao/preco-centavos';
 import { OrdemLeitura } from '@/app/actions/manutencao-ordem-leitura';
@@ -35,8 +36,11 @@ export type IndicadoresCarregados = {
 type Intervalo = { inicio: string; fim: string };
 type Cliente = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 type Agregado = ReturnType<IndicadoresManutencao['agregar']>;
+const rotuloAlvo = new RotuloAlvoManutencao();
+
 type OrdemLinha = {
-  maquina_id: string;
+  escopo: string;
+  maquina_id: string | null;
   status: string;
   urgencia: string | null;
   aberta_em: string;
@@ -117,7 +121,7 @@ class LeituraIndicadores {
     const linhas = [...(await this.finalizadas(janela)), ...(await this.paradasAbertas())];
     const nomes = await new OrdemLeitura(this.client).nomesPorId(
       'manutencao_maquinas',
-      linhas.map((linha) => linha.maquina_id),
+      linhas.flatMap((linha) => (linha.maquina_id ? [linha.maquina_id] : [])),
     );
     return linhas.map((linha) => this.paraOrdem(linha, nomes));
   }
@@ -136,7 +140,7 @@ class LeituraIndicadores {
   private async finalizadas(janela: JanelaSaoPaulo): Promise<OrdemLinha[]> {
     const { data, error } = await this.client
       .from('manutencao_ordens' as never)
-      .select('maquina_id, status, urgencia, aberta_em, inicio_em, fim_em, custo_pecas_centavos')
+      .select('escopo, maquina_id, status, urgencia, aberta_em, inicio_em, fim_em, custo_pecas_centavos')
       .eq('status', 'finalizada')
       .gte('fim_em', janela.desde())
       .lt('fim_em', janela.ate());
@@ -147,7 +151,7 @@ class LeituraIndicadores {
   private async paradasAbertas(): Promise<OrdemLinha[]> {
     const { data, error } = await this.client
       .from('manutencao_ordens' as never)
-      .select('maquina_id, status, urgencia, aberta_em, inicio_em, fim_em, custo_pecas_centavos')
+      .select('escopo, maquina_id, status, urgencia, aberta_em, inicio_em, fim_em, custo_pecas_centavos')
       .in('status', ['aberta', 'recebida'])
       .eq('urgencia', 'maquina_parou');
     if (error) throw new Error(error.message);
@@ -155,9 +159,10 @@ class LeituraIndicadores {
   }
 
   private paraOrdem(linha: OrdemLinha, nomes: Map<string, string>): OrdemIndicador {
+    const fabrica = linha.escopo === ALVO_FABRICA;
     return {
-      maquinaId: linha.maquina_id,
-      maquinaNome: nomes.get(linha.maquina_id) || 'Máquina',
+      maquinaId: fabrica ? ALVO_FABRICA : (linha.maquina_id ?? ''),
+      maquinaNome: rotuloAlvo.nome(linha.escopo, nomes.get(linha.maquina_id ?? '') || 'Máquina'),
       status: linha.status,
       urgencia: linha.urgencia,
       abertaEm: linha.aberta_em,

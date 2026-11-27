@@ -1,11 +1,16 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import {
   EdicaoDescricaoPlano,
+  type FrequenciaInformada,
   type PlanoEmEdicao,
 } from '@/domain/manutencao/edicao-descricao-plano';
+import { AlvoDoPlano } from '@/domain/manutencao/escopo-manutencao';
+import { GravacaoFrequenciaPlano } from '@/domain/manutencao/gravacao-frequencia-plano';
 import {
   PlanoPreventivo,
+  type ContextoAlvoPlano,
   type EntradaPlano,
   type MaquinaDoPlano,
 } from '@/domain/manutencao/plano-preventivo';
@@ -13,20 +18,16 @@ import {
   PlanoRemocao,
   type AvaliacaoRemocaoPlano,
 } from '@/domain/manutencao/plano-remocao';
-import {
-  ProximaDataPreventiva,
-  type FrequenciaPlano,
-} from '@/domain/manutencao/proxima-data-preventiva';
+import type { FrequenciaPlano } from '@/domain/manutencao/proxima-data-preventiva';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { GeradorPreventivaNaFila } from './manutencao-plano-geracao';
 
-export type FrequenciaEntrada =
-  | { tipo: 'a_cada_n_dias'; intervalo: number }
-  | { tipo: 'semanal'; diaSemana: number }
-  | { tipo: 'mensal'; diaMes: number };
+export type FrequenciaEntrada = FrequenciaInformada;
 
 export type EntradaSalvarPlano = {
   id?: string;
+  escopo: 'maquina' | 'fabrica';
   maquinaId: string;
   descricao: string;
   frequencia: FrequenciaEntrada;
@@ -37,7 +38,8 @@ type Resultado = { ok: boolean; mensagem: string };
 type Cliente = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 type PlanoGravado = {
   id: string;
-  maquina_id: string;
+  escopo: 'maquina' | 'fabrica';
+  maquina_id: string | null;
   ativo: boolean;
   frequencia_tipo: FrequenciaEntrada['tipo'];
   intervalo_dias: number | null;
@@ -46,11 +48,10 @@ type PlanoGravado = {
   ancora_em: string | null;
   proxima_em: string;
 };
-type FrequenciaCalculada = {
-  frequencia: FrequenciaPlano;
-  proximaEm: string;
-};
 type CamposPlano = Record<string, string | number | boolean | null>;
+
+const frequencias = new GravacaoFrequenciaPlano();
+const alvos = new AlvoDoPlano();
 
 const SALVO = 'Plano salvo.';
 const REMOVIDO = 'Plano removido.';
@@ -59,7 +60,7 @@ const NAO_ENCONTRADO = 'Plano não encontrado.';
 export async function salvarPlano(entrada: EntradaSalvarPlano): Promise<Resultado> {
   await requireInternoModulo('interno_manutencao', 'editar');
   const client = supabaseClientFactory.createServiceRoleClient();
-  const hoje = hojeSp();
+  const hoje = frequencias.hojeSp();
   if (entrada.id) return editarPlano(client, entrada.id, entrada, hoje);
   return criarPlano(client, entrada, hoje);
 }
@@ -119,17 +120,17 @@ async function criarPlano(
   entrada: EntradaSalvarPlano,
   hoje: string,
 ): Promise<Resultado> {
-  const frequencia = frequenciaNova(entrada);
-  const maquina = await lerMaquina(client, entrada.maquinaId);
-  const validacao = validar(entrada, frequencia, entrada.primeiraData, hoje, maquina);
+  const frequencia = frequencias.nova(entrada.frequencia, entrada.primeiraData);
+  const contexto = await contextoAlvo(client, entrada);
+  const validacao = validar(entrada, frequencia, entrada.primeiraData, hoje, contexto);
   if (!validacao.ok) return validacao;
   const erro = await inserir(client, {
-    maquina_id: entrada.maquinaId,
+    ...colunasDoAlvo(entrada),
     descricao: validacao.descricao,
     ativo: true,
-    ...colunasDaFrequencia(frequencia, validacao.proximaEm),
+    ...frequencias.colunas(frequencia, validacao.proximaEm),
   });
-  return resultado(erro);
+  return concluir(client, erro, validacao.proximaEm, hoje);
 }
 
 async function editarPlano(
@@ -142,40 +143,47 @@ async function editarPlano(
   if (!atual?.ativo) return { ok: false, mensagem: NAO_ENCONTRADO };
   const edicao = new EdicaoDescricaoPlano();
   const plano = planoEmEdicao(atual);
-  if (edicao.soDescricao(plano, entrada.maquinaId, entrada.frequencia)) {
-    return gravarDescricao(client, id, entrada.descricao);
+  const alvo = alvos.daEntrada(entrada.escopo, entrada.maquinaId);
+  if (edicao.soDescricao(plano, alvo, entrada.frequencia)) {
+    return gravarDescricao(client, id, entrada.descricao, atual.proxima_em, hoje);
   }
-  const maquina = await lerMaquina(client, entrada.maquinaId);
+  const contexto = await contextoAlvo(client, entrada);
   if (edicao.mesmaFrequencia(plano, entrada.frequencia)) {
-    return gravarMaquina(client, id, entrada, atual, maquina, hoje);
+    return gravarAlvo(client, id, entrada, atual, contexto, hoje);
   }
-  return gravarFrequencia(client, id, entrada, atual, maquina, hoje);
+  return gravarFrequencia(client, id, entrada, atual, contexto, hoje);
 }
 
-async function gravarDescricao(client: Cliente, id: string, descricao: string): Promise<Resultado> {
+async function gravarDescricao(
+  client: Cliente,
+  id: string,
+  descricao: string,
+  proximaEm: string,
+  hoje: string,
+): Promise<Resultado> {
   const aceita = new EdicaoDescricaoPlano().aceitar(descricao);
   if (!aceita.ok) return aceita;
-  return resultado(await atualizar(client, id, { descricao: aceita.descricao }));
+  const erro = await atualizar(client, id, { descricao: aceita.descricao });
+  return concluir(client, erro, proximaEm, hoje);
 }
 
-async function gravarMaquina(
+async function gravarAlvo(
   client: Cliente,
   id: string,
   entrada: EntradaSalvarPlano,
   atual: PlanoGravado,
-  maquina: MaquinaDoPlano | null,
+  contexto: ContextoAlvoPlano,
   hoje: string,
 ): Promise<Resultado> {
-  const frequencia = frequenciaDoPlano(atual);
-  const primeiraData = dataParaValidar(atual, frequencia, hoje);
-  const validacao = validar(entrada, frequencia, primeiraData, hoje, maquina);
+  const frequencia = frequencias.doPlano(atual);
+  const primeiraData = frequencias.dataParaValidar(atual, frequencia, hoje);
+  const validacao = validar(entrada, frequencia, primeiraData, hoje, contexto);
   if (!validacao.ok) return validacao;
-  return resultado(
-    await atualizar(client, id, {
-      maquina_id: entrada.maquinaId,
-      descricao: validacao.descricao,
-    }),
-  );
+  const erro = await atualizar(client, id, {
+    ...colunasDoAlvo(entrada),
+    descricao: validacao.descricao,
+  });
+  return concluir(client, erro, atual.proxima_em, hoje);
 }
 
 async function gravarFrequencia(
@@ -183,18 +191,18 @@ async function gravarFrequencia(
   id: string,
   entrada: EntradaSalvarPlano,
   atual: PlanoGravado,
-  maquina: MaquinaDoPlano | null,
+  contexto: ContextoAlvoPlano,
   hoje: string,
 ): Promise<Resultado> {
-  const recalculo = new RecalculoDeFrequencia().calcular(atual, entrada.frequencia, hoje);
-  const validacao = validar(entrada, recalculo.frequencia, recalculo.proximaEm, hoje, maquina);
+  const recalculo = frequencias.recalcular(atual, entrada.frequencia, hoje);
+  const validacao = validar(entrada, recalculo.frequencia, recalculo.proximaEm, hoje, contexto);
   if (!validacao.ok) return validacao;
   const erro = await atualizar(client, id, {
-    maquina_id: entrada.maquinaId,
+    ...colunasDoAlvo(entrada),
     descricao: validacao.descricao,
-    ...colunasDaFrequencia(recalculo.frequencia, recalculo.proximaEm),
+    ...frequencias.colunas(recalculo.frequencia, recalculo.proximaEm),
   });
-  return resultado(erro);
+  return concluir(client, erro, recalculo.proximaEm, hoje);
 }
 
 function validar(
@@ -202,9 +210,9 @@ function validar(
   frequencia: FrequenciaPlano,
   primeiraData: string,
   hoje: string,
-  maquina: MaquinaDoPlano | null,
+  contexto: ContextoAlvoPlano,
 ) {
-  return new PlanoPreventivo().validar(pedido(entrada, frequencia, primeiraData, hoje), maquina);
+  return new PlanoPreventivo().validar(pedido(entrada, frequencia, primeiraData, hoje), contexto);
 }
 
 function pedido(
@@ -214,6 +222,7 @@ function pedido(
   hoje: string,
 ): EntradaPlano {
   return {
+    escopo: entrada.escopo === 'fabrica' ? 'fabrica' : 'maquina',
     maquinaId: entrada.maquinaId,
     descricao: entrada.descricao,
     frequencia,
@@ -222,56 +231,13 @@ function pedido(
   };
 }
 
-class RecalculoDeFrequencia {
-  constructor(private readonly datas = new ProximaDataPreventiva()) {}
-
-  calcular(atual: PlanoGravado, nova: FrequenciaEntrada, hoje: string): FrequenciaCalculada {
-    const frequencia = this.frequencia(atual, nova, hoje);
-    return { frequencia, proximaEm: this.datas.depoisDeHoje(frequencia, hoje) };
-  }
-
-  private frequencia(atual: PlanoGravado, nova: FrequenciaEntrada, hoje: string): FrequenciaPlano {
-    if (nova.tipo === 'semanal') return { tipo: 'semanal', diaSemana: nova.diaSemana };
-    if (nova.tipo === 'mensal') return { tipo: 'mensal', diaMes: nova.diaMes };
-    const ancora = this.datas.depoisDeHoje(this.intervalo(atual, nova.intervalo, hoje), hoje);
-    return { tipo: 'a_cada_n_dias', intervalo: nova.intervalo, ancora };
-  }
-
-  private intervalo(atual: PlanoGravado, intervalo: number, hoje: string): FrequenciaPlano {
-    return { tipo: 'a_cada_n_dias', intervalo, ancora: this.ancora(atual, hoje) };
-  }
-
-  private ancora(atual: PlanoGravado, hoje: string): string {
-    if (atual.frequencia_tipo !== 'a_cada_n_dias' || !atual.ancora_em) return hoje;
-    return dataCurta(atual.ancora_em);
-  }
-}
-
-function frequenciaNova(entrada: EntradaSalvarPlano): FrequenciaPlano {
-  if (entrada.frequencia.tipo !== 'a_cada_n_dias') return entrada.frequencia;
-  return {
-    tipo: 'a_cada_n_dias',
-    intervalo: entrada.frequencia.intervalo,
-    ancora: entrada.primeiraData,
-  };
-}
-
-function frequenciaDoPlano(atual: PlanoGravado): FrequenciaPlano {
-  if (atual.frequencia_tipo === 'a_cada_n_dias') {
-    return {
-      tipo: 'a_cada_n_dias',
-      intervalo: atual.intervalo_dias ?? 0,
-      ancora: dataCurta(atual.ancora_em ?? atual.proxima_em),
-    };
-  }
-  if (atual.frequencia_tipo === 'semanal') {
-    return { tipo: 'semanal', diaSemana: atual.dia_semana ?? 0 };
-  }
-  return { tipo: 'mensal', diaMes: atual.dia_mes ?? 0 };
+function colunasDoAlvo(entrada: EntradaSalvarPlano): CamposPlano {
+  return alvos.colunas(alvos.daEntrada(entrada.escopo, entrada.maquinaId));
 }
 
 function planoEmEdicao(atual: PlanoGravado): PlanoEmEdicao {
   return {
+    escopo: atual.escopo === 'fabrica' ? 'fabrica' : 'maquina',
     maquinaId: atual.maquina_id,
     frequenciaTipo: atual.frequencia_tipo,
     intervaloDias: atual.intervalo_dias,
@@ -280,42 +246,33 @@ function planoEmEdicao(atual: PlanoGravado): PlanoEmEdicao {
   };
 }
 
-function dataParaValidar(atual: PlanoGravado, frequencia: FrequenciaPlano, hoje: string): string {
-  const proxima = dataCurta(atual.proxima_em);
-  const datas = new ProximaDataPreventiva();
-  if (proxima >= hoje && datas.encaixa(frequencia, proxima)) return proxima;
-  return datas.depoisDeHoje(frequencia, hoje);
-}
-
-function colunasDaFrequencia(frequencia: FrequenciaPlano, proximaEm: string): CamposPlano {
-  const base: CamposPlano = {
-    frequencia_tipo: frequencia.tipo,
-    intervalo_dias: null,
-    dia_semana: null,
-    dia_mes: null,
-    ancora_em: null,
-    proxima_em: proximaEm,
-  };
-  if (frequencia.tipo === 'a_cada_n_dias') {
-    return { ...base, intervalo_dias: frequencia.intervalo, ancora_em: frequencia.ancora };
-  }
-  if (frequencia.tipo === 'semanal') return { ...base, dia_semana: frequencia.diaSemana };
-  return { ...base, dia_mes: frequencia.diaMes };
-}
-
-function hojeSp(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
-
-function dataCurta(valor: string): string {
-  return valor.slice(0, 10);
-}
-
 function resultado(erro: string | null, mensagem = SALVO): Resultado {
   return erro ? { ok: false, mensagem: erro } : { ok: true, mensagem };
 }
 
+async function concluir(
+  client: Cliente,
+  erro: string | null,
+  proximaEm: string,
+  hoje: string,
+): Promise<Resultado> {
+  if (erro) return { ok: false, mensagem: erro };
+  const mensagem = await new GeradorPreventivaNaFila().aposSalvar(client, proximaEm, hoje);
+  revalidatePath('/manutencao');
+  revalidatePath('/manutencao/preventiva');
+  return { ok: true, mensagem };
+}
+
+async function contextoAlvo(
+  client: Cliente,
+  entrada: EntradaSalvarPlano,
+): Promise<ContextoAlvoPlano> {
+  if (entrada.escopo === 'fabrica') return { escopo: 'fabrica' };
+  return { escopo: 'maquina', maquina: await lerMaquina(client, entrada.maquinaId) };
+}
+
 async function lerMaquina(client: Cliente, maquinaId: string): Promise<MaquinaDoPlano | null> {
+  if (!maquinaId) return null;
   const { data, error } = await client
     .from('manutencao_maquinas' as never)
     .select('id, ativo')
@@ -329,7 +286,7 @@ async function lerPlano(client: Cliente, id: string): Promise<PlanoGravado | nul
   const { data, error } = await client
     .from('manutencao_planos' as never)
     .select(
-      'id, maquina_id, ativo, frequencia_tipo, intervalo_dias, dia_semana, dia_mes, ancora_em, proxima_em',
+      'id, escopo, maquina_id, ativo, frequencia_tipo, intervalo_dias, dia_semana, dia_mes, ancora_em, proxima_em',
     )
     .eq('id', id)
     .maybeSingle();

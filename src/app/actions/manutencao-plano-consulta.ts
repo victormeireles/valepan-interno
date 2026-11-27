@@ -1,11 +1,18 @@
 'use server';
 
+import {
+  RotuloAlvoManutencao,
+  type EscopoManutencao,
+} from '@/domain/manutencao/escopo-manutencao';
 import { requireInternoModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
 
+const rotuloAlvo = new RotuloAlvoManutencao();
+
 export type PlanoItem = {
   id: string;
-  maquinaId: string;
+  escopo: EscopoManutencao;
+  maquinaId: string | null;
   maquinaCodigo: string;
   maquinaNome: string;
   descricao: string;
@@ -21,7 +28,8 @@ type FrequenciaTipo = 'a_cada_n_dias' | 'semanal' | 'mensal';
 type Cliente = ReturnType<typeof supabaseClientFactory.createServiceRoleClient>;
 type PlanoRow = {
   id: string;
-  maquina_id: string;
+  escopo: string;
+  maquina_id: string | null;
   descricao: string;
   frequencia_tipo: FrequenciaTipo;
   intervalo_dias: number | null;
@@ -45,14 +53,14 @@ async function lerPlanosAtivos(client: Cliente): Promise<PlanoRow[]> {
   const { data, error } = await client
     .from('manutencao_planos' as never)
     .select(
-      'id, maquina_id, descricao, frequencia_tipo, intervalo_dias, dia_semana, dia_mes, proxima_em',
+      'id, escopo, maquina_id, descricao, frequencia_tipo, intervalo_dias, dia_semana, dia_mes, proxima_em',
     )
     .eq('ativo', true);
   if (error) throw new Error(error.message);
   return (data ?? []) as PlanoRow[];
 }
 
-async function lerMaquinas(client: Cliente, ids: string[]): Promise<Map<string, MaquinaRow>> {
+async function lerMaquinas(client: Cliente, ids: (string | null)[]): Promise<Map<string, MaquinaRow>> {
   const unicos = idsUnicos(ids);
   if (unicos.length === 0) return new Map();
   const { data, error } = await client
@@ -81,8 +89,8 @@ function idsDeOrdem(ordens: OrdemPlano[]): Set<string> {
   );
 }
 
-function idsUnicos(ids: string[]): string[] {
-  return [...new Set(ids)];
+function idsUnicos(ids: (string | null)[]): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 function paraItem(
@@ -90,12 +98,14 @@ function paraItem(
   maquinas: Map<string, MaquinaRow>,
   abertas: Set<string>,
 ): PlanoItem {
-  const maquina = maquinas.get(plano.maquina_id);
+  const maquina = plano.maquina_id ? maquinas.get(plano.maquina_id) : undefined;
+  const escopo = plano.escopo === 'fabrica' ? 'fabrica' : 'maquina';
   return {
     id: plano.id,
+    escopo,
     maquinaId: plano.maquina_id,
-    maquinaCodigo: maquina?.codigo ?? '',
-    maquinaNome: maquina?.nome ?? '',
+    maquinaCodigo: escopo === 'fabrica' ? '' : (maquina?.codigo ?? ''),
+    maquinaNome: rotuloAlvo.nome(escopo, maquina?.nome ?? ''),
     descricao: plano.descricao,
     frequenciaTipo: plano.frequencia_tipo,
     intervaloDias: plano.intervalo_dias,

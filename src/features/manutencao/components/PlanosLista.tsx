@@ -41,7 +41,7 @@ export function PlanosLista({
       <Input
         label="Buscar"
         aria-label="Buscar planos"
-        placeholder="Máquina, descrição, frequência ou data"
+        placeholder="Máquina, fábrica, descrição, frequência ou data"
         icon="search"
         value={termo}
         autoComplete="off"

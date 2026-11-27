@@ -1,6 +1,7 @@
 'use server';
 
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
+import { FotoOrdem, type FotoOrdemValor } from '@/domain/manutencao/foto-ordem';
 import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
 import {
   OrdemFinalizacao,
@@ -13,6 +14,8 @@ import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { anexarFotoNaOrdem } from '@/lib/manutencao/persistir-foto-ordem';
+import { AjudantesOficina } from './manutencao-ajudantes-oficina';
 import type { EntradaFinalizacao } from './manutencao-ordem-finalizar-actions';
 import type { ClienteOrdem } from './manutencao-ordem-leitura';
 
@@ -79,8 +82,16 @@ export async function atualizarFinalizacaoOrdem(
     usuarioId,
     administra: new ManutencaoAcesso().administra(snap),
     ...preparado,
-    ajudanteIds: limparAjudantes(entrada.ajudanteIds, liberada.ordem.recebidaPor),
+    ajudanteIds: await manterAjudantes(
+      client,
+      limparAjudantes(entrada.ajudanteIds, liberada.ordem.recebidaPor),
+    ),
   });
+}
+
+async function manterAjudantes(client: ClienteOrdem, ids: string[]): Promise<string[]> {
+  const elegiveis = await new AjudantesOficina(client).idsElegiveis(ids);
+  return ids.filter((id) => elegiveis.has(id));
 }
 
 function limparAjudantes(ids: string[], receptorId: string): string[] {
@@ -133,7 +144,14 @@ function prepararEntrada(
   entrada: EntradaFinalizacao,
   abertaEm: string,
 ):
-  | { ok: true; inicioIso: string; fimIso: string; servicos: string; linhas: PecaFinalizacao[] }
+  | {
+      ok: true;
+      inicioIso: string;
+      fimIso: string;
+      servicos: string;
+      linhas: PecaFinalizacao[];
+      foto: FotoOrdemValor | null;
+    }
   | Resultado {
   const horarios = validarInstantes(entrada.inicioIso, entrada.fimIso, abertaEm);
   if (!horarios.ok) return horarios;
@@ -141,12 +159,15 @@ function prepararEntrada(
   if (!servicos.ok) return servicos;
   const linhas = linhasDe(entrada.pecas);
   if (!linhas.ok) return linhas;
+  const foto = new FotoOrdem().validar(entrada.foto);
+  if (!foto.ok) return foto;
   return {
     ok: true,
     inicioIso: entrada.inicioIso,
     fimIso: entrada.fimIso,
     servicos: servicos.servicos,
     linhas: linhas.linhas,
+    foto: foto.foto,
   };
 }
 
@@ -180,6 +201,25 @@ async function gravar(
     servicos: string;
     linhas: PecaFinalizacao[];
     ajudanteIds: string[];
+    foto: FotoOrdemValor | null;
+  },
+): Promise<ResultadoAcao> {
+  const movimento = await comRetentativa(client, pedido);
+  if (!movimento.ok) return movimento;
+  return anexarFotoNaOrdem(client, pedido.ordemId, pedido.foto, movimento);
+}
+
+async function comRetentativa(
+  client: ClienteOrdem,
+  pedido: {
+    ordemId: string;
+    inicioIso: string;
+    fimIso: string;
+    servicos: string;
+    linhas: PecaFinalizacao[];
+    ajudanteIds: string[];
+    usuarioId: string;
+    administra: boolean;
   },
 ): Promise<ResultadoAcao> {
   const primeira = await tentar(client, pedido);

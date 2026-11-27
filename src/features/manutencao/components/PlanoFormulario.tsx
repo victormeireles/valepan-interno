@@ -2,6 +2,7 @@
 
 import { useId, type FormEvent } from 'react';
 import type { EntradaSalvarPlano, FrequenciaEntrada } from '@/app/actions/manutencao-plano-actions';
+import { ALVO_FABRICA, OPCAO_FABRICA_INTEIRA } from '@/domain/manutencao/escopo-manutencao';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select, type SelectOption } from '@/components/ui/Select';
@@ -282,9 +283,11 @@ class OpcoesDeMaquina {
 
 class EntradaDoFormulario {
   montar(valor: PlanoFormularioValor): EntradaSalvarPlano {
+    const fabrica = valor.maquinaId === ALVO_FABRICA;
     return {
       id: valor.id,
-      maquinaId: valor.maquinaId,
+      escopo: fabrica ? 'fabrica' : 'maquina',
+      maquinaId: fabrica ? '' : valor.maquinaId,
       descricao: valor.descricao,
       frequencia: this.frequencia(valor),
       primeiraData: valor.data,
@@ -303,6 +306,7 @@ class EntradaDoFormulario {
 function opcoesMaquina(maquinas: MaquinaPlanoOpcao[]): SelectOption[] {
   return [
     { value: '', label: 'Selecione a máquina' },
+    { value: ALVO_FABRICA, label: OPCAO_FABRICA_INTEIRA },
     ...maquinas.map((maquina) => ({
       value: maquina.id,
       label: rotuloMaquina(maquina),

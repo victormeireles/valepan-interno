@@ -1,5 +1,6 @@
 'use server';
 
+import { RotuloAlvoManutencao } from '@/domain/manutencao/escopo-manutencao';
 import { FilaFundacao } from '@/domain/manutencao/fila-fundacao';
 import { FilaOrdem, type FilaItem } from '@/domain/manutencao/fila-ordem';
 import {
@@ -53,6 +54,8 @@ export type OrdemCarregada = {
   canceladaPorNome: string | null;
   cancelamentoMotivo: string | null;
   custoPecasCentavos: number | null;
+  fotoUrl: string | null;
+  fotoId: string | null;
   pecas: PecaOrdemVista[];
   ajudantes: { id: string; nome: string }[];
   podeReceber: boolean;
@@ -64,10 +67,13 @@ export type OrdemCarregada = {
   exigeMotivo: boolean;
 };
 
+const rotuloAlvo = new RotuloAlvoManutencao();
+
 type FilaBruta = {
   numero: number;
-  maquina_id: string;
-  setor_id: string;
+  escopo: string;
+  maquina_id: string | null;
+  setor_id: string | null;
   urgencia: string | null;
   tipo_problema: string | null;
   tipo: string;
@@ -81,8 +87,9 @@ type OrdemBruta = {
   numero: number;
   tipo: string;
   status: string;
-  maquina_id: string;
-  setor_id: string;
+  escopo: string;
+  maquina_id: string | null;
+  setor_id: string | null;
   urgencia: string | null;
   tipo_problema: string | null;
   descricao: string;
@@ -97,6 +104,8 @@ type OrdemBruta = {
   cancelada_por: string | null;
   cancelamento_motivo: string | null;
   custo_pecas_centavos: number;
+  foto_url: string | null;
+  foto_id: string | null;
 };
 type NomesOrdem = {
   pessoas: Map<string, string>;
@@ -146,7 +155,7 @@ async function lerFila(client: ClienteOrdem, setores: string[] | null): Promise<
   const consulta = client
     .from('manutencao_ordens' as never)
     .select(
-      'numero, maquina_id, setor_id, urgencia, tipo_problema, tipo, status, recebida_por, aberta_em, fim_em',
+      'numero, escopo, maquina_id, setor_id, urgencia, tipo_problema, tipo, status, recebida_por, aberta_em, fim_em',
     )
     .in('status', ['aberta', 'recebida', 'finalizada']);
   const filtrada = setores ? consulta.in('setor_id', setores) : consulta;
@@ -157,8 +166,11 @@ async function lerFila(client: ClienteOrdem, setores: string[] | null): Promise<
 
 async function montarFila(leitura: OrdemLeitura, brutas: FilaBruta[]): Promise<LinhaFila[]> {
   const [maquinas, setores, pessoas] = await Promise.all([
-    leitura.nomesPorId('manutencao_maquinas', brutas.map((linha) => linha.maquina_id)),
-    leitura.nomesPorId('pessoas_setores', brutas.map((linha) => linha.setor_id)),
+    leitura.nomesPorId('manutencao_maquinas', idsDeMaquina(brutas)),
+    leitura.nomesPorId(
+      'pessoas_setores',
+      brutas.flatMap((linha) => (linha.setor_id ? [linha.setor_id] : [])),
+    ),
     leitura.nomesPorId(
       'usuarios',
       brutas.flatMap((linha) => (linha.recebida_por ? [linha.recebida_por] : [])),
@@ -182,8 +194,8 @@ function paraLinhaFila(
   if (!tipo || !status) return null;
   return {
     numero: linha.numero,
-    maquinaNome: maquinas.get(linha.maquina_id) ?? '',
-    setorNome: setores.get(linha.setor_id) ?? '',
+    maquinaNome: rotuloAlvo.nome(linha.escopo, maquinas.get(linha.maquina_id ?? '') ?? ''),
+    setorNome: linha.setor_id ? (setores.get(linha.setor_id) ?? '') : '',
     urgencia: linha.urgencia,
     tipoProblema: linha.tipo_problema,
     tipo,
@@ -217,7 +229,7 @@ async function lerOrdem(client: ClienteOrdem, numero: number): Promise<OrdemBrut
   const { data, error } = await client
     .from('manutencao_ordens' as never)
     .select(
-      'id, numero, tipo, status, maquina_id, setor_id, urgencia, tipo_problema, descricao, aberta_em, aberta_por, recebida_em, recebida_por, inicio_em, fim_em, servicos, cancelada_em, cancelada_por, cancelamento_motivo, custo_pecas_centavos',
+      'id, numero, tipo, status, escopo, maquina_id, setor_id, urgencia, tipo_problema, descricao, aberta_em, aberta_por, recebida_em, recebida_por, inicio_em, fim_em, servicos, cancelada_em, cancelada_por, cancelamento_motivo, custo_pecas_centavos, foto_url, foto_id',
     )
     .eq('numero', numero)
     .maybeSingle();
@@ -228,7 +240,7 @@ async function lerOrdem(client: ClienteOrdem, numero: number): Promise<OrdemBrut
 async function podeVer(
   leitura: OrdemLeitura,
   snap: UsuarioAuthzSnapshot,
-  setorId: string,
+  setorId: string | null,
 ): Promise<boolean> {
   const acesso = new ManutencaoAcesso();
   const setores = acesso.veTodas(snap) ? [] : await setoresDoSnapshot(leitura, snap);
@@ -267,8 +279,8 @@ async function nomesDaOrdem(leitura: OrdemLeitura, ordem: OrdemBruta): Promise<N
   );
   const [pessoas, maquinas, setores] = await Promise.all([
     leitura.nomesPorId('usuarios', pessoasIds),
-    leitura.nomesPorId('manutencao_maquinas', [ordem.maquina_id]),
-    leitura.nomesPorId('pessoas_setores', [ordem.setor_id]),
+    leitura.nomesPorId('manutencao_maquinas', ordem.maquina_id ? [ordem.maquina_id] : []),
+    leitura.nomesPorId('pessoas_setores', ordem.setor_id ? [ordem.setor_id] : []),
   ]);
   return { pessoas, maquinas, setores };
 }
@@ -284,8 +296,8 @@ function camposOrdem(
     numero: ordem.numero,
     tipo,
     status,
-    maquinaNome: nomes.maquinas.get(ordem.maquina_id) ?? '',
-    setorNome: nomes.setores.get(ordem.setor_id) ?? '',
+    maquinaNome: rotuloAlvo.nome(ordem.escopo, nomes.maquinas.get(ordem.maquina_id ?? '') ?? ''),
+    setorNome: ordem.setor_id ? (nomes.setores.get(ordem.setor_id) ?? '') : '',
     urgencia: ordem.urgencia,
     tipoProblema: ordem.tipo_problema,
     descricao: ordem.descricao,
@@ -300,7 +312,13 @@ function camposOrdem(
     canceladaPorNome: nomeDe(nomes.pessoas, ordem.cancelada_por),
     cancelamentoMotivo: ordem.cancelamento_motivo,
     custoPecasCentavos: veValores ? ordem.custo_pecas_centavos : null,
+    fotoUrl: ordem.foto_url,
+    fotoId: ordem.foto_id,
   };
+}
+
+function idsDeMaquina(linhas: { maquina_id: string | null }[]): string[] {
+  return linhas.flatMap((linha) => (linha.maquina_id ? [linha.maquina_id] : []));
 }
 
 function nomeDe(nomes: Map<string, string>, id: string | null): string | null {

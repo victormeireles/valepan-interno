@@ -11,6 +11,11 @@ describe('OrdemPermissao', () => {
 
   it('mostra o detalhe de qualquer setor para quem vê todas', () => {
     expect(permissao.veDetalhe(true, [], 'setor-forno')).toBe(true);
+    expect(permissao.veDetalhe(true, [], null)).toBe(true);
+  });
+
+  it('esconde a fábrica inteira de quem só vê o próprio setor', () => {
+    expect(permissao.veDetalhe(false, ['setor-forno'], null)).toBe(false);
   });
 
   it('mostra o detalhe do setor que está na lista', () => {

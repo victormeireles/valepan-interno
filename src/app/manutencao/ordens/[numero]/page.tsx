@@ -56,7 +56,7 @@ async function apoioDe(ordem: OrdemCarregada): Promise<ApoioFinalizacao> {
       fimPadrao: ordem.fimEm ? parede.deIso(ordem.fimEm) : '',
       inicioIsoPadrao: ordem.inicioEm ?? '',
       fimIsoPadrao: ordem.fimEm ?? '',
-      iniciais: iniciaisDe(ordem, pecas),
+      iniciais: iniciaisDe(ordem, pecas, new Set(ajudantes.map((item) => item.id))),
     };
   }
   return {
@@ -87,7 +87,11 @@ function pecaAtiva(pecas: PecaItem[], id: string): boolean {
   return pecas.some((peca) => peca.id === id && peca.ativo);
 }
 
-function iniciaisDe(ordem: OrdemCarregada, pecas: PecaItem[]): ValoresIniciaisFinalizacao {
+function iniciaisDe(
+  ordem: OrdemCarregada,
+  pecas: PecaItem[],
+  ajudantesPermitidos: Set<string>,
+): ValoresIniciaisFinalizacao {
   const porId = new Map(pecas.map((peca) => [peca.id, peca]));
   const quantidades = new QuantidadeEstoque();
   const saldos = new ConversorSaldo();
@@ -103,6 +107,10 @@ function iniciaisDe(ordem: OrdemCarregada, pecas: PecaItem[]): ValoresIniciaisFi
   return {
     servicos: ordem.servicos ?? '',
     linhas,
-    ajudanteIds: ordem.ajudantes.map((ajudante) => ajudante.id),
+    ajudanteIds: ordem.ajudantes
+      .map((ajudante) => ajudante.id)
+      .filter((id) => ajudantesPermitidos.has(id)),
+    fotoUrl: ordem.fotoUrl,
+    fotoId: ordem.fotoId,
   };
 }

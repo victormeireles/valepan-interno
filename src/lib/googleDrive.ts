@@ -17,19 +17,19 @@ export interface PhotoInfo {
   uploadedAt: string;
 }
 
+export type DrivePhotoType =
+  | 'pacote'
+  | 'etiqueta'
+  | 'pallet'
+  | 'forno'
+  | 'fermentacao'
+  | 'saida'
+  | 'ordem';
+
 /**
  * Gera o nome do arquivo baseado no rowId e tipo de foto
  */
-function generateFileName(
-  rowId: number,
-  photoType:
-    | 'pacote'
-    | 'etiqueta'
-    | 'pallet'
-    | 'forno'
-    | 'fermentacao'
-    | 'saida',
-): string {
+function generateFileName(rowId: number, photoType: DrivePhotoType): string {
   return `${rowId}-${photoType.toUpperCase()}.jpg`;
 }
 
@@ -139,13 +139,7 @@ export async function uploadPhotoToDrive(
   fileName: string,
   mimeType: string,
   rowId: number,
-  photoType:
-    | 'pacote'
-    | 'etiqueta'
-    | 'pallet'
-    | 'forno'
-    | 'fermentacao'
-    | 'saida',
+  photoType: DrivePhotoType,
 ): Promise<PhotoUploadResult> {
   try {
     const drive = await getGoogleDriveClient();

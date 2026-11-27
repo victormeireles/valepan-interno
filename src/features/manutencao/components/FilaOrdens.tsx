@@ -102,13 +102,8 @@ function LinhaFila({ item, rotulos }: { item: LinhaFila; rotulos: RotulosFila })
 function DetalheLinha({ item, rotulos }: { item: LinhaFila; rotulos: RotulosFila }) {
   return (
     <p className="text-sm leading-5 text-stone-600">
-      <span>{item.setorNome}</span>
-      <Separador />
-      <span className={`font-medium ${rotulos.classeUrgencia(item.urgencia)}`}>
-        {rotulos.urgencia(item.urgencia)}
-      </span>
-      <Separador />
-      <span>{rotulos.problema(item.tipoProblema)}</span>
+      {item.setorNome ? <span>{item.setorNome}</span> : null}
+      <MeioLinha item={item} rotulos={rotulos} comSetor={Boolean(item.setorNome)} />
       <Separador />
       <span>{rotulos.status(item.status)}</span>
       {item.recebidaPorNome ? (
@@ -119,6 +114,34 @@ function DetalheLinha({ item, rotulos }: { item: LinhaFila; rotulos: RotulosFila
       ) : null}
     </p>
   );
+}
+
+function MeioLinha({
+  item,
+  rotulos,
+  comSetor,
+}: {
+  item: LinhaFila;
+  rotulos: RotulosFila;
+  comSetor: boolean;
+}) {
+  const trechos = rotulos.meio(item.tipo, item.urgencia, item.tipoProblema);
+  return (
+    <>
+      {trechos.map((texto, indice) => (
+        <span key={`${texto}-${indice}`}>
+          {indice > 0 || comSetor ? <Separador /> : null}
+          <span className={classeMeio(item, rotulos, indice)}>{texto}</span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function classeMeio(item: LinhaFila, rotulos: RotulosFila, indice: number): string {
+  if (item.tipo === 'preventiva') return 'font-medium text-stone-700';
+  if (indice === 0) return `font-medium ${rotulos.classeUrgencia(item.urgencia)}`;
+  return '';
 }
 
 function Separador() {

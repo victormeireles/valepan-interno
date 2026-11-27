@@ -41,6 +41,11 @@ export class RotulosFila {
     return ROTULO_PROBLEMA[valor] ?? valor;
   }
 
+  meio(tipo: 'corretiva' | 'preventiva', urgencia: string | null, problema: string | null): string[] {
+    if (tipo === 'preventiva') return ['Preventiva'];
+    return [this.urgencia(urgencia), this.problema(problema)];
+  }
+
   status(valor: string): string {
     return ROTULO_STATUS[valor] ?? valor;
   }

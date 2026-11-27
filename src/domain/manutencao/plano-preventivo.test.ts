@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { PlanoPreventivo } from './plano-preventivo';
+import { PlanoPreventivo, type ContextoAlvoPlano } from './plano-preventivo';
 import type { FrequenciaPlano } from './proxima-data-preventiva';
 
-const maquinaAtiva = { id: 'maq-1', ativo: true };
+const maquinaAtiva: ContextoAlvoPlano = {
+  escopo: 'maquina',
+  maquina: { id: 'maq-1', ativo: true },
+};
 
 function entrada(parcial: {
+  escopo?: 'maquina' | 'fabrica';
   maquinaId?: string;
   descricao?: string;
   frequencia?: FrequenciaPlano;
@@ -12,6 +16,7 @@ function entrada(parcial: {
   hojeSp?: string;
 } = {}) {
   return {
+    escopo: 'maquina' as const,
     maquinaId: 'maq-1',
     descricao: 'Lubrificar rolamentos',
     frequencia: { tipo: 'semanal', diaSemana: 1 } as FrequenciaPlano,
@@ -80,14 +85,24 @@ describe('PlanoPreventivo', () => {
 
   it('recusa máquina inativa', () => {
     expect(
-      plano.validar(entrada(), { id: 'maq-1', ativo: false }),
+      plano.validar(entrada(), { escopo: 'maquina', maquina: { id: 'maq-1', ativo: false } }),
     ).toEqual({ ok: false, mensagem: 'Máquina inativa.' });
   });
 
   it('recusa máquina ausente', () => {
-    expect(plano.validar(entrada(), null)).toEqual({
+    expect(plano.validar(entrada(), { escopo: 'maquina', maquina: null })).toEqual({
       ok: false,
       mensagem: 'Máquina não encontrada.',
+    });
+  });
+
+  it('aceita a fábrica inteira sem setor', () => {
+    expect(
+      plano.validar(entrada({ escopo: 'fabrica', maquinaId: '' }), { escopo: 'fabrica' }),
+    ).toEqual({
+      ok: true,
+      descricao: 'Lubrificar rolamentos',
+      proximaEm: '2026-11-09',
     });
   });
 

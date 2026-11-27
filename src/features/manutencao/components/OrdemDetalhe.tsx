@@ -11,6 +11,7 @@ import {
 } from '@/app/actions/manutencao-ordem-actions';
 import type { OrdemCarregada } from '@/app/actions/manutencao-ordem-consulta';
 import type { PecaOrdemVista } from '@/app/actions/manutencao-ordem-leitura';
+import PhotoManager from '@/components/PhotoManager';
 import { Button } from '@/components/ui/Button';
 import { OrdemCancelarFormulario } from './OrdemCancelarFormulario';
 import { OrdemFinalizarFormulario } from './OrdemFinalizarFormulario';
@@ -47,6 +48,7 @@ export function OrdemDetalhe({ ordem, apoio }: OrdemDetalheProps) {
       <LinhaDoTempo ordem={ordem} />
       <PecasOrdem ordem={ordem} />
       <AjudantesFeitos ajudantes={ordem.ajudantes} />
+      <FotoDaOrdem ordem={ordem} />
       {acoes.aviso ? <AvisoAcao aviso={acoes.aviso} /> : null}
       <BarraAcoes
         ordem={ordem}
@@ -186,8 +188,12 @@ function Resumo({ ordem }: { ordem: OrdemCarregada }) {
     <section className={`${CARTAO} space-y-3 p-4`}>
       <p className="text-sm leading-5 text-stone-600">
         <span className="font-medium text-stone-900">{ordem.maquinaNome}</span>
-        <Separador />
-        <span>{ordem.setorNome}</span>
+        {ordem.setorNome ? (
+          <>
+            <Separador />
+            <span>{ordem.setorNome}</span>
+          </>
+        ) : null}
         <Separador />
         <span>{ROTULO_TIPO[ordem.tipo]}</span>
         {ordem.urgencia ? (
@@ -261,6 +267,21 @@ function LinhaPecaOrdem({ peca }: { peca: PecaOrdemVista }) {
         {apresentacaoOrdem.quantidade(peca.quantidade)}
       </span>
     </li>
+  );
+}
+
+function FotoDaOrdem({ ordem }: { ordem: OrdemCarregada }) {
+  if (!ordem.fotoUrl) return null;
+  return (
+    <section className={`${CARTAO} space-y-3 p-4`}>
+      <h2 className="text-sm font-semibold text-stone-900">Foto</h2>
+      <PhotoManager
+        photoUrl={ordem.fotoUrl}
+        photoId={ordem.fotoId ?? undefined}
+        onPhotoRemove={() => undefined}
+        showRemoveButton={false}
+      />
+    </section>
   );
 }
 

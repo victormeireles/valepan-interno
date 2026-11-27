@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import type { EntradaSalvarPlano } from '@/app/actions/manutencao-plano-actions';
+import { ALVO_FABRICA } from '@/domain/manutencao/escopo-manutencao';
 import { IconButton } from '@/components/ui/IconButton';
 import ModalPortal from '@/components/ui/ModalPortal';
 import {
@@ -108,7 +109,7 @@ export function PlanoFormularioModal({
                 {editando ? 'Editar plano' : 'Novo plano'}
               </h2>
               <p className="mt-0.5 text-sm text-stone-500">
-                {editando ? 'Preventiva da máquina' : 'Cadastro de plano preventivo'}
+                {subtitulo(editando, valor.maquinaId)}
               </p>
             </div>
             <IconButton
@@ -134,4 +135,10 @@ export function PlanoFormularioModal({
       </div>
     </ModalPortal>
   );
+}
+
+function subtitulo(editando: boolean, maquinaId: string): string {
+  if (!editando) return 'Cadastro de plano preventivo';
+  if (maquinaId === ALVO_FABRICA) return 'Preventiva da fábrica';
+  return 'Preventiva da máquina';
 }

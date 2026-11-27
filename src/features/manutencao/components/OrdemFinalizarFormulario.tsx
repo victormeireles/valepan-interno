@@ -8,6 +8,7 @@ import ModalPortal from '@/components/ui/ModalPortal';
 import { Select, type SelectOption } from '@/components/ui/Select';
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
+import { OrdemFotoCampo } from './OrdemFotoCampo';
 import {
   useFinalizacao,
   type AjudanteEscolha,
@@ -107,7 +108,7 @@ export function OrdemFinalizarFormulario({
               >
                 {titulo}
               </h2>
-              <p className="mt-0.5 text-sm text-stone-500">Horários, serviços, peças e ajudantes</p>
+              <p className="mt-0.5 text-sm text-stone-500">Horários, serviços, peças, ajudantes e foto</p>
             </div>
             <IconButton
               icon="close"
@@ -140,6 +141,16 @@ export function OrdemFinalizarFormulario({
                 ajudantes={ajudantes}
                 marcados={formulario.ajudanteIds}
                 onAlternar={formulario.alternarAjudante}
+              />
+              <OrdemFotoCampo
+                salvaUrl={formulario.foto.salva?.url}
+                salvaId={formulario.foto.salva?.id}
+                mostrarSalva={formulario.foto.mostrarSalva}
+                removida={formulario.foto.removida}
+                desabilitado={formulario.enviando}
+                onSelecionar={formulario.foto.selecionar}
+                onRemoverNova={formulario.foto.removerNova}
+                onRemoverSalva={formulario.foto.removerSalva}
               />
               {formulario.erro ? (
                 <p role="alert" className="text-sm text-red-700">

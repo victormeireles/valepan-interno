@@ -1,6 +1,7 @@
 'use server';
 
 import { ConversorSaldo } from '@/domain/manutencao/conversor-saldo';
+import { FotoOrdem, type FotoOrdemValor } from '@/domain/manutencao/foto-ordem';
 import { ManutencaoAcesso } from '@/domain/manutencao/manutencao-acesso';
 import {
   OrdemFinalizacao,
@@ -10,10 +11,11 @@ import {
 } from '@/domain/manutencao/ordem-finalizacao';
 import { OrdemPermissao } from '@/domain/manutencao/ordem-permissao';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
-import { nivelAtende, type NivelModulo } from '@/lib/auth/interno-modulos-catalog';
 import type { UsuarioAuthzSnapshot } from '@/lib/auth/interno-access-manager';
 import { requireInternoQualquerModulo } from '@/lib/auth/require-interno-modulo';
 import { supabaseClientFactory } from '@/lib/clients/supabase-client-factory';
+import { anexarFotoNaOrdem } from '@/lib/manutencao/persistir-foto-ordem';
+import { AjudantesOficina } from './manutencao-ajudantes-oficina';
 import type { ClienteOrdem } from './manutencao-ordem-leitura';
 
 const MODULO_OFICINA = 'interno_manutencao';
@@ -26,8 +28,6 @@ const MENSAGEM_NAO_FINALIZA = 'Só quem recebeu ou quem administra finaliza.';
 const MENSAGEM_AJUDANTE = 'Ajudante inválido.';
 const MENSAGEM_PECA = 'Peça não encontrada.';
 const FALHA = 'Não foi possível finalizar a ordem.';
-const SELECT_AJUDANTES =
-  'usuarios ( id, ativo ), perfis ( ativo, perfil_modulos ( modulo, nivel ) )';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FRASES_FUNCAO = [
   CONFLITO,
@@ -45,6 +45,7 @@ export type EntradaFinalizacao = {
   servicos: string;
   pecas: { pecaId: string; quantidadeTexto: string }[];
   ajudanteIds: string[];
+  foto: FotoOrdemValor | null;
 };
 
 type Resultado = { ok: false; mensagem: string };
@@ -62,6 +63,7 @@ type Preparado = {
   fimIso: string;
   servicos: string;
   linhas: PecaFinalizacao[];
+  foto: FotoOrdemValor | null;
 };
 type Ajudantes = { ok: true; ids: string[] };
 type PecaBruta = {
@@ -89,18 +91,9 @@ type PedidoGravacao = {
   servicos: string;
   linhas: PecaFinalizacao[];
   ajudanteIds: string[];
+  foto: FotoOrdemValor | null;
 };
 type ErroFuncao = { message: string; details?: string | null; hint?: string | null };
-type ModuloLinha = { modulo: string; nivel: string };
-type PerfilLinha = {
-  ativo: boolean;
-  perfil_modulos: ModuloLinha[] | ModuloLinha | null;
-};
-type UsuarioLinha = { id: string; ativo: boolean };
-type VinculoPerfil = {
-  usuarios: UsuarioLinha | UsuarioLinha[] | null;
-  perfis: PerfilLinha | PerfilLinha[] | null;
-};
 
 export async function finalizarOrdem(
   numero: number,
@@ -163,12 +156,15 @@ function prepararEntrada(entrada: EntradaFinalizacao, abertaEm: string): Prepara
   if (!servicos.ok) return servicos;
   const linhas = linhasDe(entrada.pecas);
   if (!linhas.ok) return linhas;
+  const foto = new FotoOrdem().validar(entrada.foto);
+  if (!foto.ok) return foto;
   return {
     ok: true,
     inicioIso: entrada.inicioIso,
     fimIso: entrada.fimIso,
     servicos: servicos.servicos,
     linhas: linhas.linhas,
+    foto: foto.foto,
   };
 }
 
@@ -207,6 +203,7 @@ function pedidoDe(
     servicos: preparado.servicos,
     linhas: preparado.linhas,
     ajudanteIds,
+    foto: preparado.foto,
   };
 }
 
@@ -220,7 +217,7 @@ async function resolverAjudantes(
   if (unicos.some((id) => id === receptorId || !UUID.test(id))) {
     return { ok: false, mensagem: MENSAGEM_AJUDANTE };
   }
-  const elegiveis = await idsComOficina(client, unicos);
+  const elegiveis = await new AjudantesOficina(client).idsElegiveis(unicos);
   if (unicos.some((id) => !elegiveis.has(id))) return { ok: false, mensagem: MENSAGEM_AJUDANTE };
   return { ok: true, ids: unicos };
 }
@@ -236,50 +233,13 @@ function deduplicar(ids: string[]): string[] {
   return unicos;
 }
 
-async function idsComOficina(client: ClienteOrdem, ids: string[]): Promise<Set<string>> {
-  const { data, error } = await client
-    .from('usuario_perfis' as never)
-    .select(SELECT_AJUDANTES)
-    .in('usuario_id', ids);
-  if (error) throw new Error(error.message);
-  return elegiveisDe((data ?? []) as VinculoPerfil[]);
-}
-
-function elegiveisDe(linhas: VinculoPerfil[]): Set<string> {
-  const ids = new Set<string>();
-  for (const linha of linhas) {
-    const usuario = primeiro(linha.usuarios);
-    if (!usuario || usuario.ativo !== true || !perfilOficina(primeiro(linha.perfis))) continue;
-    ids.add(usuario.id);
-  }
-  return ids;
-}
-
-function perfilOficina(perfil: PerfilLinha | null): boolean {
-  if (!perfil || perfil.ativo !== true) return false;
-  return modulosDe(perfil).some((modulo) => oficinaEditar(modulo));
-}
-
-function oficinaEditar(modulo: ModuloLinha): boolean {
-  if (modulo.modulo !== MODULO_OFICINA || !nivelConhecido(modulo.nivel)) return false;
-  return nivelAtende(modulo.nivel, 'editar');
-}
-
-function nivelConhecido(nivel: string): nivel is NivelModulo {
-  return nivel === 'ler' || nivel === 'editar' || nivel === 'administrar';
-}
-
-function modulosDe(perfil: PerfilLinha): ModuloLinha[] {
-  if (!perfil.perfil_modulos) return [];
-  return Array.isArray(perfil.perfil_modulos) ? perfil.perfil_modulos : [perfil.perfil_modulos];
-}
-
-function primeiro<T>(valor: T | T[] | null): T | null {
-  if (!valor) return null;
-  return Array.isArray(valor) ? (valor[0] ?? null) : valor;
-}
-
 async function gravar(client: ClienteOrdem, pedido: PedidoGravacao): Promise<ResultadoAcao> {
+  const movimento = await comRetentativa(client, pedido);
+  if (!movimento.ok) return movimento;
+  return anexarFotoNaOrdem(client, pedido.ordemId, pedido.foto, movimento);
+}
+
+async function comRetentativa(client: ClienteOrdem, pedido: PedidoGravacao): Promise<ResultadoAcao> {
   const primeira = await tentar(client, pedido);
   if (primeira.ok || primeira.mensagem !== CONFLITO) return primeira;
   return tentar(client, pedido);

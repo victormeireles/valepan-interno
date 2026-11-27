@@ -11,6 +11,7 @@ import {
 import type { PlanoItem } from '@/app/actions/manutencao-plano-consulta';
 import { Button } from '@/components/ui/Button';
 import { Toast } from '@/components/ui/Toast';
+import { ALVO_FABRICA } from '@/domain/manutencao/escopo-manutencao';
 import { PlanoListaFiltro } from '@/domain/manutencao/plano-lista-filtro';
 import {
   FORMULARIO_PLANO_VAZIO,
@@ -163,10 +164,7 @@ function useCadastroPlanoModal() {
     try {
       const resultado = await salvarPlano(entrada);
       if (resultado.ok) {
-        setAviso({
-          texto: entrada.id ? 'Plano atualizado.' : 'Plano criado.',
-          ok: true,
-        });
+        setAviso({ texto: resultado.mensagem, ok: true });
         router.refresh();
       }
       return resultado;
@@ -191,7 +189,7 @@ function useCadastroPlanoModal() {
 function valorDoPlano(plano: PlanoItem): PlanoFormularioValor {
   return {
     id: plano.id,
-    maquinaId: plano.maquinaId,
+    maquinaId: plano.escopo === 'fabrica' ? ALVO_FABRICA : (plano.maquinaId ?? ''),
     descricao: plano.descricao,
     tipo: plano.frequenciaTipo,
     intervalo: String(plano.intervaloDias ?? 7),

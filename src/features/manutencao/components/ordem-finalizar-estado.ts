@@ -9,6 +9,7 @@ import {
 import { OrdemFinalizacao } from '@/domain/manutencao/ordem-finalizacao';
 import { QuantidadeEstoque } from '@/domain/manutencao/quantidade-estoque';
 import { ParedeSaoPaulo } from './parede-sao-paulo';
+import { useFotoFinalizacao, type FotoSalva } from './use-foto-finalizacao';
 
 const MENSAGEM_QUANTIDADE = 'Informe uma quantidade maior que zero, com até 3 casas.';
 
@@ -35,6 +36,8 @@ export type ValoresIniciaisFinalizacao = {
   servicos: string;
   linhas: LinhaPeca[];
   ajudanteIds: string[];
+  fotoUrl: string | null;
+  fotoId: string | null;
 };
 
 export type ApoioFinalizacao = {
@@ -74,6 +77,7 @@ export function useFinalizacao(
   const campos = useCamposFinalizacao(padroes.inicio, padroes.fim, iniciais?.servicos ?? '');
   const pecasForm = usePecasFinalizacao(pecas, iniciais?.linhas ?? [], campos.definirErro);
   const ajudantes = useAjudantesMarcados(iniciais?.ajudanteIds ?? []);
+  const foto = useFotoFinalizacao(fotoInicial(iniciais));
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -83,7 +87,23 @@ export function useFinalizacao(
       campos.definirErro(pedido.mensagem);
       return;
     }
-    await gravar(numero, modo, pedido.entrada, campos.definirErro, campos.definirEnviando, onConcluir);
+    campos.definirEnviando(true);
+    campos.definirErro(null);
+    try {
+      const resolvida = await foto.resolver(numero);
+      if (!resolvida.ok) {
+        campos.definirErro(resolvida.mensagem);
+        return;
+      }
+      const resultado = await salvar(numero, modo, { ...pedido.entrada, foto: resolvida.foto });
+      if (!resultado.ok) {
+        campos.definirErro(resultado.mensagem);
+        return;
+      }
+      onConcluir(resultado.mensagem);
+    } finally {
+      campos.definirEnviando(false);
+    }
   }
 
   return {
@@ -91,8 +111,14 @@ export function useFinalizacao(
     ...pecasForm,
     ajudanteIds: ajudantes.ids,
     alternarAjudante: ajudantes.alternar,
+    foto,
     enviar,
   };
+}
+
+function fotoInicial(iniciais: ValoresIniciaisFinalizacao | null): FotoSalva {
+  if (!iniciais?.fotoUrl || !iniciais.fotoId) return null;
+  return { url: iniciais.fotoUrl, id: iniciais.fotoId };
 }
 
 function useCamposFinalizacao(inicioPadrao: string, fimPadrao: string, servicosPadrao: string) {
@@ -163,35 +189,15 @@ function rascunhoDe(
   return { ...campos, linhas, ajudanteIds };
 }
 
-async function gravar(
-  numero: number,
-  modo: ModoFinalizacao,
-  entrada: EntradaFinalizacao,
-  definirErro: (mensagem: string | null) => void,
-  definirEnviando: (enviando: boolean) => void,
-  aoFinalizar: (mensagem: string) => void,
-) {
-  definirEnviando(true);
-  definirErro(null);
-  try {
-    const resultado =
-      modo === 'editar'
-        ? await atualizarFinalizacaoOrdem(numero, entrada)
-        : await finalizarOrdem(numero, entrada);
-    if (!resultado.ok) {
-      definirErro(resultado.mensagem);
-      return;
-    }
-    aoFinalizar(resultado.mensagem);
-  } finally {
-    definirEnviando(false);
-  }
+async function salvar(numero: number, modo: ModoFinalizacao, entrada: EntradaFinalizacao) {
+  if (modo === 'editar') return atualizarFinalizacaoOrdem(numero, entrada);
+  return finalizarOrdem(numero, entrada);
 }
 
 function montarPedido(
   rascunho: RascunhoFinal,
   padroes: PadroesHorario,
-): { ok: true; entrada: EntradaFinalizacao } | Recusa {
+): { ok: true; entrada: Omit<EntradaFinalizacao, 'foto'> } | Recusa {
   const inicio = isoDe(rascunho.inicio, { parede: padroes.inicio, iso: padroes.inicioIso }, 'Informe o início.');
   if (!inicio.ok) return inicio;
   const fim = isoDe(rascunho.fim, { parede: padroes.fim, iso: padroes.fimIso }, 'Informe o fim.');
@@ -206,7 +212,7 @@ function entradaDe(
   inicioIso: string,
   fimIso: string,
   servicos: string,
-): EntradaFinalizacao {
+): Omit<EntradaFinalizacao, 'foto'> {
   return {
     inicioIso,
     fimIso,

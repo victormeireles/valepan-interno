@@ -10,7 +10,7 @@ const MOTIVO_SONDA = 'motivo';
 type OrdemParaFlags = {
   status: string;
   tipo: string;
-  setor_id: string;
+  setor_id: string | null;
   recebida_por: string | null;
 };
 
